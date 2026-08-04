@@ -21,6 +21,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
+
 func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1106,9 +1120,7 @@ func TestAWSFileManager_WriteConfig_LoadFailure(t *testing.T) {
 // failures (e.g. an unwritable target directory) are surfaced as
 // ErrWriteCredentialsFile.
 func TestAWSFileManager_WriteCredentials_SaveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write-permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1132,9 +1144,7 @@ func TestAWSFileManager_WriteCredentials_SaveFailure(t *testing.T) {
 // TestAWSFileManager_WriteConfig_SaveFailure mirrors the credentials case for
 // WriteConfig's cfg.SaveTo failure branch.
 func TestAWSFileManager_WriteConfig_SaveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write-permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1185,9 +1195,7 @@ func TestAWSFileManager_RemoveCredentialsProfile_LoadFailure(t *testing.T) {
 // read-only) is surfaced as ErrRemoveProfile instead of being silently
 // swallowed.
 func TestAWSFileManager_RemoveConfigProfile_SaveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("read-only file permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1207,9 +1215,7 @@ func TestAWSFileManager_RemoveConfigProfile_SaveFailure(t *testing.T) {
 // TestAWSFileManager_RemoveCredentialsProfile_SaveFailure mirrors the config
 // case for RemoveCredentialsProfile's cfg.SaveTo failure branch.
 func TestAWSFileManager_RemoveCredentialsProfile_SaveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("read-only file permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1231,9 +1237,7 @@ func TestAWSFileManager_RemoveCredentialsProfile_SaveFailure(t *testing.T) {
 // containing directory made read-only, which blocks unlink on POSIX even
 // though the file itself is readable) is surfaced as ErrRemoveProfile.
 func TestAWSFileManager_RemoveConfigProfile_RemoveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write-permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -1252,9 +1256,7 @@ func TestAWSFileManager_RemoveConfigProfile_RemoveFailure(t *testing.T) {
 // TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure mirrors the
 // config case for RemoveCredentialsProfile's os.Remove failure branch.
 func TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write-permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}

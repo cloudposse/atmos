@@ -14,9 +14,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// credentialFileSystem provides atomic writes so a best-effort concurrent reader
+// (see withFileRLock) never observes a truncated credentials file.
+var credentialFileSystem = filesystem.NewOSFileSystem()
 
 const (
 	PermissionRWX = 0o700
@@ -129,7 +134,7 @@ func (m *AzureFileManager) WriteCredentials(providerName, identityName string, c
 		if err != nil {
 			return fmt.Errorf("%w: failed to marshal credentials: %w", ErrWriteCredentialsFile, err)
 		}
-		if err := os.WriteFile(credPath, data, PermissionRW); err != nil {
+		if err := credentialFileSystem.WriteFileAtomic(credPath, data, PermissionRW); err != nil {
 			return errors.Join(ErrWriteCredentialsFile, err)
 		}
 

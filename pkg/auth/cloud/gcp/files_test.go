@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -510,15 +511,17 @@ func TestWriteADCFile_LockFailure_WrapsSentinel(t *testing.T) {
 	providerName := "gcp-adc"
 	identityName := "lock-fail-adc"
 
-	// Resolve the path WriteADCFile will use, which also creates the ADC
-	// directory. Then strip write permission from that directory so the
-	// sibling ".lock" file cannot be created, forcing a lock-acquisition
-	// failure without any real lock contention.
-	path, err := GetADCFilePath(testRealm, providerName, identityName)
+	// WriteADCFile locks a single per-identity target directly under providerDir
+	// (shared with the other write helpers and CleanupIdentityFiles), not a file
+	// next to the ADC file itself. Strip write permission from providerDir so that
+	// shared lock's sibling ".lock" file cannot be created, forcing a
+	// lock-acquisition failure without any real lock contention.
+	_, err := GetADCFilePath(testRealm, providerName, identityName)
 	require.NoError(t, err)
-	dir := filepath.Dir(path)
-	require.NoError(t, os.Chmod(dir, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
 
 	_, err = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
 		Type:        "authorized_user",
@@ -537,11 +540,14 @@ func TestWritePropertiesFile_LockFailure_WrapsSentinel(t *testing.T) {
 	providerName := "gcp-adc"
 	identityName := "lock-fail-props"
 
-	path, err := GetPropertiesFilePath(testRealm, providerName, identityName)
+	// See TestWriteADCFile_LockFailure_WrapsSentinel: the shared per-identity lock
+	// lives directly under providerDir, so that's what must be made read-only.
+	_, err := GetPropertiesFilePath(testRealm, providerName, identityName)
 	require.NoError(t, err)
-	dir := filepath.Dir(path)
-	require.NoError(t, os.Chmod(dir, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
 
 	_, err = WritePropertiesFile(testRealm, providerName, identityName, "my-project", "us-central1")
 
@@ -557,11 +563,14 @@ func TestWriteAccessTokenFile_LockFailure_WrapsSentinel(t *testing.T) {
 	providerName := "gcp-adc"
 	identityName := "lock-fail-token"
 
-	path, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
+	// See TestWriteADCFile_LockFailure_WrapsSentinel: the shared per-identity lock
+	// lives directly under providerDir, so that's what must be made read-only.
+	_, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
 	require.NoError(t, err)
-	dir := filepath.Dir(path)
-	require.NoError(t, os.Chmod(dir, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
 
 	_, err = WriteAccessTokenFile(testRealm, providerName, identityName, "ya29.access-token", time.Time{})
 
@@ -577,9 +586,10 @@ func TestCleanupIdentityFiles_LockFailure_WrapsError(t *testing.T) {
 	providerName := "gcp-adc"
 	identityName := "lock-fail-cleanup"
 
-	// CleanupIdentityFiles locks on providerDir/<identity>.cleanup, a file
-	// that never exists on disk, so its sibling ".lock" file lives directly
-	// under providerDir. Deny write access on providerDir itself.
+	// CleanupIdentityFiles locks the same shared per-identity target as the write
+	// helpers (providerDir/<identity>.identity), a marker that never exists on disk,
+	// so its sibling ".lock" file lives directly under providerDir. Deny write
+	// access on providerDir itself.
 	providerDir, err := GetProviderDir(testRealm, providerName)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(providerDir, 0o500))
@@ -702,6 +712,69 @@ func TestCleanupIdentityFiles_RemoveAllFailure_JoinsErrors(t *testing.T) {
 	// not just whichever one happened to be appended first.
 	assert.Contains(t, err.Error(), adcDir, "joined error should mention the ADC directory that failed to remove")
 	assert.Contains(t, err.Error(), configDir, "joined error should mention the config directory that failed to remove")
+}
+
+// TestIdentityLockTarget_SharedAcrossWritesAndCleanup verifies that
+// WriteADCFile, WritePropertiesFile, WriteAccessTokenFile, and
+// CleanupIdentityFiles all resolve to the identical lock target for a given
+// (realm, provider, identity), which is what makes them actually contend with
+// each other instead of racing (see identityLockTarget's doc comment).
+func TestIdentityLockTarget_SharedAcrossWritesAndCleanup(t *testing.T) {
+	providerDir := filepath.Join(t.TempDir(), "provider")
+	identityName := "shared-lock-identity"
+
+	target := identityLockTarget(providerDir, identityName)
+	assert.Equal(t, target, identityLockTarget(providerDir, identityName), "must be deterministic")
+	assert.Equal(t, filepath.Join(providerDir, identityName+".identity"), target)
+	// Must live directly under providerDir, not inside a subdirectory CleanupIdentityFiles removes.
+	assert.Equal(t, providerDir, filepath.Dir(target))
+}
+
+// TestCleanupIdentityFiles_ContendsWithConcurrentWrite proves cleanup and a
+// write now share a single lock: while an external holder occupies the
+// identity lock, CleanupIdentityFiles must block rather than proceed
+// concurrently (which would previously let it RemoveAll a directory a write
+// was still populating), and must complete only after the lock is released.
+func TestCleanupIdentityFiles_ContendsWithConcurrentWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file locking is best-effort/noop on Windows; contention is not observable there")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "contended-identity"
+
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+
+	// Hold the shared identity lock externally, simulating a write in progress.
+	held := flock.New(identityLockTarget(providerDir, identityName) + ".lock")
+	locked, err := held.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "external holder should acquire the identity lock")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- CleanupIdentityFiles(testRealm, providerName, identityName)
+	}()
+
+	// CleanupIdentityFiles must still be blocked shortly after starting: it
+	// cannot proceed while the identity lock is held elsewhere.
+	select {
+	case err := <-done:
+		t.Fatalf("CleanupIdentityFiles returned early (err=%v) while the identity lock was still held; cleanup and writes are not contending on the same lock", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	require.NoError(t, held.Unlock())
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "cleanup should succeed once the lock is released")
+	case <-time.After(fileLockTimeout):
+		t.Fatal("CleanupIdentityFiles did not complete after the identity lock was released")
+	}
 }
 
 func TestValidatePathSegment(t *testing.T) {

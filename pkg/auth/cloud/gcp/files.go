@@ -16,7 +16,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/filesystem"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -63,6 +62,21 @@ func withFileLock(path string, fn func() error) error {
 	defer cancel()
 
 	return cache.NewFileLock(path).WithLockContext(ctx, fn)
+}
+
+// identityLockTarget returns a single, persistent lock target shared by every write
+// helper (WriteADCFile, WritePropertiesFile, WriteAccessTokenFile) and
+// CleanupIdentityFiles for the given identity. It intentionally lives directly under
+// providerDir rather than inside the adc/ or config/ subdirectories that
+// CleanupIdentityFiles removes, and it is never deleted once created: removing it
+// after use (as the individual per-file locks previously were) would let a
+// concurrent waiter recreate the lock file at the same path and lock a different
+// inode, silently losing mutual exclusion. Sharing one target across all four
+// operations is what makes them actually contend with each other; locking each
+// write's own file path (as before) let a cleanup run concurrently with a write and
+// remove a directory out from under it.
+func identityLockTarget(providerDir, identityName string) string {
+	return filepath.Join(providerDir, identityName+".identity")
 }
 
 // AuthorizedUserContent represents the structure of an authorized_user ADC JSON file.
@@ -198,8 +212,12 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve ADC file path", err)
 	}
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve GCP provider directory", err)
+	}
 
-	if err := withFileLock(path, func() error {
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
 		data, err := json.MarshalIndent(content, "", "  ")
 		if err != nil {
 			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to marshal ADC content", err)
@@ -224,8 +242,12 @@ func WritePropertiesFile(realm, providerName, identityName string, projectID str
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP properties file path", err)
 	}
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP provider directory", err)
+	}
 
-	if err := withFileLock(path, func() error {
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
 		cfg := ini.Empty()
 		coreSection, err := cfg.NewSection("core")
 		if err != nil {
@@ -273,8 +295,12 @@ func WriteAccessTokenFile(realm, providerName, identityName string, accessToken 
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP access token file path", err)
 	}
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP provider directory", err)
+	}
 
-	if err := withFileLock(path, func() error {
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
 		content := accessToken + "\n"
 		if !expiry.IsZero() {
 			content += expiry.Format(time.RFC3339) + "\n"
@@ -303,8 +329,11 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 		return err
 	}
 
-	lockTarget := filepath.Join(providerDir, identityName+".cleanup")
-	lockErr := withFileLock(lockTarget, func() error {
+	// Lock the same target the write helpers use so cleanup actually contends with a
+	// concurrent WriteADCFile/WritePropertiesFile/WriteAccessTokenFile for this identity,
+	// instead of racing it: RemoveAll below could otherwise delete a directory out from
+	// under a write in progress, or delete a file a write just finished creating.
+	lockErr := withFileLock(identityLockTarget(providerDir, identityName), func() error {
 		adcDir := filepath.Join(providerDir, ADCSubdir, identityName)
 		configDir := filepath.Join(providerDir, ConfigSubdir, identityName)
 		var errs []error
@@ -318,13 +347,6 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 		}
 		return nil
 	})
-
-	// lockTarget is a synthetic marker with no corresponding persistent file (unlike the
-	// write helpers above, whose lock files sit next to the real file they wrote), so best-effort
-	// remove it here to avoid leaving a stray ".cleanup.lock" behind in providerDir on every call.
-	if removeErr := os.Remove(lockTarget + ".lock"); removeErr != nil && !os.IsNotExist(removeErr) {
-		log.Debug("Failed to remove cleanup lock file", "path", lockTarget+".lock", "error", removeErr)
-	}
 
 	if lockErr != nil {
 		return fmt.Errorf("cleanup identity files: %w", lockErr)

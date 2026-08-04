@@ -231,6 +231,12 @@ func TestNewMSALCache_HomeDirError(t *testing.T) {
 }
 
 func TestNewMSALCache_RealmIsolatesDefaultPath(t *testing.T) {
+	// Redirect HOME/USERPROFILE so the realm cache directory is created under a
+	// temp home instead of the real ~/.azure.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
 

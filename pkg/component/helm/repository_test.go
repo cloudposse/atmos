@@ -18,6 +18,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory (or the permission bits on a pre-created lock file) to force
+// a failure: the trick is a no-op on Windows (permissions work differently) and
+// on Unix when running as root (root bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
+
 func TestMergeRepositories(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Helm.Repositories = []schema.HelmRepository{
@@ -106,6 +120,12 @@ func TestSetupHelmRepositories_LockUnavailable(t *testing.T) {
 		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
 		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
 		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+	if os.Getuid() == 0 {
+		// Root ignores the 0o000 permission bits below, so the lock would actually be
+		// acquired and setupHelmRepositories would proceed to a real request against
+		// the "https://example.com" URL used below.
+		t.Skip("Skipping permission test when running as root")
 	}
 
 	dir := t.TempDir()
@@ -253,9 +273,7 @@ func TestUpdateRepositories_DownloadIndexFailure(t *testing.T) {
 // (the repo file's directory made read-only) is surfaced rather than
 // silently discarded after a successful download.
 func TestUpdateRepositories_WriteFileFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write-permission bits are not enforced the same way on Windows")
-	}
+	skipIfCannotDenyDirWrite(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`apiVersion: v1
