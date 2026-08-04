@@ -64,16 +64,49 @@ func NewZipRegistry(t *testing.T, repoTag string, files map[string]string) strin
 	return pushImage(t, repoTag, layer)
 }
 
-// pushImage starts an in-process OCI registry and writes a single-layer image
-// to it, returning the bare image reference "127.0.0.1:PORT/repoTag".
-func pushImage(t *testing.T, repoTag string, layer v1.Layer) string {
+// NewEmptyRegistry starts an in-process OCI registry serving an image with no
+// layers at all. It exercises the "manifest resolves but has zero layers"
+// path (distinct from a network/auth failure), which real registries can
+// legitimately serve for an empty or config-only image.
+func NewEmptyRegistry(t *testing.T, repoTag string) string {
+	defer perf.Track(nil, "ocitest.NewEmptyRegistry")()
+
+	t.Helper()
+
+	return pushImage(t, repoTag)
+}
+
+// NewBrokenLayerRegistry starts an in-process OCI registry serving an image
+// whose single layer declares the default tar+gzip media type but is not
+// valid gzip data. The blob starts with the real gzip magic header
+// (0x1f 0x8b) so go-containerregistry's compression sniffing selects the
+// gzip decoder rather than treating the blob as an already-uncompressed tar
+// (which would instead fail during tar parsing, not decompression); the
+// remaining bytes are deliberately malformed so gzip.NewReader fails on the
+// very first read, making the error deterministic and non-retryable.
+func NewBrokenLayerRegistry(t *testing.T, repoTag string) string {
+	defer perf.Track(nil, "ocitest.NewBrokenLayerRegistry")()
+
+	t.Helper()
+
+	brokenGzip := append([]byte{0x1f, 0x8b}, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}...)
+	layer := static.NewLayer(brokenGzip, "application/vnd.oci.image.layer.v1.tar+gzip")
+
+	return pushImage(t, repoTag, layer)
+}
+
+// pushImage starts an in-process OCI registry and writes an image built from
+// zero or more layers, returning the bare image reference
+// "127.0.0.1:PORT/repoTag". Zero layers pushes empty.Image unmodified, giving
+// callers a real, resolvable manifest with no layers.
+func pushImage(t *testing.T, repoTag string, layers ...v1.Layer) string {
 	t.Helper()
 
 	srv := httptest.NewServer(registry.New())
 	t.Cleanup(srv.Close)
 	host := strings.TrimPrefix(srv.URL, "http://")
 
-	img, err := mutate.AppendLayers(empty.Image, layer)
+	img, err := mutate.AppendLayers(empty.Image, layers...)
 	require.NoError(t, err)
 
 	imageRef := host + "/" + repoTag
