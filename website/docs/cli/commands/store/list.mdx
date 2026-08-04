@@ -1,0 +1,96 @@
+---
+title: atmos store list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List the store backends configured in atmos.yaml, or the key/value pairs stored inside one.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List the store backends configured under `stores:` in `atmos.yaml`. For each backend, this command shows its kind. It also shows whether the backend is a secret backend. It also shows which optional capabilities the backend supports, such as deletion, key enumeration, or a local existence check. Pass a `STORE` name to list the key/value pairs stored inside that backend instead, scoped with `--stack` and `--component` the same way [`store set`](/cli/commands/store/set) writes a key. Only backends that support key enumeration can list their contents this way — check the `Listable` column first.
+</Intro>
+
+<CastPlayer title="atmos store list --help" src="/casts/screengrabs/atmos-store-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store list [STORE] [flags]
+```
+
+## Examples
+
+```shell
+# List all configured store backends
+atmos store list
+
+# Pipeline-friendly output
+atmos store list --format=json
+
+# List the key/value pairs in a store, scoped to a stack and component
+atmos store list app-metadata --stack=prod --component=ecs-service
+
+# List store-global key/value pairs (no --stack/--component)
+atmos store list app-metadata
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    Optional. The name of a configured store backend. When set, this command lists the key/value pairs stored inside that backend instead of the configured backends themselves.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    Only used with `STORE`. The Atmos stack used to scope the listing. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    Only used with `STORE`. The Atmos component used to scope the listing. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Only used with `STORE`. The identity Atmos uses to access the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--format` <em>(alias `-f`)</em></dt>
+  <dd>
+    The output format. Choices are `table`, `json`, `yaml`, `csv`, or `tsv`. On a terminal, the default is a styled table. When piped, the default is plain, delimited output.
+  </dd>
+</dl>
+
+## Values Are Masked
+
+When you list a store's contents, Atmos masks every value the same way [`atmos store get`](/cli/commands/store/get) does. A value from a `secret: true` store — or any value that happens to look like a credential — shows as a masked placeholder. Pass `--mask=false` to reveal the real values.
+
+## Backend Support
+
+Not every store backend can enumerate its keys. 1Password cannot list keys, because its references
+are opaque and do not follow a predictable naming pattern. The default system keychain backend
+cannot list keys either, because the underlying OS keychain APIs do not support enumeration. The
+file and memory keychain backends do support it.
+
+Every other supported backend supports key enumeration: AWS SSM, AWS Secrets Manager, HashiCorp
+Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, and GitHub Actions.
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`atmos store get`](/cli/commands/store/get) — Retrieve a single value
+- [Stores configuration](/cli/configuration/stores)
