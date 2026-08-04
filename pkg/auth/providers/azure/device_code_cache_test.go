@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -944,6 +945,12 @@ func TestStripBOM(t *testing.T) {
 // lock file with O_RDONLY (not O_RDWR) by default, and open()+flock() on a
 // directory succeeds on both Linux and macOS.
 func TestWithAzureFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
 	// Deliberately do not create "missing-dir": the lock file's parent
 	// directory must not exist so opening the lock file fails immediately.
 	path := filepath.Join(t.TempDir(), "missing-dir", "some-cache-file")
@@ -980,6 +987,12 @@ func TestWriteCacheFileWithLocking_LockFailure(t *testing.T) {
 // directory itself, so leaving it absent makes the lock-file open fail
 // immediately with ENOENT.
 func TestDeviceCodeProvider_updateAzureProfile_LockFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
 	testHome := t.TempDir()
 	// Deliberately do not create "<testHome>/.azure".
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -240,6 +241,12 @@ func TestConfigManager_GetConfigPath(t *testing.T) {
 }
 
 func TestConfigManager_WithConfigLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
 	tempDir := t.TempDir()
 
 	// Point configPath at a parent directory that does not exist. gofrs/flock

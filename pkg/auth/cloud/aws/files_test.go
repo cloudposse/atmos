@@ -1034,6 +1034,12 @@ func TestNewAWSFileManager_WithRealm(t *testing.T) {
 // TestWithFileLock_WrapsErrCacheLocked verifies that withFileLock wraps ErrCacheLocked with the package's ErrFileLockTimeout sentinel and never invokes fn when the lock cannot be acquired.
 // Using a path whose ".lock" sibling lives under a directory that was never created makes the underlying open call fail immediately with ENOENT, since O_CREATE cannot materialize the missing parent directory — no waiting or real timeout involved, on either Unix or Windows.
 func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
 	path := filepath.Join(t.TempDir(), "missing-subdir", "credentials")
 
 	fnCalled := false
