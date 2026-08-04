@@ -43,7 +43,7 @@ atmos terraform migrate plan [component] -s <stack> [options]
   <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir`. Do not include the `migration_dir` prefix. `migration_dir` defaults to `./migrations` when that directory exists in the component, otherwise it defaults to the component root. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
-  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
+  <dd>Override the `tfmigrate` config path. Atmos checks, in order: this flag or `ATMOS_TFMIGRATE_CONFIG`, then `TFMIGRATE_CONFIG`, then a `.tfmigrate.hcl` file in the component. When none of these are set, Atmos generates a config that reuses the component's Terraform backend as history storage.</dd>
 
   <dt>`--backend-config`</dt>
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>

@@ -63,12 +63,10 @@ mirror, not from Atmos's own 30s-per-call upstream timeout ever firing.
   unrelated `cyclomatic complexity` finding on `ActionForMode`
   (`pkg/terraform/tfmigrate/tfmigrate.go`) remains, from an earlier commit this patch does not
   touch.
-- Not yet re-run against the actual failed GitHub Actions job — this fix is uncommitted pending
-  the user's decision on whether/when to commit and push (per this repo's "never commit without
-  being asked" convention). Re-running job 91719711270 (or the workflow as a whole) after pushing
-  would confirm the fix resolves the observed failure, but since the original failure was
-  intermittent (1 in 15 recent runs), a single successful rerun cannot alone prove the fix -
-  the code-level reasoning and the new regression test are the primary evidence.
+- Not yet re-run against the actual failed GitHub Actions job. Re-running job 91719711270 (or the
+  workflow as a whole) would confirm the fix resolves the observed failure, but since the original
+  failure was intermittent (1 in 15 recent runs), a single successful rerun cannot alone prove the
+  fix — the code-level reasoning and the new regression test are the primary evidence.
 
 ## Follow-ups
 

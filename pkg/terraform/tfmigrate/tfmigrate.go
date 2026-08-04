@@ -298,7 +298,7 @@ func BackendHistoryEnv(backendType string, backend map[string]any) []string {
 func BackendHistoryValues(backendType string, backend map[string]any) map[string]string {
 	defer perf.Track(nil, "tfmigrate.BackendHistoryValues")()
 
-	if len(backend) == 0 {
+	if backendType == "" {
 		return nil
 	}
 

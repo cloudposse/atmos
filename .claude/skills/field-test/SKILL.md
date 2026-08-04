@@ -74,14 +74,17 @@ plausibly do:
   pass — this repo ships local AWS/GCP/Azure/Kubernetes/Vault/registry emulators for exactly this
   purpose (see the `atmos-emulator` skill). Don't rely solely on mocked/dry-run paths, since that's
   exactly what's already covered by automated tests.
-- Never manually edit golden snapshot files under `tests/test-cases/` or `tests/testdata/` —
-  regenerate them via `-regenerate-snapshots` per CLAUDE.md's Golden Snapshots section.
+- Never manually edit golden snapshot files under `tests/test-cases/`, `tests/testdata/`, or
+  `tests/snapshots/` — regenerate them via `-regenerate-snapshots` per CLAUDE.md's Golden Snapshots
+  section.
 - Keep fixtures that have lasting value (they close real coverage gaps); don't create
   scratch-and-delete throwaways unless truly one-off.
 
 ## Phase 4 — Execute for real, with discipline
 
-- Run actual commands against actual state. Don't reason abstractly about what "should" happen —
+- Run actual commands against a disposable fixture or emulator by default. Before any command that
+  can mutate state, obtain explicit user confirmation. Run against shared or production state only
+  with a documented backup and rollback plan. Don't reason abstractly about what "should" happen —
   observe what does happen. Build a fresh binary first (`atmos build`) if the change under test
   isn't already reflected in `./build/atmos`.
 - Never pipe redirection into a command under test — per CLAUDE.md, piping breaks TTY detection,

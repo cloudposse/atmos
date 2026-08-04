@@ -1,13 +1,17 @@
 package registry
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,6 +194,48 @@ func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 	assert.Less(t, elapsed, serialFloor/2,
 		"resolving %d platforms took %s - expected well under the %s serial floor, indicating platforms are fetched concurrently, not one at a time",
 		platformCount, elapsed, serialFloor)
+}
+
+// TestFetchPlatformArchives_BoundsConcurrency guards against a malformed or
+// malicious registry response advertising an excessive platform list from
+// spawning unbounded goroutines and outbound requests: it asserts the peak
+// number of concurrent platform lookups never exceeds maxConcurrentPlatformFetches.
+func TestFetchPlatformArchives_BoundsConcurrency(t *testing.T) {
+	const platformCount = maxConcurrentPlatformFetches * 3
+
+	var current, peak int64
+	fetch := func(_ context.Context, _ proxy.UpstreamRequest) (*http.Response, error) {
+		n := atomic.AddInt64(&current, 1)
+		for {
+			p := atomic.LoadInt64(&peak)
+			if n <= p || atomic.CompareAndSwapInt64(&peak, p, n) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		atomic.AddInt64(&current, -1)
+
+		body, err := json.Marshal(registryDownload{Filename: "terraform-provider-aws.zip"})
+		require.NoError(t, err)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body))}, nil
+	}
+
+	platforms := make([]registryPlatform, platformCount)
+	for i := range platforms {
+		platforms[i] = registryPlatform{OS: fmt.Sprintf("os%d", i), Arch: "amd64"}
+	}
+
+	req := &platformArchiveRequest{
+		svc:     services{providersV1: "/v1/providers/"},
+		coord:   providerCoord{host: "registry.terraform.io", namespace: "hashicorp", typ: "aws"},
+		version: "5.95.0",
+	}
+
+	archives := fetchPlatformArchives(context.Background(), fetch, req, platforms)
+
+	assert.Len(t, archives, platformCount, "all platforms should still resolve")
+	assert.LessOrEqual(t, int(atomic.LoadInt64(&peak)), maxConcurrentPlatformFetches,
+		"peak concurrent platform fetches (%d) exceeded the bound (%d)", peak, maxConcurrentPlatformFetches)
 }
 
 func TestProviderMirror_ArchiveDownloadAndVerify(t *testing.T) {

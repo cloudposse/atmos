@@ -45,7 +45,7 @@ Atmos runs the same component preparation as `plan`: auth, source provisioning, 
   <dd>Path to a single `tfmigrate` migration file, relative to `migration_dir`. Do not include the `migration_dir` prefix. `migration_dir` defaults to `./migrations` when that directory exists in the component, otherwise it defaults to the component root. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
 
   <dt>`--tfmigrate-config`</dt>
-  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
+  <dd>Override the `tfmigrate` config path. Atmos checks, in order: this flag or `ATMOS_TFMIGRATE_CONFIG`, then `TFMIGRATE_CONFIG`, then a `.tfmigrate.hcl` file in the component. When none of these are set, Atmos generates a config that reuses the component's Terraform backend as history storage.</dd>
 
   <dt>`--backend-config`</dt>
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
@@ -94,7 +94,7 @@ Override the default `tfmigrate` config path:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
-Components with an S3 or GCS backend get durable history automatically. When the component has no `.tfmigrate.hcl`, Atmos generates a config that stores history in the same bucket as the state. Provide your own `.tfmigrate.hcl` file only to customize this behavior, for example:
+Components with an S3 or GCS backend get durable history automatically. When none of `--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG`, `TFMIGRATE_CONFIG`, or a component `.tfmigrate.hcl` file is set, Atmos generates a config that stores history in the same bucket as the state. Provide your own config only to customize this behavior, for example:
 
 ```hcl
 tfmigrate {

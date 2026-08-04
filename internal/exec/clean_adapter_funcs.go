@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"fmt"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
@@ -64,12 +66,12 @@ func ConstructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) st
 // `terraform plan` from a *second* directory (`from_dir`), where a bare
 // filename good only in the component's own directory would not exist.
 func ConstructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
-	defer perf.Track(nil, "exec.ConstructTerraformComponentVarfilePath")()
+	defer perf.Track(atmosConfig, "exec.ConstructTerraformComponentVarfilePath")()
 
 	path := constructTerraformComponentVarfilePath(atmosConfig, info)
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
 	}
 	return absPath, nil
 }

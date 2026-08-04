@@ -226,9 +226,25 @@ func TestAppendExecPath_RespectsProcessEnvVar(t *testing.T) {
 	assert.Equal(t, []string{"A=B"}, env)
 }
 
-func TestBackendHistoryValues_EmptyBackendReturnsNil(t *testing.T) {
-	assert.Nil(t, BackendHistoryValues("s3", nil))
-	assert.Nil(t, BackendHistoryValues("s3", map[string]any{}))
+func TestBackendHistoryValues_EmptyBackendTypeReturnsNil(t *testing.T) {
+	assert.Nil(t, BackendHistoryValues("", nil))
+	assert.Nil(t, BackendHistoryValues("", map[string]any{}))
+}
+
+// TestBackendHistoryValues_NilOrEmptyBackendStillReportsStorage covers a known
+// backend type with a nil or empty backend section (e.g. a component whose
+// stack config never set explicit backend attributes): it must still report
+// EnvHistoryStorage = backendType, not nil, so `migrate list`'s History
+// Storage column isn't blank just because the backend section itself is empty.
+func TestBackendHistoryValues_NilOrEmptyBackendStillReportsStorage(t *testing.T) {
+	values := BackendHistoryValues("s3", nil)
+	require.NotNil(t, values)
+	assert.Equal(t, "s3", values[EnvHistoryStorage])
+	assert.NotContains(t, values, EnvHistoryBucket)
+
+	values = BackendHistoryValues("local", map[string]any{})
+	require.NotNil(t, values)
+	assert.Equal(t, "local", values[EnvHistoryStorage])
 }
 
 // TestBackendHistoryValues_UnsupportedBackendTypeReportsStorageOnly covers
