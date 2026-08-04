@@ -115,6 +115,7 @@ type effectiveReleasePolicy struct {
 type releaseLifecycleResolution struct {
 	Policy          effectiveReleasePolicy
 	TimeoutExplicit bool
+	TimeoutField    string
 	Warnings        []lifecycleWarning
 }
 
@@ -324,7 +325,10 @@ func decodeDeletePolicy(releaseMap map[string]any) (deletePolicyInput, error) {
 }
 
 func resolveReleaseLifecycle(input releasePolicyInput, operation string, emitMigrationWarning bool) (releaseLifecycleResolution, error) {
-	resolution := releaseLifecycleResolution{Policy: defaultReleasePolicy(operation)}
+	resolution := releaseLifecycleResolution{
+		Policy:       defaultReleasePolicy(operation),
+		TimeoutField: "built-in default",
+	}
 	if err := applyCommonPolicy(&resolution, input.Timeout, input.ChartHooks, input.Wait, "release"); err != nil {
 		return releaseLifecycleResolution{}, err
 	}
@@ -562,6 +566,7 @@ func applyTimeout(resolution *releaseLifecycleResolution, value, field string) e
 	}
 	resolution.Policy.Timeout = parsed
 	resolution.TimeoutExplicit = true
+	resolution.TimeoutField = field
 	return nil
 }
 
