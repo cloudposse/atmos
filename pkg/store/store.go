@@ -67,3 +67,14 @@ type ListableStore interface {
 	// Keys lists the keys under a stack/component scope (or globally when both are empty).
 	Keys(stack, component string) ([]string, error)
 }
+
+// ValueListableStore is implemented by stores whose ListableStore.Keys enumeration is only safe
+// to pair with per-key Get calls in some execution contexts. GitHubActionsStore's Get requires a
+// GitHub Actions runner; outside one it implements this to report false so ListKeyValues can
+// fail fast with ErrListNotSupported instead of aborting mid-enumeration on the first Get error.
+type ValueListableStore interface {
+	Store
+	// ValueListingSupported reports whether Get can currently be called for every key Keys
+	// returns.
+	ValueListingSupported() bool
+}

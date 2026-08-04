@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -62,6 +63,8 @@ var (
 )
 
 // SSMClient interface allows us to mock the AWS SSM client.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_aws_ssm_param_store.go -package=providers
 type SSMClient interface {
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
@@ -626,6 +629,8 @@ func (s *SSMStore) resolveReadClient(ctx context.Context) (SSMClient, error) {
 // empty), via SSM's GetParametersByPath (recursive). WithDecryption is false: only names are
 // needed, so no kms:Decrypt permission is required.
 func (s *SSMStore) Keys(stack string, component string) ([]string, error) {
+	defer perf.Track(nil, "providers.SSMStore.Keys")()
+
 	if s.stackDelimiter == nil {
 		return nil, store.ErrStackDelimiterNotSet
 	}

@@ -7,40 +7,34 @@ import (
 	"testing"
 	"time"
 
-	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
+
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
-// MockRedisClient is a mock implementation of the RedisClient interface.
-type MockRedisClient struct {
-	mock.Mock
+// stringCmd builds a *redis.StringCmd the way the real go-redis client would populate one,
+// for use as a gomock .Return() value on RedisClient.Get expectations.
+func stringCmd(val string, err error) *redis.StringCmd {
+	return redis.NewStringResult(val, err)
 }
 
-func (m *MockRedisClient) Get(ctx context.Context, key string) *redis.StringCmd {
-	args := m.Called(ctx, key)
-	cmd := redis.NewStringResult(args.String(0), args.Error(1))
-	return cmd
+// statusCmd builds a *redis.StatusCmd for use as a gomock .Return() value on RedisClient.Set
+// expectations.
+func statusCmd(val string, err error) *redis.StatusCmd {
+	return redis.NewStatusResult(val, err)
 }
 
-func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
-	args := m.Called(ctx, key, value, expiration)
-	cmd := redis.NewStatusResult(args.String(0), args.Error(1))
-	return cmd
-}
-
-// Scan mock returns (keys []string, nextCursor uint64, err error), in that order, via .Return().
-func (m *MockRedisClient) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
-	args := m.Called(ctx, cursor, match, count)
+// scanCmd builds a *redis.ScanCmd with either a populated key page/cursor or an error, for use as
+// a gomock .Return() value on RedisClient.Scan expectations.
+func scanCmd(ctx context.Context, keys []string, cursor uint64, err error) *redis.ScanCmd {
 	cmd := redis.NewScanCmd(ctx, nil)
-	if err := args.Error(2); err != nil {
+	if err != nil {
 		cmd.SetErr(err)
 		return cmd
 	}
-	keys, _ := args.Get(0).([]string)
-	nextCursor, _ := args.Get(1).(uint64)
-	cmd.SetVal(keys, nextCursor)
+	cmd.SetVal(keys, cursor)
 	return cmd
 }
 
@@ -84,7 +78,8 @@ func TestRedisStore_Get_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			mockClient := new(MockRedisClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockRedisClient(ctrl)
 			store, err := NewRedisStore(RedisStoreOptions{
 				Prefix:         ptr("testprefix"),
 				StackDelimiter: ptr("/"),
@@ -104,7 +99,7 @@ func TestRedisStore_Get_Success(t *testing.T) {
 			jsonData, _ := json.Marshal(tt.expectedValue)
 
 			// Set up the expected calls and return values
-			mockClient.On("Get", context.Background(), fullKey).Return(string(jsonData), nil)
+			mockClient.EXPECT().Get(context.Background(), fullKey).Return(stringCmd(string(jsonData), nil))
 
 			// Act
 			result, err := redisStore.Get(stack, component, key)
@@ -115,14 +110,14 @@ func TestRedisStore_Get_Success(t *testing.T) {
 			expectedJSON, _ := json.Marshal(tt.expectedValue)
 			actualJSON, _ := json.Marshal(result)
 			assert.JSONEq(t, string(expectedJSON), string(actualJSON))
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
 
 func TestRedisStore_Get_KeyNotFound(t *testing.T) {
 	// Arrange
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	store, err := NewRedisStore(RedisStoreOptions{
 		Prefix:         ptr("testprefix"),
 		StackDelimiter: ptr("/"),
@@ -140,7 +135,7 @@ func TestRedisStore_Get_KeyNotFound(t *testing.T) {
 	fullKey := "testprefix/mystack/mycomponent/mykey"
 
 	// Set up the expected calls and return values
-	mockClient.On("Get", context.Background(), fullKey).Return("", redis.Nil)
+	mockClient.EXPECT().Get(context.Background(), fullKey).Return(stringCmd("", redis.Nil))
 
 	// Act
 	result, err := redisStore.Get(stack, component, key)
@@ -149,12 +144,12 @@ func TestRedisStore_Get_KeyNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to get key")
-	mockClient.AssertExpectations(t)
 }
 
 func TestRedisStore_Set_Success(t *testing.T) {
 	// Arrange
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	store, err := NewRedisStore(RedisStoreOptions{
 		Prefix:         ptr("testprefix"),
 		StackDelimiter: ptr("/"),
@@ -178,19 +173,19 @@ func TestRedisStore_Set_Success(t *testing.T) {
 	jsonData, _ := json.Marshal(value)
 
 	// Set up the expected calls and return values
-	mockClient.On("Set", context.Background(), fullKey, jsonData, time.Duration(0)).Return("OK", nil)
+	mockClient.EXPECT().Set(context.Background(), fullKey, jsonData, time.Duration(0)).Return(statusCmd("OK", nil))
 
 	// Act
 	err = redisStore.Set(stack, component, key, value)
 
 	// Assert
 	assert.NoError(t, err)
-	mockClient.AssertExpectations(t)
 }
 
 func TestRedisStore_Set_MarshalError(t *testing.T) {
 	// Arrange
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	store, err := NewRedisStore(RedisStoreOptions{
 		Prefix:         ptr("testprefix"),
 		StackDelimiter: ptr("/"),
@@ -219,7 +214,8 @@ func TestRedisStore_Set_MarshalError(t *testing.T) {
 
 func TestRedisStore_Get_UnmarshalError(t *testing.T) {
 	// Arrange
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	store, err := NewRedisStore(RedisStoreOptions{
 		Prefix:         ptr("testprefix"),
 		StackDelimiter: ptr("/"),
@@ -239,7 +235,7 @@ func TestRedisStore_Get_UnmarshalError(t *testing.T) {
 	invalidJSON := "invalid_json"
 
 	// Set up the expected calls and return values
-	mockClient.On("Get", context.Background(), fullKey).Return(invalidJSON, nil)
+	mockClient.EXPECT().Get(context.Background(), fullKey).Return(stringCmd(invalidJSON, nil))
 
 	// Act
 	result, err := redisStore.Get(stack, component, key)
@@ -247,7 +243,6 @@ func TestRedisStore_Get_UnmarshalError(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, invalidJSON, result)
-	mockClient.AssertExpectations(t)
 }
 
 func TestRedisStore_Get_NonJsonValues(t *testing.T) {
@@ -286,7 +281,8 @@ func TestRedisStore_Get_NonJsonValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			mockClient := new(MockRedisClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockRedisClient(ctrl)
 			store, err := NewRedisStore(RedisStoreOptions{
 				Prefix:         ptr("testprefix"),
 				StackDelimiter: ptr("/"),
@@ -304,7 +300,7 @@ func TestRedisStore_Get_NonJsonValues(t *testing.T) {
 			fullKey := "testprefix/mystack/mycomponent/mykey"
 
 			// Set up the expected calls and return values
-			mockClient.On("Get", context.Background(), fullKey).Return(tt.rawValue, nil)
+			mockClient.EXPECT().Get(context.Background(), fullKey).Return(stringCmd(tt.rawValue, nil))
 
 			// Act
 			result, err := redisStore.Get(stack, component, key)
@@ -312,14 +308,14 @@ func TestRedisStore_Get_NonJsonValues(t *testing.T) {
 			// Assert
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedValue, result)
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
 
 func TestRedisStore_Get_GetKeyError(t *testing.T) {
 	// Arrange
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	store, err := NewRedisStore(RedisStoreOptions{
 		Prefix:         nil, // Prefix is nil
 		StackDelimiter: ptr("/"),
@@ -341,7 +337,7 @@ func TestRedisStore_Get_GetKeyError(t *testing.T) {
 	fullKey := "/mystack/mycomponent/mykey"
 
 	// Set up the expected call to redisClient.Get with fullKey and return redis.Nil to simulate key not found
-	mockClient.On("Get", context.Background(), fullKey).Return("", redis.Nil)
+	mockClient.EXPECT().Get(context.Background(), fullKey).Return(stringCmd("", redis.Nil))
 
 	// Act
 	result, err := redisStore.Get(stack, component, key)
@@ -350,7 +346,6 @@ func TestRedisStore_Get_GetKeyError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to get key")
-	mockClient.AssertExpectations(t)
 }
 
 func TestRedisStore_getRedisOptions(t *testing.T) {
@@ -381,7 +376,8 @@ func TestRedisStore_getRedisOptions(t *testing.T) {
 }
 
 func TestRedisStore_RedisClient(t *testing.T) {
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	s := &RedisStore{redisClient: mockClient}
 
 	assert.Equal(t, mockClient, s.RedisClient())
@@ -460,7 +456,8 @@ func TestRedisStore_GetKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			mockClient := new(MockRedisClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockRedisClient(ctrl)
 			store, err := NewRedisStore(RedisStoreOptions{
 				Prefix:         ptr("myapp"),
 				StackDelimiter: ptr("/"),
@@ -475,7 +472,7 @@ func TestRedisStore_GetKey(t *testing.T) {
 			// Set up mock expectations
 			// GetKey prepends the prefix with a colon when prefix is set
 			expectedKey := "myapp:" + tt.key
-			mockClient.On("Get", context.Background(), expectedKey).Return(tt.mockReturn, tt.mockError)
+			mockClient.EXPECT().Get(context.Background(), expectedKey).Return(stringCmd(tt.mockReturn, tt.mockError))
 
 			// Act
 			result, err := redisStore.GetKey(tt.key)
@@ -491,7 +488,6 @@ func TestRedisStore_GetKey(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedValue, result)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -566,15 +562,15 @@ func TestRedisStore_Set_Validation(t *testing.T) {
 }
 
 func TestRedisStore_Set_ClientError(t *testing.T) {
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	s := &RedisStore{prefix: "p", redisClient: mockClient, stackDelimiter: ptr("/")}
 
-	mockClient.On("Set", context.Background(), "p/dev/app/k", mock.Anything, time.Duration(0)).
-		Return("", fmt.Errorf("set boom"))
+	mockClient.EXPECT().Set(context.Background(), "p/dev/app/k", gomock.Any(), time.Duration(0)).
+		Return(statusCmd("", fmt.Errorf("set boom")))
 
 	err := s.Set("dev", "app", "k", "v")
 	assert.Error(t, err)
-	mockClient.AssertExpectations(t)
 }
 
 func TestBuildRedisStore_ParseError(t *testing.T) {
@@ -585,28 +581,49 @@ func TestBuildRedisStore_ParseError(t *testing.T) {
 }
 
 // TestRedisStore_Keys proves Keys pages through SCAN (never KEYS) until the cursor returns to 0,
-// matching on the composed prefix, and strips that prefix from each returned key.
+// matches on a segment-bounded pattern (prefix + "/*", not prefix + "*"), and strips that prefix
+// from each returned key. It also proves a same-level sibling that merely shares a character
+// prefix (e.g. "vpc2" when scoped to "vpc") is excluded.
 func TestRedisStore_Keys(t *testing.T) {
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	s := &RedisStore{redisClient: mockClient, prefix: "p", stackDelimiter: ptr("-")}
 
-	mockClient.On("Scan", context.Background(), uint64(0), "p/prod/vpc*", int64(0)).
-		Return([]string{"p/prod/vpc/image_tag"}, uint64(7), nil)
-	mockClient.On("Scan", context.Background(), uint64(7), "p/prod/vpc*", int64(0)).
-		Return([]string{"p/prod/vpc/region"}, uint64(0), nil)
+	ctx := context.Background()
+	mockClient.EXPECT().Scan(ctx, uint64(0), "p/prod/vpc/*", int64(0)).
+		Return(scanCmd(ctx, []string{"p/prod/vpc/image_tag"}, uint64(7), nil))
+	mockClient.EXPECT().Scan(ctx, uint64(7), "p/prod/vpc/*", int64(0)).
+		Return(scanCmd(ctx, []string{"p/prod/vpc/region", "p/prod/vpc2/key"}, uint64(0), nil))
 
 	keys, err := s.Keys("prod", "vpc")
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
-	mockClient.AssertExpectations(t)
+}
+
+// TestRedisStore_Keys_EscapesGlobMetacharacters proves a literal glob metacharacter in the
+// stack/component name is escaped in the SCAN pattern rather than interpreted as a wildcard.
+func TestRedisStore_Keys_EscapesGlobMetacharacters(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
+	s := &RedisStore{redisClient: mockClient, prefix: "p", stackDelimiter: ptr("-")}
+
+	ctx := context.Background()
+	mockClient.EXPECT().Scan(ctx, uint64(0), `p/prod/vpc\[1\]/*`, int64(0)).
+		Return(scanCmd(ctx, []string{"p/prod/vpc[1]/image_tag"}, uint64(0), nil))
+
+	keys, err := s.Keys("prod", "vpc[1]")
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag"}, keys)
 }
 
 func TestRedisStore_Keys_Error(t *testing.T) {
-	mockClient := new(MockRedisClient)
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockRedisClient(ctrl)
 	s := &RedisStore{redisClient: mockClient, prefix: "p", stackDelimiter: ptr("-")}
 
-	mockClient.On("Scan", context.Background(), uint64(0), "p/prod/vpc*", int64(0)).
-		Return([]string(nil), uint64(0), fmt.Errorf("scan boom"))
+	ctx := context.Background()
+	mockClient.EXPECT().Scan(ctx, uint64(0), "p/prod/vpc/*", int64(0)).
+		Return(scanCmd(ctx, nil, uint64(0), fmt.Errorf("scan boom")))
 
 	_, err := s.Keys("prod", "vpc")
 	assert.Error(t, err)

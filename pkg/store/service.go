@@ -121,8 +121,19 @@ type KeyValue struct {
 
 // ListKeyValues lists every key under a stack/component scope (or globally when both are empty)
 // in the named store, together with its current value, sorted by key. It returns
-// ErrListNotSupported if the store's backend does not implement ListableStore.
+// ErrListNotSupported if the store's backend does not implement ListableStore, or if it
+// implements ValueListableStore and reports that value listing isn't currently supported (e.g. a
+// GitHub Actions store run outside a runner) -- checked up front so the call fails fast instead
+// of aborting mid-enumeration on the first Get error.
 func (s *Service) ListKeyValues(name, stack, component string) ([]KeyValue, error) {
+	st, err := s.lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if vls, ok := st.(ValueListableStore); ok && !vls.ValueListingSupported() {
+		return nil, fmt.Errorf("%w: store %q (kind %s)", ErrListNotSupported, name, resolveKind(s.config[name]))
+	}
+
 	keys, err := s.Keys(name, stack, component)
 	if err != nil {
 		return nil, err

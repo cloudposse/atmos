@@ -156,10 +156,12 @@ commands:
             command: go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
 
       - name: generate-auth-http-mocks
-        description: Regenerate auth/http mocks using go:generate directives
+        description: Regenerate auth/http/store mocks using go:generate directives
         env: *go_auto_env
         steps:
           - type: shell
             command: go generate ./pkg/auth/types/...
           - type: shell
             command: go generate ./pkg/http/...
+          - type: shell
+            command: go generate ./pkg/store/...

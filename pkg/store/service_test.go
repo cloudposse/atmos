@@ -40,6 +40,14 @@ func TestService_Get(t *testing.T) {
 	assert.Equal(t, "v1.2.3", value)
 }
 
+func TestService_Get_StoreNotConfigured(t *testing.T) {
+	svc := NewService(StoresConfig{}, StoreRegistry{})
+
+	_, err := svc.Get("missing-store", "", "", "somekey")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrStoreNotConfigured)
+}
+
 func TestService_GetKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockStore := NewMockStore(ctrl)
@@ -50,6 +58,14 @@ func TestService_GetKey(t *testing.T) {
 	value, err := svc.GetKey("app", "image_tag")
 	require.NoError(t, err)
 	assert.Equal(t, "v1.2.3", value)
+}
+
+func TestService_GetKey_StoreNotConfigured(t *testing.T) {
+	svc := NewService(StoresConfig{}, StoreRegistry{})
+
+	_, err := svc.GetKey("missing-store", "somekey")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrStoreNotConfigured)
 }
 
 func TestService_Delete(t *testing.T) {
@@ -150,6 +166,48 @@ func TestService_ListKeyValues_GetError(t *testing.T) {
 
 	_, err := svc.ListKeyValues("app", "prod", "vpc")
 	require.ErrorIs(t, err, assert.AnError)
+}
+
+// valueListableStore combines ListableStore and ValueListableStore in one fake -- no generated
+// mock implements both interfaces at once, and the capability check in ListKeyValues needs a
+// store that type-asserts to ValueListableStore without also satisfying it via embedding tricks.
+type valueListableStore struct {
+	*MockListableStore
+	supported bool
+}
+
+func (f *valueListableStore) ValueListingSupported() bool { return f.supported }
+
+// TestService_ListKeyValues_ValueListingNotSupported proves ListKeyValues checks
+// ValueListableStore up front and fails fast with ErrListNotSupported -- without calling Keys or
+// Get -- when value listing isn't currently supported (e.g. a GitHub Actions store run outside a
+// runner).
+func TestService_ListKeyValues_ValueListingNotSupported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := &valueListableStore{MockListableStore: NewMockListableStore(ctrl), supported: false}
+	// No EXPECT() calls on mockStore.MockListableStore: Keys/Get must never be invoked.
+
+	svc := NewService(StoresConfig{"app": {Kind: KindGitHubActions}}, StoreRegistry{"app": mockStore})
+
+	_, err := svc.ListKeyValues("app", "prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrListNotSupported)
+}
+
+// TestService_ListKeyValues_ValueListingSupported proves a ValueListableStore that reports
+// support proceeds through the normal Keys/Get enumeration unchanged.
+func TestService_ListKeyValues_ValueListingSupported(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	inner := NewMockListableStore(ctrl)
+	inner.EXPECT().Keys("prod", "vpc").Return([]string{"image_tag"}, nil)
+	inner.EXPECT().Get("prod", "vpc", "image_tag").Return("v1.2.3", nil)
+	mockStore := &valueListableStore{MockListableStore: inner, supported: true}
+
+	svc := NewService(StoresConfig{"app": {Kind: KindGitHubActions}}, StoreRegistry{"app": mockStore})
+
+	kvs, err := svc.ListKeyValues("app", "prod", "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, []KeyValue{{Key: "image_tag", Value: "v1.2.3"}}, kvs)
 }
 
 // fakeLocalStore is a small hand-written fake (rather than a generated mock) implementing both

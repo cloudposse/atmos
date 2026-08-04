@@ -399,14 +399,18 @@ func TestSecretsManagerStore_GetKey_StackDelimiterNotSet(t *testing.T) {
 }
 
 // TestSecretsManagerStore_Keys proves Keys uses ListSecrets' server-side "name" prefix filter
-// and strips the queried prefix (plus its separator) from each returned secret name.
+// and strips the queried prefix (plus its separator) from each returned secret name. It also
+// proves a same-level sibling that merely shares a character prefix (e.g. "prod/api-backup" for
+// scope "prod/api") is excluded, since the server-side filter is a raw character-prefix match,
+// not a path-segment-aware one.
 func TestSecretsManagerStore_Keys(t *testing.T) {
 	fake := newFakeSecretsManager()
 	s := newTestASMStore(fake)
 
 	require.NoError(t, s.Set("prod", "api", "API_KEY", "v1"))
 	require.NoError(t, s.Set("prod", "api", "DB_PASSWORD", "v2"))
-	require.NoError(t, s.Set("dev", "api", "API_KEY", "v3")) // Different stack: excluded.
+	require.NoError(t, s.Set("dev", "api", "API_KEY", "v3"))       // Different stack: excluded.
+	require.NoError(t, s.Set("prod", "api-backup", "TOKEN", "v4")) // Sibling component: excluded.
 
 	keys, err := s.Keys("prod", "api")
 	require.NoError(t, err)

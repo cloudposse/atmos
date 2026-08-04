@@ -10,6 +10,7 @@ import (
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/redis/go-redis/v9"
 )
@@ -27,6 +28,8 @@ type RedisStoreOptions struct {
 }
 
 // RedisClient interface allows us to mock the Redis Client in test with only the methods we are using in the RedisStore.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_redis_store.go -package=providers
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
@@ -208,16 +211,22 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 // Keys lists the keys under a stack/component scope (or globally when both are empty), via
 // Redis SCAN with a MATCH glob pattern. SCAN is used instead of KEYS, which blocks the server on
 // a large keyspace; it gives no strong consistency guarantee (keys added/removed mid-scan may or
-// may not appear), which is acceptable for a "list what's roughly there" result.
+// may not appear), which is acceptable for a "list what's roughly there" result. The pattern is
+// segment-bounded (prefix + "/*", not prefix + "*") and the prefix's glob metacharacters are
+// escaped, so a scoped scan can't over-match a same-level sibling (e.g. "vpc2" when scoped to
+// "vpc") or treat a literal "*"/"?"/"["/"]" in a stack or component name as a wildcard.
 func (s *RedisStore) Keys(stack string, component string) ([]string, error) {
+	defer perf.Track(nil, "providers.RedisStore.Keys")()
+
 	if s.stackDelimiter == nil {
 		return nil, store.ErrStackDelimiterNotSet
 	}
 
 	prefix := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
-	pattern := prefix + "*"
+	pattern := "*"
 	trimPrefix := prefix
 	if trimPrefix != "" {
+		pattern = escapeRedisGlob(prefix) + "/*"
 		trimPrefix += "/"
 	}
 
@@ -230,7 +239,7 @@ func (s *RedisStore) Keys(stack string, component string) ([]string, error) {
 			return nil, fmt.Errorf(errFormat, store.ErrScanRedisKeys, err)
 		}
 		for _, k := range keys {
-			if name := strings.TrimPrefix(k, trimPrefix); name != "" {
+			if name, ok := strings.CutPrefix(k, trimPrefix); ok && name != "" {
 				names = append(names, name)
 			}
 		}
@@ -241,6 +250,12 @@ func (s *RedisStore) Keys(stack string, component string) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// escapeRedisGlob escapes Redis SCAN MATCH glob metacharacters so a composed prefix (store
+// prefix, stack, or component name) matches literally instead of as a wildcard pattern.
+func escapeRedisGlob(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`).Replace(s)
 }
 
 // RedisClient returns the underlying Redis client for testing purposes.

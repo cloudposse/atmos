@@ -219,6 +219,28 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 	})
 }
 
+// TestGitHubActionsStore_ValueListingSupported proves ValueListingSupported mirrors readAllowed
+// in every case Get's own CI gating covers, so Service.ListKeyValues rejects value listing in
+// exactly the same conditions Get itself would reject a value read.
+func TestGitHubActionsStore_ValueListingSupported(t *testing.T) {
+	t.Run("unsupported outside CI", func(t *testing.T) {
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+		assert.False(t, store.ValueListingSupported())
+	})
+
+	t.Run("supported when ci.enabled forces it", func(t *testing.T) {
+		opts := GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}
+		opts.CI.Enabled = true
+		store := newTestStore(newFakeGitHubActionsClient(), &opts, false)
+		assert.True(t, store.ValueListingSupported())
+	})
+
+	t.Run("supported when detected as a runner", func(t *testing.T) {
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+		assert.True(t, store.ValueListingSupported())
+	})
+}
+
 func TestGitHubActionsStore_EnvHint(t *testing.T) {
 	withEnv := newTestStore(newFakeGitHubActionsClient(),
 		&GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Environment: "production"}, false)

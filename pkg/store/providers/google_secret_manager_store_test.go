@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"testing"
 
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/google/go-cmp/cmp"
-	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // Define test error constants.
@@ -22,72 +22,6 @@ var (
 	ErrInternalError  = errors.New("internal error")
 	ErrTransientError = errors.New("transient error")
 )
-
-// MockGSMClient is a mock implementation of GSMClient.
-type MockGSMClient struct {
-	mock.Mock
-}
-
-// CreateSecret mocks the GSM CreateSecret API call.
-func (m *MockGSMClient) CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error) {
-	args := m.Called(mock.Anything, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*secretmanagerpb.Secret), args.Error(1)
-}
-
-// AddSecretVersion mocks the GSM AddSecretVersion API call.
-func (m *MockGSMClient) AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
-	args := m.Called(mock.Anything, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
-}
-
-// AccessSecretVersion mocks the GSM AccessSecretVersion API call.
-func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error) {
-	args := m.Called(mock.Anything, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
-}
-
-// GetSecretVersion mocks the GSM GetSecretVersion API call, which returns version metadata
-// without accessing or decrypting the secret payload.
-func (m *MockGSMClient) GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
-	args := m.Called(mock.Anything, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
-}
-
-// DeleteSecret mocks the GSM DeleteSecret API call.
-func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error {
-	args := m.Called(mock.Anything, req)
-	return args.Error(0)
-}
-
-// Close mocks the GSM client Close method.
-func (m *MockGSMClient) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-// ListSecrets satisfies GSMClient for compilation. The secretmanager.SecretIterator's paging
-// state is unexported and can only be built by the real SDK client, so this cannot return a
-// working iterator from a test double -- see gsmSecretNames (tested directly) for the
-// unit-testable half of GSMStore.Keys.
-func (m *MockGSMClient) ListSecrets(ctx context.Context, req *secretmanagerpb.ListSecretsRequest, opts ...gax.CallOption) *secretmanager.SecretIterator {
-	args := m.Called(mock.Anything, req)
-	if args.Get(0) == nil {
-		return nil
-	}
-	return args.Get(0).(*secretmanager.SecretIterator)
-}
 
 // newGSMStoreWithClient creates a new GSMStore with a provided client (test helper).
 func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore {
@@ -127,7 +61,7 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 			}
 		}
 
-		m.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
+		m.EXPECT().CreateSecret(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.CreateSecretRequest) bool {
 			expectedReq := &secretmanagerpb.CreateSecretRequest{
 				Parent:   parent,
 				SecretId: secretId,
@@ -167,7 +101,7 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 			ret = &secretmanagerpb.SecretVersion{}
 		}
 
-		m.On("AddSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
+		m.EXPECT().AddSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
 			expectedReq := &secretmanagerpb.AddSecretVersionRequest{
 				Parent: fmt.Sprintf("%s/secrets/%s", parent, secretId),
 				Payload: &secretmanagerpb.SecretPayload{
@@ -211,10 +145,11 @@ func TestGSMStore_createSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &MockGSMClient{}
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{ProjectID: "test-project"})
 
-			mockClient.On("CreateSecret", mock.Anything, mock.Anything).Return(nil, tt.returnErr)
+			mockClient.EXPECT().CreateSecret(gomock.Any(), gomock.Any()).Return(nil, tt.returnErr)
 
 			secret, err := store.createSecret(context.Background(), "my-secret")
 
@@ -225,7 +160,6 @@ func TestGSMStore_createSecret(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectName, secret.GetName())
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -375,7 +309,8 @@ func TestGSMStore_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &MockGSMClient{}
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			if tt.mockFn != nil {
 				tt.mockFn(mockClient)
 			}
@@ -393,8 +328,6 @@ func TestGSMStore_Set(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -418,7 +351,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
 						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
@@ -438,7 +371,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
 						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
@@ -458,7 +391,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
 						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
@@ -474,7 +407,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
 						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
@@ -491,7 +424,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key/versions/latest"
 				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
 					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
@@ -506,7 +439,7 @@ func TestGSMStore_Get(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				m.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					return req.Name == "projects/test-project/secrets/test-prefix_config-key/versions/latest"
 				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
 					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
@@ -527,7 +460,8 @@ func TestGSMStore_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockGSMClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			tt.mockFn(mockClient)
 
 			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
@@ -550,7 +484,6 @@ func TestGSMStore_Get(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -561,7 +494,7 @@ func TestGSMStore_Delete(t *testing.T) {
 	const secretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
 
 	matchDelete := func(m *MockGSMClient, err error) {
-		m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+		m.EXPECT().DeleteSecret(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.DeleteSecretRequest) bool {
 			return req.Name == secretName
 		})).Return(err)
 	}
@@ -612,7 +545,7 @@ func TestGSMStore_Delete(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+				m.EXPECT().DeleteSecret(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.DeleteSecretRequest) bool {
 					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key"
 				})).Return(nil)
 			},
@@ -624,7 +557,7 @@ func TestGSMStore_Delete(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+				m.EXPECT().DeleteSecret(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.DeleteSecretRequest) bool {
 					return req.Name == "projects/test-project/secrets/test-prefix_config-key"
 				})).Return(nil)
 			},
@@ -641,7 +574,8 @@ func TestGSMStore_Delete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockGSMClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			tt.mockFn(mockClient)
 
 			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
@@ -656,7 +590,6 @@ func TestGSMStore_Delete(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -668,7 +601,7 @@ func TestGSMStore_Has(t *testing.T) {
 	const versionName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
 
 	matchGetVersion := func(m *MockGSMClient, version *secretmanagerpb.SecretVersion, err error) {
-		call := m.On("GetSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.GetSecretVersionRequest) bool {
+		call := m.EXPECT().GetSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.GetSecretVersionRequest) bool {
 			return req.Name == versionName
 		}))
 		if err != nil {
@@ -723,7 +656,8 @@ func TestGSMStore_Has(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := new(MockGSMClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			tt.mockFn(mockClient)
 
 			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
@@ -743,9 +677,9 @@ func TestGSMStore_Has(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.want, got)
-			// Existence must be checked WITHOUT accessing/decrypting the payload.
-			mockClient.AssertNotCalled(t, "AccessSecretVersion")
-			mockClient.AssertExpectations(t)
+			// Existence must be checked WITHOUT accessing/decrypting the payload: no
+			// AccessSecretVersion expectation is registered above, so the gomock
+			// controller fails the test if Has ever calls it.
 		})
 	}
 }
@@ -986,7 +920,8 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			mockClient := new(MockGSMClient)
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
 			store := &GSMStore{
 				client:    mockClient,
 				projectID: "test-project",
@@ -997,11 +932,11 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 			// Set up mock expectations
 			expectedFullPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", "test-project", tt.key)
 			if tt.mockError != nil {
-				mockClient.On("AccessSecretVersion", mock.Anything, &secretmanagerpb.AccessSecretVersionRequest{
+				mockClient.EXPECT().AccessSecretVersion(gomock.Any(), &secretmanagerpb.AccessSecretVersionRequest{
 					Name: expectedFullPath,
 				}).Return(nil, tt.mockError)
 			} else {
-				mockClient.On("AccessSecretVersion", mock.Anything, &secretmanagerpb.AccessSecretVersionRequest{
+				mockClient.EXPECT().AccessSecretVersion(gomock.Any(), &secretmanagerpb.AccessSecretVersionRequest{
 					Name: expectedFullPath,
 				}).Return(&secretmanagerpb.AccessSecretVersionResponse{
 					Payload: &secretmanagerpb.SecretPayload{
@@ -1024,7 +959,6 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedValue, result)
 			}
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
@@ -1046,81 +980,84 @@ func TestGSMStore_addSecretVersion_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mc := new(MockGSMClient)
-			mc.On("CreateSecret", mock.Anything, mock.Anything).
+			ctrl := gomock.NewController(t)
+			mc := NewMockGSMClient(ctrl)
+			mc.EXPECT().CreateSecret(gomock.Any(), gomock.Any()).
 				Return(&secretmanagerpb.Secret{Name: "projects/p/secrets/s"}, nil)
-			mc.On("AddSecretVersion", mock.Anything, mock.Anything).
+			mc.EXPECT().AddSecretVersion(gomock.Any(), gomock.Any()).
 				Return(nil, status.Error(tt.code, "boom"))
 
 			s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 			err := s.Set("dev", "app", "k", "v")
 			assert.ErrorIs(t, err, tt.want)
-			mc.AssertExpectations(t)
 		})
 	}
 }
 
 func TestGSMStore_Set_MoreErrors(t *testing.T) {
 	t.Run("nil value", func(t *testing.T) {
-		mc := new(MockGSMClient)
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
 	})
 
 	t.Run("marshal error", func(t *testing.T) {
-		mc := new(MockGSMClient)
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
 	})
 
 	t.Run("createSecret error", func(t *testing.T) {
-		mc := new(MockGSMClient)
-		mc.On("CreateSecret", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
+		mc.EXPECT().CreateSecret(gomock.Any(), gomock.Any()).
 			Return(nil, status.Error(codes.PermissionDenied, "boom"))
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrPermissionDenied)
-		mc.AssertExpectations(t)
 	})
 }
 
 func TestGSMStore_Get_GenericError(t *testing.T) {
-	mc := new(MockGSMClient)
-	mc.On("AccessSecretVersion", mock.Anything, mock.Anything).Return(nil, errors.New("boom"))
+	ctrl := gomock.NewController(t)
+	mc := NewMockGSMClient(ctrl)
+	mc.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom"))
 	s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 
 	_, err := s.Get("dev", "app", "k")
 	assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
-	mc.AssertExpectations(t)
 }
 
 func TestGSMStore_GetKey_MoreCases(t *testing.T) {
 	t.Run("empty key", func(t *testing.T) {
-		mc := new(MockGSMClient)
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 		_, err := s.GetKey("")
 		assert.ErrorIs(t, err, storepkg.ErrEmptyKey)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		mc := new(MockGSMClient)
-		mc.On("AccessSecretVersion", mock.Anything, mock.Anything).
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
+		mc.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Any()).
 			Return(nil, status.Error(codes.NotFound, "nope"))
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
 		_, err := s.GetKey("k")
 		assert.ErrorIs(t, err, storepkg.ErrResourceNotFound)
-		mc.AssertExpectations(t)
 	})
 
 	t.Run("prefix prepended and nil payload returns empty string", func(t *testing.T) {
-		mc := new(MockGSMClient)
-		mc.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+		ctrl := gomock.NewController(t)
+		mc := NewMockGSMClient(ctrl)
+		mc.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 			return req.Name == "projects/p/secrets/myprefix_k/versions/latest"
 		})).Return(&secretmanagerpb.AccessSecretVersionResponse{}, nil) // Payload is nil.
 		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p", Prefix: stringPtr("myprefix")})
 		v, err := s.GetKey("k")
 		assert.NoError(t, err)
 		assert.Equal(t, "", v)
-		mc.AssertExpectations(t)
 	})
 }
 
@@ -1166,6 +1103,14 @@ func TestGsmSecretNames(t *testing.T) {
 			prefix:     "atmos_prod_vpc",
 			want:       nil,
 		},
+		{
+			name: "same-level sibling sharing a character prefix is excluded",
+			// "prod_api-backup" shares the character prefix "prod_api" with scope "prod_api" but
+			// is not a child of it -- the separator boundary check must reject it.
+			secretName: "projects/p/secrets/prod_api-backup",
+			prefix:     "prod_api",
+			want:       nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1175,4 +1120,31 @@ func TestGsmSecretNames(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestGSMStore_Keys exercises GSMStore.Keys end-to-end against a real, working
+// MockSecretIterator sequence -- something the old testify mock couldn't do because
+// secretmanager.SecretIterator's paging state is unexported. Now that GSMClient.ListSecrets
+// returns the narrow SecretIterator interface, mockgen can generate a usable test double for it.
+func TestGSMStore_Keys(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockGSMClient(ctrl)
+	it := NewMockSecretIterator(ctrl)
+	gomock.InOrder(
+		it.EXPECT().Next().Return(&secretmanagerpb.Secret{Name: "projects/p/secrets/prod_vpc_image_tag"}, nil),
+		it.EXPECT().Next().Return(&secretmanagerpb.Secret{Name: "projects/p/secrets/prod_vpc_region"}, nil),
+		it.EXPECT().Next().Return(nil, iterator.Done),
+	)
+	mockClient.EXPECT().ListSecrets(gomock.Any(), gomock.Any()).Return(it)
+
+	testDelimiter := "-"
+	store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+		ProjectID:      "p",
+		Prefix:         stringPtr("prod"),
+		StackDelimiter: &testDelimiter,
+	})
+
+	got, err := store.Keys("vpc", "")
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, got)
 }

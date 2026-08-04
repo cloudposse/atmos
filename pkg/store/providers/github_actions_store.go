@@ -70,10 +70,11 @@ type GitHubActionsStore struct {
 
 // Ensure GitHubActionsStore implements the expected interfaces.
 var (
-	_ store.Store          = (*GitHubActionsStore)(nil)
-	_ store.StatusStore    = (*GitHubActionsStore)(nil)
-	_ store.DeletableStore = (*GitHubActionsStore)(nil)
-	_ store.ListableStore  = (*GitHubActionsStore)(nil)
+	_ store.Store              = (*GitHubActionsStore)(nil)
+	_ store.StatusStore        = (*GitHubActionsStore)(nil)
+	_ store.DeletableStore     = (*GitHubActionsStore)(nil)
+	_ store.ListableStore      = (*GitHubActionsStore)(nil)
+	_ store.ValueListableStore = (*GitHubActionsStore)(nil)
 )
 
 func init() {
@@ -126,6 +127,14 @@ func (s *GitHubActionsStore) getClient() gitHubActionsClient {
 // Actions runner, or when explicitly forced via options.ci.enabled.
 func (s *GitHubActionsStore) readAllowed() bool {
 	return s.options.CI.Enabled || s.isCI()
+}
+
+// ValueListingSupported reports whether Get can currently be called for every key Keys returns --
+// true only inside a GitHub Actions runner (or with options.ci.enabled), mirroring readAllowed.
+// Service.ListKeyValues checks this before enumerating so `store list STORE` fails fast with
+// ErrListNotSupported instead of aborting mid-enumeration on the first Get error.
+func (s *GitHubActionsStore) ValueListingSupported() bool {
+	return s.readAllowed()
 }
 
 // Set encrypts and writes a secret value via the GitHub API. The stack and component do not affect

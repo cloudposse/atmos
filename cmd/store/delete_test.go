@@ -46,6 +46,17 @@ func TestRunStoreDelete_AbortedPrompt(t *testing.T) {
 	assert.Empty(t, svc.deleteCalls)
 }
 
+func TestRunStoreDelete_ConfirmError(t *testing.T) {
+	setupIO(t)
+	svc := newFakeStoreService()
+	installService(t, svc, nil)
+	overrideConfirmAction(t, false, assert.AnError)
+
+	err := runStoreSubcommand(t, "delete", "app-metadata", "key")
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Empty(t, svc.deleteCalls)
+}
+
 func TestRunStoreDelete_NotSupported(t *testing.T) {
 	setupIO(t)
 	svc := newFakeStoreService()

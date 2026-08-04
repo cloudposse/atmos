@@ -1,6 +1,7 @@
 package store
 
 import (
+	_ "embed"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/atmos_store_list_usage.md
+var storeListUsageMarkdown string
+
 // flagFormat is the name of the output-format flag.
 const flagFormat = "format"
 
@@ -29,8 +33,9 @@ var listCmd = &cobra.Command{
 		"capabilities. Pass a STORE name to list the key/value pairs stored inside that backend instead, " +
 		"scoped with --stack and --component the same way `atmos store set` writes a key. Only backends " +
 		"that support key enumeration can list their contents this way; check the Listable column first.",
-	Args: cobra.MaximumNArgs(1),
-	RunE: runStoreList,
+	Example: storeListUsageMarkdown,
+	Args:    cobra.MaximumNArgs(1),
+	RunE:    runStoreList,
 }
 
 func init() {
@@ -132,6 +137,7 @@ var storeColumns = []column.Config{
 	{Name: "Kind", Value: "{{ .kind }}"},
 	{Name: "Secret", Value: "{{ .secret }}"},
 	{Name: "Deletable", Value: "{{ .deletable }}"},
+	{Name: "Has Status", Value: "{{ .hasStatus }}"},
 	{Name: "Local", Value: "{{ .local }}"},
 	{Name: "Listable", Value: "{{ .listable }}"},
 }

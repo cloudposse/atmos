@@ -101,6 +101,17 @@ func TestRunStoreGet_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, assert.AnError)
 }
 
+func TestRunStoreGet_JSONFormat(t *testing.T) {
+	stdout := captureStdout(t)
+	svc := newFakeStoreService()
+	svc.getValues["image_tag"] = "v1.2.3"
+	installService(t, svc, nil)
+
+	err := runStoreSubcommand(t, "get", "app-metadata", "image_tag", "--format", "json")
+	require.NoError(t, err)
+	assert.Equal(t, "\"v1.2.3\"\n", stdout.String())
+}
+
 func TestRunStoreGet_RawFormatConflict(t *testing.T) {
 	captureStdout(t)
 	svc := newFakeStoreService()

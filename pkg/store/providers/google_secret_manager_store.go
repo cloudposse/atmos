@@ -26,7 +26,18 @@ const (
 	gsmKeySeparator     = "_"
 )
 
+// SecretIterator abstracts the paging behavior Keys consumes from ListSecrets (just Next). The
+// real *secretmanager.SecretIterator satisfies this structurally via its exported Next method --
+// its paging state is otherwise unexported, so it can't be constructed by a test double; this
+// narrower interface is what makes ListSecrets mockable at all. See gsmClientAdapter, which
+// narrows the real SDK client's wider return type to this interface.
+type SecretIterator interface {
+	Next() (*secretmanagerpb.Secret, error)
+}
+
 // GSMClient is the interface that wraps the Google Secret Manager client methods we use.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_google_secret_manager_store.go -package=providers
 type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
@@ -35,8 +46,20 @@ type GSMClient interface {
 	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	// ListSecrets returns an iterator (unlike the other methods here) rather than a
 	// (response, error) pair, matching the underlying secretmanager.Client.ListSecrets signature.
-	ListSecrets(ctx context.Context, req *secretmanagerpb.ListSecretsRequest, opts ...gax.CallOption) *secretmanager.SecretIterator
+	ListSecrets(ctx context.Context, req *secretmanagerpb.ListSecretsRequest, opts ...gax.CallOption) SecretIterator
 	Close() error
+}
+
+// gsmClientAdapter adapts the real *secretmanager.Client to GSMClient, narrowing ListSecrets'
+// return type from the concrete *secretmanager.SecretIterator to the SecretIterator interface.
+// All other GSMClient methods are satisfied by promotion from the embedded client unchanged.
+type gsmClientAdapter struct {
+	*secretmanager.Client
+}
+
+// ListSecrets narrows the embedded client's *secretmanager.SecretIterator to SecretIterator.
+func (a *gsmClientAdapter) ListSecrets(ctx context.Context, req *secretmanagerpb.ListSecretsRequest, opts ...gax.CallOption) SecretIterator {
+	return a.Client.ListSecrets(ctx, req, opts...)
 }
 
 // GSMStore is an implementation of the store.Store interface for Google Secret Manager.
@@ -153,7 +176,7 @@ func (s *GSMStore) initDefaultClient() error {
 		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
-	s.client = client
+	s.client = &gsmClientAdapter{client}
 
 	return nil
 }
@@ -182,7 +205,7 @@ func (s *GSMStore) initIdentityClient() error {
 		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
-	s.client = client
+	s.client = &gsmClientAdapter{client}
 
 	return nil
 }
@@ -553,23 +576,23 @@ func (s *GSMStore) Keys(stack string, component string) ([]string, error) {
 // gsmSecretNames extracts a secret's ID from its full resource name
 // ("projects/{project}/secrets/{secret_id}") and, if it matches prefix, returns the key with
 // prefix stripped. GSM's list filter is a substring/wildcard match, not a guaranteed prefix, so
-// this verifies the match client-side before trusting it. Split out as a pure function (no SDK
-// iterator involved) because secretmanager.SecretIterator cannot be constructed outside its own
-// package -- its paging state is unexported -- so this is the unit-testable half of Keys.
+// this verifies the match client-side before trusting it -- against prefix+gsmKeySeparator, not
+// the bare prefix, so a same-level sibling that merely shares a character prefix (e.g.
+// "prod_api-backup" for scope "prod_api") is excluded rather than returned unstripped. Split out
+// as a pure function (no SDK iterator involved) because secretmanager.SecretIterator cannot be
+// constructed outside its own package -- its paging state is unexported -- so this is the
+// unit-testable half of Keys.
 func gsmSecretNames(secret *secretmanagerpb.Secret, prefix string) []string {
 	parts := strings.Split(secret.GetName(), "/")
 	secretID := parts[len(parts)-1]
-	if prefix != "" && !strings.HasPrefix(secretID, prefix) {
+	if prefix == "" {
+		return []string{secretID}
+	}
+	name, ok := strings.CutPrefix(secretID, prefix+gsmKeySeparator)
+	if !ok || name == "" {
 		return nil
 	}
-	trimPrefix := prefix
-	if trimPrefix != "" {
-		trimPrefix += gsmKeySeparator
-	}
-	if name := strings.TrimPrefix(secretID, trimPrefix); name != "" {
-		return []string{name}
-	}
-	return nil
+	return []string{name}
 }
 
 // GetKey retrieves a secret value directly by its key name, without stack/component scoping.

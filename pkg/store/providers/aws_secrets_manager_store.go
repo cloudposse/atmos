@@ -353,8 +353,10 @@ func (s *SecretsManagerStore) Delete(stack string, component string, key string)
 
 // Keys lists the secret names under a stack/component scope (or globally when both are empty),
 // via Secrets Manager's ListSecrets with a "name" filter. That filter is a server-side,
-// case-sensitive prefix match, so no client-side filtering pass is needed beyond stripping the
-// prefix from each returned name.
+// case-sensitive prefix match on raw characters, not on path segments, so it can return
+// same-level siblings (e.g. "prod/api-backup" when scoped to "prod/api"); each returned name is
+// re-checked client-side against the segment-bounded prefix (trimPrefix, which includes the
+// trailing separator) before it's trusted and trimmed.
 func (s *SecretsManagerStore) Keys(stack string, component string) ([]string, error) {
 	if s.stackDelimiter == nil {
 		return nil, store.ErrStackDelimiterNotSet
@@ -382,11 +384,7 @@ func (s *SecretsManagerStore) Keys(stack string, component string) ([]string, er
 		if err != nil {
 			return nil, fmt.Errorf(errWrapFormatWithID, store.ErrListSecrets, prefix, err)
 		}
-		for i := range output.SecretList {
-			if name := strings.TrimPrefix(aws.ToString(output.SecretList[i].Name), trimPrefix); name != "" {
-				names = append(names, name)
-			}
-		}
+		names = appendSecretNames(names, output.SecretList, trimPrefix)
 		if output.NextToken == nil {
 			break
 		}
@@ -394,6 +392,20 @@ func (s *SecretsManagerStore) Keys(stack string, component string) ([]string, er
 	}
 
 	return names, nil
+}
+
+// appendSecretNames appends each entry's name to names, stripped of trimPrefix, skipping any
+// entry that doesn't actually start with trimPrefix. ListSecrets' server-side "name" filter is a
+// raw character-prefix match, not path-segment-aware, so it can return same-level siblings (e.g.
+// "prod/api-backup" when scoped to "prod/api"); the boundary-aware strings.CutPrefix check here
+// re-verifies the match before trusting it.
+func appendSecretNames(names []string, entries []smtypes.SecretListEntry, trimPrefix string) []string {
+	for i := range entries {
+		if name, ok := strings.CutPrefix(aws.ToString(entries[i].Name), trimPrefix); ok && name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // Has reports whether a secret exists, treating ResourceNotFound as non-existent.

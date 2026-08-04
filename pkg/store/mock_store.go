@@ -492,3 +492,85 @@ func (mr *MockListableStoreMockRecorder) Set(stack, component, key, value any) *
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockListableStore)(nil).Set), stack, component, key, value)
 }
+
+// MockValueListableStore is a mock of ValueListableStore interface.
+type MockValueListableStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockValueListableStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockValueListableStoreMockRecorder is the mock recorder for MockValueListableStore.
+type MockValueListableStoreMockRecorder struct {
+	mock *MockValueListableStore
+}
+
+// NewMockValueListableStore creates a new mock instance.
+func NewMockValueListableStore(ctrl *gomock.Controller) *MockValueListableStore {
+	mock := &MockValueListableStore{ctrl: ctrl}
+	mock.recorder = &MockValueListableStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValueListableStore) EXPECT() *MockValueListableStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockValueListableStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockValueListableStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockValueListableStore)(nil).Get), stack, component, key)
+}
+
+// GetKey mocks base method.
+func (m *MockValueListableStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockValueListableStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockValueListableStore)(nil).GetKey), key)
+}
+
+// Set mocks base method.
+func (m *MockValueListableStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockValueListableStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockValueListableStore)(nil).Set), stack, component, key, value)
+}
+
+// ValueListingSupported mocks base method.
+func (m *MockValueListableStore) ValueListingSupported() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValueListingSupported")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ValueListingSupported indicates an expected call of ValueListingSupported.
+func (mr *MockValueListableStoreMockRecorder) ValueListingSupported() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValueListingSupported", reflect.TypeOf((*MockValueListableStore)(nil).ValueListingSupported))
+}

@@ -39,6 +39,8 @@ type ArtifactoryStoreOptions struct {
 }
 
 // ArtifactoryClient interface allows us to mock the Artifactory Services Manager in test with only the methods we are using in the ArtifactoryStore.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_artifactory_store.go -package=providers
 type ArtifactoryClient interface {
 	DownloadFiles(...services.DownloadParams) (int, int, error)
 	UploadFiles(artifactory.UploadServiceOptions, ...services.UploadParams) (int, int, error)
