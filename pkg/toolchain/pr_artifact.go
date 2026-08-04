@@ -477,29 +477,47 @@ func extractZipFile(zipPath, destDir string) error {
 			return err
 		}
 
-		// Verify path stays within destination (redundant with sanitizeZipPath but satisfies CodeQL).
-		if rel, relErr := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), destPath); relErr != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, f.Name)
-		}
-
 		// Create parent directories.
 		if f.FileInfo().IsDir() {
+			// Guard placed immediately adjacent to the sink (rather than relying solely on
+			// sanitizeZipPath's earlier check) so CodeQL's go/zipslip query, which only
+			// credits a containment check that directly guards the sink, recognizes it.
+			if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(destPath, dirPermissions); err != nil {
 				return fmt.Errorf("%w: failed to create dir: %w", ErrPRArtifactExtractFailed, err)
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(destPath), dirPermissions); err != nil {
+		parentDir := filepath.Dir(destPath)
+		if err := verifyWithinDestDir(parentDir, cleanDestDir, f.Name); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(parentDir, dirPermissions); err != nil {
 			return fmt.Errorf("%w: failed to create parent dir: %w", ErrPRArtifactExtractFailed, err)
 		}
 
 		// Extract file.
-		if err := extractZipEntry(f, destPath); err != nil {
+		if err := extractZipEntry(f, destPath, cleanDestDir); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// verifyWithinDestDir re-validates that path is contained within cleanDestDir immediately
+// before a filesystem-mutating operation. This duplicates the check sanitizeZipPath already
+// performed, deliberately placed adjacent to each sink (MkdirAll/Create) rather than relying
+// on a guarantee computed earlier in the caller, since that's what the go/zipslip scanner needs
+// to recognize the path as sanitized at the point of use.
+func verifyWithinDestDir(path, cleanDestDir, entryName string) error {
+	rel, err := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, entryName)
+	}
 	return nil
 }
 
@@ -537,7 +555,14 @@ func sanitizeZipPath(entryName, cleanDestDir string) (string, error) {
 }
 
 // extractZipEntry extracts a single ZIP entry to the destination path.
-func extractZipEntry(f *zip.File, destPath string) error {
+func extractZipEntry(f *zip.File, destPath, cleanDestDir string) error {
+	// Guard immediately before the sink: extractZipFile already validated destPath, but this
+	// function must not trust that a caller-computed guarantee still holds without checking it
+	// again itself (and it's what lets CodeQL's go/zipslip query see the sanitizer at the sink).
+	if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+		return err
+	}
+
 	rc, err := f.Open()
 	if err != nil {
 		return fmt.Errorf("%w: failed to open ZIP entry: %w", ErrPRArtifactExtractFailed, err)
