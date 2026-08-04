@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -200,6 +201,43 @@ components:
 			assert.Equal(t, "/mock/git/repo/root", atmosConfig.BasePath)
 		})
 	}
+}
+
+// TestLoadConfigFromCLIArgs_GitRootBasePathErrorIsNonFatal verifies that a git-root
+// discovery failure is logged and swallowed rather than failing config loading, per
+// the "Don't fail config loading if this step fails, just log it" contract.
+func TestLoadConfigFromCLIArgs_GitRootBasePathErrorIsNonFatal(t *testing.T) {
+	original := gitRootResolver
+	gitRootResolver = func(string) (string, error) {
+		return "", errors.New("simulated git root detection failure")
+	}
+	defer func() { gitRootResolver = original }()
+
+	configDir := t.TempDir()
+	configFile := filepath.Join(configDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+base_path: ""
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`), 0o644))
+
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.NoError(t, err, "a git-root resolution failure must not fail config loading")
+	assert.Empty(t, atmosConfig.BasePath, "base_path should remain unset when git-root discovery fails")
 }
 
 func TestLoadConfigFromCLIArgs_InvalidConfigDir(t *testing.T) {
