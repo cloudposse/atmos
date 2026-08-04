@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -54,6 +55,7 @@ var (
 	_ store.Store          = (*KeychainStore)(nil)
 	_ store.DeletableStore = (*KeychainStore)(nil)
 	_ store.StatusStore    = (*KeychainStore)(nil)
+	_ store.ListableStore  = (*KeychainStore)(nil)
 )
 
 func init() {
@@ -189,6 +191,30 @@ func (s *KeychainStore) Has(stack string, component string, key string) (bool, e
 // `atmos secret list` can check its status for free (no --verify needed). Implements LocalStore.
 func (s *KeychainStore) IsLocal() bool {
 	return true
+}
+
+// Keys lists the keys under a stack/component scope (or globally when both are empty). The
+// keychain's default (system/OS) backend returns store.ErrListNotSupported: the underlying
+// go-keyring library cannot enumerate entries on macOS Keychain, Windows Credential Manager, or
+// Linux Secret Service — this is a permanent limitation of that library, not a per-platform gap.
+// The file and memory backends do support it.
+func (s *KeychainStore) Keys(stack string, component string) ([]string, error) {
+	all, err := s.kr.List()
+	if err != nil {
+		if errors.Is(err, keyring.ErrListNotSupported) {
+			return nil, fmt.Errorf("%w: %w", store.ErrListNotSupported, err)
+		}
+		return nil, fmt.Errorf("%w: %w", store.ErrKeychainList, err)
+	}
+
+	prefix := getKeyPrefix(s.prefix, s.stackDelimiter, stack, component, keychainKeyDelimiter) + keychainKeyDelimiter
+	names := make([]string, 0, len(all))
+	for _, k := range all {
+		if name := strings.TrimPrefix(k, prefix); name != k {
+			names = append(names, name)
+		}
+	}
+	return names, nil
 }
 
 // keychainEncodeValue JSON-encodes a value for storage so any type round-trips through the
