@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"context"
 	"io"
 	"os"
 	"runtime"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -57,15 +59,15 @@ func TestRunUpdateWithSpinner_NonTTY_PropagatesError(t *testing.T) {
 	assert.Nil(t, report)
 }
 
-// TestUpdateSpinnerModel_View_NeverWraps is a regression test for the sibling of
-// internal/exec/vendor_model.go's mixin line-stacking bug: a long, unbroken component name (no
-// spaces to word-wrap at) must never make the live "Checking <name>" status line contain a hard
-// line break, since bubbletea's single-line, carriage-return-based redraw corrupts (stacks
-// duplicate lines in the scrollback) if the rendered line wraps in the real terminal. At widths
-// that exceed the fixed spinner+bar+count overhead the whole composed line must also fit strictly
-// within the terminal width (never equal to it -- see liveLineMargin); at extremely narrow widths
-// (smaller than that fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is
-// checked.
+// TestUpdateSpinnerModel_View_NeverWraps proves a long, unbroken component name (no spaces to
+// word-wrap at) never makes the live "Checking <name>" status line contain a hard line break,
+// since bubbletea's single-line, carriage-return-based redraw corrupts (stacks duplicate lines in
+// the scrollback) if the rendered line wraps in the real terminal. At widths that exceed the fixed
+// spinner+bar+count overhead the whole composed line must also fit strictly within the terminal
+// width (never equal to it -- see liveLineMargin); at extremely narrow widths (smaller than that
+// fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is checked.
+//
+// Historical note: this is the sibling of internal/exec/vendor_model.go's mixin line-stacking bug.
 func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	longName := "https://raw.githubusercontent.com/cloudposse/terraform-components/mixins/v0.3.2/src/mixins/account-verification.mixin.tf"
 
@@ -90,11 +92,12 @@ func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	}
 }
 
-// TestUpdateSpinnerModel_View_NeverTouchesLastColumn is a boundary-focused regression test for the
-// "cursor overlapping the progress bar" bug: at widths exactly matching the fixed
-// spinner+bar+count overhead (so the padded gap saturates the line), the rendered line must still
-// stop at least liveLineMargin columns short of the terminal's true last column, never landing
+// TestUpdateSpinnerModel_View_NeverTouchesLastColumn proves that at widths exactly matching the
+// fixed spinner+bar+count overhead (so the padded gap saturates the line), the rendered line still
+// stops at least liveLineMargin columns short of the terminal's true last column, never landing
 // exactly on it.
+//
+// Historical note: boundary case for the "cursor overlapping the progress bar" bug.
 func TestUpdateSpinnerModel_View_NeverTouchesLastColumn(t *testing.T) {
 	for _, width := range []int{60, 61, 79, 80, 81, 120, 200, 250} {
 		m := &updateSpinnerModel{
@@ -207,16 +210,68 @@ func TestUpdateSpinnerModel_Update_WindowSizeMsg(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-// TestUpdateSpinnerModel_Update_KeyMsg proves any keypress quits the spinner program, the same
-// early-exit path runUpdateWithSpinner's doc comment describes (the trigger for the
-// nil-report/nil-err race cmd/vendor/update.go guards against).
+// TestUpdateSpinnerModel_Update_KeyMsg proves ordinary keypresses are ignored. A status display
+// must not silently terminate an update because the user happened to press a key.
 func TestUpdateSpinnerModel_Update_KeyMsg(t *testing.T) {
 	m := newTestUpdateSpinnerModel()
 
-	_, cmd := m.Update(tea.KeyMsg{})
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.False(t, updated.canceled)
+	assert.Nil(t, cmd)
+}
+
+// TestUpdateSpinnerModel_Update_CtrlC proves the one explicit cancellation control quits the
+// spinner so runUpdateWithSpinner can return a visible cancellation error to the CLI.
+func TestUpdateSpinnerModel_Update_CtrlC(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.True(t, updated.canceled)
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestUpdateSpinnerResult_Canceled(t *testing.T) {
+	report, err := updateSpinnerResult(&updateSpinnerModel{canceled: true})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "vendor update canceled")
+}
+
+// TestUpdateSpinnerResult_NilModel proves a nil final model (bubbletea's Run returning nil
+// without error, which shouldn't happen but must not be silently mistaken for success) surfaces
+// a clear error instead of a nil pointer dereference further down the call chain.
+func TestUpdateSpinnerResult_NilModel(t *testing.T) {
+	report, err := updateSpinnerResult(nil)
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerReturnedNilModel)
+}
+
+// unexpectedTeaModel is a minimal tea.Model stand-in used only to prove updateSpinnerResult
+// rejects a final model of the wrong concrete type instead of panicking on a failed type
+// assertion.
+type unexpectedTeaModel struct{}
+
+func (unexpectedTeaModel) Init() tea.Cmd                       { return nil }
+func (unexpectedTeaModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return unexpectedTeaModel{}, nil }
+func (unexpectedTeaModel) View() string                        { return "" }
+
+// TestUpdateSpinnerResult_UnexpectedModelType proves a final model of the wrong concrete type
+// (a programming error, since only *updateSpinnerModel is ever run) surfaces a clear error
+// instead of a panicking type assertion.
+func TestUpdateSpinnerResult_UnexpectedModelType(t *testing.T) {
+	report, err := updateSpinnerResult(unexpectedTeaModel{})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerUnexpectedModelType)
 }
 
 // TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames proves the spinner.TickMsg and
