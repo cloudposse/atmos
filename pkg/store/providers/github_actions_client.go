@@ -47,6 +47,9 @@ const githubAPITimeout = 30 * time.Second
 // githubPublicKeySize is the byte length of a NaCl/libsodium public key (Curve25519).
 const githubPublicKeySize = 32
 
+// githubListSecretsPerPage is the page size used when paginating ListSecrets.
+const githubListSecretsPerPage = 100
+
 // gitHubActionsClient abstracts the GitHub Actions secrets operations the store needs against a
 // single repo (and optional environment) scope. The real implementation wraps go-github; tests
 // inject an in-memory fake. Reading a secret's *value* is intentionally absent: the GitHub API
@@ -60,6 +63,9 @@ type gitHubActionsClient interface {
 	HasSecret(ctx context.Context, name string) (bool, error)
 	// DeleteSecret removes the secret named name. It is idempotent: a missing secret is not an error.
 	DeleteSecret(ctx context.Context, name string) error
+	// ListSecrets returns every secret name in the scope (metadata only, no values -- the
+	// GitHub API never returns secret values via any endpoint).
+	ListSecrets(ctx context.Context) ([]string, error)
 }
 
 // githubActionsAPIClient is the go-github backed gitHubActionsClient. When environment is empty it
@@ -209,6 +215,38 @@ func (c *githubActionsAPIClient) DeleteSecret(ctx context.Context, name string) 
 		return fmt.Errorf(errWrapFormatWithID, store.ErrGitHubDeleteSecret, name, err)
 	}
 	return nil
+}
+
+func (c *githubActionsAPIClient) ListSecrets(ctx context.Context) ([]string, error) {
+	var names []string
+	opts := &github.ListOptions{PerPage: githubListSecretsPerPage}
+	for {
+		var (
+			secrets *github.Secrets
+			resp    *github.Response
+			err     error
+		)
+		if c.environment == "" {
+			secrets, resp, err = c.gh.Actions.ListRepoSecrets(ctx, c.owner, c.repo, opts)
+		} else {
+			repoID, idErr := c.repoIDFor(ctx)
+			if idErr != nil {
+				return nil, idErr
+			}
+			secrets, resp, err = c.gh.Actions.ListEnvSecrets(ctx, repoID, c.environment, opts)
+		}
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFormat, store.ErrGitHubListSecrets, err)
+		}
+		for _, secret := range secrets.Secrets {
+			names = append(names, secret.Name)
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return names, nil
 }
 
 // ghIsNotFound reports whether a GitHub API error/response indicates a missing resource (HTTP 404).

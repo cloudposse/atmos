@@ -20,6 +20,7 @@ type fakeGitHubActionsClient struct {
 	putErr  error
 	hasErr  error
 	delErr  error
+	listErr error
 	puts    []string // names written, in order.
 }
 
@@ -52,6 +53,17 @@ func (f *fakeGitHubActionsClient) DeleteSecret(_ context.Context, name string) e
 	}
 	delete(f.secrets, name)
 	return nil
+}
+
+func (f *fakeGitHubActionsClient) ListSecrets(_ context.Context) ([]string, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	names := make([]string, 0, len(f.secrets))
+	for name := range f.secrets {
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 // newTestStore builds a store wired to a fake client and an explicit CI predicate.
@@ -207,6 +219,28 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 	})
 }
 
+// TestGitHubActionsStore_ValueListingSupported proves ValueListingSupported mirrors readAllowed
+// in every case Get's own CI gating covers, so Service.ListKeyValues rejects value listing in
+// exactly the same conditions Get itself would reject a value read.
+func TestGitHubActionsStore_ValueListingSupported(t *testing.T) {
+	t.Run("unsupported outside CI", func(t *testing.T) {
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+		assert.False(t, store.ValueListingSupported())
+	})
+
+	t.Run("supported when ci.enabled forces it", func(t *testing.T) {
+		opts := GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}
+		opts.CI.Enabled = true
+		store := newTestStore(newFakeGitHubActionsClient(), &opts, false)
+		assert.True(t, store.ValueListingSupported())
+	})
+
+	t.Run("supported when detected as a runner", func(t *testing.T) {
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+		assert.True(t, store.ValueListingSupported())
+	})
+}
+
 func TestGitHubActionsStore_EnvHint(t *testing.T) {
 	withEnv := newTestStore(newFakeGitHubActionsClient(),
 		&GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Environment: "production"}, false)
@@ -304,4 +338,40 @@ func TestGitHubActionsStore_BuildsViaRegistry(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "acme", gha.options.Owner)
 	assert.Equal(t, "production", gha.options.Environment)
+}
+
+// TestGitHubActionsStore_Keys proves Keys lists every secret name in scope, filtered client-side
+// by this store's prefix (GitHub Actions secrets are a flat, repo-global namespace: stack and
+// component are accepted but do not affect the result).
+func TestGitHubActionsStore_Keys(t *testing.T) {
+	client := newFakeGitHubActionsClient()
+	client.secrets["ATMOS_IMAGE_TAG"] = "v1"
+	client.secrets["ATMOS_REGION"] = "v2"
+	client.secrets["OTHER_TOKEN"] = "v3" // No prefix match: excluded.
+	s := newTestStore(client, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+	s.prefix = "atmos"
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"IMAGE_TAG", "REGION"}, keys)
+}
+
+func TestGitHubActionsStore_Keys_NoPrefix(t *testing.T) {
+	client := newFakeGitHubActionsClient()
+	client.secrets["ANY_SECRET"] = "v1"
+	s := newTestStore(client, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ANY_SECRET"}, keys)
+}
+
+func TestGitHubActionsStore_Keys_Error(t *testing.T) {
+	client := newFakeGitHubActionsClient()
+	client.listErr = assert.AnError
+	s := newTestStore(client, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, assert.AnError)
 }

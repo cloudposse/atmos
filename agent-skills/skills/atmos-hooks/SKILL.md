@@ -60,6 +60,9 @@ Use before/after events for component operations, for example:
 - `before.terraform.apply`, `after.terraform.apply`
 - `before.terraform.deploy`, `after.terraform.deploy`
 - `before.terraform.test`, `after.terraform.test`
+- `before.terraform.output`, `after.terraform.output` — fires for `atmos terraform output`,
+  useful for backfilling a store from already-deployed infrastructure without an `apply`
+- `before.terraform.refresh`, `after.terraform.refresh`
 
 Kubernetes provides `before`/`after` events for `render`, `diff`/`plan`, `apply`/`deploy`,
 `delete`, and `validate`. Native Helm provides `template`, `diff`, `apply`/`deploy`, and

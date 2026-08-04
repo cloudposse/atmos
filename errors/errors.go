@@ -799,6 +799,8 @@ var (
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
 	ErrArchiveStepInvalidAction      = errors.New("invalid action for archive step")
 	ErrArchiveStepInvalidSource      = errors.New("archive step source must be a string path")
+	ErrStoreStepInvalidAction        = errors.New("invalid action for store step")
+	ErrStoreStepWriteFailed          = errors.New("store step failed to write value")
 	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
 	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
