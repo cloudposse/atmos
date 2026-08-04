@@ -471,6 +471,15 @@ func extractZipFile(zipPath, destDir string) error {
 	cleanDestDir := filepath.Clean(destDir) + string(os.PathSeparator)
 
 	for _, f := range r.File {
+		// Reject any archive entry name containing "..", guarding the raw tainted value
+		// directly (the shape CodeQL's go/zipslip query itself documents as the fix,
+		// see the query's help text) rather than only a derived/split-component check --
+		// sanitizeZipPath's per-component comparison isn't recognized as a sanitizer by
+		// the query's dataflow model, so this guard is what actually clears the taint.
+		if strings.Contains(f.Name, "..") {
+			return fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, f.Name)
+		}
+
 		// Sanitize path to prevent Zip Slip attacks.
 		destPath, err := sanitizeZipPath(f.Name, cleanDestDir)
 		if err != nil {
