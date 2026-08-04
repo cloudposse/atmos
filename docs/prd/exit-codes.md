@@ -40,7 +40,7 @@ Atmos follows POSIX.1-2017 and Linux Standard Base (LSB) conventions:
 
 - [POSIX Exit Status](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_08_02)
 - [Linux Standard Base - Exit Codes](https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/iniscrptact.html)
-- [sysexits.h](https://man.openbsd.org/sysexits) - BSD exit codes
+- [sysexits.h](https://www.freebsd.org/cgi/man.cgi?query=sysexits&sektion=3) - BSD exit codes
 - [Bash Exit Codes](https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html)
 
 ## Atmos Exit Code Mapping

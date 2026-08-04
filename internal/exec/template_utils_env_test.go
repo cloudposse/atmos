@@ -199,7 +199,7 @@ func TestProcessTmplWithDatasources_EnvVarsFromConfig(t *testing.T) {
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 	settingsSection := schema.Settings{}
 
-	// Template that reads the env var using Sprig's env function.
+	// Template that reads the env var using the env function (provided via getEnvFuncMap).
 	tmplValue := `
 config:
   profile: '{{ env "TEST_GOMPLATE_AWS_PROFILE" }}'
