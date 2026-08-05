@@ -2302,6 +2302,22 @@ func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 	})
 }
 
+func TestChangedFilesIndex_NativeHelmBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Helm: schema.Helm{BasePath: "components/helm"},
+		},
+	}
+	helmFile := filepath.Join(tempDir, "components", "helm", "app", "Chart.yaml")
+	unrelatedFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	index := newChangedFilesIndex(atmosConfig, []string{helmFile, unrelatedFile}, tempDir)
+
+	assert.Equal(t, []string{helmFile}, index.getRelevantFiles(cfg.HelmComponentType, atmosConfig))
+	assert.True(t, index.isChangedFile(unrelatedFile))
+}
+
 func TestComponentPathPatternCache_GetTerraformModulePatterns_EdgeCases(t *testing.T) {
 	tempDir := t.TempDir()
 
