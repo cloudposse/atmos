@@ -50,4 +50,8 @@ var (
 
 	// ErrVerifierVersionUnavailable indicates a verifier bootstrap version could not be resolved.
 	ErrVerifierVersionUnavailable = errors.New("verifier version unavailable")
+
+	// ErrVerifierTrustFailed indicates Atmos could not mark a bootstrap-installed
+	// verifier binary as locally trusted (macOS-only; not a fatal condition).
+	ErrVerifierTrustFailed = errors.New("failed to mark verifier binary as trusted")
 )

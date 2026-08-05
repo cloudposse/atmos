@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
@@ -370,7 +371,7 @@ func TestUninstall_SkillNotFound(t *testing.T) {
 	installer, err := NewInstaller("1.0.0")
 	require.NoError(t, err)
 
-	err = installer.Uninstall("nonexistent", true)
+	err = installer.Uninstall("nonexistent", true, "", nil, nil)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrSkillNotFound))
@@ -400,7 +401,7 @@ func TestUninstall_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Uninstall with force.
-	err = installer.Uninstall("uninstall-test-skill", true)
+	err = installer.Uninstall("uninstall-test-skill", true, "", nil, nil)
 
 	assert.NoError(t, err)
 	// Verify skill was removed from registry.
@@ -654,12 +655,33 @@ func TestGetInstallPath(t *testing.T) {
 		FullPath: "github.com/user/repo",
 	}
 
-	result := installer.getInstallPath(source)
+	result, err := installer.getInstallPath(source, "")
 
+	require.NoError(t, err)
 	assert.Contains(t, result, ".atmos")
 	assert.Contains(t, result, "skills")
 	// Use filepath.ToSlash to normalize for cross-platform comparison.
 	assert.Contains(t, filepath.ToSlash(result), "github.com/user/repo")
+}
+
+func TestGetInstallPath_WithOverride(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer := &Installer{}
+
+	source := &SourceInfo{
+		FullPath: "github.com/user/repo",
+		Name:     "repo",
+	}
+
+	overrideDir := filepath.Join(tempDir, "custom-skills")
+	result, err := installer.getInstallPath(source, overrideDir)
+
+	require.NoError(t, err)
+	// Flattened: <override>/<skillName>, not <override>/github.com/user/repo.
+	assert.Equal(t, filepath.Join(overrideDir, "repo"), result)
 }
 
 func TestRedactHomePath_WithHomePrefix(t *testing.T) {
@@ -1568,4 +1590,470 @@ metadata:
 func TestRedactHomePath_FallbackOnError(t *testing.T) {
 	result := redactHomePath("/some/random/path")
 	assert.Equal(t, "/some/random/path", result)
+}
+
+func TestInstall_PathOverride_FlattensLayout(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Path: overridePath}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	// Flattened: <override>/<skillName>, not <override>/github.com/test/test-skill.
+	assert.Equal(t, filepath.Join(overridePath, "test-skill"), skill.Path)
+
+	_, err = os.Stat(filepath.Join(overridePath, "test-skill", skillFileName))
+	assert.NoError(t, err)
+}
+
+func TestInstall_NoPathOverride_KeepsOwnerRepoNesting(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.ToSlash(filepath.Join(tempDir, ".atmos", "skills", "github.com", "test", "test-skill")), filepath.ToSlash(skill.Path))
+}
+
+func TestInstall_PathOverride_SkipsAutoDistribution(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".vscode"), 0o755))
+
+	ctx := context.Background()
+	opts := InstallOptions{
+		SkipConfirm: true,
+		Path:        filepath.Join(t.TempDir(), "custom-skills"),
+		BasePath:    basePath,
+	}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "test-skill"))
+	assert.True(t, os.IsNotExist(err), "explicit --path must skip auto-distribution")
+}
+
+func TestInstallOneSkillFromPackage_PathOverride_Flattens(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := createMultiSkillPackageDir(t, 1)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyTo := filepath.Join(t.TempDir(), "pkg-copy")
+			require.NoError(t, os.MkdirAll(copyTo, 0o755))
+			require.NoError(t, copyDirRecursive(packageDir, copyTo))
+			return copyTo, nil
+		},
+	}
+
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Path: overridePath}
+
+	err = installer.Install(ctx, "github.com/cloudposse/atmos", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill-1")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(overridePath, "test-skill-1"), skill.Path)
+}
+
+// distributionSourceDir creates a minimal installed-skill directory (as if it
+// were already moved to its canonical install path) for distributeToClients tests.
+func distributionSourceDir(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, skillFileName), []byte("---\nname: dist-skill\n---\n\nBody.\n"), 0o644)
+	require.NoError(t, err)
+	return dir
+}
+
+func TestDistributeToClients_ExplicitClients(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	opts := &InstallOptions{Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
+
+	_, err := os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".gemini", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "gemini was not requested, must not be distributed")
+}
+
+func TestDistributeToClients_AllClients(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	opts := &InstallOptions{AllClients: true}
+	installer.distributeToClients(basePath, installPath, "dist-skill", SupportedClients, opts.Scope)
+
+	for _, client := range SupportedClients {
+		_, err := os.Stat(filepath.Join(clientSkillDir(basePath, "", ScopeProject, client), "dist-skill", skillFileName))
+		assert.NoError(t, err, "expected distribution for client %s", client)
+	}
+}
+
+func TestDistributeToClients_AutoDetect(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".vscode"), 0o755))
+
+	opts := &InstallOptions{}
+	clients := installer.resolveDistributionClients(basePath, opts)
+	installer.distributeToClients(basePath, installPath, "dist-skill", clients, opts.Scope)
+
+	_, err := os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "claude-code was not detected, must not be distributed")
+}
+
+// TestDistributeToClients_SkipsPreExistingSymlink covers the real incident: this repo's own
+// .claude/skills/<name> entries are intentionally checked-in symlinks pointing into
+// agent-skills/skills/<name> for contributor auto-discovery. It must never write through a
+// pre-existing symlink at a client target -- it must skip that client and leave the symlink
+// (and whatever it points at) completely untouched.
+func TestDistributeToClients_SkipsPreExistingSymlink(t *testing.T) {
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	// A separate directory standing in for e.g. agent-skills/skills/dist-skill, with sentinel
+	// content that must survive completely unchanged.
+	symlinkTarget := t.TempDir()
+	sentinelPath := filepath.Join(symlinkTarget, "sentinel.txt")
+	require.NoError(t, os.WriteFile(sentinelPath, []byte("do not touch"), 0o644))
+
+	claudeSkillsDir := filepath.Join(basePath, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(claudeSkillsDir, 0o755))
+	symlinkPath := filepath.Join(claudeSkillsDir, "dist-skill")
+	if err := os.Symlink(symlinkTarget, symlinkPath); err != nil {
+		t.Skipf("Skipping symlink test: %v", err)
+	}
+
+	opts := &InstallOptions{Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
+
+	// The symlink itself is untouched (still a symlink, still pointing at the same target).
+	assert.True(t, isSymlink(symlinkPath), "symlink must remain a symlink, not be replaced")
+	resolved, err := os.Readlink(symlinkPath)
+	require.NoError(t, err)
+	assert.Equal(t, symlinkTarget, resolved)
+
+	// Its target content is byte-for-byte unchanged -- nothing was written through it.
+	content, err := os.ReadFile(sentinelPath)
+	require.NoError(t, err)
+	assert.Equal(t, "do not touch", string(content))
+	_, err = os.Stat(filepath.Join(symlinkTarget, skillFileName))
+	assert.True(t, os.IsNotExist(err), "skill files must not have been copied through the symlink")
+
+	// The other, non-symlinked client still gets its distribution as normal.
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err, "vscode wasn't a symlink and should still be distributed to")
+}
+
+func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".claude"), 0o755))
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, BasePath: basePath}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+
+	clientCopyPath := filepath.Join(basePath, ".claude", "skills", "test-skill")
+	_, err = os.Stat(clientCopyPath)
+	require.NoError(t, err, "expected auto-distributed claude-code copy")
+
+	// Mirror what the CLI does: recompute the client list (stateless -- no
+	// registry tracking of prior distribution) and pass it to Uninstall.
+	clients := DetectClients(basePath, "", ScopeProject)
+	err = installer.Uninstall("test-skill", true, basePath, clients, []string{ScopeProject})
+	require.NoError(t, err)
+
+	_, err = os.Stat(skill.Path)
+	assert.True(t, os.IsNotExist(err), "canonical install path should be removed")
+	_, err = os.Stat(clientCopyPath)
+	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+}
+
+func TestUninstallAll_RemovesEveryInstalledSkill(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	basePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, ".claude"), 0o755))
+
+	skillDir := createTestSkillDir(t)
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+	ctx := context.Background()
+	require.NoError(t, installer.Install(ctx, "github.com/test/test-skill", InstallOptions{SkipConfirm: true, BasePath: basePath}))
+	require.NoError(t, installer.Install(ctx, "atmos-terraform", InstallOptions{SkipConfirm: true, BasePath: basePath}))
+
+	require.Len(t, installer.List(), 2)
+	clientCopyPath := filepath.Join(basePath, ".claude", "skills", "test-skill")
+	require.FileExists(t, filepath.Join(clientCopyPath, "SKILL.md"))
+
+	clients := DetectClients(basePath, "", ScopeProject)
+	require.NoError(t, installer.UninstallAll(true, basePath, clients, []string{ScopeProject}))
+
+	assert.Empty(t, installer.List())
+	_, err = os.Stat(clientCopyPath)
+	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+}
+
+func TestUninstallAll_NoneInstalled_NoError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	require.NoError(t, installer.UninstallAll(true, "", nil, nil))
+	assert.Empty(t, installer.List())
+}
+
+func TestUninstall_NoClients_SkipsClientCleanup(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "no-client-cleanup-skill")
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skill := &InstalledSkill{
+		Name:    "no-client-cleanup-skill",
+		Path:    skillPath,
+		Enabled: true,
+	}
+	require.NoError(t, installer.localRegistry.Add(skill))
+
+	err = installer.Uninstall("no-client-cleanup-skill", true, "", nil, nil)
+	require.NoError(t, err)
+
+	_, err = os.Stat(skillPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestRemoveClientCopies_SkipsPreExistingSymlink is the uninstall-side mirror of
+// TestDistributeToClients_SkipsPreExistingSymlink: removeClientCopies must never delete a
+// pre-existing symlink at a client target (e.g. this repo's own .claude/skills/<name> entries),
+// even though Go's os.RemoveAll on a symlink only unlinks it rather than recursing into its
+// target -- deleting an intentionally-placed symlink is still the wrong outcome.
+func TestRemoveClientCopies_SkipsPreExistingSymlink(t *testing.T) {
+	basePath := t.TempDir()
+	symlinkTarget := t.TempDir()
+
+	claudeSkillsDir := filepath.Join(basePath, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(claudeSkillsDir, 0o755))
+	symlinkPath := filepath.Join(claudeSkillsDir, "dist-skill")
+	if err := os.Symlink(symlinkTarget, symlinkPath); err != nil {
+		t.Skipf("Skipping symlink test: %v", err)
+	}
+
+	// A real (non-symlink) copy for vscode, to confirm it's still cleaned up normally.
+	vscodeSkillsDir := filepath.Join(basePath, ".github", "skills", "dist-skill")
+	require.NoError(t, os.MkdirAll(vscodeSkillsDir, 0o755))
+
+	removeClientCopies(basePath, "dist-skill", []string{ClientClaudeCode, ClientVSCode}, []string{ScopeProject})
+
+	assert.True(t, isSymlink(symlinkPath), "symlink must survive removeClientCopies untouched")
+	resolved, err := os.Readlink(symlinkPath)
+	require.NoError(t, err)
+	assert.Equal(t, symlinkTarget, resolved)
+	_, err = os.Stat(symlinkTarget)
+	assert.NoError(t, err, "the symlink's target directory itself must still exist")
+
+	_, err = os.Stat(vscodeSkillsDir)
+	assert.True(t, os.IsNotExist(err), "the non-symlinked vscode copy should still be removed normally")
+}
+
+// TestPrepareInstallPath_ForceRefusesSymlink covers the canonical-install-path guard: --force
+// reinstall must refuse to delete a pre-existing symlink at the install path (e.g. someone
+// manually symlinked ~/.atmos/skills/<name> for local testing) rather than silently unlinking it.
+func TestPrepareInstallPath_ForceRefusesSymlink(t *testing.T) {
+	installer := &Installer{}
+
+	symlinkTarget := t.TempDir()
+	installPath := filepath.Join(t.TempDir(), "some-skill")
+	if err := os.Symlink(symlinkTarget, installPath); err != nil {
+		t.Skipf("Skipping symlink test: %v", err)
+	}
+
+	err := installer.prepareInstallPath(installPath, "some-skill", true)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrRefuseDeleteSymbolicLink))
+
+	assert.True(t, isSymlink(installPath), "symlink must survive the refused force-reinstall")
+}
+
+// TestDistributeToClients_UserScope confirms Scope: ScopeUser lands copies
+// under the resolved home directory (via homedir.Dir(), since BasePath is
+// irrelevant at user scope) instead of the project path, including the
+// vscode/.copilot asymmetry (not .github).
+func TestDistributeToClients_UserScope(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer := &Installer{}
+	installPath := distributionSourceDir(t)
+	basePath := t.TempDir()
+
+	opts := &InstallOptions{Scope: ScopeUser, Clients: []string{ClientClaudeCode, ClientVSCode}}
+	installer.distributeToClients(basePath, installPath, "dist-skill", opts.Clients, opts.Scope)
+
+	_, err := os.Stat(filepath.Join(tempHome, ".claude", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err, "expected user-scope claude-code distribution under the home dir")
+	_, err = os.Stat(filepath.Join(tempHome, ".copilot", "skills", "dist-skill", skillFileName))
+	assert.NoError(t, err, "expected user-scope vscode/copilot distribution under .copilot, not .github")
+
+	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "user scope must not write into the project path")
+	_, err = os.Stat(filepath.Join(basePath, ".github", "skills", "dist-skill", skillFileName))
+	assert.True(t, os.IsNotExist(err), "user scope must not write into the project path")
+}
+
+// TestUninstall_UserScope_RemovesHomeDirClientCopy is the uninstall-side
+// mirror of TestDistributeToClients_UserScope: a skill installed with
+// Scope: ScopeUser must have its client copy removed from the home-dir-rooted
+// path, not the project path.
+func TestUninstall_UserScope_RemovesHomeDirClientCopy(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skillDir := createTestSkillDir(t)
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	basePath := t.TempDir()
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, BasePath: basePath, Scope: ScopeUser, Clients: []string{ClientClaudeCode}}
+	require.NoError(t, installer.Install(ctx, "github.com/test/test-skill", opts))
+
+	homeCopyPath := filepath.Join(tempHome, ".claude", "skills", "test-skill")
+	_, err = os.Stat(homeCopyPath)
+	require.NoError(t, err, "expected user-scope claude-code copy under the home dir")
+
+	require.NoError(t, installer.Uninstall("test-skill", true, basePath, []string{ClientClaudeCode}, []string{ScopeUser}))
+
+	_, err = os.Stat(homeCopyPath)
+	assert.True(t, os.IsNotExist(err), "user-scope client copy should be removed")
+
+	// The project path must never have been touched.
+	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "test-skill"))
+	assert.True(t, os.IsNotExist(err), "project path must remain untouched by a user-scope uninstall")
 }

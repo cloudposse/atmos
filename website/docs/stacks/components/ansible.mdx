@@ -190,8 +190,9 @@ components:
         ansible:
           playbook: deploy.yml
           inventory: inventory/production
-        depends_on:
-          - component: webserver
+      dependencies:
+        components:
+          - name: webserver
 
 ```
 </File>
@@ -321,7 +322,7 @@ atmos ansible playbook hello-world -s dev
 
 2. **Centralize Defaults:** Define common settings in catalog defaults and override only when necessary.
 
-3. **Use Dependencies:** Define `depends_on` when playbooks need to run after infrastructure is provisioned.
+3. **Use Dependencies:** Define `dependencies.components` when playbooks need to run after infrastructure is provisioned.
 
 4. **Keep Playbooks Small:** Create focused playbooks for specific tasks rather than monolithic automation.
 
@@ -339,5 +340,5 @@ atmos ansible playbook hello-world -s dev
 - [Configure Environment](/stacks/env)
 - [Passing Secrets](/cli/configuration/secrets)
 - [`!secret` function](/functions/yaml/secret)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)
 - [atmos ansible playbook](/cli/commands/ansible/playbook)

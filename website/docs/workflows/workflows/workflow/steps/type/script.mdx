@@ -1,0 +1,36 @@
+---
+title: script
+sidebar_label: script
+slug: /workflows/steps/type/script
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `script` step type runs inline code with an explicit interpreter. Use it for a small,
+portable script body instead of encoding a heredoc in a shell command.
+</Intro>
+
+```yaml
+steps:
+  - name: check generated files
+    type: script
+    interpreter: python3
+    working_directory: .
+    script: |
+      from pathlib import Path
+      if not Path("generated/config.yaml").exists():
+          raise SystemExit("missing generated config")
+```
+
+## Fields
+
+| Field | Description |
+| --- | --- |
+| `interpreter` | Required executable that evaluates `script`. Supports templates. |
+| `script` | Required inline program text. Supports templates. |
+| `working_directory` | Optional process directory. |
+| `env` | Optional environment map. |
+
+Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
+`type: script` when the interpreter and body are the intentional interface.

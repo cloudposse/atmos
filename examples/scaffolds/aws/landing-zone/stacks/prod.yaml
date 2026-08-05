@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Production environment: protected audit log bucket, long retention, and a
+# tight alarm threshold.
+
+import:
+  - _defaults
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    audit-trail:
+      vars:
+        # Never let a destroy empty the production audit log bucket.
+        force_destroy: false
+    monitoring:
+      vars:
+        retention_in_days: 365
+        # 256 MiB per 5 minutes — unusual log volume should alert.
+        alarm_threshold_bytes: 268435456
+    baseline:
+      vars:
+        parameters:
+          environment: production
+          log-level: warn

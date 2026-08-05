@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -740,6 +741,55 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestDeviceCodeProvider_updateAzureCLICache_GuestHomeAccountID(t *testing.T) {
+	// For guest (B2B) users MSAL's home account ID ("{home-oid}.{home-tenant}")
+	// differs from "{oid}.{target-tenant}". The written Account entry must carry
+	// the MSAL value, or az fails with "Found multiple accounts with the same
+	// username" (azure-cli#20168).
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+	t.Setenv("AZURE_CONFIG_DIR", tmpHome)
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT","alg":"RS256"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"oid":"guest-oid-in-target","upn":"guest@hometenant.com"}`))
+	accessToken := header + "." + payload + ".testsignature"
+
+	provider := &deviceCodeProvider{
+		name:     "test-provider",
+		tenantID: "target-tenant",
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+		config: &schema.Provider{
+			Kind: "azure/device-code",
+			Spec: map[string]interface{}{
+				"tenant_id": "target-tenant",
+			},
+		},
+	}
+
+	err := provider.updateAzureCLICache(&tokenCacheUpdate{
+		AccessToken:   accessToken,
+		ExpiresAt:     time.Now().UTC().Add(1 * time.Hour),
+		HomeAccountID: "home-oid.home-tenant",
+	})
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(tmpHome, ".azure", "msal_token_cache.json"))
+	require.NoError(t, err)
+
+	var cache map[string]map[string]map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &cache))
+
+	accounts := cache["Account"]
+	require.Len(t, accounts, 1, "exactly one Account entry expected")
+	for key, entry := range accounts {
+		assert.Contains(t, key, "home-oid.home-tenant", "cache key must use the MSAL home account ID")
+		assert.Equal(t, "home-oid.home-tenant", entry[azureCloud.FieldHomeAccountID])
+		assert.Equal(t, "guest-oid-in-target", entry["local_account_id"], "local account id stays the target-tenant OID")
+		assert.Equal(t, "target-tenant", entry[azureCloud.FieldRealm], "realm stays the target tenant")
+	}
+}
+
 func TestLoadAndInitializeCLICache(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -929,5 +979,169 @@ func TestStripBOM(t *testing.T) {
 			result := stripBOM(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+// TestWithAzureFileLock_WrapsErrCacheLocked verifies that withAzureFileLock wraps
+// the underlying cache.ErrCacheLocked into azureCloud.ErrFileLockTimeout, and that
+// the wrapped function never runs when the lock cannot be acquired.
+//
+// The lock file (path + ".lock") is placed under a directory that is never
+// created, so opening it fails immediately with ENOENT instead of retrying for
+// the full 10s timeout. This is the same "invalid lock path" style used by
+// pkg/cache/filelock_unix_test.go's TestWithLock_InvalidLockPath: a directory
+// pre-created at the lock path does not work here because gofrs/flock opens the
+// lock file with O_RDONLY (not O_RDWR) by default, and open()+flock() on a
+// directory succeeds on both Linux and macOS.
+func TestWithAzureFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	// Deliberately do not create "missing-dir": the lock file's parent
+	// directory must not exist so opening the lock file fails immediately.
+	path := filepath.Join(t.TempDir(), "missing-dir", "some-cache-file")
+
+	executed := false
+	err := withAzureFileLock(path, func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
+
+// TestWriteCacheFileWithLocking_LockFailure verifies that writeCacheFileWithLocking returns false without overwriting existing data when the lock-protected write fails, exercising the withAzureFileLock error branch at its call site.
+// The function always creates the cache directory before locking, so an absent-parent-directory trick can't reach this call site; instead cachePath itself is pre-created as a directory so the write performed inside the lock fails cross-platform with "is a directory".
+func TestWriteCacheFileWithLocking_LockFailure(t *testing.T) {
+	cachePath := filepath.Join(t.TempDir(), "cache", "msal_token_cache.json")
+	require.NoError(t, os.MkdirAll(cachePath, 0o755))
+
+	ok := writeCacheFileWithLocking(cachePath, []byte("data"), "test cache")
+
+	assert.False(t, ok)
+	info, err := os.Stat(cachePath)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "cache path must remain untouched (still a directory) when the write fails")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_LockFailure verifies that updateAzureProfile
+// propagates a wrapped ErrFileLockTimeout when the azureProfile.json lock cannot be
+// acquired, exercising its withAzureFileLock call site. Unlike
+// writeCacheFileWithLocking, updateAzureProfile never creates the ".azure"
+// directory itself, so leaving it absent makes the lock-file open fail
+// immediately with ENOENT.
+func TestDeviceCodeProvider_updateAzureProfile_LockFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	testHome := t.TempDir()
+	// Deliberately do not create "<testHome>/.azure".
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_WriteFailure verifies the
+// os.WriteFile failure branch *inside* the lock closure, distinct from
+// TestDeviceCodeProvider_updateAzureProfile_LockFailure above (which covers
+// lock *acquisition* failing before the closure ever runs). The sibling
+// ".lock" file is pre-created so locking succeeds, then the ".azure"
+// directory is made read-only so the write of the new azureProfile.json
+// fails once the lock is already held.
+func TestDeviceCodeProvider_updateAzureProfile_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to write Azure profile")
+	_, statErr := os.Stat(profilePath)
+	assert.True(t, os.IsNotExist(statErr), "azureProfile.json should not exist when the write failed")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_ReadFailure verifies the
+// non-ENOENT os.ReadFile failure branch (the profile path is a directory,
+// not a missing file).
+func TestDeviceCodeProvider_updateAzureProfile_ReadFailure(t *testing.T) {
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.MkdirAll(profilePath, 0o700)) // Directory in place of the file.
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read Azure profile")
+}
+
+// TestDeviceCodeProvider_updateAzureProfile_ParseFailure verifies that a
+// corrupted (non-JSON) existing azureProfile.json is surfaced as a parse
+// error rather than silently discarded.
+func TestDeviceCodeProvider_updateAzureProfile_ParseFailure(t *testing.T) {
+	testHome := t.TempDir()
+	azureDir := filepath.Join(testHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath, []byte("{not valid json"), 0o600))
+
+	provider := &deviceCodeProvider{
+		subscriptionID: "sub-123",
+		tenantID:       "tenant-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+
+	err := provider.updateAzureProfile(testHome, "user@example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Azure profile")
+}
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
 	}
 }

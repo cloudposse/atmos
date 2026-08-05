@@ -42,7 +42,7 @@ atmos terraform deploy <component> -s <stack>
 See [all flags](#flags).
 
 :::tip
-Run `atmos terraform deploy --help` to see all the available options
+Run `atmos terraform deploy --help=all` to see shared selector and dependency flags.
 :::
 
 ## Configuration
@@ -365,6 +365,38 @@ atmos terraform deploy --query '.settings.context.account_id == 12345'
 atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
 ```
 
+### Deploy Components by Tags and Labels
+
+Filter components by `metadata.tags`/`metadata.labels`. These flags compose with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them:
+
+```shell
+# Deploy components tagged production or tier-1 (matches any)
+atmos terraform deploy --tags production,tier-1
+
+# Deploy components labeled cost-center=platform (matches all given labels)
+atmos terraform deploy --labels cost-center=platform
+
+# Narrow an --affected run to only production-tagged components
+atmos terraform deploy --affected --tags production
+```
+
+### Include Dependencies and Dependents
+
+Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are deployed even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately deploys prerequisite components outside the `dev` stack:
+
+```shell
+# Deploy dev-labeled components plus everything they depend on
+atmos terraform deploy --labels=env=dev --include-dependencies
+
+# Bound the expansion to direct dependencies only
+atmos terraform deploy --labels=env=dev --include-dependencies=1
+
+# Deploy a stack plus everything that depends on it, up to two levels out
+atmos terraform deploy -s dev --include-dependents=2
+```
+
+Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separated value is not bound to the flag. The bare flag expands without a depth limit, and `true`/`false` values are accepted for backward compatibility.
+
 ### Multi-Component Flags
 
 <dl>
@@ -380,8 +412,17 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
     <dt>`--query`</dt>
     <dd>Deploy components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
 
+    <dt>`--tags`</dt>
+    <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+    <dt>`--labels`</dt>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+
+    <dt>`--include-dependencies`</dt>
+    <dd>Also deploy everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
     <dt>`--include-dependents`</dt>
-    <dd>With `--affected`, also deploy components that depend on affected components, recursively.</dd>
+    <dd>Also deploy everything that depends on the selected components, in dependency order. Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`). Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds it to two levels.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
     <dt>`--ref`</dt>
     <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>

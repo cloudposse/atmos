@@ -3,6 +3,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -2577,6 +2578,45 @@ ai:
 			assert.NotContains(t, err.Error(), "AI features are not enabled")
 			assert.NotContains(t, err.Error(), "sessions are not enabled")
 		}
+	})
+
+	t.Run("cleanSessionsCommand deletes old sessions and reports the count", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+		// The shared atmos.yaml above doesn't set stacks.included_paths. The
+		// sibling subtests tolerate any error other than the AI/sessions
+		// disabled messages, so they never noticed; this subtest asserts
+		// require.NoError, so supply the required env var explicitly.
+		t.Setenv("ATMOS_STACKS_INCLUDED_PATHS", "**/*")
+
+		// Seed the session store with a session old enough to be swept by a
+		// 30-day retention window, so CleanOldSessions returns count > 0 and
+		// exercises the "Deleted N session(s)" branch (as opposed to the
+		// "No sessions to clean" branch covered by the sibling subtest above).
+		storagePath := filepath.Join(tempDir, ".atmos", "sessions", "sessions.db")
+		storage, err := session.NewSQLiteStorage(storagePath)
+		require.NoError(t, err)
+
+		oldTime := time.Now().AddDate(0, 0, -40)
+		require.NoError(t, storage.CreateSession(context.Background(), &session.Session{
+			ID:          "old-session-for-clean-count-test",
+			Name:        "old",
+			ProjectPath: tempDir,
+			Model:       "gpt-4",
+			Provider:    "openai",
+			CreatedAt:   oldTime,
+			UpdatedAt:   oldTime,
+		}))
+		require.NoError(t, storage.Close())
+
+		testCmd := &cobra.Command{
+			Use:  "clean",
+			RunE: cleanSessionsCommand,
+		}
+		testCmd.Flags().String("older-than", "30d", "Duration")
+
+		err = cleanSessionsCommand(testCmd, []string{})
+		require.NoError(t, err, "cleanSessionsCommand should succeed once the 40-day-old session is deleted")
 	})
 
 	t.Run("cleanSessionsCommand with various duration formats", func(t *testing.T) {

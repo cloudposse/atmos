@@ -54,10 +54,15 @@ func (h *Handler) validateAtmosFile(doc *Document) []protocol.Diagnostic {
 		yamlDiags := h.validateYAMLSyntax(doc)
 		diagnostics = append(diagnostics, yamlDiags...)
 
-		// If YAML is valid, perform Atmos-specific validation.
+		// If YAML is valid, perform Atmos-specific validation: CLI
+		// configuration documents are validated against the generated
+		// atmos.yaml JSON Schema; everything else gets stack heuristics.
 		if len(yamlDiags) == 0 {
-			atmosDiags := h.validateAtmosStack(doc)
-			diagnostics = append(diagnostics, atmosDiags...)
+			if isAtmosConfigDocument(filePath) {
+				diagnostics = append(diagnostics, h.validateConfigSchema(doc)...)
+			} else {
+				diagnostics = append(diagnostics, h.validateAtmosStack(doc)...)
+			}
 		}
 
 	case ".tf", ".hcl":

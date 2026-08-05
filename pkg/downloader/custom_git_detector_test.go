@@ -121,6 +121,46 @@ func TestGetDefaultUsername(t *testing.T) {
 	}
 }
 
+func TestDetect_DefaultsDepthToOneForShallowClone(t *testing.T) {
+	// Supported git hosts get a shallow clone by default for speed.
+	config := fakeAtmosConfig()
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+	result, ok, err := detector.Detect("github.com/cloudposse/atmos.git//examples", "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok to be true for a supported host")
+	}
+	if !strings.Contains(result, "depth=1") {
+		t.Errorf("Expected default shallow clone (depth=1), got: %s", result)
+	}
+}
+
+// TestDetect_PreservesExplicitDepth pins a contract the scaffold catalog
+// depends on (see templates.CatalogEntry.ResolvedSource): git rejects a
+// shallow clone (`--depth`) combined with a ref that isn't a branch or tag,
+// so pinning to an arbitrary commit SHA requires disabling the default
+// shallow clone by passing `depth=0` explicitly. Detect must not override an
+// explicit depth back to 1.
+func TestDetect_PreservesExplicitDepth(t *testing.T) {
+	config := fakeAtmosConfig()
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+	result, ok, err := detector.Detect("github.com/cloudposse/atmos.git//examples?ref=0cf62afa883b1546f07f2eaf2d6f1690353d31b7&depth=0", "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok to be true for a supported host")
+	}
+	if !strings.Contains(result, "depth=0") {
+		t.Errorf("Expected explicit depth=0 to be preserved, got: %s", result)
+	}
+	if strings.Contains(result, "depth=1") {
+		t.Errorf("Expected depth not to be overridden to 1, got: %s", result)
+	}
+}
+
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
 	config := fakeAtmosConfig()
