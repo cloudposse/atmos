@@ -103,11 +103,35 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
+	// diff3's line reader can't tell how many trailing newlines its input
+	// had (bufio.Scanner strips every line terminator, including the last),
+	// so its join step always collapses them — to one fewer than there
+	// really were, or to none at all, even when nothing else changed.
+	// Restore the exact trailing-newline count from theirs (the
+	// freshly-rendered template version is the most defensible reference for
+	// what the file should look like): when nothing meaningful changed,
+	// ours == theirs, so this also reconstructs ours byte-for-byte without
+	// needing a separate no-op short-circuit.
+	mergedContent = matchTrailingNewline(mergedContent, theirs)
+
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
+}
+
+// matchTrailingNewline appends a trailing newline to content when reference
+// ends with one and content doesn't. Used to restore the newline diff3's join
+// step unconditionally drops, matching whatever convention the reference
+// (the freshly-rendered template version) uses.
+func matchTrailingNewline(content, reference string) string {
+	if content == "" {
+		return content
+	}
+	trimmed := strings.TrimRight(content, newlineSeparator)
+	trailing := reference[len(strings.TrimRight(reference, newlineSeparator)):]
+	return trimmed + trailing
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
