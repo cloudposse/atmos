@@ -559,7 +559,7 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 		cfg.ValuesSectionName: map[string]any{"source": "override"},
 	}
 
-	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	component, _, err := mergeComponentConfigurations(atmosCfg, &opts, result)
 	require.NoError(t, err)
 
 	release := component[cfg.HelmReleaseSectionName].(map[string]any)
@@ -599,7 +599,7 @@ func TestMergeComponentConfigurations_HelmReleaseIgnoresListMergeStrategy(t *tes
 		},
 	}
 
-	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	component, _, err := mergeComponentConfigurations(atmosCfg, &opts, result)
 	require.NoError(t, err)
 	upgrade := component[cfg.HelmReleaseSectionName].(map[string]any)[cfg.HelmUpgradeSectionName].(map[string]any)
 	assert.Equal(t, "rollback", upgrade[cfg.HelmOnFailureSectionName])
@@ -624,7 +624,7 @@ func TestMergeComponentConfigurations_EmptyHelmValuesDoNotEraseInheritedDefaults
 		cfg.ValuesSectionName: nil,
 	})
 
-	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	component, _, err := mergeComponentConfigurations(atmosCfg, &opts, result)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
