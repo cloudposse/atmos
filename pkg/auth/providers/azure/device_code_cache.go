@@ -321,7 +321,7 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 		"local_account_id":            userOID,
 		"username":                    username,
 		"authority_type":              "MSSTS",
-		"account_source":              "device_code",
+		"account_source":              p.accountSource(),
 	}
 	accountSection[accountKey] = accountEntry
 	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
