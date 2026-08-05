@@ -1622,6 +1622,18 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		return nil
 	}
 
+	if isCIGitCloneBootstrapArgs(args) {
+		// The CI git-clone bootstrap clone runs in an empty workspace (e.g.
+		// replacing actions/checkout), where atmos.yaml and any profile it
+		// references cannot exist yet. This mirrors PersistentPreRun's later,
+		// cmd-aware applyCIGitCloneBootstrap tolerance (see that function),
+		// but is needed here too since this handler runs before Cobra ever
+		// resolves the command -- a config/profile error at this point would
+		// otherwise abort Execute() before PersistentPreRun's check runs.
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1649,6 +1661,38 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// isCIGitCloneBootstrapArgs reports whether args represent a no-argument
+// `atmos git clone` invocation under a detected CI provider -- the same
+// bootstrap shape gitcmd.CICloneBootstrapRequested recognizes once Cobra has
+// resolved the command, but checked directly against raw args before Cobra
+// has parsed anything (see handleConfigInitErrorWithArgs's caller).
+//
+// This is intentionally permissive about flags it can't fully validate
+// without Cobra (e.g. an unrecognized flag's arity): the authoritative
+// CI-mode decision is still made later via applyCIGitCloneBootstrap once cmd
+// is fully resolved. This only decides whether the earlier, pre-Cobra
+// handler should let execution continue far enough to reach that check,
+// rather than aborting on a config/profile error that's expected to be
+// unresolvable in a fresh CI bootstrap workspace.
+func isCIGitCloneBootstrapArgs(args []string) bool {
+	if len(args) < 1 {
+		return false
+	}
+	rest, ok := skipLeadingRootFlags(args[1:])
+	if !ok || !matchesLeadingTokens(rest, "git", "clone") {
+		return false
+	}
+	for _, arg := range rest[2:] {
+		// A bare token is a positional repo name/URI; "--all" bulk-clones
+		// every configured repository; "--" signals a hand-crafted native-arg
+		// invocation. None of these is the zero-argument bootstrap case.
+		if arg == "--" || arg == "--all" || !strings.HasPrefix(arg, "-") {
+			return false
+		}
+	}
+	return gitcmd.CIGitCloneModeRequestedFromEnv()
 }
 
 // configCommandToken is the "config" argument/subcommand token shared by all

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -720,6 +721,65 @@ func TestHandleConfigInitError(t *testing.T) {
 			case tt.expectError:
 				assert.Error(t, err)
 			default:
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestHandleConfigInitError_CIGitCloneBootstrap covers the pre-Cobra config-init
+// error path (Execute()'s first cfg.InitCliConfig call, before PersistentPreRun
+// ever runs). A no-argument `atmos git clone` under a detected CI provider must
+// tolerate a missing/unresolved profile here too, not just in PersistentPreRun's
+// later, cmd-aware handling (applyCIGitCloneBootstrap) -- the bootstrap clone runs
+// in an empty workspace (replacing actions/checkout) where atmos.yaml and any
+// profile it references cannot exist yet. Before this fix, ErrProfileNotFound hit
+// the final "return other errors as-is" branch and aborted Execute() before Cobra
+// ever resolved the command, so ATMOS_CI=true had no effect.
+func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		ciEnabled bool
+		wantErr   bool
+	}{
+		{
+			name:      "bootstrap clone under CI tolerates profile not found",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			name:      "explicit repo argument is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "flux-deploy"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "bulk --all clone is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "--all"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "outside a detected CI provider the error is not swallowed",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: false,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_ACTIONS", strconv.FormatBool(tt.ciEnabled))
+			t.Setenv("ATMOS_CI", "true")
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			err := handleConfigInitErrorWithArgs(errUtils.ErrProfileNotFound, atmosConfig, tt.args)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
 				assert.NoError(t, err)
 			}
 		})

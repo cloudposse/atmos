@@ -47,6 +47,28 @@ func CICloneBootstrapRequested(cmd *cobra.Command, args []string) bool {
 	return mode != ciCloneModeDisabled
 }
 
+// CIGitCloneModeRequestedFromEnv reports whether a detected CI provider plus
+// ATMOS_CI together request CI checkout mode, without any Cobra command
+// context (no --ci flag lookup, since none is resolved yet).
+//
+// Execute() in cmd/root.go runs an initial cfg.InitCliConfig before Cobra
+// ever parses the invoked command (see that function's config-init-error
+// handling). A missing/invalid atmos.yaml or unresolved profile at that point
+// currently aborts the process before PersistentPreRun -- and therefore
+// before CICloneBootstrapRequested/applyCIGitCloneBootstrap ever run -- even
+// for the CI bootstrap clone, which runs in an empty workspace where no
+// atmos.yaml or profile can exist yet. This lets that earlier handler
+// recognize the same "would this be CI checkout mode" signal from the
+// environment alone, deferring to resolveCICloneMode for the ATMOS_CI/CI
+// provider precedence so the two callers can't drift.
+func CIGitCloneModeRequestedFromEnv() bool {
+	if ci.Detect() == nil {
+		return false
+	}
+	mode, _ := resolveCICloneMode(nil)
+	return mode != ciCloneModeDisabled
+}
+
 // isCloneCommand reports whether cmd is the `atmos git clone` leaf, checked
 // by name/parent rather than pointer identity so callers can exercise this
 // with a lightweight test command tree instead of the package's real
