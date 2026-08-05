@@ -53,8 +53,14 @@ func (e *Engine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
 	}
 	cmd := exec.Command(atmosBin, args...) // #nosec G204,G702 -- intentional nested Atmos invocation.
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = ctx.Stdout
+	cmd.Stderr = ctx.Stderr
+	if cmd.Stdout == nil {
+		cmd.Stdout = os.Stdout
+	}
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
 	cmd.Env = append(os.Environ(), "ATMOS_SKIP_HOOKS=*")
 	if err := cmd.Run(); err != nil {
 		// ApplyOnFailure resolves ctx.Hook.OnFailure ("warn"/"ignore"/"fail",
