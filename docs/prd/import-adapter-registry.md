@@ -1,5 +1,7 @@
 # Import Adapter Registry Pattern
 
+**Status:** Phase 1 (registry pattern, `pkg/config/import_adapter.go`, `pkg/config/import_adapter_registry.go`) is implemented. Phase 2's `terragrunt://` HCL→YAML transform adapter is **not implemented** — only referenced in a doc comment as a planned adapter type. There is no automatic `terragrunt.hcl` → Atmos YAML conversion today; migration is manual/agent-assisted.
+
 ## Overview
 
 This document describes the import adapter registry pattern for Atmos, which provides a modular, extensible architecture for custom import schemes that require **transformation** (like `terragrunt://` for HCL→YAML conversion, or `mock://` for testing). Standard go-getter schemes continue to work through the existing infrastructure.

@@ -1,8 +1,8 @@
 # PRD: DAG-Based Concurrent Execution
 
-**Status:** Draft
+**Status:** Mostly Shipped — Phases 1–3 (foundation packages, `pkg/scheduler/` + Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and `--affected`/`--query` routing consolidation onto the scheduler) are implemented (`pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, `internal/exec/terraform_query.go`). Phase 4 (per-type concurrency limits, critical-path scheduling, TUI progress display, resumability) remains open.
 **Version:** 2.0
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-07-11
 **Author:** Erik Osterman
 
 ---
@@ -219,10 +219,10 @@ Fully implemented and shipped (#1516):
 - `builder.go` — `GraphBuilder` for constructing graphs
 - `filter.go` — Filter by type, stack, component; connected components
 
-### Dependency-Ordered Execution (`internal/exec/terraform_all.go`)
-- `ExecuteTerraformAll()` — Builds DAG from `settings.depends_on`, executes in topological order
+### Dependency-Ordered Execution (`internal/exec/terraform_all.go`, `pkg/scheduler/`)
+- `ExecuteTerraformAll()` — Builds DAG from `settings.depends_on`/`dependencies.components`, executes via `pkg/scheduler/adapters/terraform.go`
 - `buildTerraformDependencyGraph()` — Constructs graph from stack configs
-- `executeInDependencyOrder()` — **Currently sequential** (iterates sorted nodes one by one)
+- Execution now runs through the ready-queue `Scheduler` (`pkg/scheduler/scheduler.go`) with `--max-concurrency` controlling worker count (default `1`, sequential) — no longer a plain sequential loop
 - Reverse order for `destroy`
 - Cross-stack dependency support
 

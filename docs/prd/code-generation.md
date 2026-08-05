@@ -1,5 +1,7 @@
 # PRD: Generate Section in Atmos Stack Config
 
+**Status:** 🟢 Shipped — `cmd/terraform/generate/files.go`, `atmos terraform generate files`, and `auto_generate_files` are implemented and documented at `website/docs/stacks/generate.mdx`.
+
 ## Overview
 
 Add a `generate` section to Atmos stack configuration that allows users to declaratively define files to be generated alongside Terraform components. Files are written to the component directory and support templating with full component context.
