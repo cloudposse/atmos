@@ -727,6 +727,11 @@ module.exports = function fileBrowserPlugin(context, options) {
     // folder icon and "Open" so examples/gists render unchanged.
     cardIcon = 'folder',
     cardCtaLabel = 'Open',
+    // Shows a "Copy as Markdown" button on each item's root page, which
+    // concatenates the item's readme and every nested file into one
+    // clipboard-ready document. Defaults to false so existing instances
+    // render unchanged unless opted in.
+    enableCopyMarkdown = false,
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -767,6 +772,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           searchable,
           cardIcon,
           cardCtaLabel,
+          enableCopyMarkdown,
         },
       };
     },

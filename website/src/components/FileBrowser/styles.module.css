@@ -692,6 +692,52 @@
   opacity: 0.7;
 }
 
+/* Page Toolbar (breadcrumb + page-level actions) */
+.pageToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* .breadcrumb already carries its own margin-bottom; avoid doubling it when wrapped. */
+.pageToolbar .breadcrumb {
+  margin-bottom: 0;
+}
+
+/* Copy Markdown Button */
+.copyMarkdownButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copyMarkdownButton:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownButton {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.copyMarkdownIcon {
+  font-size: 1rem;
+}
+
 /* README Section */
 .readmeSection {
   width: 100%;

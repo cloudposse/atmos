@@ -205,6 +205,41 @@ export function getParentPath(path: string): string {
 }
 
 /**
+ * Recursively concatenates every readable file under a directory into one
+ * Markdown document — the whole skill, references included, as a single
+ * block of context that can be copied without installing anything. The
+ * node's own `readme` (e.g. SKILL.md) leads, since it's the entry point;
+ * everything else follows in tree order. Binary files and files skipped at
+ * scan time (over the plugin's `maxFileSize`, `content === null`) are
+ * omitted rather than left as empty sections.
+ */
+export function collectMarkdownContext(root: DirectoryNode): string {
+  const sections: string[] = [];
+  const readmePath = root.readme?.path;
+
+  const addFile = (node: FileNode) => {
+    if (node.content == null || isBinaryFile(node)) return;
+    const body = isMarkdownFile(node)
+      ? node.content.trim()
+      : `\`\`\`${node.language}\n${node.content.trim()}\n\`\`\``;
+    sections.push(`## ${node.path}\n\n${body}`);
+  };
+
+  const visit = (node: TreeNode) => {
+    if (node.type === 'directory') {
+      node.children.forEach(visit);
+    } else if (node.path !== readmePath) {
+      addFile(node);
+    }
+  };
+
+  if (root.readme) addFile(root.readme);
+  visit(root);
+
+  return sections.join('\n\n---\n\n');
+}
+
+/**
  * Counts total files in a tree.
  */
 export function countFiles(node: DirectoryNode): number {

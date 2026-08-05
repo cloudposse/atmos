@@ -101,6 +101,8 @@ export interface FileBrowserOptions {
   cardIcon?: string;
   /** Card call-to-action label. Defaults to 'Open'. */
   cardCtaLabel?: string;
+  /** Shows a "Copy as Markdown" button on each item's root page when true. */
+  enableCopyMarkdown?: boolean;
 }
 
 /**

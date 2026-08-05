@@ -526,6 +526,7 @@ const config = {
                 searchable: true,
                 cardIcon: 'graduation-cap',
                 cardCtaLabel: 'Learn',
+                enableCopyMarkdown: true,
             },
         ],
     ],

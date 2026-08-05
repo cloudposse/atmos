@@ -8,6 +8,7 @@ import FileTree from './FileTree';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
+import CopyMarkdownButton from './CopyMarkdownButton';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import CastPlayer from '@site/src/components/CastPlayer';
@@ -48,6 +49,7 @@ export default function DirectoryPage({
     : `${dirData.name} - ${exampleName}`;
   const isExampleRoot = dirData.path === exampleName;
   const showCast = isExampleRoot && !!example.cast?.file;
+  const showCopyMarkdown = isExampleRoot && !!optionsData.enableCopyMarkdown;
 
   return (
     <Layout title={pageTitle}>
@@ -58,7 +60,16 @@ export default function DirectoryPage({
           currentPath={dirData.path}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+          <div className={styles.pageToolbar}>
+            <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+            {showCopyMarkdown && (
+              <CopyMarkdownButton
+                directory={dirData}
+                title={example.title || example.name}
+                description={example.description}
+              />
+            )}
+          </div>
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
