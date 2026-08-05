@@ -2,6 +2,7 @@ package installer
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -143,6 +144,12 @@ func validateGitHubContentFields(tool *registry.Tool) error {
 	if tool.RepoOwner == "" || tool.RepoName == "" || tool.Path == "" {
 		return fmt.Errorf("%w: RepoOwner, RepoName, and Path must be set for github_content type (got RepoOwner=%q, RepoName=%q, Path=%q)",
 			ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName, tool.Path)
+	}
+	// Path is a repo-relative URL segment (always forward-slash, regardless of
+	// host OS), so use the "path" package rather than "path/filepath" here.
+	if path.IsAbs(tool.Path) || strings.Contains(tool.Path, "..") {
+		return fmt.Errorf("%w: Path must be a relative repository path for github_content type (got Path=%q)",
+			ErrInvalidToolSpec, tool.Path)
 	}
 	return nil
 }

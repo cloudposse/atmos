@@ -1254,6 +1254,28 @@ func TestValidateGitHubContentFields(t *testing.T) {
 			wantErr:   true,
 			errSubstr: []string{"github_content", "RepoOwner=\"\"", "RepoName=\"\"", "Path=\"\""},
 		},
+		{
+			name:      "absolute Path is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "/etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative", "Path=\"/etc/passwd\""},
+		},
+		{
+			name:      "Path with parent traversal is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "../../etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative", "Path=\"../../etc/passwd\""},
+		},
+		{
+			name:      "Path with embedded traversal segment is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "scripts/../../../etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative"},
+		},
+		{
+			name: "nested relative Path is valid",
+			tool: &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "scripts/install.sh"},
+		},
 	}
 
 	for _, tt := range tests {
