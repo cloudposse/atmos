@@ -4,6 +4,7 @@ description: "Ansible orchestration: playbook execution, variable passing, inven
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Ansible Orchestration

@@ -74,6 +74,33 @@
   color: var(--ifm-heading-color);
 }
 
+/* Search (opt-in via the `searchable` plugin option) */
+.searchContainer {
+  margin: 0 0 1.5rem 0;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 2px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-base);
+  transition: border-color 0.2s ease;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary);
+}
+
+.searchResults {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
 /* Filter Bar */
 .filterBar {
   display: flex;

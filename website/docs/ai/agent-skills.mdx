@@ -7,15 +7,16 @@ slug: /ai/agent-skills
 ---
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
+import Link from '@docusaurus/Link'
 
 <Intro>
-Atmos ships 25 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
-configuration, Terraform orchestration, authentication, validation, and more. The skills live in the `agent-skills/`
-folder at the root of the Atmos repository and work across all major AI tools.
+Atmos ships a growing set of agent skills that give AI coding assistants deep, accurate knowledge of Atmos
+conventions, stack configuration, Terraform orchestration, authentication, validation, and more. The skills live in
+the `agent-skills/` folder at the root of the Atmos repository and work across all major AI tools.
 </Intro>
 
 <KeyPoints>
-- 25 domain-specific skills covering every Atmos subsystem
+- Domain-specific skills covering every Atmos subsystem -- browse them all at [/ai/skills](/ai/skills)
 - Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
 - Progressive disclosure: AI loads only the skill it needs, keeping context focused
 - Portable SKILL.md format with YAML frontmatter and tiered reference files
@@ -40,95 +41,29 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 25 skills covering every major subsystem:
+Atmos skills cover every major subsystem -- Terraform and Helmfile orchestration, stack configuration, auth,
+secrets, validation, CI, emulators, and more -- and the list keeps growing with each release. Rather than a static
+list here (which drifts out of date as skills are added), browse the full, always-current, searchable set at:
 
-<dl>
-  <dt>`atmos-ansible`</dt>
-  <dd>Ansible playbook execution, variable passing, inventory management.</dd>
+<p>
+  <Link className="button button--primary button--lg" to="/ai/skills">
+    Browse the Agent Skills Directory &rarr;
+  </Link>
+</p>
 
-  <dt>`atmos-asciicast`</dt>
-  <dd>Terminal cast recording workflows, fixtures, validation, and website cast assets.</dd>
-
-  <dt>`atmos-auth`</dt>
-  <dd>Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell.</dd>
-
-  <dt>`atmos-aws-security`</dt>
-  <dd>AWS security findings, component mapping, remediation, and compliance reports.</dd>
-
-  <dt>`atmos-components`</dt>
-  <dd>Terraform root modules, abstract components, component inheritance, versioning.</dd>
-
-  <dt>`atmos-config`</dt>
-  <dd>Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles.</dd>
-
-  <dt>`atmos-custom-commands`</dt>
-  <dd>User-defined CLI commands in atmos.yaml with arguments, flags, and steps.</dd>
-
-  <dt>`atmos-design-patterns`</dt>
-  <dd>Stack organization, component catalogs, inheritance, version management patterns.</dd>
-
-  <dt>`atmos-devcontainer`</dt>
-  <dd>Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration.</dd>
-
-  <dt>`atmos-gitops`</dt>
-  <dd>GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows.</dd>
-
-  <dt>`atmos-helmfile`</dt>
-  <dd>Helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration.</dd>
-
-  <dt>`atmos-hooks`</dt>
-  <dd>Lifecycle hooks for Terraform operations, stores, scanners, git, commands, and steps.</dd>
-
-  <dt>`atmos-introspection`</dt>
-  <dd>describe/list commands for querying stacks, components, dependencies, and change impact.</dd>
-
-  <dt>`atmos-packer`</dt>
-  <dd>Packer init/build/validate, machine image building, template management.</dd>
-
-  <dt>`atmos-schemas`</dt>
-  <dd>JSON Schema for stack manifests, IDE auto-completion, schema validation.</dd>
-
-  <dt>`atmos-stacks`</dt>
-  <dd>Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata.</dd>
-
-  <dt>`atmos-stores`</dt>
-  <dd>Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory).</dd>
-
-  <dt>`atmos-steps`</dt>
-  <dd>Shared step DSL for workflows, custom commands, hooks, and cast recordings.</dd>
-
-  <dt>`atmos-templates`</dt>
-  <dd>Go templates, Sprig/Gomplate functions, `atmos.Component`, datasources.</dd>
-
-  <dt>`atmos-terraform`</dt>
-  <dd>Terraform plan/apply/deploy/destroy, workspace management, backend config.</dd>
-
-  <dt>`atmos-toolchain`</dt>
-  <dd>CLI tool version management via Aqua registries, .tool-versions, install/exec.</dd>
-
-  <dt>`atmos-validation`</dt>
-  <dd>Aggregate, affected, and native-CI validation; OPA/Rego, JSON Schema, EditorConfig, and GitHub Actions.</dd>
-
-  <dt>`atmos-vendoring`</dt>
-  <dd>Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry.</dd>
-
-  <dt>`atmos-workflows`</dt>
-  <dd>Multi-step workflows, Go template support, cross-component orchestration.</dd>
-
-  <dt>`atmos-yaml-functions`</dt>
-  <dd>YAML functions: `!terraform.state`, `!store`, `!env`, `!exec`, `!include`, `!aws.*`.</dd>
-</dl>
+Each skill's page there is generated directly from its `SKILL.md`, grouped by category, and links back to its
+source on GitHub.
 
 ## Folder Structure
 
-All 25 skills live in a single flat directory, packaged as one Claude Code plugin:
+All skills live in a single flat directory, packaged as one Claude Code plugin:
 
 ```text
 agent-skills/                                  # Single plugin
   AGENTS.md                                    # Skill-activation router (loaded first)
   .claude-plugin/plugin.json                   # Plugin manifest
   skills/
-    atmos-terraform/                           # One directory per skill (25 total)
+    atmos-terraform/                           # One directory per skill
       SKILL.md                                 # Primary instruction file (<500 lines)
       references/                              # Deep-dive reference files
     atmos-stacks/
@@ -137,13 +72,13 @@ agent-skills/                                  # Single plugin
     atmos-config/
       SKILL.md
       references/
-    ...                                        # 22 more skills
+    ...                                        # One directory per skill -- see /ai/skills for the full list
 
 .claude/skills/                                # Symlinks for auto-discovery (Atmos contributors)
   atmos-terraform -> ../../agent-skills/skills/atmos-terraform
   atmos-config -> ../../agent-skills/skills/atmos-config
   atmos-stacks -> ../../agent-skills/skills/atmos-stacks
-  ...                                          # 25 symlinks total
+  ...                                          # One symlink per skill
   docs/                                        # Repo-local contributor skill, not part of agent-skills
     SKILL.md
 ```
@@ -166,6 +101,7 @@ description: "Stack configuration: imports, inheritance, deep merging, locals, v
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 references:
   - references/import-patterns.md
   - references/inheritance-deep-merge.md
@@ -188,6 +124,9 @@ Instructions for the AI assistant...
 
   <dt>`metadata.version`</dt>
   <dd>SemVer version of the skill content.</dd>
+
+  <dt>`metadata.category`</dt>
+  <dd>Groups the skill in the [Agent Skills Directory](/ai/skills) (e.g. `orchestrators`, `security`, `ci-automation`).</dd>
 
   <dt>`references`</dt>
   <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
@@ -298,6 +237,8 @@ Skills are maintained in the Atmos repository under `agent-skills/`. To contribu
 2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
 3. Place detailed reference material in `references/` subdirectories
 4. Update `AGENTS.md` to include your skill in the routing table
-5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright` and `version`), and optionally `references` fields
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright`, `version`, and `category`), and optionally `references` fields
+
+New skills appear automatically in the [Agent Skills Directory](/ai/skills) -- no separate doc update needed.
 
 See the [Atmos Contributing Guide](/community) for general contribution guidelines.

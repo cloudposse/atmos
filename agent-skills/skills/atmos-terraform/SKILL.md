@@ -4,6 +4,7 @@ description: "Terraform and OpenTofu orchestration: plan/apply/deploy, workspace
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Terraform and OpenTofu Orchestration

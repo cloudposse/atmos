@@ -4,6 +4,7 @@ description: "Go templates: Sprig/Gomplate functions, atmos.Component, atmos.Gom
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 references:
   - references/go-templates.md
 ---

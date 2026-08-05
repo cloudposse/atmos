@@ -134,6 +134,7 @@ func resetListFlags(t *testing.T) {
 	t.Helper()
 	require.NoError(t, listCmd.Flags().Set("detailed", "false"))
 	require.NoError(t, listCmd.Flags().Set("installed", "false"))
+	require.NoError(t, listCmd.Flags().Set(flagFormat, ""))
 }
 
 func TestListCmd_BasicProperties(t *testing.T) {
@@ -160,16 +161,25 @@ func TestListCmd_Flags(t *testing.T) {
 		assert.Equal(t, "bool", flag.Value.Type())
 		assert.Equal(t, "false", flag.DefValue)
 	})
+
+	t.Run("format flag", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup(flagFormat)
+		require.NotNil(t, flag)
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
 }
 
 func TestSkillListColumns(t *testing.T) {
 	columns := skillListColumns()
-	require.Len(t, columns, 4)
+	require.Len(t, columns, 5)
 	assert.Equal(t, " ", columns[0].Name)
 	assert.Equal(t, 1, columns[0].Width)
 	assert.Equal(t, "Name", columns[1].Name)
 	assert.Equal(t, "Source", columns[2].Name)
 	assert.Equal(t, "State", columns[3].Name)
+	assert.Equal(t, "Category", columns[4].Name)
 }
 
 func TestListCmd_EnvVarBinding(t *testing.T) {
@@ -185,6 +195,13 @@ func TestListCmd_EnvVarBinding(t *testing.T) {
 		v := viper.New()
 		require.NoError(t, listParser.BindToViper(v))
 		assert.True(t, v.GetBool("installed"))
+	})
+
+	t.Run("format env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORMAT", "json")
+		v := viper.New()
+		require.NoError(t, listParser.BindToViper(v))
+		assert.Equal(t, "json", v.GetString(flagFormat))
 	})
 }
 
@@ -209,11 +226,13 @@ func TestBuildListEntries(t *testing.T) {
 		assert.False(t, entries[0].installed)
 		assert.Equal(t, sourceBuiltIn, entries[0].displaySource)
 		assert.Equal(t, catalog[0].Source, entries[0].source)
+		assert.Equal(t, catalog[0].Category, entries[0].category)
 		assert.Equal(t, catalog[len(catalog)-1].Name, entries[len(entries)-1].name)
 		assert.True(t, entries[len(entries)-1].available)
 		assert.False(t, entries[len(entries)-1].installed)
 		assert.Equal(t, sourceBuiltIn, entries[len(entries)-1].displaySource)
 		assert.Equal(t, catalog[len(catalog)-1].Source, entries[len(entries)-1].source)
+		assert.Equal(t, catalog[len(catalog)-1].Category, entries[len(entries)-1].category)
 	})
 
 	t.Run("installed catalog skill is marked installed with its version", func(t *testing.T) {
@@ -427,6 +446,49 @@ func TestListCmd_DefaultOutput(t *testing.T) {
 	for _, c := range catalog {
 		assert.Contains(t, output, c.Name)
 	}
+}
+
+func TestListCmd_FormatJSON(t *testing.T) {
+	catalog, err := marketplace.Catalog()
+	require.NoError(t, err)
+
+	tempHome := withTempHome(t)
+	skillPath := filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform")
+	writeRegistry(t, tempHome, map[string]map[string]interface{}{
+		"atmos-terraform": installedEntry(
+			"atmos-terraform",
+			"github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform",
+			"1.0.0",
+			skillPath,
+		),
+	})
+	resetListFlags(t)
+	require.NoError(t, listCmd.Flags().Set(flagFormat, "json"))
+
+	stdout := setupSkillListOutput(t)
+	require.NoError(t, listCmd.RunE(listCmd, []string{}))
+	output := stdout.String()
+
+	// The human-oriented header, legend, and install hint must not appear.
+	assert.NotContains(t, output, "Atmos skills (")
+	assert.NotContains(t, output, "Install a built-in skill by name:")
+
+	var rows []map[string]string
+	require.NoError(t, json.Unmarshal([]byte(output), &rows), "output must be valid JSON")
+	require.Len(t, rows, len(catalog))
+
+	var found bool
+	for _, row := range rows {
+		assert.Contains(t, row, "Name")
+		assert.Contains(t, row, "Source")
+		assert.Contains(t, row, "State")
+		assert.Contains(t, row, "Category")
+		if row["Name"] == "atmos-terraform" {
+			found = true
+			assert.NotEmpty(t, row["Category"])
+		}
+	}
+	assert.True(t, found, "atmos-terraform must be present in JSON output")
 }
 
 func TestListCmd_InstalledOnly(t *testing.T) {

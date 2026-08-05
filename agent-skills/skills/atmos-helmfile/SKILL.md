@@ -4,6 +4,7 @@ description: "Helmfile orchestration: sync/apply/destroy/diff, Kubernetes deploy
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Helmfile Orchestration

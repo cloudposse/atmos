@@ -95,6 +95,8 @@ export interface FileBrowserOptions {
   githubBranch: string;
   githubPath: string;
   disclaimer?: string;
+  /** Shows a free-text search box on the index page when true. */
+  searchable?: boolean;
 }
 
 /**

@@ -30,21 +30,32 @@ interface IndexPageProps {
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
-  const { routeBasePath, title, description } = optionsData;
+  const { routeBasePath, title, description, searchable } = optionsData;
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredExamples = activeTag
+  const tagFilteredExamples = activeTag
     ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredExamples = query
+    ? tagFilteredExamples.filter((ex) => {
+      const haystack = [ex.name, ex.title, ex.description, ...ex.tags].join(' ').toLowerCase();
+      return haystack.includes(query);
+    })
+    : tagFilteredExamples;
+
   // Group the "All" view into visible sections by each example's primary
   // (first) tag, in the site's tag order; anything untagged lands in "More".
+  // When searching, sections are built from the search results so empty
+  // sections drop out instead of showing a heading with nothing under it.
   const sections = [
     ...tags.map((tag) => ({
       tag,
-      examples: examples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
+      examples: filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
     })),
-    { tag: 'More', examples: examples.filter((ex) => ex.tags.length === 0) },
+    { tag: 'More', examples: filteredExamples.filter((ex) => ex.tags.length === 0) },
   ].filter((section) => section.examples.length > 0);
 
   // Render a single example card. All cards use the friendly English title
@@ -107,7 +118,22 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <p className={styles.indexDescription}>{description}</p>
         </header>
 
-        {activeTag === null && featured.length > 0 && (
+        {searchable && (
+          <div className={styles.searchContainer}>
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder={`Search ${title.toLowerCase()} by name, description, or category...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <div className={styles.searchResults}>
+              Showing {filteredExamples.length} of {examples.length}
+            </div>
+          </div>
+        )}
+
+        {activeTag === null && !query && featured.length > 0 && (
           <section className={styles.featuredSection}>
             <h2 className={styles.featuredHeading}>Featured</h2>
             <div className={styles.examplesGrid}>

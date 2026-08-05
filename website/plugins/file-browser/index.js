@@ -10,6 +10,12 @@ const crypto = require('crypto');
 
 const matter = require('gray-matter');
 
+// File names recognized as an item's primary content — the ones treated as
+// its "readme" for description/title/tags extraction and index-page preview.
+// SKILL.md is the Agent Skills open standard's fixed file name (skills don't
+// ship a README.md), so it's recognized alongside the usual README variants.
+const PRIMARY_CONTENT_FILENAMES = new Set(['readme.md', 'readme.mdx', 'skill.md']);
+
 // Default patterns to exclude from scanning.
 const DEFAULT_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
@@ -129,6 +135,23 @@ const TAGS_MAP = {
   'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
+};
+
+// Display labels for the `metadata.category` slug used by SKILL.md front matter
+// (see agent-skills/skills/*/SKILL.md). Content with no top-level `tags:` front
+// matter and a recognized category slug is tagged with this label instead of
+// falling through to TAGS_MAP, which has no entries for skill directory names.
+const CATEGORY_LABELS = {
+  'core-config': 'Core Configuration & Architecture',
+  orchestrators: 'Orchestration Engines',
+  security: 'Auth, Secrets & Compliance',
+  aws: 'AWS Integrations',
+  'ci-automation': 'CI/CD & Automation',
+  'state-versioning': 'State, Versioning & Provenance',
+  'dev-tooling': 'Developer Tooling',
+  'templating-data': 'Templates & Data',
+  ai: 'AI & MCP',
+  scaffolding: 'Scaffolding & Init',
 };
 
 // Cast recordings for examples whose README.md doubles as copied scaffold
@@ -434,8 +457,10 @@ function scanDirectory(dirPath, relativePath, options) {
         githubUrl: generateGitHubUrl(entryRelativePath, options),
       };
 
-      // Track README files.
-      if (entry.name.toLowerCase() === 'readme.md' || entry.name.toLowerCase() === 'readme.mdx') {
+      // Track README files. SKILL.md is recognized alongside README.md/README.mdx
+      // as primary content — it's the file name mandated by the Agent Skills
+      // open standard (https://agentskills.io), which the skills gallery instance uses.
+      if (PRIMARY_CONTENT_FILENAMES.has(entry.name.toLowerCase())) {
         readme = fileNode;
       }
 
@@ -560,12 +585,19 @@ function scanExamples(sourceDir, options) {
     const castMeta = readmeMetadata.data.cast;
     const cast = castMeta && typeof castMeta === 'object' ? castMeta : CAST_MAP[entry.name] || {};
 
-    // Tags: README front matter wins so examples can self-categorize; fall back
-    // to the hand-maintained map. The first tag is the example's index section.
+    // Tags: README front matter wins so examples can self-categorize; next, a
+    // recognized SKILL.md `metadata.category` slug (see CATEGORY_LABELS); then
+    // fall back to the hand-maintained map. The first tag is the index section.
     const frontmatterTags = Array.isArray(readmeMetadata.data.tags)
       ? readmeMetadata.data.tags.filter((tag) => typeof tag === 'string')
       : [];
-    const tags = frontmatterTags.length > 0 ? frontmatterTags : TAGS_MAP[entry.name] || [];
+    const categorySlug = readmeMetadata.data.metadata && readmeMetadata.data.metadata.category;
+    const categoryLabel = typeof categorySlug === 'string' ? CATEGORY_LABELS[categorySlug] : undefined;
+    const tags = frontmatterTags.length > 0
+      ? frontmatterTags
+      : categoryLabel
+        ? [categoryLabel]
+        : TAGS_MAP[entry.name] || [];
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
@@ -688,6 +720,9 @@ module.exports = function fileBrowserPlugin(context, options) {
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
     tagOrder = DEFAULT_TAG_ORDER,
+    // Shows a free-text search box on the index page. Defaults to false so the
+    // existing examples/gists instances render unchanged unless opted in.
+    searchable = false,
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -725,6 +760,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubBranch,
           githubPath,
           disclaimer,
+          searchable,
         },
       };
     },

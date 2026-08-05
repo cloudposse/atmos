@@ -15,3 +15,9 @@ $ atmos ai skill list --installed
 ```
 $ atmos ai skill list --detailed
 ```
+
+- List as JSON
+
+```
+$ atmos ai skill list --format=json
+```

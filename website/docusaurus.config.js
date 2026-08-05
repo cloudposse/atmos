@@ -499,6 +499,33 @@ const config = {
                 disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
             },
         ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'skills',
+                sourceDir: '../agent-skills/skills',
+                routeBasePath: '/ai/skills',
+                title: 'Agent Skills',
+                description: 'Browse every Atmos agent skill — domain-specific knowledge that gives AI coding assistants deep, accurate understanding of Atmos conventions.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'agent-skills/skills',
+                // Skill chapters, in display order (from each SKILL.md's metadata.category).
+                tagOrder: [
+                    'Core Configuration & Architecture',
+                    'Orchestration Engines',
+                    'Auth, Secrets & Compliance',
+                    'AWS Integrations',
+                    'CI/CD & Automation',
+                    'State, Versioning & Provenance',
+                    'Developer Tooling',
+                    'Templates & Data',
+                    'AI & MCP',
+                    'Scaffolding & Init',
+                ],
+                searchable: true,
+            },
+        ],
     ],
 
     presets: [

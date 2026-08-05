@@ -4,6 +4,7 @@ description: "Atmos caching: CI cache configuration and commands, GitHub Actions
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Cache

@@ -4,6 +4,7 @@ description: "Packer orchestration: init/build/validate/inspect/output, machine 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Packer Orchestration

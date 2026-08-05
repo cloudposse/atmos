@@ -4,6 +4,7 @@ description: "Stack configuration: local and remote imports, inheritance, deep m
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Stack Configuration
