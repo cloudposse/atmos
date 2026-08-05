@@ -71,6 +71,7 @@ func TestResolve_LocalPath(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "local template files must be loaded")
+	assert.Equal(t, dir, cfg.Source, "local sources must record the original path")
 }
 
 func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
@@ -152,6 +153,7 @@ func TestHydrate_LocalStub(t *testing.T) {
 	require.NoError(t, err)
 	defer cleanup()
 	assert.True(t, hasSampleFile(stub.Files), "local stub must be hydrated from its source")
+	assert.Equal(t, dir, stub.Source, "hydrate's *stub = *resolved copy must preserve the original source")
 }
 
 func TestHydrate_LocalStubError(t *testing.T) {
@@ -231,6 +233,30 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteRecordsOriginalSource pins the bug where a remote
+// (git::/https://) scaffold source ended up with Configuration.Source (and
+// therefore the persisted spec.source in .atmos/scaffold.yaml) set to the
+// ephemeral os.MkdirTemp download directory instead of the original source
+// string. That tempdir is removed by cleanup() as soon as the command
+// finishes, leaving spec.source pointing at nothing.
+func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
+	requireGit(t)
+
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "?ref=main"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+
+	assert.Equal(t, src, cfg.Source, "remote sources must record the original source string, not the ephemeral fetch tempdir")
 }
 
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
