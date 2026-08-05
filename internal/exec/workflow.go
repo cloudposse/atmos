@@ -142,7 +142,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, workflowFile)
+		workflowPath = filepath.Join(getWorkflowsDirToUse(&atmosConfig), workflowFile)
 	}
 
 	// If the workflow file is specified without an extension, use the default extension

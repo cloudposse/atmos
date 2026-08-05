@@ -12,8 +12,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and --config.
-func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
+// mergeConfigFromCLIArgs merges config sources selected via --config/--config-path into v,
+// returning the directories that contributed configuration (for CliConfigPath assembly).
+//
+// Split out from loadConfigFromCLIArgs so LoadConfig's main flow can merge the CLI-selected
+// config and then fall through into the same profile-loading/edition/final-unmarshal tail
+// every other config source uses, instead of returning immediately. Previously, using
+// --config/--config-path meant LoadConfig returned right after loadConfigFromCLIArgs' own,
+// separate unmarshal -- silently skipping profile loading entirely (--config and --profile
+// could not be combined, cloudposse/atmos#2867/#2868 audit finding) along with the
+// profiles.base_path/vendor-updater/container-runtime config bridging the shared tail
+// performs for every other config source.
+func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) ([]string, error) {
 	log.Debug("loading config from command line arguments")
 
 	configFilesArgs := configAndStacksInfo.AtmosConfigFilesFromArg
@@ -23,7 +33,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Merge all config from --config files
 	if len(configFilesArgs) > 0 {
 		if err := mergeFiles(v, configFilesArgs); err != nil {
-			return err
+			return nil, err
 		}
 		for _, configFilePath := range configFilesArgs {
 			configPaths = append(configPaths, filepath.Dir(configFilePath))
@@ -34,7 +44,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	if len(configDirsArgs) > 0 {
 		paths, err := mergeConfigFromDirectories(v, configDirsArgs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		configPaths = append(configPaths, paths...)
 	}
@@ -42,13 +52,26 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
-		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
+		return nil, fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
+	}
+
+	return configPaths, nil
+}
+
+// loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and
+// --config, unmarshaling directly into atmosConfig on its own (without profile support or the
+// shared-tail config bridging LoadConfig's main flow performs -- see mergeConfigFromCLIArgs).
+// Kept as a standalone entry point for direct callers/tests exercising --config in isolation.
+func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
+	configPaths, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
+	if err != nil {
+		return err
 	}
 
 	setEnv(v)
 
 	// Apply the edition pin (if any) before unmarshaling, same as the main
-	// LoadConfig flow (this path returns early and skips that hook).
+	// LoadConfig flow (this path skips that hook otherwise).
 	if err := applyEditionDefaults(v); err != nil {
 		return err
 	}

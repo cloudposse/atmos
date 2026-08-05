@@ -739,8 +739,17 @@ func TestInitCliConfig_BasePathSource_SetForEnvVar(t *testing.T) {
 		"BasePathSource should be 'runtime' when ATMOS_BASE_PATH env var is set")
 }
 
-// TestFindAllStackConfigsInPathsForStack_ErrorWrapping verifies that when GetGlobMatches
-// fails, the error is wrapped with the ErrFailedToFindImport sentinel.
+// TestFindAllStackConfigsInPathsForStack_ErrorWrapping verifies that when every
+// included_paths entry matches nothing (e.g. the whole stacks directory doesn't exist),
+// the function still errors -- with ErrNoStackManifestsFound, not ErrFailedToFindImport.
+//
+// Prior to cloudposse/atmos#2867's fix, a single entry matching nothing surfaced
+// ErrFailedToFindImport directly from inside the per-path loop, which also meant a SECOND,
+// valid included_paths entry earlier in the list would have its already-found matches
+// discarded by this same hard error. Now, an individual entry matching nothing is treated as
+// "nothing here, keep looking" and only the aggregate "nothing matched at all" case (this
+// test: the only entry present matches nothing) errors, with a sentinel describing that
+// outcome directly instead of leaking the glob-matching implementation's own error identity.
 func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
 		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-test"),
@@ -759,11 +768,13 @@ func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 
 	require.Error(t, err)
 
-	assert.True(t, errors.Is(err, errUtils.ErrFailedToFindImport),
-		"Error should wrap ErrFailedToFindImport, got: %v", err)
+	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
 }
 
-// TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack variant.
+// TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack
+// variant. See TestFindAllStackConfigsInPathsForStack_ErrorWrapping above for why this is
+// ErrNoStackManifestsFound rather than ErrFailedToFindImport post-#2867.
 func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
 		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-test2"),
@@ -781,6 +792,6 @@ func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 
 	require.Error(t, err)
 
-	assert.True(t, errors.Is(err, errUtils.ErrFailedToFindImport),
-		"Error should wrap ErrFailedToFindImport, got: %v", err)
+	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
 }

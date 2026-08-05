@@ -130,11 +130,24 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, true, foundVendorConfigFile, nil
 }
 
+// getVendorDirToUse returns the appropriate vendor directory for file resolution. It prefers
+// the precomputed VendorDirAbsolutePath (set by AtmosConfigAbsolutePaths, the same mechanism
+// cloudposse/atmos#2864 uses for the top-level base_path), falling back to joining the raw
+// BasePath/Vendor.BasePath for callers that construct an AtmosConfiguration by hand without
+// running it through AtmosConfigAbsolutePaths first (e.g. tests). Mirrors getWorkflowsDirToUse
+// and getBasePathToUse (validate_component.go).
+func getVendorDirToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.VendorDirAbsolutePath != "" {
+		return atmosConfig.VendorDirAbsolutePath
+	}
+	return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+}
+
 // Helper function to resolve the vendor config file path.
 func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) string {
 	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+			return getVendorDirToUse(atmosConfig)
 		}
 		return atmosConfig.Vendor.BasePath
 	}
@@ -142,7 +155,7 @@ func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorC
 	// Search for the vendor config file
 	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 	if !fileExists {
-		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
+		pathToVendorConfig := filepath.Join(getBasePathToUse(atmosConfig), vendorConfigFile)
 		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 		if !fileExists {
 			return "" // File does not exist, but this is not an error

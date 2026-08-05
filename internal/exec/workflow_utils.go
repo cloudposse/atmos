@@ -944,8 +944,14 @@ func ExecuteWorkflow(
 			stepErr := err
 			if !errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
 				stepErr = buildWorkflowStepError(err, &workflowStepErrorContext{
-					WorkflowPath:     workflowPath,
-					WorkflowBasePath: atmosConfig.Workflows.BasePath,
+					WorkflowPath: workflowPath,
+					// Must be the SAME anchor workflowPath was actually joined against
+					// (workflow.go), not the raw, always-relative atmosConfig.Workflows.BasePath
+					// -- otherwise the TrimPrefix below in buildWorkflowStepError silently fails
+					// to strip it whenever workflowPath ends up absolute (e.g. via the
+					// precomputed WorkflowsDirAbsolutePath), leaving the resume-command hint
+					// showing a garbled path instead of the plain workflow file name.
+					WorkflowBasePath: getWorkflowsDirToUse(&atmosConfig),
 					Workflow:         workflow,
 					StepName:         step.Name,
 					Command:          command,
@@ -1098,12 +1104,15 @@ func ExecuteDescribeWorkflows(
 		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
 	}
 
-	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
+	// If `workflows.base_path` is a relative path, resolve it via getWorkflowsDirToUse
+	// (prefers the precomputed WorkflowsDirAbsolutePath over the raw, possibly still-relative
+	// atmosConfig.BasePath -- same bug shape cloudposse/atmos#2864 fixed for the top-level
+	// base_path itself).
 	var workflowsDir string
 	if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
 		workflowsDir = atmosConfig.Workflows.BasePath
 	} else {
-		workflowsDir = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+		workflowsDir = getWorkflowsDirToUse(&atmosConfig)
 	}
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
@@ -1122,7 +1131,7 @@ func ExecuteDescribeWorkflows(
 		if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
 			workflowPath = filepath.Join(atmosConfig.Workflows.BasePath, f)
 		} else {
-			workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
+			workflowPath = filepath.Join(getWorkflowsDirToUse(&atmosConfig), f)
 		}
 
 		fileContent, err := os.ReadFile(workflowPath)

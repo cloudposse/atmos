@@ -538,6 +538,27 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, absPath, config.Components.Helmfile.BasePath)
 		assert.Equal(t, absPath, config.Stacks.BasePath)
 	})
+
+	// TestAtmosConfigAbsolutePaths_VendorAndWorkflows guards against the same bug shape
+	// cloudposse/atmos#2864 fixed for the top-level base_path: Vendor.BasePath and
+	// Workflows.BasePath were never centralized into an absolute field, so consumers
+	// re-joined the raw (possibly still-relative) atmosConfig.BasePath at call time instead.
+	t.Run("computes vendor and workflows absolute paths", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath: baseDir,
+			Vendor:   schema.Vendor{BasePath: "vendor.yaml"},
+			Workflows: schema.Workflows{
+				BasePath: "stacks/workflows",
+			},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "vendor.yaml"), config.VendorDirAbsolutePath)
+		assert.Equal(t, filepath.Join(baseDir, "stacks", "workflows"), config.WorkflowsDirAbsolutePath)
+	})
 }
 
 // Helper functions.

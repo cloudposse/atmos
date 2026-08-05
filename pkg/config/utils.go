@@ -56,7 +56,15 @@ func FindAllStackConfigsInPathsForStack(
 		// (like permission issues or invalid path) versus simply no matching files.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
+			// GetGlobMatches itself reports "pattern matched nothing" (e.g. a
+			// stacks.included_paths entry whose directory doesn't exist yet) by wrapping
+			// ErrFailedToFindImport -- that's expected and must not abort discovery for the
+			// *other* entries in includeStackPaths (cloudposse/atmos#2867: a second,
+			// currently-empty included_paths entry was hard-failing the whole lookup, even
+			// though an earlier entry already matched real stack manifests). Only a
+			// different underlying error (invalid pattern syntax, permission denied, etc.)
+			// is a genuine error worth aborting for.
+			if err != nil && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 				return nil, nil, false, errUtils.Build(err).
 					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
 					WithHint("Check that the stacks directory exists and contains stack configuration files").
@@ -64,8 +72,8 @@ func FindAllStackConfigsInPathsForStack(
 					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
 					Err()
 			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
+			// Either no error, or the pattern was simply valid-but-empty: continue to the
+			// next included_paths entry rather than aborting the whole lookup.
 			continue
 		}
 
@@ -154,7 +162,11 @@ func FindAllStackConfigsInPaths(
 		// (like permission issues or invalid path) versus simply no matching files.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
+			// See the identical comment in FindAllStackConfigsInPathsForStack above:
+			// GetGlobMatches wraps ErrFailedToFindImport for a valid-but-empty pattern, and
+			// that must not abort discovery for the other includeStackPaths entries
+			// (cloudposse/atmos#2867).
+			if err != nil && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 				return nil, nil, errUtils.Build(err).
 					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
 					WithHint("Check that the stacks directory exists and contains stack configuration files").
@@ -162,8 +174,8 @@ func FindAllStackConfigsInPaths(
 					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
 					Err()
 			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
+			// Either no error, or the pattern was simply valid-but-empty: continue to the
+			// next included_paths entry rather than aborting the whole lookup.
 			continue
 		}
 
@@ -188,6 +200,10 @@ func FindAllStackConfigsInPaths(
 				relativePaths = append(relativePaths, matchedFileRelativePath)
 			}
 		}
+	}
+
+	if len(absolutePaths) == 0 {
+		return nil, nil, fmt.Errorf("%w in the paths %v", errUtils.ErrNoStackManifestsFound, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, nil

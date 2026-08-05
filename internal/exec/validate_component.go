@@ -30,6 +30,18 @@ func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.BasePath
 }
 
+// getWorkflowsDirToUse returns the appropriate workflows directory for file resolution. It
+// prefers the precomputed WorkflowsDirAbsolutePath (set by AtmosConfigAbsolutePaths, the same
+// mechanism cloudposse/atmos#2864 uses for the top-level base_path), falling back to joining
+// the raw BasePath/Workflows.BasePath for callers that construct an AtmosConfiguration by hand
+// without running it through AtmosConfigAbsolutePaths first (e.g. tests).
+func getWorkflowsDirToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.WorkflowsDirAbsolutePath != "" {
+		return atmosConfig.WorkflowsDirAbsolutePath
+	}
+	return filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+}
+
 // enableProvenanceForRichOutput sets atmosConfig.TrackProvenance when the
 // resolved output format is "rich". Provenance is enabled only for the rich
 // invocation: it lets the command map JSON Schema fields back to the

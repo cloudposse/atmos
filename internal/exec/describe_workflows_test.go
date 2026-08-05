@@ -87,6 +87,11 @@ workflows:
 	// Update config with the correct base path
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	// Refresh derived absolute paths (e.g. WorkflowsDirAbsolutePath) after mutating BasePath
+	// directly -- real callers only ever get a fresh AtmosConfiguration from InitCliConfig,
+	// which computes these together; a manual post-load field mutation must recompute them
+	// too or ExecuteDescribeWorkflows would resolve against the stale pre-mutation paths.
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	tests := []struct {
 		name          string
@@ -190,6 +195,7 @@ workflows:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	tests := []struct {
 		name              string
@@ -287,6 +293,7 @@ workflows:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Should continue processing and return valid workflows despite invalid file.
 	listResult, _, _, err := ExecuteDescribeWorkflows(config)
@@ -326,6 +333,7 @@ some_other_key:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Should continue processing and return valid workflows.
 	listResult, _, _, err := ExecuteDescribeWorkflows(config)
@@ -344,6 +352,7 @@ func TestExecuteDescribeWorkflows_EmptyWorkflowsDirectory(t *testing.T) {
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Empty workflows directory.
 	listResult, mapResult, allResult, err := ExecuteDescribeWorkflows(config)

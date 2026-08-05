@@ -524,6 +524,25 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
 
+	// Convert Vendor base path to an absolute path. Consumers previously re-joined the raw
+	// (possibly still-relative) atmosConfig.BasePath at call time instead of using a
+	// precomputed absolute path -- the same bug shape #2864 fixed for the top-level
+	// base_path itself, just not yet applied here.
+	vendorBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Vendor.BasePath)
+	vendorDirAbsPath, err := filepath.Abs(vendorBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.VendorDirAbsolutePath = vendorDirAbsPath
+
+	// Convert Workflows base path to an absolute path (same rationale as Vendor above).
+	workflowsBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Workflows.BasePath)
+	workflowsDirAbsPath, err := filepath.Abs(workflowsBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.WorkflowsDirAbsolutePath = workflowsDirAbsPath
+
 	return nil
 }
 

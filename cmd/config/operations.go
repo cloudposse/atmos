@@ -7,7 +7,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -15,20 +17,36 @@ import (
 var valueType string
 
 var configGetCmd = &cobra.Command{
-	Use:     "get <path>",
-	Short:   "Read a value from atmos.yaml by dot-notation path",
-	Long:    "Read a value from atmos.yaml using a dot-notation path (e.g. logs.level).",
+	Use:   "get <path>",
+	Short: "Read a value from the effective Atmos configuration by dot-notation path",
+	Long: `Read a value using a dot-notation path (e.g. logs.level) from the effective,
+fully-merged Atmos configuration for this invocation -- the same configuration
+"terraform plan", "list stacks", etc. actually use, including every --config
+file, --config-path directory, and profile applied on top of each other. This
+can differ from what a single physical atmos.yaml file declares on its own
+(cloudposse/atmos#2867): use "atmos config format" or read the file directly
+to inspect one file's own declared value instead.`,
 	Example: "atmos config get logs.level",
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "config.getRunE")()
 
-		file, err := resolveConfigFile(cmd)
+		// Reload rather than reuse atmosConfigPtr, mirroring configListCmd: this keeps `get`
+		// independently correct (and independently testable via RunE) even before root.go's
+		// PersistentPreRun has populated the package-level pointer. Safe to call with an empty
+		// ConfigAndStacksInfo{} -- LoadConfig now falls back to os.Args/env for
+		// --config/--config-path/--base-path itself (cloudposse/atmos#2868).
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return err
 		}
 
-		value, err := atmosyaml.GetFile(file, args[0])
+		effectiveYAML, err := u.ConvertToYAML(atmosConfig)
+		if err != nil {
+			return err
+		}
+
+		value, err := atmosyaml.Get([]byte(effectiveYAML), args[0])
 		if err != nil {
 			return err
 		}
