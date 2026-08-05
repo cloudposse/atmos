@@ -49,7 +49,6 @@ func deliverApply(
 	if selected.Kind == target.KindKubernetes {
 		result, err := applyHelmRelease(ctx, spec, info.DryRun)
 		spec.Lifecycle = result.Lifecycle
-		emitLifecycleWarnings(result.Lifecycle.Warnings)
 		summary["manifest_bytes"] = len(result.Manifest)
 		summary["release"] = lifecycleSummary(result.Operation, result.Lifecycle.Policy)
 		if objects, decodeErr := manifest.DecodeObjects([]byte(result.Manifest)); decodeErr == nil {

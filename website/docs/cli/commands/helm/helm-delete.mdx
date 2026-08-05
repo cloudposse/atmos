@@ -32,7 +32,7 @@ atmos helm delete --all --tags production,tier-1
   <dd>Atmos stack.</dd>
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
-  <dd>Process multiple Helm components in dependency order.</dd>
+  <dd>Process multiple Helm components in reverse dependency order, deleting dependents before their dependencies.</dd>
 
   <dt>`--tags` / `--labels` <em>(optional)</em></dt>
   <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
