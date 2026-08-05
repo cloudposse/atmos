@@ -54,6 +54,7 @@ type AzureKeyVaultStore struct {
 	stackDelimiter *string
 	clientOptions  *azsecrets.ClientOptions
 	withoutAuth    bool
+	secret         bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -81,6 +82,7 @@ var (
 	_ store.DeletableStore     = (*AzureKeyVaultStore)(nil)
 	_ store.StatusStore        = (*AzureKeyVaultStore)(nil)
 	_ store.ListableStore      = (*AzureKeyVaultStore)(nil)
+	_ store.SecretAwareStore   = (*AzureKeyVaultStore)(nil)
 )
 
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
@@ -310,12 +312,10 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
-	// Convert value to JSON string like other stores.
-	jsonValue, err := json.Marshal(value)
+	strValue, err := marshalAzureSecretValue(value, s.secret)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
-	strValue := string(jsonValue)
 
 	params := azsecrets.SetSecretParameters{
 		Value: &strValue,
@@ -333,51 +333,81 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 	return nil
 }
 
+// SetSecret implements SecretAwareStore. Secret string values are written verbatim so
+// `atmos secret set` round-trips through `!secret ... | raw`; structured values remain JSON.
+func (s *AzureKeyVaultStore) SetSecret(secret bool) {
+	s.secret = secret
+}
+
+func marshalAzureSecretValue(value any, rawStrings bool) (string, error) {
+	if rawStrings {
+		if text, ok := value.(string); ok {
+			return text, nil
+		}
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
 func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
+	raw, err := s.GetRaw(stack, component, key)
+	if err != nil {
+		return nil, err
+	}
+
+	var result interface{}
+	if jsonErr := json.Unmarshal([]byte(raw), &result); jsonErr != nil {
+		return raw, nil
+	}
+	return result, nil
+}
+
+// GetRaw retrieves the original Key Vault secret string without JSON decoding.
+func (s *AzureKeyVaultStore) GetRaw(stack string, component string, key string) (string, error) {
 	if stack == "" {
-		return nil, store.ErrEmptyStack
+		return "", store.ErrEmptyStack
 	}
 	if component == "" {
-		return nil, store.ErrEmptyComponent
+		return "", store.ErrEmptyComponent
 	}
 	if key == "" {
-		return nil, store.ErrEmptyKey
+		return "", store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
+	return s.getRawByName(secretName)
+}
 
+func (s *AzureKeyVaultStore) getRawByName(secretName string) (string, error) {
 	resp, err := s.client.GetSecret(context.Background(), secretName, "", nil)
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
 			switch respErr.StatusCode {
 			case statusCodeNotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretName, err)
+				return "", fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
+				return "", fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
 
 	if resp.Value == nil {
 		return "", nil
 	}
 
-	// Try to unmarshal as JSON first, fallback to string if it fails.
-	var result interface{}
-	if jsonErr := json.Unmarshal([]byte(*resp.Value), &result); jsonErr != nil {
-		// If JSON unmarshaling fails, return as string.
-		return *resp.Value, nil
-	}
-	return result, nil
+	return *resp.Value, nil
 }
 
 // Delete removes a secret from Azure Key Vault for the given stack, component, and key.

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // errTestBackend is a generic (non-*azcore.ResponseError) backend error used to exercise the
@@ -151,6 +152,22 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAzureKeyVaultStore_SetSecretStringVerbatim(t *testing.T) {
+	var stored string
+	store := &AzureKeyVaultStore{
+		client: &mockClient{setSecretFunc: func(_ context.Context, _ string, parameters azsecrets.SetSecretParameters, _ *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+			stored = *parameters.Value
+			return azsecrets.SetSecretResponse{}, nil
+		}},
+		vaultURL:       "https://example.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+	}
+	store.SetSecret(true)
+
+	require.NoError(t, store.Set("dev", "app", "credential", "example-token"))
+	assert.Equal(t, "example-token", stored)
 }
 
 func TestAzureKeyVaultStore_Get(t *testing.T) {

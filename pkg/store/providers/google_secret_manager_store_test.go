@@ -193,9 +193,19 @@ func TestGSMStore_Set(t *testing.T) {
 		key       string
 		value     any
 		locations []string
+		secret    bool
 		mockFn    func(*MockGSMClient)
 		wantErr   bool
 	}{
+		{
+			name:      "secret string is stored verbatim",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			secret:    true,
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `test-value`, nil, nil, nil),
+		},
 		{
 			name:      "successful set",
 			stack:     "dev-usw2",
@@ -339,6 +349,7 @@ func TestGSMStore_Set(t *testing.T) {
 				StackDelimiter: &testDelimiter,
 				Locations:      &tt.locations,
 			})
+			store.SetSecret(tt.secret)
 
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if tt.wantErr {

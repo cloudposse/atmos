@@ -80,6 +80,57 @@ func TestRunSecretSet_SharedScopes(t *testing.T) {
 	assert.Equal(t, "GLOBAL", svc2.setCalls[0].name)
 }
 
+func TestRunSecretSet_GlobalScopeWithoutComponent(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.scopes = map[string]secrets.Scope{"SHARED_TOKEN": secrets.ScopeGlobal}
+	installService(t, svc, nil)
+	overrideEnumerateScopes(t, []scopeEntry{
+		{
+			Stack:         "dev",
+			Component:     "example-service",
+			ComponentType: "helm",
+			Section: secretDeclarationSection("SHARED_TOKEN", map[string]any{
+				"store": "example-secrets",
+				"scope": "global",
+			}),
+		},
+	}, nil)
+
+	err := runSecretSubcommand(t, "set", "SHARED_TOKEN=v1", "--stack", "dev")
+	require.NoError(t, err)
+	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "SHARED_TOKEN", svc.setCalls[0].name)
+	assert.Equal(t, "v1", svc.setCalls[0].value)
+}
+
+func TestRunSecretSet_NonGlobalScopeStillRequiresComponent(t *testing.T) {
+	svc := newFakeSecretService()
+	installService(t, svc, nil)
+	overrideEnumerateScopes(t, []scopeEntry{
+		{
+			Stack:         "dev",
+			Component:     "example-service",
+			ComponentType: "helm",
+			Section: secretDeclarationSection("API_KEY", map[string]any{
+				"store": "example-secrets",
+				"scope": "instance",
+			}),
+		},
+	}, nil)
+
+	err := runSecretSubcommand(t, "set", "API_KEY=v1", "--stack", "dev")
+	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	assert.Empty(t, svc.setCalls)
+}
+
+func secretDeclarationSection(name string, spec map[string]any) map[string]any {
+	return map[string]any{
+		"secrets": map[string]any{
+			"vars": map[string]any{name: spec},
+		},
+	}
+}
+
 func TestRunSecretSet_Prompt(t *testing.T) {
 	svc := newFakeSecretService()
 	installService(t, svc, nil)
