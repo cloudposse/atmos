@@ -50,7 +50,7 @@ assertion `okta-aws-cli web` would get.
 
 | User has...                                                              | Maps to |
 |--------------------------------------------------------------------------|---------|
-| Uses `okta-aws-cli web`, and their org allows direct password+MFA API login (true for Classic orgs; true for many OIE orgs unless locked down) | [Full Replacement](#full-replacement--awssaml--driver-okta) -- just try it |
+| Uses `okta-aws-cli web`, and their org (necessarily OIE, since `web` requires it) still allows direct password+MFA API login | [Full Replacement](#full-replacement--awssaml--driver-okta) -- just try it |
 | Uses `okta-aws-cli web`, and the org enforces browser-only/phishing-resistant login (blocks direct `/api/v1/authn` password auth) | [Not Yet Supported: OIDC Device-Flow Login](#not-yet-supported-oidc-device-flow-login) |
 | Uses `okta-aws-cli m2m` (headless, private-key JWT)                      | [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |
 | Uses `okta-aws-cli direct` (Direct Authentication / out-of-band MFA)     | [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |

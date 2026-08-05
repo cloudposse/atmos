@@ -265,9 +265,23 @@ since they often replace scripts the user built by hand.
             account_id: "123456789012"
             region: us-east-2
   ```
-- **EKS kubeconfig, automated.** `atmos auth login` configures kubeconfig to call
-  `atmos aws eks token` as a kubectl exec-credential plugin using the active identity -- no more
-  manually running `aws eks update-kubeconfig` and hoping the right profile/role is active.
+- **EKS kubeconfig, automated.** Wire an `aws/eks` integration (requires a linked identity plus
+  `spec.cluster.name`/`spec.cluster.region`) and `atmos auth login` auto-provisions the kubeconfig
+  entry, configuring `atmos aws eks token` as a kubectl exec-credential plugin using the active
+  identity -- no more manually running `aws eks update-kubeconfig` and hoping the right
+  profile/role is active:
+  ```yaml
+  auth:
+    integrations:
+      dev/eks:
+        kind: aws/eks
+        via:
+          identity: dev-admin
+        spec:
+          cluster:
+            name: dev-cluster
+            region: us-east-2
+  ```
 - **`aws/assume-root` -- a capability plain profiles can't express at all.** AWS's newer
   centralized-root-access feature (temporary, task-scoped root credentials via AWS Organizations)
   has no representation in classic `~/.aws/config` -- there's no `role_arn` for "become root for

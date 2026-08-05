@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC and authentication tooling: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration — plus migrating AWS/GCP/Azure CLI configs, Leapp, Granted, and saml2aws into atmos auth"
+description: "Migrating to Atmos from existing IaC and authentication tooling: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration — plus migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
