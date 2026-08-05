@@ -21,7 +21,15 @@ type flockFileLock struct{ lockPath string }
 func NewFileLock(path string) FileLock {
 	defer perf.Track(nil, "cache.NewFileLock")()
 
-	return &flockFileLock{lockPath: path + ".lock"}
+	return NewFileLockAtPath(path + ".lock")
+}
+
+// NewFileLockAtPath creates a FileLock that uses lockPath directly. Use this
+// when compatibility requires a lock name other than targetPath + ".lock".
+func NewFileLockAtPath(lockPath string) FileLock {
+	defer perf.Track(nil, "cache.NewFileLockAtPath")()
+
+	return &flockFileLock{lockPath: lockPath}
 }
 
 func (l *flockFileLock) WithLock(fn func() error) error {
@@ -57,4 +65,21 @@ func cacheLockError(err error) error {
 		return errors.Join(errUtils.ErrCacheLocked, err)
 	}
 	return err
+}
+
+// TryWithRLock executes fn only when a shared read lock can be acquired
+// immediately.
+func (f *flockFileLock) TryWithRLock(fn func() error) (bool, error) {
+	defer perf.Track(nil, "cache.flockFileLock.TryWithRLock")()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := filelock.New(f.lockPath).WithShared(ctx, fn)
+	if errors.Is(err, filelock.ErrAcquire) {
+		if ctx.Err() != nil {
+			return false, nil
+		}
+		return false, cacheLockError(err)
+	}
+	return true, err
 }

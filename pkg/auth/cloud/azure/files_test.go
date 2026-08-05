@@ -1,7 +1,9 @@
 package azure
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -551,4 +553,178 @@ func TestAzureFileManager_ConcurrentAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "token-2", loaded.AccessToken)
 	assert.Equal(t, "tenant-789", loaded.TenantID)
+}
+
+func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort noop file lock (see pkg/cache/filelock_windows.go)
+		// that always executes fn and never returns ErrCacheLocked, so the
+		// lock-acquisition-failure path exercised here is not reachable there.
+		t.Skip("file locking is best-effort/noop on Windows; lock-failure path is not reachable")
+	}
+
+	tempDir := t.TempDir()
+	// Point the lock path (path + ".lock") at a parent directory that does not
+	// exist so that cache.NewFileLock(path).WithLockContext fails to open the
+	// lock file immediately, cross-platform-safe and without waiting on a real
+	// contended lock (mirrors pkg/cache/filelock_unix_test.go's
+	// TestWithLock_InvalidLockPath).
+	path := filepath.Join(tempDir, "nonexistent-subdir", "some-file")
+
+	executed := false
+	err := withFileLock(context.Background(), path, func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
+
+// TestWithFileRLock_WrapsErrCacheLocked mirrors TestWithFileLock_WrapsErrCacheLocked
+// for the separate read-lock path (withFileRLock), which LoadCredentials now
+// uses instead of the exclusive write lock.
+func TestWithFileRLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file locking is best-effort/noop on Windows; lock-failure path is not reachable")
+	}
+
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "nonexistent-subdir", "some-file")
+
+	executed := false
+	err := withFileRLock(path, func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
+
+// TestAzureFileManager_WriteCredentials_MkdirAllFailure verifies that a
+// MkdirAll failure (the credentials directory already exists as a regular
+// file, not a directory) is surfaced as ErrCreateCredentialsFile.
+func TestAzureFileManager_WriteCredentials_MkdirAllFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	credPath := mgr.GetCredentialsPath("blocked-provider")
+	credDir := filepath.Dir(credPath)
+	require.NoError(t, os.WriteFile(credDir, []byte("not a directory"), 0o600))
+
+	err := mgr.WriteCredentials("blocked-provider", "identity", &types.AzureCredentials{AccessToken: "token"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCreateCredentialsFile))
+}
+
+// TestAzureFileManager_WriteCredentials_WriteFailure verifies the
+// os.WriteFile failure branch *inside* the lock closure (distinct from a
+// lock-acquisition failure): the sibling ".lock" file is pre-created so
+// locking succeeds, then the directory is made read-only so the actual
+// credentials write fails.
+func TestAzureFileManager_WriteCredentials_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	credPath := mgr.GetCredentialsPath("provider")
+	credDir := filepath.Dir(credPath)
+	require.NoError(t, os.MkdirAll(credDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(credPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(credDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(credDir, PermissionRWX) })
+
+	err := mgr.WriteCredentials("provider", "identity", &types.AzureCredentials{AccessToken: "token"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWriteCredentialsFile))
+	_, statErr := os.Stat(credPath)
+	assert.True(t, os.IsNotExist(statErr), "credentials file should not exist when the write failed")
+}
+
+// TestAzureFileManager_LoadCredentials_StatFailure verifies the non-ENOENT
+// os.Stat failure branch: the parent directory is made unsearchable (no
+// execute bit), so Stat fails with permission denied rather than
+// os.ErrNotExist even though the target path doesn't exist either way.
+func TestAzureFileManager_LoadCredentials_StatFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	credPath := mgr.GetCredentialsPath("provider")
+	credDir := filepath.Dir(credPath)
+	require.NoError(t, os.MkdirAll(credDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(credPath, []byte(`{}`), PermissionRW))
+	require.NoError(t, os.Chmod(credDir, 0o600)) // No execute bit: parent directory becomes unsearchable.
+	t.Cleanup(func() { _ = os.Chmod(credDir, PermissionRWX) })
+
+	_, err := mgr.LoadCredentials("provider")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrLoadCredentialsFile))
+}
+
+// TestAzureFileManager_LoadCredentials_ReadFailure verifies the os.ReadFile
+// failure branch inside the read-lock closure: os.Stat succeeds (it doesn't
+// need read permission on the file itself), but the file has no read
+// permission bits, so the actual read fails once the lock is held.
+func TestAzureFileManager_LoadCredentials_ReadFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	credPath := mgr.GetCredentialsPath("provider")
+	credDir := filepath.Dir(credPath)
+	require.NoError(t, os.MkdirAll(credDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(credPath, []byte(`{}`), PermissionRW))
+	require.NoError(t, os.Chmod(credPath, 0o000)) // No read permission on the file itself.
+	t.Cleanup(func() { _ = os.Chmod(credPath, PermissionRW) })
+
+	_, err := mgr.LoadCredentials("provider")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrLoadCredentialsFile))
+}
+
+// TestAzureFileManager_Cleanup_StatFailure verifies the non-ENOENT os.Stat
+// failure branch for the provider directory (parent directory made
+// unsearchable).
+func TestAzureFileManager_Cleanup_StatFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	providerDir := filepath.Join(tmpDir, "provider")
+	require.NoError(t, os.MkdirAll(providerDir, PermissionRWX))
+	require.NoError(t, os.Chmod(tmpDir, 0o600)) // No execute bit: baseDir becomes unsearchable.
+	t.Cleanup(func() { _ = os.Chmod(tmpDir, PermissionRWX) })
+
+	err := mgr.Cleanup("provider")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCleanupAzureFiles))
+}
+
+// TestAzureFileManager_Cleanup_RemoveAllFailure verifies that a non-ENOENT
+// os.RemoveAll failure (a file inside the provider directory that can't be
+// unlinked because the directory itself was made read-only) is surfaced as
+// ErrCleanupAzureFiles.
+func TestAzureFileManager_Cleanup_RemoveAllFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	mgr := &AzureFileManager{baseDir: tmpDir}
+
+	providerDir := filepath.Join(tmpDir, "provider")
+	require.NoError(t, os.MkdirAll(providerDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials.json"), []byte(`{}`), PermissionRW))
+	require.NoError(t, os.Chmod(providerDir, 0o555)) // Read-only: blocks unlinking the file inside.
+	t.Cleanup(func() { _ = os.Chmod(providerDir, PermissionRWX) })
+
+	err := mgr.Cleanup("provider")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCleanupAzureFiles))
 }
