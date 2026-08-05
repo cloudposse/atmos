@@ -3,6 +3,7 @@ package exec
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -670,6 +671,14 @@ func processHelmComponentsIndexed(
 			}
 		}
 
+		if helmValuesFileChanged(component, componentSection, atmosConfig, filesIndex) {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
+				&componentSection, affectedReasonStackValuesFile, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		if err := addHelmSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
 			return nil, err
 		}
@@ -687,6 +696,56 @@ func processHelmComponentsIndexed(
 	}
 
 	return affected, nil
+}
+
+// helmValuesFileChanged reports whether a native Helm component consumes a
+// values file changed by the compared git refs. Relative paths are resolved
+// from the physical component directory, matching Helm values loading. The
+// target may live outside the Helm component base path, so lookup uses the
+// complete changed-file set rather than the component-path index.
+func helmValuesFileChanged(
+	component string,
+	componentSection map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+) bool {
+	if filesIndex == nil {
+		return false
+	}
+
+	componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath, component)
+	for _, ref := range stringSlice(componentSection[cfg.ValuesFilesSectionName]) {
+		path := ref
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(componentPath, path)
+		}
+		absPath, err := filepath.Abs(path)
+		if err == nil && filesIndex.isChangedFile(absPath) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func stringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if str, ok := item.(string); ok && str != "" {
+				result = append(result, str)
+			}
+		}
+		return result
+	case string:
+		if typed != "" {
+			return []string{typed}
+		}
+	}
+	return nil
 }
 
 func addHelmSectionAffected(
