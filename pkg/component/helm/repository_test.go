@@ -27,7 +27,7 @@ func skipIfCannotDenyDirWrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory write-permission bits are not enforced the same way on Windows")
 	}
-	if os.Getuid() == 0 {
+	if os.Geteuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
 	}
 }
@@ -116,17 +116,12 @@ generated: "2026-06-30T00:00:00Z"
 }
 
 func TestSetupHelmRepositories_LockUnavailable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
-		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
-		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
-	}
-	if os.Getuid() == 0 {
-		// Root ignores the 0o000 permission bits below, so the lock would actually be
-		// acquired and setupHelmRepositories would proceed to a real request against
-		// the "https://example.com" URL used below.
-		t.Skip("Skipping permission test when running as root")
-	}
+	// Root ignores the 0o000 permission bits below, so the lock would actually be
+	// acquired and setupHelmRepositories would proceed to a real request against
+	// the "https://example.com" URL used below; Windows uses a best-effort no-op
+	// FileLock (see pkg/cache/filelock_windows.go) that never returns ErrCacheLocked.
+	// Both are covered by the shared skip helper.
+	skipIfCannotDenyDirWrite(t)
 
 	dir := t.TempDir()
 	repoFile := filepath.Join(dir, "repositories.yaml")

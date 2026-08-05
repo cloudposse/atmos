@@ -208,16 +208,22 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 	if content == nil {
 		return "", fmt.Errorf("%w: ADC file content cannot be nil", errUtils.ErrInvalidADCContent)
 	}
-	path, err := GetADCFilePath(realm, providerName, identityName)
-	if err != nil {
-		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve ADC file path", err)
-	}
 	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve GCP provider directory", err)
 	}
 
+	// Resolve the ADC path (which creates its parent directory) inside the lock callback,
+	// not before it: CleanupIdentityFiles now shares this same lock, so creating the
+	// directory before acquiring the lock would leave a window where cleanup can remove
+	// it before the write actually happens.
+	var path string
 	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetADCFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve ADC file path", err)
+		}
 		data, err := json.MarshalIndent(content, "", "  ")
 		if err != nil {
 			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to marshal ADC content", err)
@@ -238,16 +244,21 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 func WritePropertiesFile(realm, providerName, identityName string, projectID string, region string) (string, error) {
 	defer perf.Track(nil, "gcp.WritePropertiesFile")()
 
-	path, err := GetPropertiesFilePath(realm, providerName, identityName)
-	if err != nil {
-		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP properties file path", err)
-	}
 	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP provider directory", err)
 	}
 
+	// See WriteADCFile: resolve the properties path (which creates its parent
+	// directory) inside the lock callback so CleanupIdentityFiles can't remove it
+	// in the window before the write happens.
+	var path string
 	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetPropertiesFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP properties file path", err)
+		}
 		cfg := ini.Empty()
 		coreSection, err := cfg.NewSection("core")
 		if err != nil {
@@ -291,16 +302,21 @@ func WriteAccessTokenFile(realm, providerName, identityName string, accessToken 
 	if accessToken == "" {
 		return "", fmt.Errorf("%w: access token cannot be empty", errUtils.ErrWriteAccessTokenFile)
 	}
-	path, err := GetAccessTokenFilePath(realm, providerName, identityName)
-	if err != nil {
-		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP access token file path", err)
-	}
 	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
 		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP provider directory", err)
 	}
 
+	// See WriteADCFile: resolve the access-token path (which creates its parent
+	// directory) inside the lock callback so CleanupIdentityFiles can't remove it
+	// in the window before the write happens.
+	var path string
 	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetAccessTokenFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP access token file path", err)
+		}
 		content := accessToken + "\n"
 		if !expiry.IsZero() {
 			content += expiry.Format(time.RFC3339) + "\n"

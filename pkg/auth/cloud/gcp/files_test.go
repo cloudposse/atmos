@@ -498,7 +498,7 @@ func skipIfCannotDenyDirWrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows file locking is a no-op fallback and never returns ErrCacheLocked")
 	}
-	if os.Getuid() == 0 {
+	if os.Geteuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
 	}
 }
@@ -774,6 +774,49 @@ func TestCleanupIdentityFiles_ContendsWithConcurrentWrite(t *testing.T) {
 		assert.NoError(t, err, "cleanup should succeed once the lock is released")
 	case <-time.After(fileLockTimeout):
 		t.Fatal("CleanupIdentityFiles did not complete after the identity lock was released")
+	}
+}
+
+// TestWriteADCFile_NeverFailsFromConcurrentCleanup proves the directory-creation
+// race is closed: WriteADCFile resolves its path (which creates the parent ADC
+// directory) inside the same lock CleanupIdentityFiles uses to remove that
+// directory. If path resolution still happened before the lock, an unlucky
+// interleaving would let cleanup delete the just-created directory before the
+// write landed, failing WriteFileAtomic with "no such file or directory". Since
+// both now run under the identical lock, every write must either fully precede
+// or fully follow a concurrent cleanup, and must always succeed.
+func TestWriteADCFile_NeverFailsFromConcurrentCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file locking is best-effort/noop on Windows; contention is not observable there")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "race-identity"
+
+	const iterations = 20
+	for i := 0; i < iterations; i++ {
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		var writeErr error
+		go func() {
+			defer wg.Done()
+			_, writeErr = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+				Type:        "authorized_user",
+				AccessToken: "ya29.token",
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			// Cleanup errors (e.g. nothing to remove yet) are expected and fine;
+			// only the write's success is under test.
+			_ = CleanupIdentityFiles(testRealm, providerName, identityName)
+		}()
+
+		wg.Wait()
+		require.NoError(t, writeErr, "iteration %d: write must never fail due to a concurrent cleanup removing its directory mid-write", i)
 	}
 }
 

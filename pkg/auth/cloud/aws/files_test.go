@@ -30,7 +30,7 @@ func skipIfCannotDenyDirWrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory write-permission bits are not enforced the same way on Windows")
 	}
-	if os.Getuid() == 0 {
+	if os.Geteuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
 	}
 }
