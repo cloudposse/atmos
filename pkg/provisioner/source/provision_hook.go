@@ -119,7 +119,9 @@ func AutoProvisionSource(
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
-				ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+				if !workdir.OutputSuppressed(ctx) {
+					ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+				}
 			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
@@ -127,7 +129,7 @@ func AutoProvisionSource(
 	}
 
 	// Log reason for re-provisioning.
-	if reason != "" {
+	if reason != "" && !workdir.OutputSuppressed(ctx) {
 		ui.Info(reason)
 	}
 
@@ -140,7 +142,9 @@ func AutoProvisionSource(
 	if isWorkdir {
 		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
-			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
+			if !workdir.OutputSuppressed(ctx) {
+				ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
+			}
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
@@ -201,7 +205,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
 
-	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	operation := func() error {
 		// Track whether this attempt creates the target directory so a failed
 		// provisioning can remove it again. A leftover directory is worse than
 		// none: an empty one misleads path resolution (the component "exists"
@@ -222,7 +226,9 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
 			if createdTarget {
 				if rmErr := os.RemoveAll(targetDir); rmErr != nil {
-					ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
+					if !workdir.OutputSuppressed(ctx) {
+						ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
+					}
 				}
 			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
@@ -236,7 +242,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		}
 
 		return nil
-	})
+	}
+	if workdir.OutputSuppressed(ctx) {
+		return operation()
+	}
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
 }
 
 // wrapProvisionError wraps an error with provision context.
