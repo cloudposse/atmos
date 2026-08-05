@@ -723,6 +723,10 @@ module.exports = function fileBrowserPlugin(context, options) {
     // Shows a free-text search box on the index page. Defaults to false so the
     // existing examples/gists instances render unchanged unless opted in.
     searchable = false,
+    // Card icon and CTA label, see ICON_MAP in IndexPage.tsx. Default to the
+    // folder icon and "Open" so examples/gists render unchanged.
+    cardIcon = 'folder',
+    cardCtaLabel = 'Open',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -761,6 +765,8 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubPath,
           disclaimer,
           searchable,
+          cardIcon,
+          cardCtaLabel,
         },
       };
     },

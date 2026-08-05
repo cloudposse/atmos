@@ -367,7 +367,7 @@ For the full current function inventory, load `atmos-yaml-functions`.
 6. **Use `name` or `name_template` for stack naming**: If legacy `name_pattern` is present, migrate it.
 7. **Use `atmos describe stacks` liberally**: Always verify the resolved configuration before applying changes.
 8. **Treat remote imports as config only**: use component `source:` or `atmos vendor pull` when imported
-   config references component code that is not already local.
+    config references component code that is not already local.
 
 ## References
 

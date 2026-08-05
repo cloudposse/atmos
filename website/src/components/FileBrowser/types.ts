@@ -97,6 +97,10 @@ export interface FileBrowserOptions {
   disclaimer?: string;
   /** Shows a free-text search box on the index page when true. */
   searchable?: boolean;
+  /** Card icon name (see ICON_MAP in IndexPage.tsx). Defaults to 'folder'. */
+  cardIcon?: string;
+  /** Card call-to-action label. Defaults to 'Open'. */
+  cardCtaLabel?: string;
 }
 
 /**

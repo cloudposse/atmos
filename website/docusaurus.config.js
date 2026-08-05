@@ -524,6 +524,8 @@ const config = {
                     'Scaffolding & Init',
                 ],
                 searchable: true,
+                cardIcon: 'graduation-cap',
+                cardCtaLabel: 'Learn',
             },
         ],
     ],

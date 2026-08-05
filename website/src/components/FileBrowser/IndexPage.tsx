@@ -7,10 +7,20 @@ import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFolder } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
+
+/**
+ * Card icons selectable via the `cardIcon` plugin option (see FileBrowserOptions).
+ * 'folder' (examples/gists) is the default; add new entries here as new
+ * file-browser instances need a different visual identity.
+ */
+const ICON_MAP = {
+  folder: faFolder,
+  'graduation-cap': faGraduationCap,
+};
 
 /**
  * Markdown components for card descriptions.
@@ -30,7 +40,9 @@ interface IndexPageProps {
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
-  const { routeBasePath, title, description, searchable } = optionsData;
+  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel } = optionsData;
+  const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;
+  const cardCta = cardCtaLabel || 'Open';
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -68,7 +80,7 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
       <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
         <div className={styles.exampleCardHeader}>
           <div className={styles.exampleCardIcon}>
-            <FontAwesomeIcon icon={faFolder} />
+            <FontAwesomeIcon icon={cardIconDefinition} />
           </div>
           <h2 className={styles.exampleCardTitle}>{displayName}</h2>
         </div>
@@ -104,7 +116,7 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           ))}
         </div>
         <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardCta}>
-          Open
+          {cardCta}
         </Link>
       </div>
     </article>

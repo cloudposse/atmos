@@ -8,15 +8,16 @@ slug: /ai/agent-skills
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
 import Link from '@docusaurus/Link'
+import SkillCount from '@site/src/components/SkillCount'
 
 <Intro>
-Atmos ships a growing set of agent skills that give AI coding assistants deep, accurate knowledge of Atmos
+Atmos ships <SkillCount /> agent skills that give AI coding assistants deep, accurate knowledge of Atmos
 conventions, stack configuration, Terraform orchestration, authentication, validation, and more. The skills live in
 the `agent-skills/` folder at the root of the Atmos repository and work across all major AI tools.
 </Intro>
 
 <KeyPoints>
-- Domain-specific skills covering every Atmos subsystem -- browse them all at [/ai/skills](/ai/skills)
+- <SkillCount /> domain-specific skills covering every Atmos subsystem -- browse them all at [/ai/skills](/ai/skills)
 - Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
 - Progressive disclosure: AI loads only the skill it needs, keeping context focused
 - Portable SKILL.md format with YAML frontmatter and tiered reference files

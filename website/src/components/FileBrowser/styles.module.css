@@ -342,10 +342,19 @@
 }
 
 /* Sidebar / File Tree */
+/* `.sidebar` only handles sticky positioning. The scrollable, rounded-corner
+   panel styling lives on the nested `.sidebarInner` instead of combining
+   position: sticky + overflow-y: auto + border-radius on one element --
+   that combination makes Chromium/WebKit render the element translucently
+   while scrolling (the underlying content bleeds through mid-scroll). */
 .sidebar {
   position: sticky;
   top: 80px;
   max-height: calc(100vh - 100px);
+}
+
+.sidebarInner {
+  height: 100%;
   overflow-y: auto;
   background: var(--ifm-background-surface-color);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -353,7 +362,7 @@
   padding: 1rem;
 }
 
-:global(html[data-theme='dark']) .sidebar {
+:global(html[data-theme='dark']) .sidebarInner {
   border-color: rgba(255, 255, 255, 0.08);
 }
 

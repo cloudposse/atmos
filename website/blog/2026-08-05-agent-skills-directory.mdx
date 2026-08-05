@@ -1,0 +1,48 @@
+---
+slug: agent-skills-directory
+title: "Browse Every Atmos Agent Skill, Always Up to Date"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+A hand-maintained list is only accurate on the day someone writes it. Add a new item to the underlying
+system and forget to update the doc -- which happens constantly once a catalog is large enough to have
+real momentum -- and the list quietly falls behind. Readers trust it anyway, because nothing on the page
+signals that it's stale.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos's own [agent skills](/ai/agent-skills) documentation had exactly this problem. The page hand-listed
+each skill in a static table, and as new skills shipped, the list wasn't updated to match -- it drifted to
+roughly half the real count, with a couple of stale entries pointing at skills that no longer existed. There
+was also no way to search or filter -- just one long page to scroll and skim.
+
+## The Fix
+
+The [Agent Skills Directory](/ai/skills) replaces that static list with a page generated directly from the
+skills themselves. Every skill gets its own detail page rendering its full instructions, skills are grouped
+into categories, and a search box filters by name, description, or category. Add a skill, and it appears in
+the directory automatically -- there's no separate doc to remember to update.
+
+`atmos ai skill list` also gained a `--format` flag and now shows each skill's category, so the same
+categorization is available from the CLI, not just the website.
+
+## How to Use It
+
+Browse and search the directory at [atmos.tools/ai/skills](/ai/skills), or from the CLI:
+
+```shell
+# Table view, now with a Category column
+atmos ai skill list
+
+# Machine-readable output for scripting
+atmos ai skill list --format=json
+atmos ai skill list --format=yaml
+```
+
+## Get Involved
+
+See the [Agent Skills](/ai/agent-skills) guide for how skills are structured and how to contribute one. Skill
+ideas and contributions are welcome in the [Atmos community](https://github.com/cloudposse/atmos).
