@@ -258,11 +258,19 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 	case OperationDelete:
 		return runDelete(objects)
 	case OperationValidate:
+		options := resolveValidateOptions(ctx.Flags)
 		if !resolveComponentValidateEnabled(info.ComponentSection) {
-			ui.Warningf("structural validation skipped: 'validate: false' is set for this component")
-			return objectsToResults("skipped", objects), nil
+			// `validate: false` opts out of Atmos's own offline structural opinion
+			// only. An explicit --server request still validates against the live
+			// cluster's own API, which is authoritative regardless of this flag.
+			if !options.Server {
+				ui.Warningf("structural validation skipped: 'validate: false' is set for this component")
+				return objectsToResults("skipped", objects), nil
+			}
+			ui.Warningf("offline structural validation skipped: 'validate: false' is set for this component")
+			return runServerValidate(objects)
 		}
-		return runValidate(objects, resolveValidateOptions(ctx.Flags))
+		return runValidate(objects, options)
 	default:
 		return nil, fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
 	}

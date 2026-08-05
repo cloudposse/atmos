@@ -6,11 +6,12 @@ tags: [bugfix, enhancement]
 ---
 
 Kustomize expects the files it consumes to have exact, reserved names. A remote base or
-component can only be included if the location it points to contains a file literally named
-`kustomization.yaml` — that's not configurable on Kustomize's side. So when a value only
-Terraform knows — a security group ID, a Route53 zone ID, an ARN — needs to land inside a
-Kustomize-managed GitOps repo, teams are usually stuck hand-editing the overlay after every
-apply, or routing the value through a separate tool just to produce one correctly-named file.
+component can only be included if the location it points to contains a file with one of a
+handful of recognized names (`kustomization.yaml` is the common one) — that's not
+configurable on Kustomize's side. So when a value only Terraform knows — a security group
+ID, a Route53 zone ID, an ARN — needs to land inside a Kustomize-managed GitOps repo, teams
+are usually stuck hand-editing the overlay after every apply, or routing the value through a
+separate tool just to produce one correctly-named file.
 
 <!--truncate-->
 

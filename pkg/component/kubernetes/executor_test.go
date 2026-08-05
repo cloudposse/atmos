@@ -681,6 +681,32 @@ func TestRunOperationValidateSkippedWhenValidateDisabled(t *testing.T) {
 	assert.Equal(t, map[string]int{"skipped": 1}, result.ActionCounts)
 }
 
+func TestRunOperationValidateServerRunsDespiteValidateDisabled(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+
+	// A DNS-1123-invalid name is exactly what `validate: false` opts out of
+	// (Atmos's own offline opinion) — but --server must still validate against
+	// the live cluster regardless of the component-level flag.
+	object := kubernetesObject("v1", "ConfigMap", "Bad_Name", "")
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		client, fakeClient := newFakeSDKClientWithFake(object.DeepCopy())
+		prependApplyDryRunReactor(fakeClient, object.DeepCopy())
+		return client, nil
+	}
+
+	result, err := runOperation(
+		&component.ExecutionContext{Flags: map[string]any{"server": true}},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": false}},
+		OperationValidate,
+		[]*unstructured.Unstructured{object},
+	)
+	require.NoError(t, err)
+	// "valid" (not "skipped") proves the server dry-run actually ran.
+	assert.Equal(t, map[string]int{"valid": 1}, result.ActionCounts)
+}
+
 func TestRunOperationValidateDispatches(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })

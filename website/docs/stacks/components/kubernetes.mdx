@@ -236,9 +236,10 @@ The git target clones (or fast-forwards) the repository, replaces the managed
 is a clean no-op. Credentials come from Atmos Auth (GitHub STS); no tokens are
 written into the manifests. Pull-request publishing is not yet supported.
 
-By default `path` is a directory (one generated file per rendered object, same
-as `split: true`). Set `split: false` to write `path` as a single exact file
-instead — required whenever the consumer expects a specific filename, such as
+When `split` is unset, Atmos infers delivery mode from `path`. A manifest
+filename writes one exact file, while other paths use directory delivery. Set
+`split: true` or `split: false` to override the inference. Single-file delivery
+is required whenever the consumer expects a specific filename, such as
 Kustomize's `kustomization.yaml`. See
 [File vs. directory delivery](/cli/commands/kubernetes/deploy#file-vs-directory-delivery-split)
 and the walkthrough below.
