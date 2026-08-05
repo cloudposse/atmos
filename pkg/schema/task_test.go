@@ -264,6 +264,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Rate:             "fast",
 		Print:            "always",
 		When:             MustCondition("ci"),
+		Continue:         MustCondition(ConditionPredicateAlways),
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -285,6 +286,9 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Print, step.Print)
 	assert.True(t, step.When.Evaluate(ConditionContext{CI: true}))
 	assert.False(t, step.When.Evaluate(ConditionContext{CI: false}))
+	forgiven, err := step.Continue.EvaluateContinueE(ConditionContext{Status: ConditionPredicateFailure})
+	require.NoError(t, err)
+	assert.True(t, forgiven, "Continue must survive Task -> WorkflowStep conversion")
 	assert.Equal(t, task.Retry, step.Retry)
 	// Note: Timeout is not in WorkflowStep.
 }
@@ -304,6 +308,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Rate:             "slow",
 		Print:            "fallback",
 		When:             MustCondition("local"),
+		Continue:         MustCondition(ConditionPredicateAlways),
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -324,6 +329,9 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Print, task.Print)
 	assert.True(t, task.When.Evaluate(ConditionContext{CI: false}))
 	assert.False(t, task.When.Evaluate(ConditionContext{CI: true}))
+	forgiven, err := task.Continue.EvaluateContinueE(ConditionContext{Status: ConditionPredicateFailure})
+	require.NoError(t, err)
+	assert.True(t, forgiven, "Continue must survive WorkflowStep -> Task conversion")
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }
@@ -392,6 +400,53 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, task.Columns, roundTripped.Columns)
 	assert.Equal(t, task.Options, roundTripped.Options)
 	assert.Equal(t, task.WorkingDirectory, roundTripped.WorkingDirectory)
+}
+
+// TestTask_InputsArtifactsPreconditionRoundTrip exercises every combination of the three
+// freshness sibling fields (Inputs/Artifacts/Precondition) through both conversion directions,
+// since Inputs is a general container (not narrowed to sources only) and Artifacts/Precondition
+// are deliberately separate sibling fields, not nested inside Inputs.
+func TestTask_InputsArtifactsPreconditionRoundTrip(t *testing.T) {
+	cases := []struct {
+		name         string
+		inputs       *Inputs
+		artifacts    *Artifacts
+		precondition *Precondition
+	}{
+		{name: "none"},
+		{name: "inputs only", inputs: &Inputs{Sources: []string{"*.go"}}},
+		{name: "artifacts only", artifacts: &Artifacts{Paths: []string{"bin/app"}}},
+		{name: "precondition only", precondition: &Precondition{Tools: []string{"stringer"}}},
+		{
+			name:      "inputs and artifacts",
+			inputs:    &Inputs{Sources: []string{"*.go", "go.sum"}},
+			artifacts: &Artifacts{Paths: []string{"bin/app"}},
+		},
+		{
+			name:         "all three",
+			inputs:       &Inputs{Sources: []string{"*.go"}},
+			artifacts:    &Artifacts{Paths: []string{"bin/app"}},
+			precondition: &Precondition{Tools: []string{"stringer", "protoc"}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+" Task->WorkflowStep", func(t *testing.T) {
+			task := Task{Name: "t", Inputs: tc.inputs, Artifacts: tc.artifacts, Precondition: tc.precondition}
+			step := task.ToWorkflowStep()
+			assert.Equal(t, tc.inputs, step.Inputs)
+			assert.Equal(t, tc.artifacts, step.Artifacts)
+			assert.Equal(t, tc.precondition, step.Precondition)
+		})
+
+		t.Run(tc.name+" WorkflowStep->Task", func(t *testing.T) {
+			step := WorkflowStep{Name: "s", Inputs: tc.inputs, Artifacts: tc.artifacts, Precondition: tc.precondition}
+			task := TaskFromWorkflowStep(&step)
+			assert.Equal(t, tc.inputs, task.Inputs)
+			assert.Equal(t, tc.artifacts, task.Artifacts)
+			assert.Equal(t, tc.precondition, task.Precondition)
+		})
+	}
 }
 
 func TestTaskFromWorkflowStepIgnoresInvalidTimeout(t *testing.T) {

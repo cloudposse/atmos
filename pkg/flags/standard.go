@@ -737,8 +737,12 @@ func (p *StandardFlagParser) validateSingleFlag(flagName string, validValues []s
 	}
 
 	// Check if value is in valid values list.
-	if !p.isValueValid(strValue, validValues) {
-		return p.createValidationError(flagName, strValue, validValues)
+	if err := ValidateValue(flagName, strValue, validValues); err != nil {
+		// Custom per-flag error message overrides the default one ValidateValue returns.
+		if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
+			return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlagValue, msg)
+		}
+		return err
 	}
 
 	return nil
@@ -756,28 +760,22 @@ func (p *StandardFlagParser) isFlagExplicitlyChanged(flagName string, combinedFl
 	return cobraFlag == nil || cobraFlag.Changed
 }
 
-// isValueValid checks if a value is in the list of valid values.
-func (p *StandardFlagParser) isValueValid(value string, validValues []string) bool {
-	defer perf.Track(nil, "flags.StandardFlagParser.isValueValid")()
+// ValidateValue checks that value is one of validValues, returning a descriptive error if not.
+// An empty value or an empty validValues list always passes -- callers decide separately
+// whether a missing/required value is itself an error. Shared by StandardFlagParser (built-in
+// commands' `valid_values:`) and custom commands' `values:` (cmd/cmd_utils.go), so both surfaces
+// report identical error text for an invalid choice.
+func ValidateValue(flagName, value string, validValues []string) error {
+	defer perf.Track(nil, "flags.ValidateValue")()
 
+	if value == "" || len(validValues) == 0 {
+		return nil
+	}
 	for _, validValue := range validValues {
 		if value == validValue {
-			return true
+			return nil
 		}
 	}
-	return false
-}
-
-// createValidationError creates an error for an invalid flag value.
-func (p *StandardFlagParser) createValidationError(flagName, value string, validValues []string) error {
-	defer perf.Track(nil, "flags.StandardFlagParser.createValidationError")()
-
-	// Check for custom error message.
-	if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
-		return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlagValue, msg)
-	}
-
-	// Default error message.
 	return fmt.Errorf("%w: invalid value %q for flag --%s (valid values: %s)",
 		errUtils.ErrInvalidFlagValue, value, flagName, strings.Join(validValues, ", "))
 }

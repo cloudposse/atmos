@@ -1336,6 +1336,148 @@ func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T
 	assert.True(t, os.IsNotExist(statErr), "implicit success step should be skipped after failure")
 }
 
+// TestExecuteWorkflowContinueAlwaysForgivesFailure verifies GitHub-Actions-continue-on-error
+// semantics: a step with `continue: always` that fails still lets subsequent steps run, and the
+// overall workflow error is nil (unlike a plain failing step, which stops the workflow and
+// propagates errUtils.ErrWorkflowStepFailed, per
+// TestExecuteWorkflowContinuesWithFailureConditionAfterStepError above).
+func TestExecuteWorkflowContinueAlwaysForgivesFailure(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test continue: always forgives a step failure",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "forgiven-fail-step",
+				Command:          "echo fail > fail.txt && exit 7",
+				Type:             "shell",
+				Continue:         schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "after-forgiven-failure",
+				Command:          "echo ran > ran.txt",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "failure-handler-must-not-fire",
+				Command:          "echo failure > failure.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateFailure),
+				WorkingDirectory: tmpDir,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-continue-always", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err, "a continue: always failure must not fail the overall workflow")
+
+	for _, name := range []string{"fail.txt", "ran.txt"} {
+		_, statErr := os.Stat(filepath.Join(tmpDir, name))
+		assert.NoError(t, statErr, "expected %s to be written", name)
+	}
+	_, statErr := os.Stat(filepath.Join(tmpDir, "failure.txt"))
+	assert.True(t, os.IsNotExist(statErr), "a forgiven failure must not satisfy a later when: failure")
+}
+
+// TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged exercises the `inputs:`/`artifacts:`
+// feature end-to-end at the workflow level: a step declares inputs.sources/artifacts.paths with
+// no explicit `when:`, implicitly meaning `when: checksum.changed`. The first run executes (no
+// prior state); the second run (sources unchanged) skips; a source content change causes a
+// third run to execute again.
+func TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	atmosConfig.BasePath = tmpDir
+
+	srcFile := filepath.Join(tmpDir, "main.go")
+	artifactFile := filepath.Join(tmpDir, "bin", "app")
+	runLog := filepath.Join(tmpDir, "run.txt")
+	require.NoError(t, os.WriteFile(srcFile, []byte("package main"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(artifactFile), 0o755))
+	require.NoError(t, os.WriteFile(artifactFile, []byte("binary"), 0o644))
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test inputs: skip-when-unchanged",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "compile",
+				Command:          "echo ran >> " + runLog,
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+				Inputs:           &schema.Inputs{Sources: []string{"main.go"}},
+				Artifacts:        &schema.Artifacts{Paths: []string{"bin/app"}},
+			},
+		},
+	}
+
+	countRuns := func() int {
+		content, readErr := os.ReadFile(runLog)
+		if os.IsNotExist(readErr) {
+			return 0
+		}
+		require.NoError(t, readErr)
+		return len(strings.Split(strings.TrimSpace(string(content)), "\n"))
+	}
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 1, countRuns(), "first run must execute (no prior recorded state)")
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 1, countRuns(), "second run must skip since sources are unchanged")
+
+	require.NoError(t, os.WriteFile(srcFile, []byte("package main // changed"), 0o644))
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 2, countRuns(), "third run must execute since sources changed")
+}
+
+// TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath exercises the `precondition:`
+// mechanism at the workflow level: a step with `precondition.tools` and no explicit inputs/
+// artifacts is skipped when every declared tool already resolves via exec.LookPath. Uses "go"
+// (guaranteed present under `go test`) rather than a shell command, staying cross-platform.
+func TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	atmosConfig.BasePath = tmpDir
+	runLog := filepath.Join(tmpDir, "run.txt")
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test precondition: skip-when-satisfied",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "install",
+				Command:          "echo ran >> " + runLog,
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+				Precondition:     &schema.Precondition{Tools: []string{"go"}},
+			},
+		},
+	}
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-precondition-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	_, statErr := os.Stat(runLog)
+	assert.True(t, os.IsNotExist(statErr), "step must be skipped when the precondition tool is already on PATH")
+}
+
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
 // with a command that shell.Fields cannot parse but strings.Fields can handle.
 func TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand(t *testing.T) {

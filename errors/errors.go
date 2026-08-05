@@ -720,6 +720,7 @@ var (
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrWorkflowNoSteps               = errors.New("workflow has no steps defined")
 	ErrInvalidWorkflowStepType       = errors.New("invalid workflow step type")
+	ErrInvalidContinueCondition      = errors.New("invalid 'continue' condition")
 	ErrInvalidFromStep               = errors.New("invalid from-step flag")
 	ErrWorkflowStepFailed            = errors.New("workflow step execution failed")
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
@@ -768,6 +769,9 @@ var (
 	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
 	ErrMissingDependencyField    = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
+	// names a command that isn't registered under the custom-command cobra tree.
+	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")
 
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -289,6 +290,9 @@ func BuildConditionContext(workflow string, workflowDefinition *schema.WorkflowD
 		Workflow: workflow,
 		Step:     stepName,
 		Env:      env,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}
 }
 

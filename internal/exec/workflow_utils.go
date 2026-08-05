@@ -32,8 +32,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -51,6 +53,9 @@ const workflowTemplatePasses = 3
 // bgRunIDLen is the length of the short per-run id used to scope background container
 // instance names when no explicit `--stack` is given.
 const bgRunIDLen = 8
+
+// logKeyStep is the structured-log field key used for a workflow step's identity.
+const logKeyStep = "step"
 
 // Local errors not in shared package (workflow-specific internal errors).
 var (
@@ -173,7 +178,7 @@ func prepareStepEnvironment(
 		return nil, errUtils.Build(errUtils.ErrAuthManager).
 			WithExplanation("auth manager is not initialized").
 			WithContext("identity", stepIdentity).
-			WithContext("step", stepName).
+			WithContext(logKeyStep, stepName).
 			Err()
 	}
 
@@ -201,7 +206,7 @@ func prepareStepEnvironment(
 	}
 	stepEnv = authEnv
 
-	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
+	log.Debug("Prepared environment with identity", "identity", stepIdentity, logKeyStep, stepName)
 	return stepEnv, nil
 }
 
@@ -430,10 +435,31 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Resolve and run dependencies.commands/dependencies.workflows before any of this
+	// workflow's own steps, concurrently by default via pkg/taskgraph's DAG scheduler.
+	if direct := taskgraph.RefsFromDependencies(workflowDefinition.Dependencies.OrEmpty()); len(direct) > 0 {
+		if err := taskgraph.Run(
+			context.Background(), direct,
+			taskgraph.WithWorkflowRunner(WorkflowRunner(&atmosConfig, workflowPath, dryRun, commandLineIdentity)),
+			taskgraph.WithWorkflowLookup(WorkflowLookup(&atmosConfig, workflowPath)),
+			taskgraph.WithCommandRunner(commandRunnerViaSubprocess(&atmosConfig)),
+			taskgraph.WithCommandLookup(CommandLookup(&atmosConfig)),
+		); err != nil {
+			return err
+		}
+	}
+
 	// Construct base environment once: system env + global env + toolchain PATH.
 	// This is reused for all steps, with workflow/step env vars merged on top per step.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	baseEnv = append(baseEnv, tenv.EnvVars()...)
+
+	// Freshness checker for steps' `inputs:` (sources/generates/check), shared across all
+	// steps in this workflow run. State persists under a project-relative directory so it
+	// composes with ci.cache.includes: for cross-CI-run persistence.
+	freshnessChecker := freshness.NewChecker()
+	freshnessStateDir := freshness.StateDir(atmosConfig.BasePath)
+	freshnessScope := "workflow:" + workflowPath + ":" + workflow
 
 	// Initialize show renderer for header/flags display.
 	showRenderer := workflowPkg.NewShowRenderer()
@@ -451,14 +477,36 @@ func ExecuteWorkflow(
 	var workflowErr error
 	conditionStatus := schema.ConditionPredicateSuccess
 	for stepIdx, step := range steps {
+		// Resolved ahead of the when: check (rather than where it's used further below) since
+		// the freshness checker needs it to resolve inputs.sources/artifacts.paths relative to
+		// the step's own working directory, not process CWD.
+		stepWorkDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
+		if stepWorkDir == "" {
+			stepWorkDir = "."
+		}
+
 		conditionContext := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
 		conditionContext.Status = conditionStatus
-		runs, err := step.When.EvaluateWithImplicitSuccessE(conditionContext)
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
+		if step.Inputs != nil || step.Artifacts != nil || step.Precondition != nil {
+			id := freshness.StepIdentity{BaseDir: stepWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: step.Name}
+			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
+			if factsErr != nil {
+				return factsErr
+			}
+			conditionContext.ChecksumChanged = facts.ChecksumChanged
+			conditionContext.TimestampChanged = facts.TimestampChanged
+			conditionContext.PreconditionSuccess = facts.PreconditionSuccess
+			conditionContext.Sources = facts.Sources
+			conditionContext.Artifacts = facts.Artifacts
+		}
+		runs, err := effectiveWhen.EvaluateWithImplicitSuccessE(conditionContext)
 		if err != nil {
 			return err
 		}
 		if !runs {
-			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
+			log.Debug("Skipping workflow step, `when` condition did not match", logKeyStep, step.Name)
 			continue
 		}
 		// Render step label with optional count prefix and progress bar.
@@ -499,7 +547,7 @@ func ExecuteWorkflow(
 			stepIdentity = commandLineIdentity
 		}
 
-		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
+		log.Debug("Executing workflow step", logKeyStep, stepIdx, "name", step.Name, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -532,10 +580,7 @@ func ExecuteWorkflow(
 			conditionStatus = schema.ConditionPredicateFailure
 			continue
 		}
-		workDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
-		if workDir == "" {
-			workDir = "."
-		}
+		workDir := stepWorkDir
 
 		// Clear progress line and re-render as permanent record before step execution.
 		// This ensures progress line appears as header, then step output below it.
@@ -559,7 +604,7 @@ func ExecuteWorkflow(
 				WithTitle(WorkflowErrTitle).
 				WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
 				WithContext("workflow", workflow).
-				WithContext("step", step.Name).
+				WithContext(logKeyStep, step.Name).
 				WithHintf("Step type '%s' is not supported", commandType).
 				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
@@ -757,7 +802,7 @@ func ExecuteWorkflow(
 						WithTitle(WorkflowErrTitle).
 						WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
 						WithContext("workflow", workflow).
-						WithContext("step", step.Name).
+						WithContext(logKeyStep, step.Name).
 						WithHintf("Step type '%s' is not supported", commandType).
 						WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 						WithExitCode(1).
@@ -846,12 +891,35 @@ func ExecuteWorkflow(
 					FinalStack:       finalStack,
 				})
 			}
+
+			// A `continue:` condition that matches this step's own failure forgives it:
+			// subsequent steps still run and the overall workflow status is unaffected,
+			// mirroring GitHub Actions' continue-on-error. Malformed `continue:` CEL is a
+			// hard failure, never silently forgiven.
+			continueCtx := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
+			continueCtx.Status = schema.ConditionPredicateFailure
+			forgiven, continueErr := step.Continue.EvaluateContinueE(continueCtx)
+			if continueErr != nil {
+				return fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr)
+			}
+			if forgiven {
+				log.Warn("Workflow step failed but 'continue' matched; continuing", "workflow", workflow, logKeyStep, step.Name, "error", stepErr)
+				continue
+			}
+
 			if workflowErr == nil {
 				workflowErr = stepErr
 			} else {
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
+		} else if step.Inputs != nil {
+			// Record the new sources checksum only after a successful Execute() -- a failed
+			// step must never falsely mark itself up to date. Recording failure itself is
+			// logged, not fatal: it must not fail an otherwise-successful step.
+			if recErr := freshnessChecker.RecordSuccess(step.Inputs, stepWorkDir, freshnessStateDir, freshnessScope, step.Name); recErr != nil {
+				log.Debug("Failed to record freshness state for workflow step", "workflow", workflow, logKeyStep, step.Name, "error", recErr)
+			}
 		}
 	}
 

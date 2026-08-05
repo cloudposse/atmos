@@ -2044,6 +2044,9 @@
             "stack": {
               "type": "string"
             },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
             "steps": {
               "oneOf": [
                 {
@@ -2101,6 +2104,48 @@
                       },
                       "when": {
                         "description": "Condition controlling whether this workflow step runs. Omitted means run."
+                      },
+                      "continue": {
+                        "description": "Condition that forgives this step's own failure so later steps still run and the overall status is unaffected (GitHub Actions' continue-on-error semantics). Evaluated after the step's own execution, against its own outcome, unlike 'when' which is evaluated before the step runs."
+                      },
+                      "inputs": {
+                        "title": "inputs",
+                        "description": "Freshness sources for this step. Declaring inputs/artifacts with no explicit 'when' implicitly means when: checksum.changed. A sibling of 'artifacts' and 'precondition', not a container for them.",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "sources": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Glob patterns for files whose content determines checksum.changed / contributes to timestamp.changed."
+                          }
+                        }
+                      },
+                      "artifacts": {
+                        "title": "artifacts",
+                        "description": "This step's expected output files -- a sibling of 'inputs', not nested inside it. A missing path forces a rerun regardless of checksum.changed/timestamp.changed.",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "paths": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Glob patterns for this step's expected output files."
+                          }
+                        }
+                      },
+                      "precondition": {
+                        "title": "precondition",
+                        "description": "Tools that must already be on PATH for this step to be considered already satisfied. Declaring precondition alone with no explicit 'when' implicitly means when: \"!precondition.success\" (run only when not already satisfied).",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "tools": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Executable names resolved via exec.LookPath (no shell); precondition.success is true iff every entry resolves."
+                          }
+                        }
                       },
                       "needs": {
                         "description": "Names of earlier steps that must complete before this step runs.",

@@ -58,6 +58,42 @@ var (
 // Task represents a unit of work that can be executed.
 // This type unifies workflow steps and custom command steps,
 // supporting both simple string syntax and structured syntax.
+// Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:
+// with fields that feed CEL facts consumed via the existing `when:` condition engine rather
+// than a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes
+// these facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general
+// container (not narrowed to just file globs) since sources are one kind of input among others
+// that may be added later.
+type Inputs struct {
+	// Sources lists glob patterns for files whose content determines checksum.changed /
+	// contributes to timestamp.changed. Exposed to `when:` as the resolved match list (`sources`).
+	Sources []string `yaml:"sources,omitempty" json:"sources,omitempty" mapstructure:"sources"`
+}
+
+// Artifacts declares a step's expected output files -- a sibling of Inputs, not nested inside
+// it (sources are inputs; artifacts are outputs, and the two must not be conflated under one
+// container). A missing Artifacts path always forces checksum.changed/timestamp.changed to true,
+// regardless of Inputs.Sources. Exposed to `when:` as the resolved match list (`artifacts`).
+type Artifacts struct {
+	// Paths lists glob patterns for this step's expected output files. Named Paths, not Files,
+	// since artifacts aren't always known file-by-file (e.g. a directory glob).
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+}
+
+// Precondition declares tools that must already be on PATH for this step's work to be considered
+// already satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert
+// step's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately
+// not named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the
+// type: http step's post-hoc success criteria), and even without that collision, expect: is
+// established elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas
+// this is a pre-hoc gate checked before the step runs.
+type Precondition struct {
+	// Tools lists executable names resolved via exec.LookPath (no shell, so no
+	// which-vs-where cross-platform mismatch). precondition.success is true iff every entry
+	// resolves without error.
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+}
+
 type Task struct {
 	// Core fields.
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
@@ -83,6 +119,12 @@ type Task struct {
 	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// When controls whether the task runs.
 	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+	// Continue controls whether a failure of this task is forgiven: subsequent tasks still run
+	// and the overall command/workflow exit status is unaffected (like GitHub Actions'
+	// continue-on-error). Evaluated against this task's own outcome after it runs, unlike When
+	// (evaluated before, against the running status). Unset means no forgiveness (today's
+	// fail-stop behavior, unchanged).
+	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -205,6 +247,23 @@ type Task struct {
 	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Paths that must exist (supports templates).
 	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
 	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
+
+	// Inputs declares this step's freshness sources, exposing checksum.changed/timestamp.changed/
+	// sources as `when:` CEL facts. See pkg/runner/freshness. An unset `when:` alongside a non-nil
+	// Inputs or Artifacts implicitly means `when: checksum.changed`, mirroring the existing
+	// implicit-success default for `when:`.
+	Inputs *Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+
+	// Artifacts declares this step's expected output files -- a sibling of Inputs, not nested
+	// inside it. See the Artifacts type doc for why.
+	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
+
+	// Precondition declares tools that must already be on PATH for this step to be considered
+	// already satisfied, exposing precondition.success as a `when:` CEL fact. An unset `when:`
+	// alongside a non-nil Precondition (and no Inputs/Artifacts) implicitly means
+	// `when: "!precondition.success"` -- note the negation: success means already-satisfied,
+	// i.e. skip, the opposite polarity from checksum.changed. See the Precondition type doc.
+	Precondition *Precondition `yaml:"precondition,omitempty" json:"precondition,omitempty" mapstructure:"precondition"`
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -338,6 +397,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Identity:         task.Identity,
 		Needs:            task.Needs,
 		When:             task.When,
+		Continue:         task.Continue,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
@@ -449,6 +509,10 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Dirs:  task.Dirs,
 		Hint:  task.Hint,
 
+		Inputs:       task.Inputs,
+		Artifacts:    task.Artifacts,
+		Precondition: task.Precondition,
+
 		Outputs: task.Outputs,
 
 		// Show configuration.
@@ -489,6 +553,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Identity:         step.Identity,
 		Needs:            step.Needs,
 		When:             step.When,
+		Continue:         step.Continue,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
@@ -599,6 +664,10 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Files: step.Files,
 		Dirs:  step.Dirs,
 		Hint:  step.Hint,
+
+		Inputs:       step.Inputs,
+		Artifacts:    step.Artifacts,
+		Precondition: step.Precondition,
 
 		Outputs: step.Outputs,
 

@@ -12,9 +12,11 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -276,12 +278,47 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		}
 	}
 
+	var freshnessBasePath string
+	if opts.AtmosConfig != nil {
+		freshnessBasePath = opts.AtmosConfig.BasePath
+	}
+	freshnessChecker := freshness.NewChecker()
+	freshnessStateDir := freshness.StateDir(freshnessBasePath)
+	freshnessScope := "runner:" + opts.Dir
+
 	for i, task := range tasks {
 		conditionContext, err := taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess)
 		if err != nil {
 			return err
 		}
-		runs, err := task.When.EvaluateWithImplicitSuccessE(conditionContext)
+
+		// Mirrors Run's own dir resolution (lines 96-103) -- needed here, ahead of Run, so the
+		// freshness checker resolves inputs.sources/artifacts.paths relative to the task's own
+		// working directory, not process CWD.
+		taskDir := opts.Dir
+		if task.WorkingDirectory != "" {
+			taskDir = task.WorkingDirectory
+		}
+		if taskDir == "" {
+			taskDir = "."
+		}
+
+		declared := freshness.StepDeclarations{Inputs: task.Inputs, Artifacts: task.Artifacts, Precondition: task.Precondition}
+		effectiveWhen := freshness.EffectiveWhen(task.When, declared)
+		if task.Inputs != nil || task.Artifacts != nil || task.Precondition != nil {
+			id := freshness.StepIdentity{BaseDir: taskDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: taskName(&task, i)}
+			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
+			if factsErr != nil {
+				return factsErr
+			}
+			conditionContext.ChecksumChanged = facts.ChecksumChanged
+			conditionContext.TimestampChanged = facts.TimestampChanged
+			conditionContext.PreconditionSuccess = facts.PreconditionSuccess
+			conditionContext.Sources = facts.Sources
+			conditionContext.Artifacts = facts.Artifacts
+		}
+
+		runs, err := effectiveWhen.EvaluateWithImplicitSuccessE(conditionContext)
 		if err != nil {
 			return err
 		}
@@ -290,6 +327,14 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		}
 		if err := Run(ctx, &task, runner, opts); err != nil {
 			return fmt.Errorf("task %d (%s) failed: %w", i, taskName(&task, i), err)
+		}
+		if task.Inputs != nil {
+			// Recording failure is logged, not fatal: it must not fail an otherwise-successful
+			// task (matches internal/exec/workflow_utils.go and cmd/cmd_utils.go's identical
+			// wiring).
+			if recErr := freshnessChecker.RecordSuccess(task.Inputs, taskDir, freshnessStateDir, freshnessScope, taskName(&task, i)); recErr != nil {
+				log.Debug("Failed to record freshness state for task", "task", taskName(&task, i), "error", recErr)
+			}
 		}
 	}
 	return nil

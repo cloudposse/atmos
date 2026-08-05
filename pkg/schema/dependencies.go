@@ -3,6 +3,10 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"reflect"
+
+	"github.com/go-viper/mapstructure/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Canonical kind values for path-based dependency entries used internally on
@@ -112,6 +116,151 @@ type Dependencies struct {
 	// affected by `atmos describe affected`. Each entry may be a plain string
 	// (the folder path) or, in the future, an object with additional options.
 	Folders []string `yaml:"folders,omitempty" json:"folders,omitempty" mapstructure:"folders"`
+	// Commands lists named custom commands that must complete before this command/workflow
+	// runs its own steps. Resolved and executed concurrently by pkg/taskgraph, sharing the
+	// same generic DAG scheduler used by `parallel`/`matrix` `needs:` and Terraform's
+	// `dependencies.components`. Entries may be a plain name string or a structured object
+	// (for parameterized dependencies).
+	Commands UnitDependencies `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
+	// Workflows lists named workflows that must complete before this command/workflow runs
+	// its own steps. A plain name resolves within the current workflow file; a structured
+	// entry with `file:` resolves cross-file, exactly as the CLI's `atmos workflow <name> -f
+	// <file>` already does.
+	Workflows UnitDependencies `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
+}
+
+// UnitDependency references a single named command or workflow that must complete before the
+// declaring command/workflow runs. Supports both a plain name string
+// (`commands: [build]`) and a structured object (`commands: [{name: build, flags: {env:
+// dev}}]`) for parameterized invocation.
+type UnitDependency struct {
+	// Name is the target command or workflow name.
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	// File is the workflow file to resolve Name in, for cross-file workflow references. Only
+	// meaningful for Workflows entries; ignored for Commands (which resolve globally, since
+	// atmosConfig.Commands is already flat-merged before any command runs).
+	File string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	// Flags carries parameterized flag overrides for this dependency invocation. Two entries
+	// referencing the same Name with the same Flags/Args collapse into a single executed
+	// DAG node (automatic dedup); different Flags/Args produce distinct nodes that both run.
+	Flags map[string]string `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+	// Args carries parameterized positional-argument overrides for this dependency invocation.
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+	// Fail controls failure propagation for this dependency's siblings: wait_all (default),
+	// fail_fast, or best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's
+	// ParallelFailConfig.
+	Fail string `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+}
+
+// UnitDependencies is a list of UnitDependency that supports flexible YAML/mapstructure
+// unmarshaling: each element can be a plain name string (the common case) or a structured
+// object (for parameterized invocation or a cross-file workflow reference), mirroring the
+// existing polymorphic-element pattern already used by schema.Tasks.
+type UnitDependencies []UnitDependency
+
+// UnmarshalYAML implements custom YAML unmarshaling for UnitDependencies, used when a
+// workflow file is decoded directly via yaml.v3 (see pkg/utils.UnmarshalYAMLFromFile).
+func (u *UnitDependencies) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%w: expected sequence, got %v", ErrTaskInvalidFormat, value.Kind)
+	}
+
+	deps := make(UnitDependencies, 0, len(value.Content))
+	for i, node := range value.Content {
+		var dep UnitDependency
+		switch node.Kind {
+		case yaml.ScalarNode:
+			dep.Name = node.Value
+		case yaml.MappingNode:
+			if err := node.Decode(&dep); err != nil {
+				return fmt.Errorf("failed to decode dependency at index %d: %w", i, err)
+			}
+		default:
+			return fmt.Errorf("%w at index %d: got %v (expected string or mapping)", ErrTaskUnexpectedNodeKind, i, node.Kind)
+		}
+		deps = append(deps, dep)
+	}
+	*u = deps
+	return nil
+}
+
+// UnitDependencyDecodeHook normalizes polymorphic dependency lists (dependencies.commands /
+// dependencies.workflows) before mapstructure decodes them, used when config is loaded through
+// Viper (see pkg/config.getAtmosDecodeHookFunc) — e.g. a custom command's dependencies. Mirrors
+// schema.TasksDecodeHook's approach for the same string-or-map-per-element polymorphism.
+func UnitDependencyDecodeHook() mapstructure.DecodeHookFunc {
+	unitDependenciesType := reflect.TypeOf(UnitDependencies{})
+
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
+		if t != unitDependenciesType || f.Kind() != reflect.Slice {
+			return data, nil
+		}
+		slice, ok := sliceToAnyGeneric(data)
+		if !ok {
+			return data, nil
+		}
+		return decodeUnitDependenciesFromSlice(slice)
+	}
+}
+
+func sliceToAnyGeneric(data any) ([]any, bool) {
+	if slice, ok := data.([]any); ok {
+		return slice, true
+	}
+	rv := reflect.ValueOf(data)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
+		return nil, false
+	}
+	slice := make([]any, rv.Len())
+	for i := range slice {
+		slice[i] = rv.Index(i).Interface()
+	}
+	return slice, true
+}
+
+func decodeUnitDependenciesFromSlice(slice []any) (UnitDependencies, error) {
+	deps := make(UnitDependencies, 0, len(slice))
+	for i, item := range slice {
+		dep, err := decodeUnitDependencyItem(item, i)
+		if err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
+}
+
+func decodeUnitDependencyItem(item any, index int) (UnitDependency, error) {
+	switch v := item.(type) {
+	case string:
+		return UnitDependency{Name: v}, nil
+	case map[string]any:
+		var dep UnitDependency
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &dep,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return UnitDependency{}, fmt.Errorf("%w at index %d: %w", ErrTaskUnexpectedNodeKind, index, err)
+		}
+		if err := decoder.Decode(v); err != nil {
+			return UnitDependency{}, fmt.Errorf("%w at index %d: %w", ErrTaskUnexpectedNodeKind, index, err)
+		}
+		return dep, nil
+	default:
+		return UnitDependency{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
+	}
+}
+
+// OrEmpty returns *d, or a zero-value Dependencies if d is nil. Lets callers read
+// Commands/Workflows/Tools off a *Dependencies field (e.g. WorkflowDefinition.Dependencies,
+// Command.Dependencies) without a nil-check at every call site.
+func (d *Dependencies) OrEmpty() Dependencies {
+	if d == nil {
+		return Dependencies{}
+	}
+	return *d
 }
 
 // Normalize reconciles the v2 (`name`, `dependencies.files`,

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,8 +39,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
+	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -61,6 +65,7 @@ const currentDirPath = "."
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
+	customCommandKeyStep     = "step"
 	annotationDefaultChain   = "atmos.custom.default.chain"
 )
 
@@ -460,10 +465,12 @@ func createCustomCommand(
 	parentCommand *cobra.Command,
 ) (*cobra.Command, error) {
 	customCommand := &cobra.Command{
-		Use:   commandConfig.Name,
-		Short: commandConfig.Description,
-		Long:  commandConfig.Description,
-		Args:  customCommandArgsValidator(commandConfig),
+		Use:     commandConfig.Name,
+		Aliases: commandConfig.Aliases,
+		Hidden:  commandConfig.Internal,
+		Short:   commandConfig.Description,
+		Long:    commandConfig.Description,
+		Args:    customCommandArgsValidator(commandConfig),
 		Annotations: map[string]string{
 			annotationCustomCommand: annotationValueTrue,
 		},
@@ -834,6 +841,28 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
 	}
 
+	// Validate parallel/matrix control steps (needs: cycle/unknown-reference checks) using the
+	// exact same validator workflows use, now that custom commands can execute them too.
+	workflowSteps := make([]schema.WorkflowStep, len(commandConfig.Steps))
+	for wi := range commandConfig.Steps {
+		workflowSteps[wi] = commandConfig.Steps[wi].ToWorkflowStep()
+	}
+	if err := schema.ValidateWorkflowSteps(workflowSteps); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps")
+	}
+
+	// Resolve and run dependencies.commands/dependencies.workflows before any of this
+	// command's own steps, concurrently by default via pkg/taskgraph's DAG scheduler. Skipped
+	// when this command is itself being invoked as someone else's dependency (see
+	// adapters.DependenciesAlreadyResolved) -- the caller's taskgraph run already satisfied these.
+	direct := taskgraph.RefsFromDependencies(commandConfig.Dependencies.OrEmpty())
+	if len(direct) > 0 && !adapters.DependenciesAlreadyResolved(cmd) {
+		depOpts := adapters.CustomCommandDependencyOptions(&atmosConfig, cmd.Root(), isCustomCommand)
+		if err := taskgraph.Run(context.Background(), direct, depOpts...); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
@@ -843,16 +872,48 @@ func executeCustomCommand(
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 
+	// Freshness checker for steps' `inputs:` (sources/generates/check), shared across all
+	// steps in this command run. See internal/exec/workflow_utils.go's identical wiring.
+	freshnessChecker := freshness.NewChecker()
+	freshnessStateDir := freshness.StateDir(atmosConfig.BasePath)
+	freshnessScope := "command:" + commandConfig.Name
+
 	// Execute custom command's steps
 	var commandErr error
 	conditionStatus := schema.ConditionPredicateSuccess
 	for i, step := range commandConfig.Steps {
-		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus))
+		// Resolved ahead of the when: check (non-fatally -- an invalid working_directory on a
+		// step `when:` would otherwise skip is still caught later, at the authoritative
+		// resolution below) so the freshness checker can resolve inputs.sources/generates
+		// relative to the step's own working directory, not process CWD.
+		freshnessWorkDir := workDir
+		if strings.TrimSpace(step.WorkingDirectory) != "" {
+			if resolved, werr := resolveWorkingDirectory(step.WorkingDirectory, workDir, workDir); werr == nil {
+				freshnessWorkDir = resolved
+			}
+		}
+
+		conditionCtx := customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus)
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
+		if step.Inputs != nil || step.Artifacts != nil || step.Precondition != nil {
+			id := freshness.StepIdentity{BaseDir: freshnessWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: stepFreshnessName(step.Name, i)}
+			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
+			if factsErr != nil {
+				errUtils.CheckErrorPrintAndExit(factsErr, "", "")
+			}
+			conditionCtx.ChecksumChanged = facts.ChecksumChanged
+			conditionCtx.TimestampChanged = facts.TimestampChanged
+			conditionCtx.PreconditionSuccess = facts.PreconditionSuccess
+			conditionCtx.Sources = facts.Sources
+			conditionCtx.Artifacts = facts.Artifacts
+		}
+		runs, err := effectiveWhen.EvaluateWithImplicitSuccessE(conditionCtx)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 		if !runs {
-			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
+			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i)
 			continue
 		}
 
@@ -881,6 +942,12 @@ func executeCustomCommand(
 		// Prompt for missing semantic-typed values if interactive mode is enabled.
 		// This enables interactive selection for custom commands with component/stack arguments.
 		promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
+
+		// Validate (and, if missing+required+interactive, prompt for) values:-constrained
+		// flags/arguments -- independent of the semantic component/stack prompting above.
+		if err := pkgFlags.ValidateConstrainedFields(cmd, commandConfig, argumentsData, flagsData); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
 
 		// Prepare template data
 		data := map[string]any{
@@ -1017,7 +1084,7 @@ func executeCustomCommand(
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
 					commandIdentity, commandConfig.Name, i, err), "", "")
 			}
-			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
+			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i)
 		}
 		for _, envVar := range env {
 			parts := strings.SplitN(envVar, "=", 2)
@@ -1122,6 +1189,25 @@ func executeCustomCommand(
 					return execErr
 				}
 				return e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
+			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
+				// Route through the same control-step engine workflows use, so `needs:`,
+				// concurrency, and fail-mode semantics are identical in custom commands.
+				workflowStep := step.ToWorkflowStep()
+				workflowStep.WorkingDirectory = stepWorkDir
+				var stack string
+				if s, ok := flagsData["stack"].(string); ok {
+					stack = s
+				}
+				return e.ExecuteCustomCommandControlStep(context.Background(), &e.CustomCommandControlContext{
+					AtmosConfig:      atmosConfig,
+					CommandName:      commandConfig.Name,
+					CommandEnv:       envpkg.CommandEnvToMap(commandConfig.Env),
+					CommandLineStack: stack,
+					CommandIdentity:  commandIdentity,
+					BaseEnv:          env,
+					AuthManager:      authManager,
+					Executor:         executor,
+				}, &workflowStep)
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {
@@ -1165,15 +1251,48 @@ func executeCustomCommand(
 			if errors.As(err, &silentExit) && silentExit.Silent {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
+
+			// A `continue:` condition that matches this step's own failure forgives it:
+			// subsequent steps still run and the overall command status is unaffected,
+			// mirroring GitHub Actions' continue-on-error. Malformed `continue:` CEL is a
+			// hard failure, never silently forgiven.
+			forgiven, continueErr := step.Continue.EvaluateContinueE(
+				customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, schema.ConditionPredicateFailure),
+			)
+			if continueErr != nil {
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr), "", "")
+			}
+			if forgiven {
+				log.Warn("Custom command step failed but 'continue' matched; continuing", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i, "error", err)
+				continue
+			}
+
 			if commandErr == nil {
 				commandErr = err
 			} else {
 				commandErr = errors.Join(commandErr, err)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
+		} else if step.Inputs != nil {
+			// Record the new sources checksum only after a successful step -- a failed step
+			// must never falsely mark itself up to date. Recording failure is logged, not
+			// fatal: it must not fail an otherwise-successful step.
+			if recErr := freshnessChecker.RecordSuccess(step.Inputs, stepWorkDir, freshnessStateDir, freshnessScope, stepFreshnessName(step.Name, i)); recErr != nil {
+				log.Debug("Failed to record freshness state for custom command step", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i, "error", recErr)
+			}
 		}
 	}
 	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
+}
+
+// stepFreshnessName returns name, or a positional fallback ("step-%d") when the step has no
+// name -- matching the same fallback customCommandConditionContext uses -- so the freshness
+// state key is stable even for unnamed steps.
+func stepFreshnessName(name string, index int) string {
+	if name != "" {
+		return name
+	}
+	return fmt.Sprintf("step-%d", index)
 }
 
 func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {
@@ -1203,6 +1322,9 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 		Workflow: commandName,
 		Step:     stepName,
 		Env:      stepEnv,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}
 }
 

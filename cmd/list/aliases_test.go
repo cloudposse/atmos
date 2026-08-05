@@ -385,6 +385,28 @@ func TestCollectCommandAliasesNested(t *testing.T) {
 	assert.Equal(t, "terraform plan", aliases[0].Command)
 }
 
+// TestCollectCommandAliases_CustomCommandCategorizedCustomNotBuiltIn verifies a native alias
+// on a custom command (annotated customCommand=true, e.g. schema.Command.Aliases) is
+// categorized aliasTypeCustom, not aliasTypeBuiltIn -- otherwise `atmos list aliases` would
+// mislabel it.
+func TestCollectCommandAliases_CustomCommandCategorizedCustomNotBuiltIn(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	deployCmd := &cobra.Command{
+		Use:     "deploy",
+		Aliases: []string{"dep"},
+		Annotations: map[string]string{
+			customCommandAnnotationKey: customCommandAnnotationValue,
+		},
+	}
+	rootCmd.AddCommand(deployCmd)
+
+	aliases := collectCommandAliases(deployCmd, "atmos", "atmos deploy", "atmos")
+
+	assert.Len(t, aliases, 1)
+	assert.Equal(t, "dep", aliases[0].Alias)
+	assert.Equal(t, aliasTypeCustom, aliases[0].Type)
+}
+
 // TestCollectAllAliasesEmptyConfigured tests collectAllAliases with no configured aliases.
 func TestCollectAllAliasesEmptyConfigured(t *testing.T) {
 	rootCmd := &cobra.Command{Use: "atmos"}

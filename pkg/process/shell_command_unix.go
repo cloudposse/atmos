@@ -5,10 +5,14 @@ package process
 import (
 	"context"
 	"os/exec"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// newShellCommand builds the system-shell invocation for a session command
+// NewShellCommand builds the system-shell invocation for a session command
 // string: `sh -c <command>`.
-func newShellCommand(ctx context.Context, command string) *exec.Cmd {
+func NewShellCommand(ctx context.Context, command string) *exec.Cmd {
+	defer perf.Track(nil, "process.NewShellCommand")()
+
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }

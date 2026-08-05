@@ -2,11 +2,104 @@ package schema
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+func TestUnitDependencies_UnmarshalYAML(t *testing.T) {
+	input := `
+commands:
+  - build
+  - name: test
+    flags:
+      env: dev
+workflows:
+  - build
+  - name: test
+    file: test.yaml
+`
+	var deps Dependencies
+	require.NoError(t, yaml.Unmarshal([]byte(input), &deps))
+
+	require.Len(t, deps.Commands, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Commands[0])
+	assert.Equal(t, "test", deps.Commands[1].Name)
+	assert.Equal(t, map[string]string{"env": "dev"}, deps.Commands[1].Flags)
+
+	require.Len(t, deps.Workflows, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Workflows[0])
+	assert.Equal(t, "test", deps.Workflows[1].Name)
+	assert.Equal(t, "test.yaml", deps.Workflows[1].File)
+}
+
+func TestUnitDependencies_UnmarshalYAML_RejectsBadShape(t *testing.T) {
+	var deps Dependencies
+	err := yaml.Unmarshal([]byte("commands: not-a-list"), &deps)
+	require.Error(t, err)
+}
+
+func TestUnitDependencies_UnmarshalYAML_RejectsBadElement(t *testing.T) {
+	var deps Dependencies
+	err := yaml.Unmarshal([]byte("commands:\n  - [nested, sequence]"), &deps)
+	require.Error(t, err)
+}
+
+func TestUnitDependencyDecodeHook(t *testing.T) {
+	hook := UnitDependencyDecodeHook()
+
+	var deps Dependencies
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:     &deps,
+		DecodeHook: hook,
+	})
+	require.NoError(t, err)
+
+	input := map[string]any{
+		"commands": []any{
+			"build",
+			map[string]any{"name": "test", "flags": map[string]any{"env": "dev"}},
+		},
+		"workflows": []any{
+			"build",
+			map[string]any{"name": "test", "file": "test.yaml"},
+		},
+	}
+	require.NoError(t, decoder.Decode(input))
+
+	require.Len(t, deps.Commands, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Commands[0])
+	assert.Equal(t, "test", deps.Commands[1].Name)
+	assert.Equal(t, map[string]string{"env": "dev"}, deps.Commands[1].Flags)
+
+	require.Len(t, deps.Workflows, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Workflows[0])
+	assert.Equal(t, "test.yaml", deps.Workflows[1].File)
+}
+
+func TestUnitDependencyDecodeHook_IgnoresOtherTypes(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+
+	// Wrong target type: pass through unchanged.
+	out, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(""), []any{"build"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"build"}, out)
+
+	// Wrong source kind (not a slice): pass through unchanged.
+	out, err = hook(reflect.TypeOf(""), reflect.TypeOf(UnitDependencies{}), "not-a-slice")
+	require.NoError(t, err)
+	assert.Equal(t, "not-a-slice", out)
+}
+
+func TestUnitDependencyDecodeHook_RejectsBadElement(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+	_, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(UnitDependencies{}), []any{42})
+	require.Error(t, err)
+}
 
 func TestComponentDependency_IsFileDependency(t *testing.T) {
 	tests := []struct {
