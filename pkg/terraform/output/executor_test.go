@@ -521,6 +521,59 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	assert.Equal(t, "from-cache", value)
 }
 
+// TestExecutor_GetOutput_CacheHitIsVisible reproduces the dogfooding report:
+// a test.vars block with multiple !terraform.output lookups against the same
+// component logged a "Fetching ..." message only for the first (a cache
+// miss); every subsequent lookup for a different output key on the same
+// now-cached component+stack was invisible, since the cache-hit branch only
+// called log.Debug (invisible outside debug/trace logging), never the
+// visible outputLookupSucceeded/outputLookupFailed path a real fetch uses.
+// Every successful lookup -- cached or not -- must produce a visible
+// notification.
+func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	// Pre-populate the cache with two outputs for the same component+stack,
+	// mirroring a real fetch that caches every output at once. Neither
+	// lookup below triggers DescribeComponent -- both are cache hits.
+	stackSlug := stackComponentKey("fixtures", "vpc")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id":   "vpc-abc123",
+		"vpc_cidr": "10.0.0.0/16",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	value, exists, err := exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_id", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "vpc-abc123", value)
+
+	value, exists, err = exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_cidr", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "10.0.0.0/16", value)
+
+	rendered := uiOutput.String()
+	assert.Contains(t, rendered, "Fetching vpc_id output from vpc in fixtures",
+		"the first cache-hit lookup must be visible")
+	assert.Contains(t, rendered, "Fetching vpc_cidr output from vpc in fixtures",
+		"the second cache-hit lookup (a different output key on the same already-cached component) must also be visible")
+}
+
 func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

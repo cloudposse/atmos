@@ -387,11 +387,17 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 			"workdir": map[string]any{"enabled": true},
 		},
 	}
-	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Inject path traversal via the stack argument (incorporated into BuildPath
+	// as "<stack>-<component>"). Component-name traversal is no longer a valid
+	// vector here: BuildPath now sanitizes "/" out of the component name (see
+	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md), so a "/"
+	// or "../"-laden component collapses into a single safe path segment
+	// before this guard would ever need to fire. Stack names aren't
+	// sanitized the same way, so they're what still needs this guard.
 	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
-	traversalComponent := "../../../../../../../../../../evil"
+	traversalStack := "../../../../../../../../../../evil"
 
-	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
+	path, err := extractComponentPath(atmosConfig, traversalSections, "vpc", traversalStack)
 	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
 
 	// The returned path must not escape BasePath.
