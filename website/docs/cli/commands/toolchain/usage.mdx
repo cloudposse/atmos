@@ -135,7 +135,7 @@ Atmos provides focused Aqua registry support optimized for infrastructure toolin
 | Type | Description | Alternative |
 |------|-------------|-------------|
 | `go_install` | Installs Go binaries via `go install` (requires Go toolchain) | Use `github_release` for pre-built binaries |
-| `go_build_install` | Compiles Go source with custom build flags | Use pre-built releases (`github_release`, `github_archive`, or `http`) |
+| `go_build_install` | Compiles Go source with custom build flags | Use `github_release` or `http` for a pre-built binary; `github_archive` only downloads source |
 | `cargo` | Installs Rust crates via cargo | Use `github_release` for pre-built binaries |
 
 <details>
