@@ -174,7 +174,7 @@ undeclared `mocks` entry is a hard error rather than a silent fallback. A workin
 provider-free reference lives at `examples/terraform-component-mocks` in the Atmos
 repository.
 
-Reserve the YQ-default pattern (`!terraform.state vpc ".vpc_id // ""vpc-mock1234"""`)
+Reserve the YQ-default pattern (`!terraform.state vpc .vpc_id // "vpc-mock1234"`)
 for the narrower case of a placeholder that should also apply during a normal,
 non-mock run against a dependency that genuinely has not deployed yet — for example,
 while bringing up a dependency graph for the first time. `mocks` and `--use-mocks` are
@@ -291,7 +291,7 @@ components:
       vars:
         name: my-service
         runtime: nodejs22.x
-        iam_role_arn: !terraform.state iam-role ".arn // ""pending"""
+        iam_role_arn: !terraform.state iam-role .arn // "pending"
     iam-role:
       vars:
         name: my-service-role
@@ -315,23 +315,23 @@ side.
 ## Migration Workflow
 
 1. **Inventory the source repository.** Find every `terragrunt.hcl` and
-   `terragrunt.stack.hcl`, and every `include`/`dependency` reference between them, to
-   build a migration order — the same reconnaissance step a native-Terraform migration
-   starts with.
+    `terragrunt.stack.hcl`, and every `include`/`dependency` reference between them, to
+    build a migration order — the same reconnaissance step a native-Terraform migration
+    starts with.
 2. **Stand up `atmos.yaml` and one stack file** for a single unit, converting `include`
-   and `inputs` per the concept mapping above.
+    and `inputs` per the concept mapping above.
 3. **Wire `dependency` blocks** to `dependencies.components` and `!terraform.state`,
-   translating `mock_outputs` to the `// "default"` pattern.
+    translating `mock_outputs` to the `// "default"` pattern.
 4. **Convert `generate` blocks.** Backend and provider generation need no
-   configuration at all; anything else becomes a `generate:` stack section.
+    configuration at all; anything else becomes a `generate:` stack section.
 5. **Validate** with `atmos validate stacks`, then compare `atmos describe affected`
-   against the equivalent Terragrunt change-detection output.
+    against the equivalent Terragrunt change-detection output.
 6. **Make the result testable.** Wire the component's stack manifest to an
-   `aws/emulator` (or the matching cloud target) identity so `atmos terraform plan`/
-   `apply` runs with zero real cloud credentials before the user connects a real
-   account. See the [atmos-emulator](../../atmos-emulator/SKILL.md) skill.
+    `aws/emulator` (or the matching cloud target) identity so `atmos terraform plan`/
+    `apply` runs with zero real cloud credentials before the user connects a real
+    account. See the [atmos-emulator](../../atmos-emulator/SKILL.md) skill.
 7. **Repeat per unit**, using [remote-state-bridge.md](remote-state-bridge.md) to keep
-   not-yet-migrated units reachable via `!terraform.state` during the transition.
+    not-yet-migrated units reachable via `!terraform.state` during the transition.
 
 ## When to Escalate to Other Skills
 
