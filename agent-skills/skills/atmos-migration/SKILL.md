@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration"
+description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform, Terraform Workspaces, and Terramate — minimum-disruption paths, file-layout options, workspace mapping, tag/generate_hcl/script decomposition, and the remote-state bridge for progressive migration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,6 +8,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-terramate.md
 ---
 
 # Migrating to Atmos
@@ -24,6 +25,8 @@ For full prose tutorials aimed at end users, link to:
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (not covered by this skill)
+- Migrating from Terramate -- covered by this skill via
+  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
 
 ## Terraform or OpenTofu
 
@@ -72,6 +75,7 @@ different reference:
 | One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
 | Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
@@ -186,3 +190,6 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-terramate.md](references/from-terramate.md) -- construct-by-construct mapping
+  from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
+  including the one remaining known gap (`.tmtriggers`)
