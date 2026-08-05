@@ -8,10 +8,13 @@ import (
 	"runtime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 )
+
+const lockDirectoryPermissions = 0o755
 
 // LockFileManager manages toolchain.lock.yaml file.
 type LockFileManager struct {
@@ -60,37 +63,25 @@ func (m *LockFileManager) AddTool(ctx context.Context, tool, version string, opt
 		opt(cfg)
 	}
 
-	// Load existing lock file or create new
-	lock, err := lockfile.Load(m.filePath)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
+	return m.withExclusiveLock(ctx, func() error {
+		lock, err := lockfile.Load(m.filePath)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			lock = lockfile.New()
 		}
-		// Create new if doesn't exist
-		lock = lockfile.New()
-	}
-
-	// Get or create tool entry
-	entry := lock.GetOrCreateTool(tool)
-	entry.Version = version
-
-	// Add platform-specific information if provided
-	platform := cfg.Platform
-	if platform == "" {
-		platform = runtime.GOOS + "_" + runtime.GOARCH
-	}
-
-	if cfg.URL != "" || cfg.Checksum != "" {
-		platformEntry := &lockfile.PlatformEntry{
-			URL:      cfg.URL,
-			Checksum: cfg.Checksum,
-			Size:     cfg.Size,
+		entry := lock.GetOrCreateTool(tool)
+		entry.Version = version
+		platform := cfg.Platform
+		if platform == "" {
+			platform = runtime.GOOS + "_" + runtime.GOARCH
 		}
-		entry.Platforms[platform] = platformEntry
-	}
-
-	// Save lock file
-	return lockfile.Save(m.filePath, lock)
+		if cfg.URL != "" || cfg.Checksum != "" {
+			entry.Platforms[platform] = &lockfile.PlatformEntry{URL: cfg.URL, Checksum: cfg.Checksum, Size: cfg.Size}
+		}
+		return lockfile.Save(m.filePath, lock)
+	})
 }
 
 // RemoveTool removes a tool version.
@@ -101,39 +92,33 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 		return nil
 	}
 
-	lock, err := lockfile.Load(m.filePath)
-	if err != nil {
-		// Treat missing file as no-op.
-		if errors.Is(err, os.ErrNotExist) {
+	return m.withExclusiveLock(ctx, func() error {
+		lock, err := lockfile.Load(m.filePath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		existingTool, exists := lock.Tools[tool]
+		if !exists {
 			return nil
 		}
-		return err
-	}
-
-	// Look up the specific tool entry.
-	existingTool, exists := lock.Tools[tool]
-	if !exists {
-		// Tool not in lockfile - no-op.
-		return nil
-	}
-
-	// If caller specified a version, verify it matches.
-	if version != "" && existingTool.Version != version {
-		return errUtils.Build(errUtils.ErrLockfileVersionMismatch).
-			WithExplanationf("Cannot remove tool `%s`: lockfile version does not match requested version", tool).
-			WithHint("Update the lockfile or specify the correct version").
-			WithHint("Run `atmos toolchain list` to see installed versions").
-			WithContext("tool", tool).
-			WithContext("lockfile_version", existingTool.Version).
-			WithContext("requested_version", version).
-			WithContext("lockfile", m.filePath).
-			WithExitCode(2).
-			Err()
-	}
-
-	// Remove the tool entry.
-	lock.RemoveTool(tool)
-	return lockfile.Save(m.filePath, lock)
+		if version != "" && existingTool.Version != version {
+			return errUtils.Build(errUtils.ErrLockfileVersionMismatch).
+				WithExplanationf("Cannot remove tool `%s`: lockfile version does not match requested version", tool).
+				WithHint("Update the lockfile or specify the correct version").
+				WithHint("Run `atmos toolchain list` to see installed versions").
+				WithContext("tool", tool).
+				WithContext("lockfile_version", existingTool.Version).
+				WithContext("requested_version", version).
+				WithContext("lockfile", m.filePath).
+				WithExitCode(2).
+				Err()
+		}
+		lock.RemoveTool(tool)
+		return lockfile.Save(m.filePath, lock)
+	})
 }
 
 // SetDefault sets a tool version as default.
@@ -157,17 +142,19 @@ func (m *LockFileManager) GetTools(ctx context.Context) (map[string][]string, er
 		return nil, nil
 	}
 
-	lock, err := lockfile.Load(m.filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert lock file format to simple version map
-	tools := make(map[string][]string)
-	for name, entry := range lock.Tools {
-		tools[name] = []string{entry.Version}
-	}
-	return tools, nil
+	var tools map[string][]string
+	err := m.withSharedLock(ctx, func() error {
+		lock, err := lockfile.Load(m.filePath)
+		if err != nil {
+			return err
+		}
+		tools = make(map[string][]string)
+		for name, entry := range lock.Tools {
+			tools[name] = []string{entry.Version}
+		}
+		return nil
+	})
+	return tools, err
 }
 
 // Verify verifies the integrity of the managed file.
@@ -178,7 +165,7 @@ func (m *LockFileManager) Verify(ctx context.Context) error {
 		return nil
 	}
 
-	return lockfile.Verify(m.filePath)
+	return m.withSharedLock(ctx, func() error { return lockfile.Verify(m.filePath) })
 }
 
 // Name returns the manager name for logging.
@@ -186,4 +173,15 @@ func (m *LockFileManager) Name() string {
 	defer perf.Track(nil, "filemanager.LockFileManager.Name")()
 
 	return "lockfile"
+}
+
+func (m *LockFileManager) withExclusiveLock(ctx context.Context, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(m.filePath), lockDirectoryPermissions); err != nil {
+		return err
+	}
+	return filelock.New(m.filePath+".lock").WithExclusive(ctx, fn)
+}
+
+func (m *LockFileManager) withSharedLock(ctx context.Context, fn func() error) error {
+	return filelock.New(m.filePath+".lock").WithShared(ctx, fn)
 }

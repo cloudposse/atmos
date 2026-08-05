@@ -39,6 +39,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -391,17 +392,30 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
 	//
-	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
-	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
-	// to forward slashes, which would turn \u003e into /u003e.
+	// First, protect JSON unicode escapes like \u003e and escaped quotes like \" from
+	// being corrupted by filepath.ToSlash and the path normalization regex below. On
+	// Windows, filepath.ToSlash converts ALL backslashes to forward slashes, which would
+	// turn \u003e into /u003e and \" into /" (e.g. a quoted provenance template embedding
+	// `env \"USER\"`).
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	const escapedQuotePlaceholder = "\x00ESCAPED_QUOTE\x00"
+	// A trailing backslash in a help example is shell continuation syntax, not
+	// a path separator. Preserve it before Windows path normalization.
+	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
+	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
+	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
+	protectedOutput = strings.ReplaceAll(protectedOutput, `\"`, escapedQuotePlaceholder)
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
-	// Restore protected unicode escapes.
+	// Restore protected unicode escapes and escaped quotes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, escapedQuotePlaceholder, `\"`)
+
+	// Restore shell continuations after path normalization.
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -558,9 +572,18 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
-	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// When followed by a provenance comment, its rendered padding also depends on that
+	// value's display width, so normalize the padding too (to a single space) so different
+	// username lengths collapse to identical output; but don't invent a trailing space where
+	// none existed (e.g. a bare "provisioned_by_user: <value>" with no comment/padding). The
+	// first-character exclusion of quotes/apostrophes keeps this from matching a quoted value.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^'"\s][^\s]*([ \t]*)`)
+	result = provisionedByUserRegex.ReplaceAllStringFunc(result, func(match string) string {
+		if provisionedByUserRegex.FindStringSubmatch(match)[1] != "" {
+			return "provisioned_by_user: user "
+		}
+		return "provisioned_by_user: user"
+	})
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
@@ -732,6 +755,14 @@ func TestMain(m *testing.M) {
 	// Disable CI auto-detection so deploy/apply hooks don't try to
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
+
+	// Ensure this test-only variable used by the "env-step-template-only"
+	// workflow fixture starts unset. That test asserts the variable is absent
+	// from a subprocess's environment when an env step sets export: false; a
+	// stray pre-existing value (e.g. left over from a developer's shell)
+	// would make the assertion fail even though export: false behaves
+	// correctly. See tests/fixtures/scenarios/workflows/stacks/workflows/test.yaml.
+	os.Unsetenv("ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST")
 
 	// Configure logger verbosity based on test flags
 	switch {
@@ -1108,7 +1139,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
+		// Do not inherit a terminal width from the host. Let Atmos use each
+		// command's documented fallback unless a test explicitly exercises
+		// COLUMNS (for example, the toolchain table tests below).
+		tc.Env["COLUMNS"] = ""
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1674,6 +1708,12 @@ func normalizeLineEndings(s string) string {
 func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
 	normalized := normalizeLineEndings(input)
 	normalized = unwrapMarkdownProseLines(normalized)
+	// Cobra help output can differ by one final blank line between platforms.
+	// Canonicalize only output that already ends in a newline, leaving progress
+	// output terminated by a standalone carriage return untouched.
+	if strings.HasSuffix(normalized, "\n") {
+		normalized = strings.TrimRight(normalized, "\n") + "\n"
+	}
 	if ignoreTrailingWhitespace {
 		return stripTrailingWhitespace(normalized)
 	}
@@ -1723,13 +1763,41 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
 		return false
 	}
-	if looksLikeDataLine(trimmed) {
+	if looksLikeDataLine(trimmed) || strings.HasPrefix(nextTrimmed, "export ") {
+		return false
+	}
+	// A renderer can wrap prose at the terminal width, but it must not turn
+	// explicit boundaries between completed sentences, command examples, or
+	// URL lines into spaces while normalizing snapshots.
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, ")") || strings.HasSuffix(trimmed, ":") ||
+		strings.HasPrefix(nextTrimmed, "\"") || strings.HasPrefix(nextTrimmed, "http://") || strings.HasPrefix(nextTrimmed, "https://") ||
+		strings.HasPrefix(nextTrimmed, "atmos ") {
 		return false
 	}
 	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
 		return false
 	}
 	return true
+}
+
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "TRCE ", "FATA ")
+// as emitted at the start of a rendered log line. These must never be merged
+// into adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|TRCE|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
 }
 
 func isSnapshotStructuralLine(line string) bool {
@@ -1740,18 +1808,33 @@ func isSnapshotStructuralLine(line string) bool {
 		return true
 	case strings.HasPrefix(line, "* "):
 		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
 	case strings.HasPrefix(line, "```"):
 		return true
 	case strings.HasPrefix(line, "│"):
 		return true
 	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
 		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
 	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
 		return false
 	}
 }
 
 func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "export ") {
+		return true
+	}
 	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
 		return true
 	}
@@ -1762,6 +1845,41 @@ func looksLikeDataLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "shell exports",
+			input: "export FIRST=value\nexport SECOND=value\n",
+			want:  "export FIRST=value\nexport SECOND=value\n",
+		},
+		{
+			name:  "documentation URLs",
+			input: "For complete documentation, see:\nhttps://example.com/docs\n",
+			want:  "For complete documentation, see:\nhttps://example.com/docs\n",
+		},
+		{
+			name:  "separate command examples",
+			input: "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+			want:  "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+		},
+		{
+			name:  "terminal wrapped prose",
+			input: "This deliberately long sentence is wrapped by the terminal renderer before its final words\nare written to the output stream.\n",
+			want:  "This deliberately long sentence is wrapped by the terminal renderer before its final words are written to the output stream.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
 }
 
 // Generate a unified diff using gotextdiff.

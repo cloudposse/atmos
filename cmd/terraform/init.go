@@ -74,6 +74,16 @@ func init() {
 	// Create parser with init-specific flags.
 	initParser = flags.NewStandardParser(
 		WithBackendExecutionFlags(),
+		flags.WithBoolFlag("affected", "", false, "Initialize the affected components in dependency order"),
+		flags.WithBoolFlag("all", "", false, "Initialize all components in all stacks"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform init components to execute concurrently"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform init failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform init logs. Supported values: stream, grouped"),
+		flags.WithEnvVars("affected", "ATMOS_TERRAFORM_INIT_AFFECTED"),
+		flags.WithEnvVars("all", "ATMOS_TERRAFORM_INIT_ALL"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_INIT_MAX_CONCURRENCY"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_INIT_FAILURE_MODE"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_INIT_LOG_ORDER"),
 	)
 
 	// Register init-specific flags with Cobra.

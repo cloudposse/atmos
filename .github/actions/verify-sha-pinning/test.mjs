@@ -2,8 +2,9 @@
 /**
  * Local smoke test for verify-sha-pinning.
  *
- * Tests both positive (valid pins) and negative (bad SHA) cases
- * against the real GitHub API, including forensic metadata.
+ * Tests both the drift check (positive/negative tag-vs-SHA cases against the
+ * real GitHub API, including forensic metadata) and the coverage check
+ * (classifying unpinned, tag-pinned, and branch-pinned references).
  *
  * Usage: GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
  */
@@ -21,6 +22,44 @@ if (!token) {
 const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
 
 const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+
+// Coverage classifier — mirrors action.yml's parseUsesLine. Kept as a separate,
+// deliberately duplicated implementation (same convention as the drift-check
+// logic above) so this script exercises the real API without the Actions runtime.
+function classifyUsesLine(line) {
+  const m = line.match(/uses:\s*(\S+)(?:\s*#\s*(\S+))?/);
+  if (!m) return null;
+  const [, refValue, comment] = m;
+  if (refValue.startsWith('./') || refValue.startsWith('../')) return null;
+
+  const atIdx = refValue.lastIndexOf('@');
+  if (atIdx === -1) return null;
+  const refPath = refValue.slice(0, atIdx);
+  const ref = refValue.slice(atIdx + 1);
+  const parts = refPath.split('/');
+  if (parts.length < 2) return null;
+  const [owner, repo] = parts;
+
+  if (/^[a-f0-9]{40}$/.test(ref)) {
+    if (comment && /^v?\d/.test(comment)) {
+      return { kind: 'tag-pinned', owner, repo, sha: ref, tag: comment };
+    }
+    return { kind: 'branch-pinned', owner, repo, sha: ref, ref: comment || null };
+  }
+
+  return { kind: 'unpinned', owner, repo, ref };
+}
+
+function scanCoverage(content) {
+  const lines = content.split('\n');
+  const refs = [];
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = classifyUsesLine(lines[i]);
+    if (!parsed) continue;
+    refs.push({ line: i + 1, ...parsed });
+  }
+  return refs;
+}
 
 async function resolveTagSha(owner, repo, tag) {
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/tags/${tag}`, { headers });
@@ -231,6 +270,74 @@ assert(forensics !== undefined, 'Forensics object is populated');
 assert(forensics?.existsInRepo === true, 'existsInRepo is true (SHA is valid in actions/checkout)');
 assert(forensics?.matchingTags?.length > 0, `matchingTags has entries: [${forensics?.matchingTags?.join(', ')}]`);
 assert(forensics?.matchingTags?.[0] === 'v4.2.2', `First matching tag is v4.2.2`);
+
+// Test 8: Coverage check — bare tag (no SHA) is flagged unpinned
+console.log('\n🧪 Test 8: Coverage — bare tag flagged as unpinned');
+const bareTagWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/verify-sha-pinning
+`;
+const bareTagRefs = scanCoverage(bareTagWorkflow);
+assert(bareTagRefs.length === 1, 'Local ref (./...) is skipped, only the bare tag is classified');
+assert(bareTagRefs[0]?.kind === 'unpinned', 'actions/checkout@v6 classified as unpinned');
+assert(bareTagRefs[0]?.owner === 'actions' && bareTagRefs[0]?.repo === 'checkout', 'owner/repo parsed correctly');
+
+// Test 9: Coverage — branch-pinned SHA (# main) is covered but not tag-verified
+console.log('\n🧪 Test 9: Coverage — branch-pinned ref classified separately from tag-pinned');
+const branchPinWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+`;
+const branchPinRefs = scanCoverage(branchPinWorkflow);
+assert(branchPinRefs.length === 1, 'Found 1 reference');
+assert(branchPinRefs[0]?.kind === 'branch-pinned', 'Classified as branch-pinned, not tag-pinned or unpinned');
+assert(branchPinRefs[0]?.ref === 'main', 'Branch name captured from comment');
+
+// Test 10: Coverage — tag comment without a leading "v" is still tag-like
+console.log('\n🧪 Test 10: Coverage — no-"v"-prefix tag comment classified as tag-pinned');
+const noVPrefixWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cloudposse/github-action-seek-deployment@1234567890abcdef1234567890abcdef12345678 # 0.1.1
+`;
+const noVPrefixRefs = scanCoverage(noVPrefixWorkflow);
+assert(noVPrefixRefs.length === 1, 'Found 1 reference');
+assert(noVPrefixRefs[0]?.kind === 'tag-pinned', 'Classified as tag-pinned despite missing "v" prefix');
+assert(noVPrefixRefs[0]?.tag === '0.1.1', 'Tag captured as "0.1.1"');
+
+// Test 11: Coverage regression — real workflow directory has zero unpinned refs
+console.log('\n🧪 Test 11: Coverage regression over real workflow files');
+const workflowFiles = fs.readdirSync('.github/workflows')
+  .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
+let realUnpinned = [];
+for (const file of workflowFiles) {
+  const content = fs.readFileSync(path.join('.github/workflows', file), 'utf8');
+  for (const ref of scanCoverage(content)) {
+    if (ref.kind === 'unpinned') {
+      realUnpinned.push(`${file}:${ref.line} ${ref.owner}/${ref.repo}@${ref.ref}`);
+    }
+  }
+}
+if (realUnpinned.length > 0) {
+  console.log('  Unpinned references found:');
+  for (const u of realUnpinned) console.log(`    - ${u}`);
+}
+assert(realUnpinned.length === 0, `No unpinned third-party action references remain (found ${realUnpinned.length})`);
 
 // ── Summary ─────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);

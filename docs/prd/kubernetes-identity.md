@@ -73,7 +73,7 @@ auth:
     # 3) Harvested from a running emulator (k3s/k3d/kind).
     local-k8s:
       kind: kubernetes/emulator
-      emulator: k3s
+      emulator: local/k3s
 ```
 
 - **`kubernetes/kubeconfig`** — read an existing kubeconfig (file path or inline data), minify to the
@@ -91,9 +91,9 @@ k3s is self-contained: on start it generates its own cluster CA and an **admin k
 `kubernetes/emulator` identity:
 
 1. reads that kubeconfig out of the running container (`runtime.Exec … cat`, or mount
-   `/etc/rancher/k3s` as a known volume → plain file read);
+    `/etc/rancher/k3s` as a known volume → plain file read);
 2. rewrites **only** `server:` → `https://localhost:<live-host-port>` (CA + client cert/key kept
-   verbatim — that *is* the credential);
+    verbatim — that *is* the credential);
 3. materializes it and `Environment()` returns `KUBECONFIG=<path>`.
 
 So for aws/gcp/azure the `<cloud>/emulator` identity *injects* dummy creds + endpoint, whereas the

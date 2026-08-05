@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -26,8 +26,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -137,7 +139,8 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
 // baseEnv should already contain system env + global env + toolchain PATH.
-// This function merges workflow and step env on top, then handles auth if needed.
+// This function merges workflow env, persistent env-step values, and step env on
+// top, then handles auth if needed.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
 	baseEnv []string,
@@ -145,26 +148,39 @@ func prepareStepEnvironment(
 	stepName string,
 	authManager auth.AuthManager,
 	workflowEnvMap map[string]string,
+	persistentEnvMap map[string]string,
 	stepEnvMap map[string]string,
 ) ([]string, error) {
 	// Make a copy of baseEnv to avoid modifying the caller's slice.
 	stepEnv := make([]string, len(baseEnv))
 	copy(stepEnv, baseEnv)
 
-	// Merge workflow and step env vars into a single map (step overrides workflow for same key).
+	// Merge workflow, persistent env-step, and step env vars into a single map.
+	// Later layers take precedence, so a current step's env can override a value
+	// established by an earlier env step.
 	// This ensures duplicate keys are resolved before adding to the environment.
-	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(stepEnvMap))
+	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(persistentEnvMap)+len(stepEnvMap))
 	for k, v := range workflowEnvMap {
+		mergedEnv[k] = v
+	}
+	for k, v := range persistentEnvMap {
 		mergedEnv[k] = v
 	}
 	for k, v := range stepEnvMap {
 		mergedEnv[k] = v
 	}
+	if pathOverride, ok := mergedEnv["PATH"]; ok {
+		// Workflow templates commonly extend PATH with the process PATH, for example
+		// `PATH: /workspace/.context/bin:{{ env "PATH" }}`. At this point baseEnv
+		// has already added the workflow toolchain directories, so replacing PATH
+		// would otherwise make declared tools unavailable to the step.
+		mergedEnv["PATH"] = mergeWorkflowPath(pathOverride, lastEnvironmentValue(baseEnv, "PATH"))
+	}
 	if len(mergedEnv) > 0 {
 		stepEnv = append(stepEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
 	}
 
-	// No identity specified, use base environment (system + global + toolchain + workflow + step env).
+	// No identity specified, use base environment (system + global + toolchain + workflow + persistent + step env).
 	if stepIdentity == "" {
 		return stepEnv, nil
 	}
@@ -203,6 +219,49 @@ func prepareStepEnvironment(
 
 	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
 	return stepEnv, nil
+}
+
+// lastEnvironmentValue returns the effective value for key in env, where later
+// entries take precedence. This matches the environment semantics used for
+// subprocesses and lets a toolchain PATH override the inherited system PATH.
+func lastEnvironmentValue(env []string, key string) string {
+	var value string
+	for _, entry := range env {
+		entryKey, entryValue, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(entryKey, key) {
+			value = entryValue
+		}
+	}
+	return value
+}
+
+// mergeWorkflowPath combines a workflow PATH override with the already
+// toolchain-augmented PATH. When both values share a suffix, that suffix is
+// retained once and toolchain directories are placed after the custom prefix.
+func mergeWorkflowPath(overridePath string, toolchainPath string) string {
+	if overridePath == "" || toolchainPath == "" {
+		return overridePath
+	}
+
+	separator := string(os.PathListSeparator)
+	overrideEntries := strings.Split(overridePath, separator)
+	toolchainEntries := strings.Split(toolchainPath, separator)
+
+	commonSuffix := 0
+	for commonSuffix < len(overrideEntries) && commonSuffix < len(toolchainEntries) {
+		overrideEntry := overrideEntries[len(overrideEntries)-1-commonSuffix]
+		toolchainEntry := toolchainEntries[len(toolchainEntries)-1-commonSuffix]
+		if overrideEntry != toolchainEntry {
+			break
+		}
+		commonSuffix++
+	}
+
+	merged := make([]string, 0, len(overrideEntries)+len(toolchainEntries)-commonSuffix)
+	merged = append(merged, overrideEntries[:len(overrideEntries)-commonSuffix]...)
+	merged = append(merged, toolchainEntries[:len(toolchainEntries)-commonSuffix]...)
+	merged = append(merged, overrideEntries[len(overrideEntries)-commonSuffix:]...)
+	return strings.Join(merged, separator)
 }
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
@@ -259,6 +318,11 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	return false
 }
 
+type workflowCommandFilters struct {
+	tags   []string
+	labels string
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -269,8 +333,13 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 	commandLineIdentity string,
+	commandLineFilters ...workflowCommandFilters,
 ) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+	commandFilters := workflowCommandFilters{}
+	if len(commandLineFilters) > 0 {
+		commandFilters = commandLineFilters[0]
+	}
 	var activeContainer *workflowPkg.ContainerSession
 	defer func() {
 		if activeContainer == nil {
@@ -434,6 +503,7 @@ func ExecuteWorkflow(
 	// This is reused for all steps, with workflow/step env vars merged on top per step.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	baseEnv = append(baseEnv, tenv.EnvVars()...)
+	persistentEnv := make(map[string]string)
 
 	// Initialize show renderer for header/flags display.
 	showRenderer := workflowPkg.NewShowRenderer()
@@ -520,9 +590,9 @@ func ExecuteWorkflow(
 		}
 
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
-		// Then merge workflow-level and step-level env vars.
+		// Then merge workflow-level, persistent env-step, and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, resolvedStepEnv)
+		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -589,6 +659,12 @@ func ExecuteWorkflow(
 			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 		}
 
+		var commandResult *stepPkg.StepResult
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return runErr
+		}
 		executeStep := func() error {
 			// Background steps (start/wait/wait-all/cancel) are coordinated by the
 			// run-scoped registry; everything else falls through to the normal switch.
@@ -640,8 +716,11 @@ func ExecuteWorkflow(
 					workflowDefinition:  workflowDefinition,
 					dryRun:              dryRun,
 					commandLineStack:    commandLineStack,
+					commandLineTags:     commandFilters.tags,
+					commandLineLabels:   commandFilters.labels,
 					commandLineIdentity: stepIdentity,
 					baseEnv:             baseEnv,
+					persistentEnv:       persistentEnv,
 					authManager:         authManager,
 				}, &steps[stepIdx])
 			case commandType == "shell":
@@ -653,17 +732,21 @@ func ExecuteWorkflow(
 				switch {
 				case workflowPkg.StepContainerOverride(&step):
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
-							Workflow:     workflow,
-							WorkflowPath: workflowPath,
-							BasePath:     atmosConfig.BasePath,
-							WorkflowDef:  workflowDefinition,
-							Step:         &step,
-							HostWorkDir:  workDir,
-							Command:      command,
-							StepEnv:      stepEnv,
-							RuntimeEnv:   stepEnv,
-							DryRun:       dryRun,
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+								Workflow:      workflow,
+								WorkflowPath:  workflowPath,
+								BasePath:      atmosConfig.BasePath,
+								WorkflowDef:   workflowDefinition,
+								Step:          &step,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								RuntimeEnv:    stepEnv,
+								DryRun:        dryRun,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
 						})
 					})
 				case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
@@ -681,26 +764,40 @@ func ExecuteWorkflow(
 						}
 					}
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
-							Step:        &step,
-							WorkflowDef: workflowDefinition,
-							HostWorkDir: workDir,
-							Command:     command,
-							StepEnv:     stepEnv,
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+								Step:          &step,
+								WorkflowDef:   workflowDefinition,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
 						})
 					})
 				default:
 					err = retry.Do(context.Background(), step.Retry, func() error {
-						return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-							Command:     command,
-							Name:        commandName,
-							Dir:         workDir,
-							Env:         stepEnv,
-							TTY:         step.Tty,
-							Interactive: step.Interactive,
-							DryRun:      dryRun,
-						}, func() error {
-							return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
+						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+							return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+								Command:     command,
+								Name:        commandName,
+								Dir:         workDir,
+								Env:         stepEnv,
+								TTY:         step.Tty,
+								Interactive: step.Interactive,
+								DryRun:      dryRun,
+							}, func() error {
+								return ExecuteShellWithWriters(&ExecuteShellSpec{
+									Command: command,
+									Name:    commandName,
+									Dir:     workDir,
+									EnvVars: stepEnv,
+									DryRun:  dryRun,
+									Stdout:  io.MultiWriter(ioLayer.MaskWriter(os.Stdout), stdoutCapture),
+									Stderr:  io.MultiWriter(ioLayer.MaskWriter(os.Stderr), stderrCapture),
+								})
+							})
 						})
 					})
 				}
@@ -725,30 +822,35 @@ func ExecuteWorkflow(
 					args = strings.Fields(command)
 				}
 
+				args = workflowPkg.AppendAtmosStepFlags(args, workflowPkg.AtmosStepFlags{
+					Stack:  finalStack,
+					Tags:   commandFilters.tags,
+					Labels: commandFilters.labels,
+				})
 				if finalStack != "" {
-					if idx := slices.Index(args, "--"); idx != -1 {
-						// Insert before the "--"
-						// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-						args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-					} else {
-						// just append at the end
-						args = append(args, []string{"-s", finalStack}...)
-					}
-
 					log.Debug("Using stack", "stack", finalStack)
 				}
 
-				// Build display command for RenderCommand.
-				displayCmd := "atmos " + command
-				if finalStack != "" {
-					displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
-				}
+				// Build display command from the final arguments so it matches execution.
+				displayCmd := "atmos " + strings.Join(args, " ")
 				// Render command before execution if show.command is enabled.
 				stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
 
 				ui.Infof("Executing command: `atmos %s`", command)
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+					return runCommandStep(func(stdout, stderr io.Writer) error {
+						return ExecuteShellCommand(
+							atmosConfig,
+							"atmos",
+							args,
+							".",
+							stepEnv,
+							dryRun,
+							"",
+							WithStdoutCapture(stdout),
+							WithStderrCapture(stderr),
+						)
+					})
 				})
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
@@ -814,12 +916,17 @@ func ExecuteWorkflow(
 					break
 				}
 				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-					DryRun:      dryRun,
-					FinalStack:  finalStack,
-					AtmosConfig: &atmosConfig,
+					DryRun:        dryRun,
+					FinalStack:    finalStack,
+					AtmosConfig:   &atmosConfig,
+					ToolchainPATH: tenv.PATH(),
+					AuthManager:   authManager,
 				})
 			}
-			return err
+			if err != nil {
+				return err
+			}
+			return stepPkg.StoreCommandResult(workflowVars, step.Name, step.Outputs, commandResult)
 		}
 
 		// Wrap each step's output in a collapsible CI log group when grouping is
@@ -852,6 +959,15 @@ func ExecuteWorkflow(
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+
+		if commandType == "env" && (step.Export == nil || *step.Export) {
+			for key := range step.Vars {
+				if value, ok := workflowVars.Env[key]; ok {
+					persistentEnv[key] = value
+				}
+			}
 		}
 	}
 
@@ -868,9 +984,11 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun      bool
-	FinalStack  string
-	AtmosConfig *schema.AtmosConfiguration
+	DryRun        bool
+	FinalStack    string
+	AtmosConfig   *schema.AtmosConfiguration
+	ToolchainPATH string
+	AuthManager   auth.AuthManager
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -882,7 +1000,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
-	stepExecutorState.SetAtmosConfig(opts.AtmosConfig)
+	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {
@@ -901,6 +1019,35 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	stepCopy.Stack = opts.FinalStack
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
+}
+
+func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			StackFromArg:     stack,
+			Stack:            stack,
+		}
+		stackConfig, err := config.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 // ResetStepExecutorState resets the step executor state.
@@ -1154,7 +1301,7 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	// Start the UI
 	app, err := w.Execute(allWorkflows)
-	u.PrintMessage("")
+	_ = data.Writeln("")
 	if err != nil {
 		return "", "", "", err
 	}

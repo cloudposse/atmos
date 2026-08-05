@@ -40,6 +40,9 @@ export PATH="${GO_BIN}:${PATH}"
 REPO_OVERRIDES="
 dario.cat/mergo|github.com/imdario/mergo||LICENSE
 inet.af/netaddr|github.com/inetaf/netaddr||LICENSE
+go4.org/intern|github.com/go4org/intern||LICENSE
+go4.org/netipx|github.com/go4org/netipx||LICENSE
+go4.org/unsafe/assume-no-moving-gc|github.com/go4org/unsafe-assume-no-moving-gc||LICENSE
 cloud.google.com/go|github.com/googleapis/google-cloud-go||LICENSE
 cloud.google.com/go/auth|github.com/googleapis/google-cloud-go|auth|auth/LICENSE
 cloud.google.com/go/auth/oauth2adapt|github.com/googleapis/google-cloud-go|auth/oauth2adapt|auth/oauth2adapt/LICENSE
@@ -50,57 +53,64 @@ cloud.google.com/go/longrunning|github.com/googleapis/google-cloud-go|longrunnin
 cloud.google.com/go/monitoring|github.com/googleapis/google-cloud-go|monitoring|monitoring/LICENSE
 cloud.google.com/go/secretmanager|github.com/googleapis/google-cloud-go|secretmanager|secretmanager/LICENSE
 cloud.google.com/go/storage|github.com/googleapis/google-cloud-go|storage|storage/LICENSE
+gopkg.in/ini.v1|github.com/go-ini/ini||LICENSE
+gopkg.in/evanphx/json-patch.v4|github.com/evanphx/json-patch||LICENSE
+gopkg.in/inf.v0|github.com/go-inf/inf||LICENSE
+gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
+gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
+gopkg.in/yaml.v2|github.com/go-yaml/yaml||LICENSE
+gopkg.in/yaml.v3|github.com/go-yaml/yaml||LICENSE
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
 # a tag (e.g. v1.0.2) is used verbatim; a pseudo-version (v0.0.0-<ts>-<commit>)
 # resolves to its trailing commit hash (the full pseudo-version is not a git ref).
 git_ref_from_version() {
-    local version="$1"
-    if [[ "${version}" =~ -([0-9a-f]{12})$ ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    else
-        printf '%s' "${version}"
-    fi
+	local version="$1"
+	if [[ "${version}" =~ -([0-9a-f]{12})$ ]]; then
+		printf '%s' "${BASH_REMATCH[1]}"
+	else
+		printf '%s' "${version}"
+	fi
 }
 
 # apply_url_overrides rewrites the URL (2nd CSV field) for each overridden module to
 # a deterministic, version-pinned LICENSE URL derived from go.mod (no network fetch).
 apply_url_overrides() {
-    local csv="$1" module repo ref_prefix license_path version base_ref ref url
-    while IFS='|' read -r module repo ref_prefix license_path; do
-        [ -n "${module}" ] || continue
-        version="$(GOOS="${LICENSE_GOOS}" GOARCH="${LICENSE_GOARCH}" CGO_ENABLED="${LICENSE_CGO_ENABLED}" go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
-        [ -n "${version}" ] || continue
-        base_ref="$(git_ref_from_version "${version}")"
-        if [ -n "${ref_prefix}" ]; then
-            ref="${ref_prefix}/${base_ref}"
-        else
-            ref="${base_ref}"
-        fi
-        url="https://${repo}/blob/${ref}/${license_path}"
-        awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
-            '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
-    done <<EOF
+	local csv="$1" module repo ref_prefix license_path version base_ref ref url
+	while IFS='|' read -r module repo ref_prefix license_path; do
+		[ -n "${module}" ] || continue
+		version="$(GOOS="${LICENSE_GOOS}" GOARCH="${LICENSE_GOARCH}" CGO_ENABLED="${LICENSE_CGO_ENABLED}" go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
+		[ -n "${version}" ] || continue
+		base_ref="$(git_ref_from_version "${version}")"
+		if [ -n "${ref_prefix}" ]; then
+			ref="${ref_prefix}/${base_ref}"
+		else
+			ref="${base_ref}"
+		fi
+		url="https://${repo}/blob/${ref}/${license_path}"
+		awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
+			'$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
+	done <<EOF
 ${REPO_OVERRIDES}
 EOF
 }
 
 apply_google_cloud_go_overrides() {
-    local csv="$1" module version subpath ref url
-    while read -r module version; do
-        [ -n "${module}" ] || continue
-        ref="$(git_ref_from_version "${version}")"
-        subpath="${module#cloud.google.com/go}"
-        subpath="${subpath#/}"
-        if [ -z "${subpath}" ]; then
-            url="https://github.com/googleapis/google-cloud-go/blob/${ref}/LICENSE"
-        else
-            url="https://github.com/googleapis/google-cloud-go/blob/${subpath}/${ref}/${subpath}/LICENSE"
-        fi
-        awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
-            '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
-    done <<EOF
+	local csv="$1" module version subpath ref url
+	while read -r module version; do
+		[ -n "${module}" ] || continue
+		ref="$(git_ref_from_version "${version}")"
+		subpath="${module#cloud.google.com/go}"
+		subpath="${subpath#/}"
+		if [ -z "${subpath}" ]; then
+			url="https://github.com/googleapis/google-cloud-go/blob/${ref}/LICENSE"
+		else
+			url="https://github.com/googleapis/google-cloud-go/blob/${subpath}/${ref}/${subpath}/LICENSE"
+		fi
+		awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
+			'$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
+	done <<EOF
 $(go list -m -f '{{.Path}} {{.Version}}' all | awk '$1=="cloud.google.com/go" || index($1,"cloud.google.com/go/")==1')
 EOF
 }
@@ -108,18 +118,18 @@ EOF
 # Check if go-licenses is installed
 GO_LICENSES_BIN="$(command -v go-licenses || true)"
 if [ -z "${GO_LICENSES_BIN}" ]; then
-    echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
-    go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
-    GOBIN="$(go env GOBIN)"
-    if [ -z "${GOBIN}" ]; then
-        GOBIN="$(go env GOPATH)/bin"
-    fi
-    GO_LICENSES_BIN="${GOBIN}/go-licenses"
+	echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
+	go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
+	GOBIN="$(go env GOBIN)"
+	if [ -z "${GOBIN}" ]; then
+		GOBIN="$(go env GOPATH)/bin"
+	fi
+	GO_LICENSES_BIN="${GOBIN}/go-licenses"
 fi
 
 if [ ! -x "${GO_LICENSES_BIN}" ]; then
-    echo "go-licenses binary not found at ${GO_LICENSES_BIN}" >&2
-    exit 1
+	echo "go-licenses binary not found at ${GO_LICENSES_BIN}" >&2
+	exit 1
 fi
 
 # Generate license report
@@ -165,8 +175,8 @@ echo "" >> "${NOTICE_FILE}"
 
 # Add Apache-2.0 dependencies
 grep "Apache-2.0" "${TEMP_DIR}/license-report.csv" | \
-    sort | \
-    awk -F',' '{printf "  - %s\n    License: Apache-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}" || true
+	sort | \
+	awk -F',' '{printf "  - %s\n    License: Apache-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}" || true
 
 # Add BSD section
 cat >> "${NOTICE_FILE}" <<'EOF'
@@ -180,57 +190,62 @@ echo "" >> "${NOTICE_FILE}"
 
 # Add BSD dependencies
 grep -E "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" | \
-    sort | \
-    awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}" || true
+	sort | \
+	awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}" || true
 
 # Add MPL section if there are any
 MPL_COUNT=$(awk '/MPL-2.0/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MPL_COUNT}" -gt 0 ]; then
-    cat >> "${NOTICE_FILE}" <<'EOF'
+	cat >> "${NOTICE_FILE}" <<'EOF'
 
 ================================================================================
 
 MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 EOF
 
-    echo "" >> "${NOTICE_FILE}"
+	echo "" >> "${NOTICE_FILE}"
 
-    grep "MPL-2.0" "${TEMP_DIR}/license-report.csv" | \
-        sort | \
-        awk -F',' '{printf "  - %s\n    License: MPL-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
+	grep "MPL-2.0" "${TEMP_DIR}/license-report.csv" | \
+		sort | \
+		awk -F',' '{printf "  - %s\n    License: MPL-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
 fi
 
 # Add MIT section (optional, for completeness)
 MIT_COUNT=$(awk '/,MIT/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MIT_COUNT}" -gt 0 ]; then
-    cat >> "${NOTICE_FILE}" <<'EOF'
+	cat >> "${NOTICE_FILE}" <<'EOF'
 
 ================================================================================
 
 MIT LICENSED DEPENDENCIES
 EOF
 
-    echo "" >> "${NOTICE_FILE}"
+	echo "" >> "${NOTICE_FILE}"
 
-    grep ",MIT" "${TEMP_DIR}/license-report.csv" | \
-        sort | \
-        awk -F',' '{printf "  - %s\n    License: MIT\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
+	grep ",MIT" "${TEMP_DIR}/license-report.csv" | \
+		sort | \
+		awk -F',' '{printf "  - %s\n    License: MIT\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
 fi
 
-# Add footer
-cat >> "${NOTICE_FILE}" <<'EOF'
-
-================================================================================
-
-For the complete list of dependencies and their licenses, run:
-  go-licenses report ./...
-
-To view the full license text for a specific dependency, visit the URL
-listed above or check the dependency's repository.
-
-For more information about Atmos licensing, see:
-  https://github.com/cloudposse/atmos
-EOF
+# Add footer.
+# Uses individual echo statements (not a heredoc) because the two indented
+# lines below need a literal "  " content prefix; a heredoc line starting
+# with whitespace trips the repo's tab-only *.sh indentation rule, and an
+# indented heredoc body isn't shell indentation, it's literal output, so it
+# can't just be converted to a tab like real code without changing NOTICE.
+{
+	echo ""
+	echo "================================================================================"
+	echo ""
+	echo "For the complete list of dependencies and their licenses, run:"
+	echo "  go-licenses report ./..."
+	echo ""
+	echo "To view the full license text for a specific dependency, visit the URL"
+	echo "listed above or check the dependency's repository."
+	echo ""
+	echo "For more information about Atmos licensing, see:"
+	echo "  https://github.com/cloudposse/atmos"
+} >> "${NOTICE_FILE}"
 
 echo "✅ NOTICE file generated successfully: ${NOTICE_FILE}"
 echo ""
@@ -239,10 +254,10 @@ echo "  - Total dependencies: ${TOTAL_DEPS}"
 echo "  - Apache-2.0: ${APACHE_DEPS}"
 echo "  - BSD: ${BSD_DEPS}"
 if [ "${MPL_COUNT}" -gt 0 ]; then
-    echo "  - MPL-2.0: ${MPL_COUNT}"
+	echo "  - MPL-2.0: ${MPL_COUNT}"
 fi
 if [ "${MIT_COUNT}" -gt 0 ]; then
-    echo "  - MIT: ${MIT_COUNT}"
+	echo "  - MIT: ${MIT_COUNT}"
 fi
 echo ""
 echo "Review the NOTICE file and commit it to the repository."

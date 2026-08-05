@@ -7,9 +7,9 @@ const EXTENSIONS = [
   { title: 'Custom commands', desc: 'Wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/quick-start/advanced/add-custom-commands' },
   { title: 'Component types', desc: 'Register your own component kinds via the same registry the built-ins use.', to: '/components' },
   { title: 'YAML functions', desc: 'Resolve state, outputs, secrets, and Git metadata right inside your config.', to: '/functions/yaml' },
-  { title: 'Hooks', desc: 'Run infracost, checkov, trivy, or any command on lifecycle events.', to: '/stacks/hooks' },
+  { title: 'Hooks & stores', desc: 'Run infracost, checkov, trivy, or any command on lifecycle events, and plug in SSM, Secrets Manager, Key Vault, Vault, Redis, and more for cross-component data.', to: '/stacks/hooks' },
   { title: 'MCP & skills', desc: 'Connect Atmos to any agent, or publish reusable skills your team can install.', to: '/ai/mcp-server' },
-  { title: 'Stores', desc: 'Plug in SSM, Secrets Manager, Key Vault, Vault, Redis, and more for cross-component data.', to: '/cli/configuration/stores' },
+  { title: 'Scaffolding', desc: 'Generate new components, stacks, and entire landing zones from built-in or custom templates with atmos scaffold and atmos init.', to: '/cli/commands/scaffold' },
   { title: 'Validation', desc: 'Enforce your own guardrails with OPA/Rego policies and JSON Schema.', to: '/validation/validating' },
   { title: 'Templates & data sources', desc: 'Pull live data into your config with Go templates and Gomplate datasources.', to: '/templates' },
 ];

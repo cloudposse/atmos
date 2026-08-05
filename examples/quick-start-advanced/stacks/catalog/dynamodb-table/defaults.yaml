@@ -4,6 +4,9 @@ components:
       metadata:
         component: dynamodb-table
         description: "DynamoDB table for application state."
+        tags: [storage, state]
+        labels:
+          tier: application
       hooks:
         publish-coordinates:
           events:

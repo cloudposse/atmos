@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -55,10 +55,11 @@ func (f *RandomFunction) Execute(ctx context.Context, args string, execCtx *Exec
 		return generateRandom(defaultRandomMin, defaultRandomMax)
 	}
 
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
+	parsed, err := parser.ParseRandom(args)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidArguments, args)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidArguments, err)
 	}
+	parts := parsed.Values
 
 	var min, max int
 

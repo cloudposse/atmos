@@ -23,8 +23,13 @@ func TestAzureProfile_Branches(t *testing.T) {
 		)
 		assert.Equal(t, wantConn, p.Env["AZURE_STORAGE_CONNECTION_STRING"])
 
-		// Targets never carry a Terraform provider fragment for Azure storage.
-		assert.Nil(t, p.Provider)
+		assert.Equal(t, []map[string]any{{}}, p.Provider["features"])
+		assert.Equal(t, true, p.Provider["skip_provider_registration"])
+		assert.Equal(t, "127.0.0.1:30002", p.Provider["metadata_host"])
+		assert.Equal(t, azureDummySubscriptionID, p.Provider["subscription_id"])
+		assert.Equal(t, azureDummyTenantID, p.Provider["tenant_id"])
+		assert.Equal(t, azureDummyClientID, p.Provider["client_id"])
+		assert.Equal(t, azureDummyClientSecret, p.Provider["client_secret"])
 		assert.Empty(t, p.ResolverURL)
 	})
 
@@ -38,5 +43,7 @@ func TestAzureProfile_Branches(t *testing.T) {
 
 		// The connection string requires a live authority, so it is absent.
 		assert.NotContains(t, p.Env, "AZURE_STORAGE_CONNECTION_STRING")
+		assert.NotContains(t, p.Provider, "metadata_host")
+		assert.Equal(t, azureDummySubscriptionID, p.Provider["subscription_id"])
 	})
 }

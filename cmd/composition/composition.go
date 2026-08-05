@@ -14,7 +14,16 @@ import (
 
 var compositionParser *flags.StandardParser
 
-const tailFlagName = "tail"
+const (
+	stackFlagName = "stack"
+	tailFlagName  = "tail"
+)
+
+var lifecycleRequiredFlags = func() *flags.FlagRegistry {
+	registry := flags.NewFlagRegistry()
+	registry.RegisterStringFlag(stackFlagName, "s", "", "Atmos stack", true)
+	return registry
+}()
 
 var lifecycleVerbs = []string{"up", "start", "restart", "stop", "rm", "down", "ps"}
 
@@ -49,11 +58,7 @@ var listCmd = &cobra.Command{
 	Long:  "List declared compositions. When --stack is set, include fulfilled and not-provided services for that stack.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
-			return err
-		}
-		info := buildConfigAndStacksInfo(cmd)
-		return pkgcomposition.ExecuteList(cmd.Context(), &info)
+		return runList(cmd)
 	},
 }
 
@@ -63,11 +68,7 @@ func newLifecycleCmd(verb string) *cobra.Command {
 		Short: verb + " composition members in a stack",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
-				return err
-			}
-			info := buildConfigAndStacksInfo(cmd)
-			return pkgcomposition.ExecuteLifecycle(cmd.Context(), &info, verb, optionalCompositionArg(args), nil)
+			return runLifecycle(cmd, args, verb, nil)
 		},
 	}
 	return cmd
@@ -78,16 +79,16 @@ var logsCmd = &cobra.Command{
 	Short: "Show logs from composition members in a stack",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
-			return err
-		}
-		info := buildConfigAndStacksInfo(cmd)
-		return pkgcomposition.ExecuteLifecycle(cmd.Context(), &info, "logs", optionalCompositionArg(args), compositionVerbFlags(cmd))
+		return runLifecycle(cmd, args, "logs", compositionVerbFlags(cmd))
 	},
 }
 
 func init() {
-	compositionParser = flags.NewStandardParser(flags.WithFlagRegistry(flags.CommonFlags()))
+	compositionParser = flags.NewStandardParser(
+		flags.WithFlagRegistry(flags.CommonFlags()),
+		flags.WithCompletionPrompt(stackFlagName, "Choose a stack", compositionStackFlagCompletion),
+	)
+	compositionParser.Registry().SetCompletionFunc(stackFlagName, compositionStackFlagCompletion)
 	compositionParser.RegisterPersistentFlags(compositionCmd)
 	if err := compositionParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
@@ -103,6 +104,25 @@ func init() {
 	}
 	compositionCmd.AddCommand(commands...)
 	internal.Register(&CompositionCommandProvider{})
+}
+
+// runLifecycle binds shared flags, asks for a missing stack in an interactive
+// terminal, validates the lifecycle target, then dispatches to the composition
+// executor.
+func runLifecycle(cmd *cobra.Command, args []string, verb string, verbFlags map[string]any) error {
+	if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return err
+	}
+	parsed, err := compositionParser.Parse(cmd.Context(), args)
+	if err != nil {
+		return err
+	}
+	if err := lifecycleRequiredFlags.Validate(map[string]interface{}{stackFlagName: parsed.Stack}); err != nil {
+		return err
+	}
+	info := buildConfigAndStacksInfo(cmd)
+	info.Stack = parsed.Stack
+	return pkgcomposition.ExecuteLifecycle(cmd.Context(), &info, verb, optionalCompositionArg(args), verbFlags)
 }
 
 func optionalCompositionArg(args []string) string {
@@ -164,10 +184,15 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		Identity:                cfg.NormalizeIdentityValue(globalFlags.Identity.Value()),
 		ProfilesFromArg:         globalFlags.Profile,
 	}
-	// Resolve the stack via viper so the full precedence chain is honored
-	// (flag > ATMOS_STACK env > config), not just the directly-set Cobra flag.
-	if stack := viper.GetViper().GetString("stack"); stack != "" {
+	// Prefer the Cobra flag so an interactive stack selection is used. Fall back
+	// to Viper to retain the flag > environment > configuration precedence chain.
+	if stackFlag := cmd.Flag(stackFlagName); stackFlag != nil && stackFlag.Value.String() != "" {
+		info.Stack = stackFlag.Value.String()
+	} else if stack := viper.GetViper().GetString(stackFlagName); stack != "" {
 		info.Stack = stack
+	}
+	if dryRunFlag := cmd.Flag("dry-run"); dryRunFlag != nil && dryRunFlag.Value.String() == "true" {
+		info.DryRun = true
 	}
 	return info
 }

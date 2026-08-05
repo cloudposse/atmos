@@ -17,10 +17,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_ask.md
@@ -49,18 +50,22 @@ var askCmd = &cobra.Command{
 		noTools := v.GetBool("no-tools")
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// ask can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {
@@ -123,7 +128,7 @@ var askCmd = &cobra.Command{
 		defer cancel()
 
 		// Execute question with tool support.
-		utils.PrintfMessageToTUI("👽 Thinking...\n")
+		ui.Writef("👽 Thinking...\n")
 		result := exec.Execute(ctx, executor.Options{
 			Prompt:       finalQuestion,
 			ToolsEnabled: !noTools && toolExecutor != nil,
@@ -142,9 +147,7 @@ var askCmd = &cobra.Command{
 		if err := mdFormatter.Format(&buf, result); err != nil {
 			return fmt.Errorf("failed to format response: %w", err)
 		}
-		utils.PrintfMarkdown("%s", buf.String())
-
-		return nil
+		return data.Markdownf("%s", buf.String())
 	},
 }
 

@@ -8,4 +8,4 @@ stacks:
   base_path: "scenarios/yaml-functions-circular-deps/stacks"
   included_paths:
     - "**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
