@@ -20,6 +20,10 @@ type changedFilesIndex struct {
 	// allFiles contains all changed files for fallback scenarios.
 	allFiles []string
 
+	// allFilesSet provides constant-time lookup for dependencies that may live
+	// outside a component base path, such as native Helm values_files.
+	allFilesSet map[string]struct{}
+
 	mu sync.RWMutex
 }
 
@@ -34,6 +38,7 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 	index := &changedFilesIndex{
 		filesByBasePath: make(map[string][]string),
 		allFiles:        nil, // Set after normalization.
+		allFilesSet:     make(map[string]struct{}, len(changedFiles)),
 	}
 
 	// Pre-compute absolute base paths for each component type.
@@ -62,7 +67,9 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 				absF = f
 			}
 		}
+		absF = filepath.Clean(absF)
 		absAllFiles = append(absAllFiles, absF)
+		index.allFilesSet[absF] = struct{}{}
 	}
 	index.allFiles = absAllFiles
 
@@ -83,7 +90,7 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 // Only includes non-empty component base paths to avoid indexing files under the root basePath.
 func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	// Collect base paths, skipping empty ones to prevent root basePath collisions.
-	basePaths := make([]string, 0, 4)
+	basePaths := make([]string, 0, 6)
 
 	// Add terraform base path if configured.
 	if atmosConfig.Components.Terraform.BasePath != "" {
@@ -103,6 +110,11 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	// Add kubernetes base path if configured.
 	if atmosConfig.Components.Kubernetes.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath))
+	}
+
+	// Add native Helm base path if configured.
+	if atmosConfig.Components.Helm.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath))
 	}
 
 	// Add stacks base path if configured.
@@ -210,4 +222,14 @@ func (idx *changedFilesIndex) getAllFiles() []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.allFiles
+}
+
+// isChangedFile reports whether the normalized absolute path is in the git
+// change set. It is used for component dependencies that can be located
+// outside the component's indexed base path.
+func (idx *changedFilesIndex) isChangedFile(path string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	_, ok := idx.allFilesSet[filepath.Clean(path)]
+	return ok
 }
