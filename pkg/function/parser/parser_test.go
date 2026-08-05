@@ -193,6 +193,36 @@ func TestParseStoreGet(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseSecret(t *testing.T) {
+	actual, err := ParseSecret(`SERVICE_CONFIG | path ".credentials.token" | default "not set"`)
+	require.NoError(t, err)
+	assert.Equal(t, SecretArgs{Name: "SERVICE_CONFIG", Path: ".credentials.token", Default: stringPtr("not set")}, actual)
+
+	actual, err = ParseSecret(`SERVICE_CONFIG | path .credentials.token // "not set"`)
+	require.NoError(t, err)
+	assert.Equal(t, `.credentials.token // "not set"`, actual.Path)
+
+	actual, err = ParseSecret(`SERVICE_CREDENTIALS |raw | default ""`)
+	require.NoError(t, err)
+	assert.Equal(t, "SERVICE_CREDENTIALS", actual.Name)
+	assert.True(t, actual.Raw)
+	require.NotNil(t, actual.Default)
+	assert.Empty(t, *actual.Default)
+
+	for _, input := range []string{
+		"",
+		"| raw",
+		"SERVICE_CONFIG raw",
+		"SERVICE_CONFIG | raw value",
+		"SERVICE_CONFIG | path",
+		"SERVICE_CONFIG | unknown value",
+		`SERVICE_CONFIG | raw | path ".token"`,
+	} {
+		_, err = ParseSecret(input)
+		require.Error(t, err, input)
+	}
+}
+
 func TestParseStoreRejectsMissingOptionValue(t *testing.T) {
 	_, err := ParseStore("ssm vpc id | default")
 	require.Error(t, err)

@@ -404,12 +404,21 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 // An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
 // omit those path segments.
 func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
+	raw, err := s.GetRaw(stack, component, key)
+	if err != nil {
+		return nil, err
+	}
+	return s.decodeParameterValue(raw), nil
+}
+
+// GetRaw retrieves the exact decrypted parameter string without JSON decoding.
+func (s *SSMStore) GetRaw(stack string, component string, key string) (string, error) {
 	if key == "" {
-		return nil, store.ErrEmptyKey
+		return "", store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	ctx := context.TODO()
@@ -417,13 +426,13 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -443,10 +452,10 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
+		return "", fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
 
-	return s.decodeParameterValue(*output.Parameter.Value), nil
+	return *output.Parameter.Value, nil
 }
 
 // GetKey retrieves a value by key from AWS SSM Parameter store.Store.

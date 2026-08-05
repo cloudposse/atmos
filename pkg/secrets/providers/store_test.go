@@ -103,6 +103,31 @@ func TestStoreProvider_SetGet(t *testing.T) {
 	assert.Equal(t, "v1", got)
 }
 
+func TestStoreProvider_GetRawFallsBackForTextOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().Get("prod", "api", "API_KEY").Return("v1", nil)
+	p := &storeProvider{name: "app", kind: "example/text", store: mockStore}
+
+	got, err := p.GetRaw(Coordinate{Stack: "prod", Component: "api", Key: "API_KEY"})
+	require.NoError(t, err)
+	assert.Equal(t, "v1", got)
+}
+
+func TestStoreProvider_GetRawRejectsStructuredFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().Get("prod", "api", "CONFIG").Return(map[string]any{"enabled": true}, nil)
+	p := &storeProvider{name: "app", kind: "example/structured", store: mockStore}
+
+	_, err := p.GetRaw(Coordinate{Stack: "prod", Component: "api", Key: "CONFIG"})
+	require.ErrorIs(t, err, ErrRawNotSupported)
+}
+
 func TestStoreProvider_DeleteUnsupported(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

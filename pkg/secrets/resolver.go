@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,7 +15,7 @@ import (
 // secretTag is the YAML tag (with leading bang) for the secret function.
 const secretTag = "!secret"
 
-// Resolve resolves a `!secret NAME [| path ...] [| default ...]` expression to a value.
+// Resolve resolves a `!secret NAME [| path ...] [| raw] [| default ...]` expression to a value.
 //
 // Behavior (in order):
 //  1. It validates that the secret is declared in the component section.
@@ -64,7 +65,22 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string,
 func retrieveAndMask(atmosConfig *schema.AtmosConfiguration, provider providers.Provider, coord providers.Coordinate, name string, opts ResolveOptions) (any, error) {
 	defer perf.Track(atmosConfig, "secrets.retrieveAndMask")()
 
-	value, err := provider.Get(coord)
+	var value any
+	var err error
+	if opts.Raw {
+		if rawProvider, ok := provider.(providers.RawGetter); ok {
+			value, err = rawProvider.GetRaw(coord)
+		} else {
+			value, err = provider.Get(coord)
+			if err == nil {
+				if _, ok := value.(string); !ok {
+					err = providers.ErrRawNotSupported
+				}
+			}
+		}
+	} else {
+		value, err = provider.Get(coord)
+	}
 	if err != nil {
 		if opts.Default != nil {
 			return *opts.Default, nil
@@ -99,37 +115,18 @@ func componentName(stackInfo *schema.ConfigAndStacksInfo) string {
 	return stackInfo.FinalComponent
 }
 
-// parseSecretArgs parses `!secret NAME [| path "x"] [| default "y"]` (or the same without the
-// leading tag) into the secret name and modifiers.
+// parseSecretArgs parses `!secret NAME [| path "x"] [| raw] [| default "y"]` (or the same
+// without the leading tag) into the secret name and modifiers.
 func parseSecretArgs(input string) (string, ResolveOptions, error) {
 	defer perf.Track(nil, "secrets.parseSecretArgs")()
 
 	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(input), secretTag))
-
-	parts := strings.Split(s, "|")
-	name := strings.TrimSpace(parts[0])
-	if name == "" {
-		return "", ResolveOptions{}, ErrEmptyName
-	}
-
-	opts := ResolveOptions{}
-	for _, p := range parts[1:] {
-		segs := strings.SplitN(strings.TrimSpace(p), " ", 2)
-		if len(segs) != 2 {
-			return "", ResolveOptions{}, fmt.Errorf("%w: invalid modifier %q", ErrInvalidSecretArgs, p)
+	parsed, err := fnparser.ParseSecret(s)
+	if err != nil {
+		if strings.TrimSpace(s) == "" {
+			return "", ResolveOptions{}, ErrEmptyName
 		}
-		key := strings.Trim(segs[0], `"'`)
-		val := strings.Trim(strings.TrimSpace(segs[1]), `"'`)
-		switch key {
-		case "path":
-			opts.Path = val
-		case "default":
-			v := val
-			opts.Default = &v
-		default:
-			return "", ResolveOptions{}, fmt.Errorf("%w: unknown modifier %q", ErrInvalidSecretArgs, key)
-		}
+		return "", ResolveOptions{}, fmt.Errorf("%w: %w", ErrInvalidSecretArgs, err)
 	}
-
-	return name, opts, nil
+	return parsed.Name, ResolveOptions{Path: parsed.Path, Raw: parsed.Raw, Default: parsed.Default}, nil
 }

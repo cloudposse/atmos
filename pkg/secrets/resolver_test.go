@@ -157,12 +157,20 @@ func (assertErr) Error() string { return "not found" }
 
 // TestParseSecretArgs covers name + modifier parsing.
 func TestParseSecretArgs(t *testing.T) {
-	name, opts, err := parseSecretArgs(`!secret DB_CONFIG | path ".host" | default "localhost"`)
+	name, opts, err := parseSecretArgs(`!secret DB_CONFIG | raw | default "localhost"`)
 	require.NoError(t, err)
 	assert.Equal(t, "DB_CONFIG", name)
-	assert.Equal(t, ".host", opts.Path)
+	assert.True(t, opts.Raw)
 	require.NotNil(t, opts.Default)
 	assert.Equal(t, "localhost", *opts.Default)
+
+	name, opts, err = parseSecretArgs(`!secret DB_CONFIG |raw`)
+	require.NoError(t, err)
+	assert.Equal(t, "DB_CONFIG", name)
+	assert.True(t, opts.Raw)
+
+	_, _, err = parseSecretArgs(`!secret DB_CONFIG | raw | path ".host"`)
+	require.ErrorIs(t, err, ErrInvalidSecretArgs)
 
 	_, _, err = parseSecretArgs("!secret ")
 	require.ErrorIs(t, err, ErrEmptyName)

@@ -41,7 +41,7 @@ func init() {
 func runSecretSet(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretSet")()
 
-	scope, err := parseScope(cmd, args)
+	scope, err := parseSetScope(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -70,6 +70,75 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// parseSetScope permits --component to be omitted only when a positional name resolves to one
+// consistent global declaration in the selected stack. A component is still used internally to
+// load the inherited declaration, but it cannot affect the resulting global backend coordinate.
+func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
+	scope, err := parseScopeStack(cmd, args)
+	if err != nil {
+		return scope, err
+	}
+	if scope.Component != "" || len(args) == 0 {
+		return requireScopeComponent(scope, cmd, args)
+	}
+	target, err := setTargetFromArg(args[0])
+	if err != nil {
+		return scope, err
+	}
+	component, componentType, err := findGlobalSetContext(scope, target.name)
+	if err != nil {
+		return scope, err
+	}
+	scope.Component = component
+	if scope.ComponentType == "" {
+		scope.ComponentType = componentType
+	}
+	return scope, nil
+}
+
+func findGlobalSetContext(scope secretScope, name string) (string, string, error) {
+	entries, _, err := enumerateScopesFn(secretScope{Stack: scope.Stack, ComponentType: scope.ComponentType})
+	if err != nil {
+		return "", "", componentRequiredForSet(name, fmt.Sprintf("the global declaration could not be verified: %v", err))
+	}
+	var selected *secrets.Declaration
+	var component, componentType string
+	for _, entry := range entries {
+		if entry.Stack != "" && entry.Stack != scope.Stack {
+			continue
+		}
+		if scope.ComponentType != "" && entry.ComponentType != "" && entry.ComponentType != scope.ComponentType {
+			continue
+		}
+		decl, ok := secrets.ExtractDeclarations(entry.Section)[name]
+		if !ok {
+			continue
+		}
+		if decl.Scope != secrets.ScopeGlobal {
+			return "", "", componentRequiredForSet(name, "the declaration is not global")
+		}
+		if selected != nil && decl != *selected {
+			return "", "", componentRequiredForSet(name, "global declarations differ between components")
+		}
+		copy := decl
+		selected = &copy
+		if component == "" {
+			component, componentType = entry.Component, entry.ComponentType
+		}
+	}
+	if selected == nil {
+		return "", "", componentRequiredForSet(name, "no global declaration was found in the stack")
+	}
+	return component, componentType, nil
+}
+
+func componentRequiredForSet(name, reason string) error {
+	return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+		WithExplanationf("--component is required to set secret %q: %s", name, reason).
+		WithHint("Omit --component only for a secret declared with `scope: global`; otherwise specify --component or -c").
+		Err()
+}
+
 // setSuccessMessage describes where the value was written: shared scopes (stack, global) name the
 // shared location so the user knows every consumer sees the new value.
 func setSuccessMessage(svc secretService, scope secretScope, name string) string {
@@ -96,13 +165,7 @@ type setTarget struct {
 // TTY, and falls back to the standard "NAME required" error in non-interactive contexts.
 func resolveSetName(svc secretService, args []string) (setTarget, error) {
 	if len(args) > 0 {
-		name, value, hasValue := strings.Cut(args[0], "=")
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return setTarget{}, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-				WithExplanation("secret NAME is required").Err()
-		}
-		return setTarget{name: name, value: value, hasValue: hasValue}, nil
+		return setTargetFromArg(args[0])
 	}
 
 	names := declaredNames(svc)
@@ -116,6 +179,16 @@ func resolveSetName(svc secretService, args []string) (setTarget, error) {
 		return setTarget{}, promptErr
 	}
 	return setTarget{name: chosen}, nil
+}
+
+func setTargetFromArg(arg string) (setTarget, error) {
+	name, value, hasValue := strings.Cut(arg, "=")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return setTarget{}, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("secret NAME is required").Err()
+	}
+	return setTarget{name: name, value: value, hasValue: hasValue}, nil
 }
 
 // declaredNames returns the sorted declared secret names for the service's scope.

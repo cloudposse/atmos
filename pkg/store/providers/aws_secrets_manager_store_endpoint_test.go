@@ -14,9 +14,10 @@ var errTestSetAuth = errors.New("primed init error")
 
 func TestMarshalSecretsManagerValue(t *testing.T) {
 	tests := []struct {
-		name  string
-		value any
-		want  string
+		name   string
+		value  any
+		secret bool
+		want   string
 	}{
 		{
 			name:  "json object string passes through verbatim",
@@ -32,6 +33,12 @@ func TestMarshalSecretsManagerValue(t *testing.T) {
 			name:  "json object string with surrounding whitespace is trimmed",
 			value: "  {\"key\":\"value\"}\n",
 			want:  `{"key":"value"}`,
+		},
+		{
+			name:   "secret string is stored verbatim",
+			value:  "hello",
+			secret: true,
+			want:   `hello`,
 		},
 		{
 			name:  "invalid json string is encoded as quoted json",
@@ -57,7 +64,7 @@ func TestMarshalSecretsManagerValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := marshalSecretsManagerValue(tt.value)
+			got, err := marshalSecretsManagerValue(tt.value, tt.secret)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, string(got))
 		})
