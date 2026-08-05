@@ -73,7 +73,8 @@ This table shows each Atlantis feature and the matching Atmos Native CI feature.
 | The `$PLANFILE` passed from the plan step to the apply step | `components.terraform.planfiles` storage (S3, GitHub Artifacts, or a local path), with `--verify-plan` on `deploy` | The `deploy` command creates a new plan. The `deploy` command compares the new plan to the stored plan before it runs the apply step. |
 | `terraform_version` set for each project | `dependencies.tools.terraform` set on the component, stack, or workflow | The Atmos toolchain manages the version. You do not set the version as a separate project field. |
 | A lock on a project during plan or apply | `atmos pro lock` and `atmos pro unlock` | These commands need Atmos Pro. See [Known Gaps](#known-gaps). |
-| `automerge`, `parallel_plan`, `parallel_apply` | A GitHub Actions matrix job, with branch protection rules or a merge queue | The matrix job runs affected components at the same time. You do not need a separate flag for this. |
+| `parallel_plan`, `parallel_apply` | A GitHub Actions matrix job | This is safe for independent components. Do not apply components with `dependencies.components` in an unordered matrix — a dependent component can apply before the component it depends on. For those components, use `atmos terraform deploy --affected` or `atmos terraform apply --affected` instead. Both flags apply the affected components in dependency order. |
+| `automerge` | See [Known Gaps](#known-gaps) | Atlantis applies before the merge, then merges the pull request. The default Atmos Native CI flow plans before the merge and applies after the merge, so there is no direct equivalent. |
 | `allowed_regexp_prefixes` | Not needed | The command `atmos describe affected` finds the correct components. You do not need a fixed list of path patterns. |
 
 ## Checklist to Remove Atlantis
@@ -81,22 +82,25 @@ This table shows each Atlantis feature and the matching Atmos Native CI feature.
 1. Add the `ci:` block to `atmos.yaml`. Set `enabled`, `output`, `summary`, `checks`, and
   `comments`. See [atmos-ci Native CI First](../../atmos-ci/SKILL.md#native-ci-first) for the
   full schema.
-2. Add two GitHub Actions workflows. Add a pull request workflow that finds the affected matrix
+2. If the project uses the Atlantis `$PLANFILE` plan/apply consistency guarantee, configure
+  `components.terraform.planfiles` storage in `atmos.yaml` and enable `--verify-plan` on `deploy`.
+  Skip this step for projects that do not rely on that guarantee.
+3. Add two GitHub Actions workflows. Add a pull request workflow that finds the affected matrix
   and runs a plan. Add a merge or manual workflow that runs a deploy. Use the examples in
   [atmos-ci references/native-ci.md](../../atmos-ci/references/native-ci.md). Grant only the
   permissions each enabled `ci.*` feature needs, such as `statuses: write`, `checks: write`, or
   `pull-requests: write`.
-3. Run both systems on real pull requests. Compare the plan output, the resource counts, and the
+4. Run both systems on real pull requests. Compare the plan output, the resource counts, and the
   pass or fail result. Confirm the results match before you continue.
-4. Remove the `integrations.atlantis` section from `atmos.yaml`. Remove any `settings.atlantis`
+5. Remove the `integrations.atlantis` section from `atmos.yaml`. Remove any `settings.atlantis`
   overrides from the stack config files.
 
 **Note:** Read the [Known Gaps](#known-gaps) section before you continue. If the team uses
 Atlantis project locks or apply-time pull request comments, make a plan for this gap before you
 remove Atlantis.
 
-5. Delete the `atlantis.yaml` file from the project.
-6. Stop the Atlantis server. Remove the Atlantis webhook.
+6. Delete the `atlantis.yaml` file from the project.
+7. Stop the Atlantis server. Remove the Atlantis webhook.
 
 ## Known Gaps
 
@@ -113,6 +117,12 @@ feature.
 - **The Azure Blob and GCS planfile stores are not built yet.** The
   `components.terraform.planfiles.stores` config supports S3, GitHub Artifacts, and a local path
   today.
+- **There is no direct `automerge` equivalent for the default Native CI flow.** Atlantis
+  `automerge` merges a pull request right after a successful apply, in a flow where the apply runs
+  before the merge. The default Atmos Native CI flow plans before the merge and applies after the
+  merge, so there is no apply result to gate a merge on. A team that wants an apply-before-merge
+  flow can enable GitHub's own Auto-merge feature on the pull request, gated on required checks,
+  but this is a different pipeline shape from the Native CI default, not a drop-in replacement.
 - **There is no GitLab CI provider yet.** The GitHub provider is complete. The Atmos team has not
   built the GitLab provider yet.
 
