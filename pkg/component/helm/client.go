@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
@@ -112,7 +113,9 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 			return releaseActionResult{Operation: releaseOperationInstall}, resolveErr
 		}
 		spec.Lifecycle = lifecycle
-		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
+		operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
+		defer cancel()
+		manifest, installErr := installRelease(operationCtx, actx, spec, dryRun)
 		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall, Lifecycle: lifecycle}, installErr
 	} else if historyErr != nil {
 		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
@@ -122,8 +125,27 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		return releaseActionResult{Operation: releaseOperationUpgrade}, resolveErr
 	}
 	spec.Lifecycle = lifecycle
-	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
+	operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
+	defer cancel()
+	manifest, upgradeErr := upgradeRelease(operationCtx, actx, spec, dryRun)
 	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade, Lifecycle: lifecycle}, upgradeErr
+}
+
+// releaseOperationContext applies the effective lifecycle timeout to every
+// cluster-side Helm action. A zero timeout intentionally remains unbounded
+// during the timeout-default migration.
+func releaseOperationContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+func releaseWaitOptions(ctx context.Context) []kube.WaitOption {
+	return []kube.WaitOption{
+		kube.WithWaitContext(ctx),
+		kube.WithWaitForDeleteMethodContext(ctx),
+	}
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
@@ -144,6 +166,7 @@ func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action
 	client.CreateNamespace = spec.CreateNamespace
 	client.Version = spec.Version
 	configureInstallLifecycle(client, spec.Lifecycle.Policy)
+	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -159,6 +182,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.Namespace = spec.Namespace
 	client.Version = spec.Version
 	configureUpgradeLifecycle(client, spec.Lifecycle.Policy)
+	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -303,6 +327,8 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
+	defer cancel()
 
 	actx, err := newActionContext(spec.Namespace)
 	if err != nil {
@@ -311,21 +337,18 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 
 	client := action.NewUninstall(actx.cfg)
 	configureUninstallLifecycle(client, spec.Lifecycle.Policy, dryRun)
-	client.WaitOptions = []kube.WaitOption{
-		kube.WithWaitContext(ctx),
-		kube.WithWaitForDeleteMethodContext(ctx),
-	}
+	client.WaitOptions = releaseWaitOptions(operationCtx)
 	if _, err := client.Run(spec.ReleaseName); err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
 		uninstallErr := fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
-		if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
 			return errors.Join(ctxErr, uninstallErr)
 		}
 		return uninstallErr
 	}
-	if err := ctx.Err(); err != nil {
+	if err := operationCtx.Err(); err != nil {
 		return err
 	}
 	return nil
