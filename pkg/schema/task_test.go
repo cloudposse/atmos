@@ -1193,6 +1193,83 @@ func TestSliceToAny_ConvertsTypedSlice(t *testing.T) {
 	assert.Equal(t, typed[1], slice[1])
 }
 
+// containerStepWithBlockYAML is a single `type: container, action: build`
+// step with a full `with:` block, in the exact shape a user writes it in
+// either a workflow file or a commands.yaml custom command.
+const containerStepWithBlockYAML = `
+- name: build
+  type: container
+  action: build
+  provider: docker
+  with:
+    engine: buildx
+    context: app
+    dockerfile: Dockerfile
+    tags:
+      - "example.invalid/demo:sha-test"
+    driver:
+      name: atmos-native-ci
+      provider: docker-container
+    cache:
+      from:
+        - type: registry
+          ref: "example.invalid/demo:buildcache"
+      to:
+        - type: registry
+          ref: "example.invalid/demo:buildcache"
+          mode: max
+`
+
+// TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically confirms
+// the public contract cited by https://github.com/cloudposse/atmos/issues/2876:
+// a `type: container` step's `with:` block must decode into the same Build
+// struct whether it's parsed as a standalone workflow file (direct
+// yaml.Node.Decode -> Task.UnmarshalYAML) or as a commands.yaml custom
+// command merged into Viper's config tree (mapstructure -> TasksDecodeHook ->
+// decodeTaskFromMap). Both call paths are exercised here exactly as their
+// real callers do: yaml.Unmarshal for the workflow-file path (see
+// pkg/utils.UnmarshalYAMLFromFile, used to load workflows/*.yaml), and
+// mapstructure.NewDecoder with TasksDecodeHook for the Viper path (see
+// pkg/config's atmosDecodeHook, used to decode atmos.yaml's `commands:`).
+func TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepWithBlockYAML), &fromYAML))
+	require.Len(t, fromYAML, 1)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepWithBlockYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 1)
+
+	workflowStep := fromYAML[0]
+	commandStep := fromMapstructure[0]
+
+	require.NotNil(t, workflowStep.Build, "workflow-file path must decode with: into Build")
+	require.NotNil(t, commandStep.Build, "custom-command path must decode with: into Build")
+	assert.Equal(t, workflowStep.Build, commandStep.Build,
+		"a type: container step's with: block must decode identically for workflow files and custom commands")
+	assert.Nil(t, workflowStep.With, "with: must not also leak into the generic With map for a container step")
+	assert.Nil(t, commandStep.With, "with: must not also leak into the generic With map for a container step")
+}
+
 // TestDecodeTaskItem_MapAnyAny verifies the default branch of decodeTaskItem that
 // stringifies a map[any]any item before decoding it as a task map.
 func TestDecodeTaskItem_MapAnyAny(t *testing.T) {

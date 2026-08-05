@@ -782,6 +782,22 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
 	}
+
+	// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
+	// `type: container` steps, or the generic With map otherwise -- exactly
+	// as Task.UnmarshalYAML's applyStepPolymorphicNodes handles it for a step
+	// loaded directly from a workflow YAML file. This mapstructure-based
+	// decode path (used for custom commands merged into atmos.yaml's Viper
+	// config tree) never invokes that yaml.Unmarshaler method, so it must
+	// pull `with:` out and replay the same polymorphic decode explicitly.
+	// Without this, `with:` only reaches the plain mapstructure struct
+	// decode below (which has no notion of the polymorphism) and
+	// Build/Run/Push/Inspect stay nil regardless of what `with:` contains.
+	withValue, hasWith := m["with"]
+	if hasWith {
+		delete(m, "with")
+	}
+
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
@@ -803,7 +819,40 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if task.Type == "" {
 		task.Type = TaskTypeShell
 	}
+
+	if hasWith {
+		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
+			generic:   &task.With,
+			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+		}); err != nil {
+			return Task{}, fmt.Errorf("failed to decode task with-block at index %d: %w", index, err)
+		}
+	}
+
 	return task, nil
+}
+
+// decodeStepWithFromMapValue applies the same `with:` polymorphic decode as
+// decodeStepWith (see workflow.go), but starting from a plain Go value
+// (as produced by mapstructure/Viper's merged config tree) instead of a
+// *yaml.Node. It round-trips the value through YAML so both the direct
+// workflow-file path (yaml.Node.Decode -> UnmarshalYAML) and this
+// mapstructure-based path share one implementation of the with:->Build/
+// Run/Push/Inspect promotion and can't drift apart.
+func decodeStepWithFromMapValue(withValue any, stepType, action string, t *stepPolyTargets) error {
+	withBytes, err := yaml.Marshal(withValue)
+	if err != nil {
+		return err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(withBytes, &doc); err != nil {
+		return err
+	}
+	node := &doc
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
+		node = doc.Content[0]
+	}
+	return decodeStepWith(node, stepType, action, t)
 }
 
 func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
