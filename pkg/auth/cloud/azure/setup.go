@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -550,24 +551,13 @@ func writeMSALCacheToFile(msalCachePath string, data []byte) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := msalCachePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(context.Background(), msalCachePath, func() error {
+		if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write MSAL cache: %w", err)
-	}
-
-	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
-	return nil
+		log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
+		return nil
+	})
 }
 
 // tokenCacheParams holds parameters for adding a token to MSAL cache.
@@ -632,53 +622,39 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Load existing profile or create new one.
-	var profile map[string]interface{}
-	data, err := os.ReadFile(profilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read Azure profile: %w", err)
+	return withFileLock(context.Background(), profilePath, func() error {
+		// Load existing profile or create new one.
+		var profile map[string]interface{}
+		data, err := os.ReadFile(profilePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read Azure profile: %w", err)
+			}
+			profile = map[string]interface{}{
+				"installationId": "",
+				"subscriptions":  []interface{}{},
+			}
+		} else {
+			// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &profile); err != nil {
+				return fmt.Errorf("failed to parse Azure profile: %w", err)
+			}
 		}
-		profile = map[string]interface{}{
-			"installationId": "",
-			"subscriptions":  []interface{}{},
+
+		profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
+		updatedData, err := json.MarshalIndent(profile, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal Azure profile: %w", err)
 		}
-	} else {
-		// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
-		data = stripBOM(data)
 
-		if err := json.Unmarshal(data, &profile); err != nil {
-			return fmt.Errorf("failed to parse Azure profile: %w", err)
+		if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
-	}
-
-	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
-
-	// Write updated profile.
-	updatedData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Azure profile: %w", err)
-	}
-
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := profilePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
-	}
-
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
-	return nil
+		log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
+		return nil
+	})
 }
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
@@ -755,66 +731,51 @@ func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken stri
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Load existing entries or create new array.
-	var entries []map[string]interface{}
-	data, err := os.ReadFile(entriesPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read service principal entries: %w", err)
-		}
-		entries = []map[string]interface{}{}
-	} else {
-		// Strip UTF-8 BOM if present.
-		data = stripBOM(data)
-
-		if err := json.Unmarshal(data, &entries); err != nil {
-			// If file is corrupted, start fresh.
-			log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+	return withFileLock(context.Background(), entriesPath, func() error {
+		// Load existing entries or create a new array.
+		var entries []map[string]interface{}
+		data, err := os.ReadFile(entriesPath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read service principal entries: %w", err)
+			}
 			entries = []map[string]interface{}{}
+		} else {
+			// Strip UTF-8 BOM if present.
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &entries); err != nil {
+				// If file is corrupted, start fresh.
+				log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+				entries = []map[string]interface{}{}
+			}
 		}
-	}
 
-	// Find or create entry for this service principal.
-	// Azure CLI looks up entries by client_id field.
-	var found bool
-	for i, entry := range entries {
-		if cid, ok := entry["client_id"].(string); ok && cid == clientID {
-			// Update existing entry.
-			entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
-			found = true
-			break
+		// Azure CLI looks up entries by client_id field.
+		var found bool
+		for i, entry := range entries {
+			if cid, ok := entry["client_id"].(string); ok && cid == clientID {
+				entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
+				found = true
+				break
+			}
 		}
-	}
 
-	if !found {
-		// Add new entry.
-		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
-	}
-
-	// Write updated entries.
-	updatedData, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal service principal entries: %w", err)
-	}
-
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := entriesPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock service principal entries file", "lock_file", lockPath, "error", unlockErr)
+		if !found {
+			entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
 		}
-	}()
 
-	if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write service principal entries: %w", err)
-	}
+		updatedData, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal service principal entries: %w", err)
+		}
 
-	log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
-	return nil
+		if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write service principal entries: %w", err)
+		}
+		log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
+		return nil
+	})
 }
 
 // createServicePrincipalEntry creates a service principal entry for OIDC authentication.
