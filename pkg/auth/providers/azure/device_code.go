@@ -41,6 +41,10 @@ type deviceCodeProvider struct {
 	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
 	cacheStorage   CacheStorage
 	realm          string // Credential isolation realm set by auth manager.
+	// authMethod is the AzureCredentials.AuthMethod value this provider mints
+	// (device_code, or interactive when embedded by interactiveProvider). It also
+	// selects the MSAL cache account_source label.
+	authMethod string
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
@@ -112,6 +116,7 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		clientID:       cfg.ClientID,
 		cloudEnv:       azureCloud.GetCloudEnvironment(cfg.CloudEnvironment),
 		cacheStorage:   &defaultCacheStorage{},
+		authMethod:     authTypes.AzureAuthMethodDeviceCode,
 	}, nil
 }
 
@@ -438,6 +443,25 @@ func (p *deviceCodeProvider) captureHomeAccountID(accounts []public.Account, res
 	}
 }
 
+// credentialsAuthMethod returns the AuthMethod this provider mints, defaulting
+// to device_code for instances constructed without one (e.g. in tests).
+func (p *deviceCodeProvider) credentialsAuthMethod() string {
+	if p.authMethod == "" {
+		return authTypes.AzureAuthMethodDeviceCode
+	}
+	return p.authMethod
+}
+
+// accountSource returns the MSAL cache account_source label matching this
+// provider's flow, mirroring what az itself records: "authorization_code" for
+// the interactive browser flow, "device_code" otherwise.
+func (p *deviceCodeProvider) accountSource() string {
+	if p.authMethod == authTypes.AzureAuthMethodInteractive {
+		return "authorization_code"
+	}
+	return "device_code"
+}
+
 // createCredentials creates Azure credentials from acquired tokens.
 // Currently returns nil error but signature matches GetCredentials interface.
 //
@@ -451,7 +475,7 @@ func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (
 		SubscriptionID:   p.subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
-		AuthMethod:       authTypes.AzureAuthMethodDeviceCode,
+		AuthMethod:       p.credentialsAuthMethod(),
 		HomeAccountID:    tokens.homeAccountID,
 	}
 
