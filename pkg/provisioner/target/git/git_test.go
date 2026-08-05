@@ -248,7 +248,7 @@ func TestWriteArtifactSingleFileMode(t *testing.T) {
 	path := filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml")
 
 	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
-		"001_kustomize.config.k8s.io_v1beta1_Component_cert-manager.yaml": []byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Component\n"),
+		"001_kustomize.config.k8s.io_v1alpha1_Component_cert-manager.yaml": []byte("apiVersion: kustomize.config.k8s.io/v1alpha1\nkind: Component\n"),
 	}}
 	require.NoError(t, writeArtifact(workdir, path, artifact, false))
 
@@ -259,7 +259,7 @@ func TestWriteArtifactSingleFileMode(t *testing.T) {
 
 	got, err := os.ReadFile(abs)
 	require.NoError(t, err)
-	assert.Equal(t, "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Component\n", string(got))
+	assert.Equal(t, "apiVersion: kustomize.config.k8s.io/v1alpha1\nkind: Component\n", string(got))
 }
 
 func TestWriteArtifactSingleFileModeMergesMultipleDocuments(t *testing.T) {
@@ -287,7 +287,7 @@ func TestWriteArtifactSingleFileModeReplacesExistingDirectory(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(stale, "001_stale.yaml"), 0o755))
 
 	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
-		"001_kustomize.config.k8s.io_v1beta1_Component.yaml": []byte("kind: Component\n"),
+		"001_kustomize.config.k8s.io_v1alpha1_Component.yaml": []byte("kind: Component\n"),
 	}}
 	require.NoError(t, writeArtifact(workdir, path, artifact, false))
 
@@ -316,6 +316,30 @@ func TestWriteArtifactWriteFailure(t *testing.T) {
 	err := writeArtifact(workdir, filepath.Join("clusters", "dev"), &target.ProvisionArtifact{Files: map[string][]byte{
 		"namespace.yaml": []byte("kind: Namespace\n"),
 	}}, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
+}
+
+func TestWriteArtifactSingleFileModeWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-mode permissions behave differently on Windows")
+	}
+	if currentUser, userErr := user.Current(); userErr == nil && (currentUser.Uid == "0" || currentUser.Username == "root") {
+		t.Skip("running as root ignores filesystem permissions")
+	}
+
+	workdir := t.TempDir()
+	// Make a read-only managed-path parent so writeSingleArtifactFile's
+	// MkdirAll/WriteFile under it fail.
+	managed := filepath.Join(workdir, "clusters")
+	require.NoError(t, os.Mkdir(managed, 0o555))
+	t.Cleanup(func() {
+		_ = os.Chmod(managed, 0o755)
+	})
+
+	err := writeArtifact(workdir, filepath.Join("clusters", "dev", "manifest.yaml"), &target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml": []byte("kind: Namespace\n"),
+	}}, false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
 }

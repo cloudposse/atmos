@@ -267,7 +267,7 @@ components:
             commit:
               message: "Render manifests for {{ .vars.environment }}"
       manifests:
-        - apiVersion: kustomize.config.k8s.io/v1beta1
+        - apiVersion: kustomize.config.k8s.io/v1alpha1
           kind: Component
           patches:
             - target:

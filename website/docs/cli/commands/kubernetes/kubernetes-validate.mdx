@@ -103,14 +103,19 @@ With `--server`:
 
 ### Kustomize config objects
 
-Kustomize's own `Kustomization` and `Component` objects
-(`apiVersion: kustomize.config.k8s.io/*`) are not Kubernetes API resources —
-they are local input consumed by the `kustomize` build tool itself, and
-Kustomize does not require (or, historically, even permit) a `metadata.name`
-on them. `validate` recognizes these two kinds specifically and does not
-require `metadata.name` for them; every other offline check (a resolvable
-group/version/kind, and DNS-1123 validity for a name that *is* given) still
-applies. See
+Kustomize's own `Kustomization` and `Component` objects are not Kubernetes API
+resources — they are local input consumed by the `kustomize` build tool
+itself, and Kustomize does not require (or, historically, even permit) a
+`metadata.name` on them. `validate` recognizes these two exact, versioned
+pairs and does not require `metadata.name` for them:
+
+- `apiVersion: kustomize.config.k8s.io/v1beta1`, `kind: Kustomization`
+- `apiVersion: kustomize.config.k8s.io/v1alpha1`, `kind: Component`
+
+A `Kustomization`/`Component` object at a different `apiVersion` is not
+recognized and still requires `metadata.name`. Every other offline check (a
+resolvable group/version/kind, and DNS-1123 validity for a name that *is*
+given) still applies regardless. See
 [Generating a Kustomize component for GitOps](/stacks/components/kubernetes#generating-a-kustomize-component-for-gitops)
 for the pattern this supports.
 
