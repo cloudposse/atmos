@@ -52,6 +52,17 @@ func TestNewProvider_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-interactive-valid",
+			providerName: "azure-interactive",
+			config: &schema.Provider{
+				Kind: "azure/interactive",
+				Spec: map[string]interface{}{
+					"tenant_id": "test-tenant-id",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "azure-oidc-valid",
 			providerName: "azure-oidc",
 			config: &schema.Provider{
