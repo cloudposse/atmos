@@ -3,6 +3,7 @@ package schema
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"time"
 
@@ -873,6 +874,21 @@ type ComponentNodeHooks interface {
 	// single-component Terraform behavior where an after-hook failure fails
 	// the command.
 	After(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error) error
+}
+
+// ComponentNodeHookWriters contains the output streams for a component node.
+type ComponentNodeHookWriters struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// ComponentNodeHooksWithOutput is implemented by node hooks that can direct
+// subprocess output through component-specific serialized writers.
+type ComponentNodeHooksWithOutput interface {
+	ComponentNodeHooks
+
+	BeforeWithWriters(ctx context.Context, info *ConfigAndStacksInfo, writers ComponentNodeHookWriters) error
+	AfterWithWriters(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error, writers ComponentNodeHookWriters) error
 }
 
 // TerraformPlanCIResultSet contains deterministic per-node Terraform results
