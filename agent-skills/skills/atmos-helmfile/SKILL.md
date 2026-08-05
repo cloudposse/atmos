@@ -224,6 +224,19 @@ atmos helmfile sync ingress-nginx --stack dev
 # -> Helmfile runs
 ```
 
+When using `source`, prefer enabling `provision.workdir` so each component-stack instance runs from
+an isolated staged directory:
+
+```yaml
+components:
+  helmfile:
+    ingress-nginx:
+      source: "github.com/cloudposse/helmfiles//releases/ingress-nginx?ref=1.0.0"
+      provision:
+        workdir:
+          enabled: true
+```
+
 ### Source Commands
 
 Explicit commands for fine-grained source management:

@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // testLocalAdapter is a minimal local adapter for testing.
@@ -27,6 +28,7 @@ func (l *testLocalAdapter) Resolve(
 	tempDir string,
 	currentDepth int,
 	maxDepth int,
+	_ *schema.AtmosConfiguration,
 ) ([]ResolvedPaths, error) {
 	if importPath == "" {
 		return nil, errUtils.ErrImportPathRequired
@@ -40,7 +42,8 @@ func (l *testLocalAdapter) Resolve(
 
 	// Log if import path is outside base directory.
 	if !strings.HasPrefix(filepath.Clean(resolvedPath), filepath.Clean(basePath)) {
-		log.Trace("Import path is outside of base directory",
+		log.Trace(
+			"Import path is outside of base directory",
 			"importPath", resolvedPath,
 			"basePath", basePath,
 		)
@@ -81,7 +84,7 @@ func (l *testLocalAdapter) Resolve(
 
 		// Recursively process nested imports.
 		if len(imports) > 0 {
-			nestedPaths, err := ProcessImportsFromAdapter(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
+			nestedPaths, err := ProcessImportsFromAdapter(nil, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue

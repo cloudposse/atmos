@@ -1,15 +1,23 @@
 package exec
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	listdeps "github.com/cloudposse/atmos/pkg/list/dependencies"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -18,27 +26,148 @@ const errWrapFmt = "%w: %w"
 // ExecuteTerraformAll executes terraform commands for all components in dependency order.
 func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAll")()
+	return ExecuteTerraformAllWithContext(context.Background(), info)
+}
 
+// ExecuteTerraformAllWithContext executes all selected Terraform components through
+// the graph-backed scheduler using the provided cancellation context.
+func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAllWithContext")()
 	// Validate inputs for --all flag usage.
-	if info.Stack == "" {
-		return errUtils.ErrStackRequiredWithAllFlag
-	}
+	// When no stack is given, --all processes every stack — matching the documented
+	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
 	if info.ComponentFromArg != "" {
 		return errUtils.ErrComponentWithAllFlagConflict
 	}
 
+	var atmosConfig schema.AtmosConfiguration
+	var stacks map[string]any
+	preflight := spinner.New("Loading stack configuration and resolving templates")
+	preflight.Start()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
+		preflight.Error("Failed to load Terraform stack configuration")
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
-	// Get all stacks with terraform components.
-	stacks, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		"",  // all stacks
-		nil, // all components
+	// Create auth manager so YAML functions (e.g. !terraform.state) can use authenticated
+	// credentials when ExecuteDescribeStacks processes stack configurations under --all.
+	// Mirrors the behavior added for --query/--components in ExecuteTerraformQuery (#2081).
+	preflight.Update("Resolving Terraform identity")
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		preflight.Error("Failed to resolve Terraform identity")
+		return err
+	}
+	if authManager != nil {
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
+	}
+
+	preflight.Update("Resolving Terraform component instances, secrets, and state references")
+	stacks, err = describeTerraformStacksForExecution(&atmosConfig, info, authManager, nil)
+	if err != nil {
+		preflight.Error("Failed to resolve Terraform component instances")
+		return terraformPreflightDescribeError(err)
+	}
+	preflight.Success("Resolved Terraform stacks and dependencies")
+
+	if info.SubCommand == "destroy" {
+		ui.Info("Processing components in reverse dependency order for destroy")
+	} else {
+		ui.Info("Processing components in dependency order")
+	}
+
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
+	})
+}
+
+// terraformClosureRequested reports whether the dependency-closure flags
+// (--include-dependencies/--include-dependents: 0 = off, -1 = unlimited,
+// N>0 = depth) request expansion for this run.
+func terraformClosureRequested(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && (info.IncludeDependencies != 0 || info.IncludeDependents != 0)
+}
+
+// describeTerraformStacksForExecution resolves the described-stacks map that
+// feeds graph-backed Terraform execution, for both the --all path (components
+// == nil) and the --components/--query path.
+//
+// Without closure flags, the describe pass narrows by -s/--components/--tags/
+// --labels exactly as before (the early-skip perf optimization). With closure
+// flags, the selection's prerequisites or dependents may live outside that
+// scope, so narrowing must not happen at describe time; instead, when the
+// selection is bounded and evaluation is on, the shared three-phase scoped
+// evaluation (pkg/list/dependencies.ResolveScopedClosure) fully evaluates only
+// the stacks the reachable closure touches. The scheduler adapter then
+// re-applies the selection filters as the seed and expands the closure on the
+// resulting graph, so the evaluation scope and execution set always agree.
+func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
+	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return ExecuteDescribeStacksWithMocks(
+			atmosConfig,
+			stackName,
+			closureComponents, // engine-supplied closure members (nil = all); never the caller's own selection.
+			[]string{cfg.TerraformComponentType},
+			nil,
+			false,
+			processTemplates,
+			processFunctions,
+			false,
+			info.Skip,
+			authManager,
+			info.UseMocks,
+			nil, // tagsFilter: see above.
+			nil, // labelsFilter: see above.
+		)
+	}
+
+	if !terraformClosureRequested(info) {
+		return describeTerraformStacksNarrowed(atmosConfig, info, authManager, components)
+	}
+
+	// Closure requested. Scoped evaluation only pays off when the selection is
+	// bounded (an unbounded closure covers every stack anyway), evaluation is
+	// actually on, and eager evaluation was not forced as the escape hatch.
+	bounded := info.Stack != "" || len(components) > 0 || len(info.Tags) > 0 || len(info.Labels) > 0
+	needsEvaluation := info.ProcessTemplates || info.ProcessFunctions
+	if !bounded || !needsEvaluation || GetEagerEvaluationSetting(atmosConfig) {
+		return describe("", nil, info.ProcessTemplates, info.ProcessFunctions)
+	}
+
+	direction, depths := listdeps.ClosureScope(info.IncludeDependencies, info.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := listdeps.ResolveScopedClosure(describe, &listdeps.ScopeRequest{
+		Components:       components,
+		Stack:            info.Stack,
+		Tags:             info.Tags,
+		Labels:           info.Labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: info.ProcessTemplates,
+		ProcessFunctions: info.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Stacks, nil
+}
+
+// describeTerraformStacksNarrowed is the historical (no-closure) describe:
+// narrowed by -s/--components and the tags/labels early-skip, bit for bit.
+func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
+	return ExecuteDescribeStacksWithMocks(
+		atmosConfig,
+		info.Stack,
+		components,
 		[]string{cfg.TerraformComponentType},
 		nil,
 		false,
@@ -46,61 +175,30 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		info.ProcessFunctions,
 		false,
 		info.Skip,
-		nil, // authManager
+		authManager,
+		info.UseMocks,
+		info.Tags,
+		info.Labels,
 	)
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
-	}
-
-	// Build dependency graph.
-	graph, err := buildTerraformDependencyGraph(
-		&atmosConfig,
-		stacks,
-		info,
-	)
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrBuildDepGraph, err)
-	}
-
-	// Apply filters if specified.
-	if info.Query != "" || len(info.Components) > 0 || info.Stack != "" {
-		graph = applyFiltersToGraph(graph, stacks, info)
-	}
-
-	// Execute components in dependency order.
-	return executeInDependencyOrder(graph, info)
 }
 
-// executeInDependencyOrder executes terraform commands in dependency order.
-func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
-	// Get execution order.
-	executionOrder, err := graph.TopologicalSort()
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrTopologicalOrder, err)
+// terraformPreflightDescribeError preserves structured errors from stack resolution
+// and explains why graph Terraform commands stop before the scheduler starts.
+func terraformPreflightDescribeError(cause error) error {
+	builder := errUtils.Build(errUtils.ErrExecuteDescribeStacks).
+		WithTitle("Terraform preflight failed").
+		WithCause(cause)
+
+	if errors.Is(cause, secrets.ErrSecretMissing) {
+		return builder.
+			WithExplanation("A required `!secret` could not be resolved before Terraform started.").
+			WithHint("Initialize the reported secret, then rerun the Terraform command.").
+			Err()
 	}
 
-	// For destroy command, reverse the execution order to destroy dependents before dependencies.
-	if info.SubCommand == "destroy" {
-		for i, j := 0, len(executionOrder)-1; i < j; i, j = i+1, j-1 {
-			executionOrder[i], executionOrder[j] = executionOrder[j], executionOrder[i]
-		}
-		log.Info("Processing components in reverse dependency order for destroy", "count", len(executionOrder))
-	} else {
-		log.Info("Processing components in dependency order", "count", len(executionOrder))
-	}
-
-	// Execute components in order.
-	for i := range executionOrder {
-		node := &executionOrder[i]
-		log.Info("Processing component", "index", i+1, "total", len(executionOrder), "component", node.Component, "stack", node.Stack)
-
-		if err := executeTerraformForNode(node, info); err != nil {
-			return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
-		}
-	}
-
-	log.Info("Successfully processed all components", "count", len(executionOrder))
-	return nil
+	return builder.
+		WithExplanation("Terraform component instances could not be resolved before Terraform started.").
+		Err()
 }
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.
@@ -191,6 +289,9 @@ func shouldSkipComponentForGraph(componentSection map[string]any, componentName 
 }
 
 // applyFiltersToGraph applies query and component filters to the graph.
+//
+// Deprecated: production Terraform bulk filtering uses the scheduler adapter.
+// Keep this helper only while legacy graph-filter tests still cover it.
 func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
 	// Determine base set: components/stack if provided; otherwise all nodes.
 	nodeIDs := collectFilteredNodeIDs(graph, info)
@@ -212,10 +313,16 @@ func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema
 	}
 
 	// Filter the graph.
+	// IncludeDependencies is false to preserve the historical scope of `--all -s <stack>`:
+	// only components in the requested stack are processed. Cross-stack prerequisites are
+	// retained as graph edges within the requested stack (where both endpoints are present)
+	// but components outside the requested stack are not pulled in. The
+	// --include-dependencies/--include-dependents flags opt users in to cross-stack
+	// closure execution on the production scheduler-adapter path.
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
-		IncludeDependencies: true,  // Include prerequisites.
-		IncludeDependents:   false, // Exclude reverse deps.
+		IncludeDependencies: false,
+		IncludeDependents:   false,
 	})
 }
 

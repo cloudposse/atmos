@@ -4,7 +4,9 @@ package ci
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/ci/cache"
 	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/pkg/ci/validate/githubactions" // Register the GitHub Actions validator.
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
@@ -19,6 +21,10 @@ var ciCmd = &cobra.Command{
 func init() {
 	// Add subcommands.
 	ciCmd.AddCommand(statusCmd)
+	ciCmd.AddCommand(validateCmd)
+
+	// Cache subcommand group: atmos ci cache {restore,save,list,delete}.
+	ciCmd.AddCommand(cache.Command())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

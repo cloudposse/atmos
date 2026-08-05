@@ -23,6 +23,7 @@ operations. On GitHub Actions, these are written to `$GITHUB_STEP_SUMMARY`.
 ci:
   summary:
     enabled: true
+    template: "summary"
 ```
 </File>
 
@@ -33,6 +34,15 @@ ci:
     On GitHub Actions, writes to `$GITHUB_STEP_SUMMARY`. On GitLab CI, creates job artifacts.
 
     **Default:** `true`
+  </dd>
+
+  <dt>`ci.summary.template`</dt>
+  <dd>
+    Override the name of the summary template loaded from the
+    [templates base path](/cli/configuration/ci/templates). For native Kubernetes components
+    this loads `<base_path>/kubernetes/<template>.md`.
+
+    **Default:** `summary`
   </dd>
 </dl>
 

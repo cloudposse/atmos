@@ -20,15 +20,27 @@ type MCPJSONConfig struct {
 
 // MCPJSONServer represents a single MCP server entry in .mcp.json.
 type MCPJSONServer struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
 }
 
 // BuildMCPJSONEntry creates a .mcp.json entry for a server.
 // Servers with identity are wrapped with 'atmos auth exec' for credential injection.
 // If toolchainPATH is non-empty, it is prepended to the server's PATH env var.
 func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) MCPJSONServer {
+	if serverCfg.TransportType() == schema.MCPTransportHTTP {
+		return MCPJSONServer{
+			Type:    schema.MCPTransportHTTP,
+			URL:     serverCfg.URL,
+			Headers: copyStringMap(serverCfg.Headers),
+		}
+	}
+
 	env := copyEnv(serverCfg.Env)
 
 	// Inject toolchain PATH so the CLI tool's MCP subprocess can find uvx/npx.
@@ -44,6 +56,7 @@ func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) 
 			Command: "atmos",
 			Args:    args,
 			Env:     env,
+			Cwd:     serverCfg.Cwd,
 		}
 	}
 
@@ -52,6 +65,7 @@ func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) 
 		Command: serverCfg.Command,
 		Args:    serverCfg.Args,
 		Env:     env,
+		Cwd:     serverCfg.Cwd,
 	}
 }
 
@@ -69,6 +83,13 @@ func GenerateMCPConfig(servers map[string]schema.MCPServerConfig, toolchainPATH 
 
 // WriteMCPConfigToTempFile generates an MCP config and writes it to a temp file.
 // Returns the file path. Caller must clean up the file when done.
+//
+// Each invocation gets a unique path via os.CreateTemp's `*` pattern
+// substitution. Earlier versions used a fixed path
+// (os.TempDir()/atmos-mcp-config.json) which raced when two concurrent
+// `atmos ai ask` (or any other consumer) invocations ran on the same
+// machine — the slower writer's content would be silently overwritten
+// while the slower reader could see partial JSON.
 func WriteMCPConfigToTempFile(servers map[string]schema.MCPServerConfig, toolchainPATH string) (string, error) {
 	config := GenerateMCPConfig(servers, toolchainPATH)
 
@@ -79,23 +100,57 @@ func WriteMCPConfigToTempFile(servers map[string]schema.MCPServerConfig, toolcha
 
 	const tempFilePerms = 0o600
 
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, "atmos-mcp-config.json")
+	// os.CreateTemp gives us a unique path per invocation. The `*` in the
+	// pattern is replaced with a random suffix; the .json extension is
+	// preserved so editors / file-browsers detect the file type correctly.
+	tmpFile, err := os.CreateTemp("", "atmos-mcp-config-*.json")
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrMCPConfigWriteFailed, err)
+	}
+	tmpPath := tmpFile.Name()
 
-	if err := os.WriteFile(tmpFile, append(data, '\n'), tempFilePerms); err != nil {
-		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, tmpFile, err)
+	// CreateTemp opens with 0600 by default on Unix and the closest
+	// equivalent on Windows, but be explicit so the contract is
+	// preserved regardless of the OS umask.
+	//
+	// gosec G703 (path traversal) is a false positive on the os.Chmod /
+	// os.Remove calls below: tmpPath comes directly from os.CreateTemp,
+	// which returns a path it just constructed with a random suffix in
+	// a directory it controls. There's no untrusted-input chain.
+	if err := os.Chmod(tmpPath, tempFilePerms); err != nil { //nolint:gosec // tmpPath came from os.CreateTemp; no untrusted input.
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath came from os.CreateTemp; no untrusted input.
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, tmpPath, err)
 	}
 
-	return tmpFile, nil
+	if _, err := tmpFile.Write(append(data, '\n')); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath came from os.CreateTemp; no untrusted input.
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, tmpPath, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath came from os.CreateTemp; no untrusted input.
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, tmpPath, err)
+	}
+
+	return tmpPath, nil
 }
 
 // copyEnv returns a copy of the env map with keys uppercased.
 // Viper lowercases all YAML map keys, but env vars are conventionally UPPERCASE.
 // This restores the expected casing (e.g., aws_region → AWS_REGION).
 func copyEnv(env map[string]string) map[string]string {
-	result := make(map[string]string, len(env))
-	for k, v := range env {
-		result[strings.ToUpper(k)] = v
+	return copyStringMapWithKeyFunc(env, strings.ToUpper)
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	return copyStringMapWithKeyFunc(m, func(k string) string { return k })
+}
+
+func copyStringMapWithKeyFunc(m map[string]string, keyFunc func(string) string) map[string]string {
+	result := make(map[string]string, len(m))
+	for k, v := range m {
+		result[keyFunc(k)] = v
 	}
 	return result
 }

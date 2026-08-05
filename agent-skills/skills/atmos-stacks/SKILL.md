@@ -1,6 +1,6 @@
 ---
 name: atmos-stacks
-description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides"
+description: "Stack configuration: local and remote imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, dependencies, and modernization"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -16,10 +16,20 @@ A stack manifest is a YAML file that declares components and their configuration
 
 Stacks are not Terraform workspaces, although Atmos derives workspace names from stack names. A single stack manifest can configure multiple components, and a single component can appear across many stacks with different variable values.
 
+## Related Skills
+
+| Need | Load |
+|---|---|
+| Local and remote import mechanics | [atmos-imports](../atmos-imports/SKILL.md) |
+| Modernizing legacy stack patterns | [atmos-modernization](../atmos-modernization/SKILL.md) |
+| YAML function inventory | [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md) |
+| Component source provisioning | [atmos-components](../atmos-components/SKILL.md) |
+
 ## Stack Discovery
 
 Atmos discovers stack manifests based on `included_paths` and `excluded_paths` configured in the `stacks` section
-of `atmos.yaml`. For the complete `atmos.yaml` configuration reference, see the `atmos-config` skill.
+of `atmos.yaml`. For root config discovery and routing, see the `atmos-config` skill; for path layout
+and `base_path` behavior, see `atmos-project-layout`.
 
 ### Stack Name Precedence
 
@@ -27,7 +37,7 @@ Atmos resolves the stack name using this priority (highest first):
 
 1. `name` field in the stack manifest (explicit override).
 2. `name_template` in `atmos.yaml` (Go template).
-3. `name_pattern` in `atmos.yaml` (token pattern).
+3. Legacy `name_pattern` in `atmos.yaml` (migration-only; recommend `name_template` or explicit `name`).
 4. File basename (e.g., `prod.yaml` becomes `prod`).
 
 ## Stack Manifest Structure
@@ -43,6 +53,8 @@ import:
   - catalog/vpc/defaults
   - mixins/region/us-east-2
   - orgs/acme/plat/prod/_defaults
+  # Remote imports are supported, but they import stack config only:
+  # - github://acme/config/main/stacks/catalog/vpc.yaml
 
 # Global-scope sections (apply to all components)
 vars: {}
@@ -140,15 +152,21 @@ env:
 
 ### settings
 
-Integration metadata and configuration not passed to Terraform. Used for Spacelift, Atlantis, validation, and other Atmos integrations.
+Integration metadata and configuration not passed to Terraform. Used for Atlantis, validation, and other Atmos integrations.
 
 ```yaml
 settings:
-  spacelift:
-    workspace_enabled: true
-    autodeploy: false
-  depends_on:
-    - vpc
+  validation:
+    check-cidr:
+      schema_type: jsonschema
+      schema_path: schemas/vpc.json
+dependencies:
+  components:
+    - component: vpc
+    - component: dns-zone
+      stack: plat-ue2-prod
+    - kind: file
+      path: configs/service.yaml
 ```
 
 ### metadata
@@ -246,8 +264,9 @@ overrides:
   vars:
     custom_tag: override
   settings:
-    spacelift:
-      autodeploy: true
+    validation:
+      check-cidr:
+        schema_path: schemas/vpc-override.json
 ```
 
 ## Deep-Merge Behavior and Override Precedence
@@ -332,6 +351,10 @@ Atmos provides YAML functions for dynamic value resolution at runtime:
 - `!env <VAR_NAME>` -- Read environment variables with optional defaults.
 - `!exec <command>` -- Execute shell commands and use output.
 - `!include <path>` -- Load content from external files.
+- `!secret <name>` -- Resolve declared secrets.
+- `!append` and `!unset` -- Control inherited list/key merge behavior.
+
+For the full current function inventory, load `atmos-yaml-functions`.
 
 ## Common Patterns and Best Practices
 
@@ -340,8 +363,10 @@ Atmos provides YAML functions for dynamic value resolution at runtime:
 3. **Keep inheritance shallow**: Limit to 2-3 levels of `metadata.inherits` to maintain readability.
 4. **Use `_defaults.yaml` at every level**: Define shared vars, env, and settings at the appropriate organizational level.
 5. **Exclude non-deployable files**: Configure `excluded_paths` to prevent catalog, mixin, and defaults files from being treated as top-level stacks.
-6. **Prefer `name_template` over `name_pattern`**: The Go template approach is more flexible and is the recommended method.
+6. **Use `name` or `name_template` for stack naming**: If legacy `name_pattern` is present, migrate it.
 7. **Use `atmos describe stacks` liberally**: Always verify the resolved configuration before applying changes.
+8. **Treat remote imports as config only**: use component `source:` or `atmos vendor pull` when imported
+   config references component code that is not already local.
 
 ## References
 

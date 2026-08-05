@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var instancesParser *flags.StandardParser
@@ -33,7 +34,14 @@ type InstancesOptions struct {
 	OutputFile       string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 	AuthDisabled     bool
+	Tags             []string
+	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels).
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // instancesCmd lists atmos instances.
@@ -58,6 +66,9 @@ var instancesCmd = &cobra.Command{
 		}
 
 		opts := parseInstancesOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return executeListInstancesCmd(cmd, args, opts)
 	},
@@ -84,7 +95,10 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		OutputFile:       v.GetString("output-file"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -135,11 +149,15 @@ func init() {
 		WithFilterFlag,
 		WithQueryFlag,
 		WithSortFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
+		WithClosureFlags,
 		WithUploadFlag,
 		WithProvenanceFlag,
 		WithOutputFileFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -177,25 +195,33 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return err
 	}
 
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
-		Info:             &configAndStacksInfo,
-		Cmd:              cmd,
-		Args:             args,
-		ShowImports:      opts.Provenance,
-		ColumnsFlag:      opts.Columns,
-		FilterSpec:       opts.Filter,
-		SortSpec:         opts.Sort,
-		Delimiter:        opts.Delimiter,
-		Query:            opts.Query,
-		AuthManager:      authManager,
-		AuthDisabled:     opts.AuthDisabled,
-		OutputFile:       opts.OutputFile,
-		ProcessTemplates: opts.ProcessTemplates,
-		ProcessFunctions: opts.ProcessFunctions,
+		Info:                &configAndStacksInfo,
+		Cmd:                 cmd,
+		Args:                args,
+		Format:              opts.Format,
+		Upload:              opts.Upload,
+		Stack:               opts.Stack,
+		ShowImports:         opts.Provenance,
+		ColumnsFlag:         opts.Columns,
+		FilterSpec:          opts.Filter,
+		SortSpec:            opts.Sort,
+		Delimiter:           opts.Delimiter,
+		Query:               opts.Query,
+		AuthManager:         authManager,
+		AuthDisabled:        opts.AuthDisabled,
+		OutputFile:          opts.OutputFile,
+		ProcessTemplates:    opts.ProcessTemplates,
+		ProcessFunctions:    opts.ProcessFunctions,
+		Skip:                skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		Tags:                opts.Tags,
+		LabelsRaw:           opts.LabelsRaw,
+		IncludeDependencies: opts.IncludeDependencies,
+		IncludeDependents:   opts.IncludeDependents,
 	})
 }

@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: install
 description: Install CLI tools required by your Atmos components, commands, and workflows.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Install CLI tools required by your Atmos components, commands, and workflows. This command downloads and sets up the exact tool versions specified in your toolchain configuration, ensuring consistent execution across your team.
 </Intro>
 
-<Screengrab title="atmos toolchain install --help" slug="atmos-toolchain-install--help" />
+<CastPlayer title="atmos toolchain install --help" src="/casts/screengrabs/atmos-toolchain-install--help.cast" static chrome />
 
 ## Usage
 
@@ -33,6 +33,9 @@ atmos toolchain install hashicorp/terraform@1.5.0
 # Install multiple tools in a single command
 atmos toolchain install opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
 atmos toolchain install terraform helm kubectl tflint
+
+# Limit this batch to two concurrent installs
+atmos toolchain install --max-concurrency 2 opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
 
 # Install all tools from .tool-versions file
 atmos toolchain install
@@ -63,4 +66,76 @@ atmos toolchain install
     <dd>
         Reinstall even if already installed
     </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of tools to install concurrently. The default is `4`.
+        Use a positive integer; values lower than `1` are rejected. This option
+        applies when installing multiple explicit tools or all tools from
+        `.tool-versions`.
+    </dd>
 </dl>
+
+## Parallel Install Configuration
+
+Independent tools in a batch install run concurrently, while Atmos coordinates
+shared downloads, extraction directories, version files, and lockfiles safely.
+Set a project default in `atmos.yaml`, or override it for a single command:
+
+```yaml
+toolchain:
+  max_concurrency: 4
+```
+
+```shell
+ATMOS_TOOLCHAIN_MAX_CONCURRENCY=6 atmos toolchain install
+atmos toolchain install --max-concurrency 8
+```
+
+Concurrency is resolved in this order: `--max-concurrency`,
+`ATMOS_TOOLCHAIN_MAX_CONCURRENCY`, `toolchain.max_concurrency`, then the
+default of `4`.
+
+## How Tools Are Installed on Disk
+
+Atmos installs each tool under a version-specific directory
+(`<install_path>/bin/<owner>/<repo>/<version>/`) and adapts the on-disk layout to
+the shape of the downloaded archive:
+
+- **Single-binary tools** (for example `jq`, `terraform`, `kubectl`) are placed
+  directly in the version directory as a flat executable.
+- **Multi-file ("onedir") tools** (for example `aws/aws-cli` and `nodejs/node`)
+  ship a binary together with runtime siblings — a bundled language runtime,
+  shared libraries, or `node_modules`. For these, Atmos preserves the complete
+  extracted archive under a `.pkg` subdirectory and records each registry
+  entrypoint's real path (such as `aws`, `node`, `npm`, `npx`) in a small sidecar
+  manifest. This keeps each executable next to the files it needs at runtime,
+  matching how the upstream `aqua` CLI installs the same packages.
+
+Atmos does not create symlinks to expose these entrypoints — a design choice
+used consistently across Atmos's install/provisioning code. `which`
+resolves directly to the real, nested path (for example
+`.../24.18.0/.pkg/node-v24.18.0-darwin-arm64/bin/node`), and
+[`atmos toolchain env`](/cli/commands/toolchain/env),
+[`exec`](/cli/commands/toolchain/exec), and
+[`which`](/cli/commands/toolchain/which) all resolve it the same way — including
+every command a multi-command package exposes, whose directories are all added
+to `PATH`. Because exposure needs no symlink, this works identically on macOS,
+Linux, and Windows with no elevated privileges or Developer Mode required.
+
+The only symlinks a onedir install may contain are ones the upstream archive
+itself ships (for example Node's `npm`, which the archive links relatively as
+`../lib/node_modules/...` on Unix). Atmos recreates each such link inside the
+preserved `.pkg` tree after extraction, through a single validated step, so the
+tool functions identically to how it would if installed from its original
+archive; the links are never created by Atmos's exposure logic. Each link is
+reproduced with the archive's **original relative target**, so it resolves
+relative to the link's own directory and works regardless of whether the
+install path is absolute or relative (such as `.tools`). The link's resolved
+target is still validated to stay inside the `.pkg` tree.
+
+On Windows, where creating a symlink normally requires Developer Mode or
+elevated privilege, an archive's own **file** symlink is reproduced as a hard
+link (or a copy if hard-linking is unavailable), so packages that ship such
+links still install without elevation. Archives that ship **directory**
+symlinks remain unsupported on Windows without the required privilege.

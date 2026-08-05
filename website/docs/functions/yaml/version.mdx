@@ -1,0 +1,92 @@
+---
+title: "!version"
+sidebar_position: 90
+sidebar_label: "!version"
+description: Resolve an Atmos-managed version from the active version track lock file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `!version` to read a locked version from the active Atmos version track.
+</Intro>
+
+The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses the stack's asserted `version.track`, then `version.track` from `atmos.yaml`, then `default`.
+
+## Usage
+
+```yaml
+!version <name>
+```
+
+## Example
+
+```yaml
+version:
+  track: prod
+
+components:
+  terraform:
+    datadog-forwarder:
+      dependencies:
+        tools:
+          opentofu: !version opentofu
+      vars:
+        image:
+          tag: !version dd_forwarder
+```
+
+With this lock file:
+
+```yaml
+version: 1
+tracks:
+  prod:
+    opentofu:
+      version: 1.10.6
+    dd_forwarder:
+      version: 5.4.5
+```
+
+Atmos resolves:
+
+```yaml
+dependencies:
+  tools:
+    opentofu: 1.10.6
+vars:
+  image:
+    tag: 5.4.5
+```
+
+## Embedded Strings
+
+Use Go template context for embedded values:
+
+```yaml
+vars:
+  image:
+    uri: "public.ecr.aws/datadog/lambda-extension:{{ .version.dd_forwarder }}"
+```
+
+Use `!version` when the whole YAML value is the version. Use `{{ .version.name }}` when the version is part of a larger string.
+
+## Pinned Entries
+
+For entries with `pin: digest` (alias: `sha`) in their [update policy](/cli/configuration/version/managed-versions#update-policy), the two surfaces behave differently:
+
+- **`!version name` always returns the version** (for example, `v6.1.0`) — never the digest.
+- **`{{ .version.name }}`** emits the pinned form: the digest for pinned entries, the version otherwise. This is what rendered files and file managers embed.
+- **`{{ .version.name.Version }}`** and **`{{ .version.name.Digest }}`** are individually addressable when you need one specific form:
+
+```yaml
+vars:
+  image:
+    uri: "ghcr.io/example/app@{{ .version.app.Digest }}"
+    tag: "{{ .version.app.Version }}"
+```
+
+## See Also
+
+- [Managed Versions Configuration](/cli/configuration/version/managed-versions)
+- [`atmos version track`](/cli/commands/version/track)

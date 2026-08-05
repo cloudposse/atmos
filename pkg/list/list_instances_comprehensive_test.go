@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -180,7 +181,8 @@ func TestSortInstances(t *testing.T) {
 // Test collectInstances edge cases.
 func TestCollectInstances(t *testing.T) {
 	t.Run("empty stacks map", func(t *testing.T) {
-		result := collectInstances(map[string]interface{}{})
+		result, err := collectInstances(map[string]interface{}{}, "")
+		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
 
@@ -191,7 +193,8 @@ func TestCollectInstances(t *testing.T) {
 				"components": "invalid",
 			},
 		}
-		result := collectInstances(stacks)
+		result, err := collectInstances(stacks, "")
+		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
 }

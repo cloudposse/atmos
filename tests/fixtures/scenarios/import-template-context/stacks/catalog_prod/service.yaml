@@ -1,0 +1,5 @@
+# Mirrors the real-world pattern: a "prod catalog" file whose own import pins a
+# versioned catalog using a variable defined by a sibling `_defaults` import one
+# level up. The templating context must propagate down from the parent manifest.
+import:
+  - "catalog/{{ .settings.context.catalog_ref }}/service"

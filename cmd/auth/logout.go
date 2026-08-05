@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -17,11 +19,13 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -64,6 +68,7 @@ func init() {
 	// Create parser with logout-specific flags.
 	logoutParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "", "", "Logout from specific provider"),
+		flags.WithStringFlag("tags", "", "", "Logout from providers matching tags (comma-separated, matches any): --tags=production"),
 		flags.WithBoolFlag("all", "", false, "Logout from all identities and providers"),
 		flags.WithBoolFlag("all-realms", "", false, "Logout from all realms across all repositories (clears file-based credentials; keychain cleanup limited to current config)"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview what would be removed without deleting"),
@@ -111,6 +116,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flags.
 	providerFlag := v.GetString("provider")
+	tagsFlag := parseCommaSeparatedNames(v.GetString(tagsKey))
 	allFlag := v.GetBool("all")
 	allRealmsFlag := v.GetBool("all-realms")
 	dryRun := v.GetBool("dry-run")
@@ -124,6 +130,12 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		identityFlag = v.GetString(IdentityFlagName)
 	}
 
+	// --tags is mutually exclusive with --provider/--all/--identity/positional identity —
+	// it's an alternative way to select a target, not a composable cross-cutting filter here.
+	if len(tagsFlag) > 0 && (providerFlag != "" || allFlag || identityFlag != "" || len(args) > 0) {
+		return errUtils.ErrMutuallyExclusiveFlags
+	}
+
 	ctx := context.Background()
 
 	// Handle --all-realms flag - logout from all realms across all repositories.
@@ -135,6 +147,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	if allFlag {
 		// Logout all identities.
 		return performLogoutAll(ctx, authManager, dryRun, deleteKeychain, force)
+	}
+
+	if len(tagsFlag) > 0 {
+		// Logout from all providers matching tags.
+		return performTagsLogout(ctx, authManager, tagsFlag, dryRun, deleteKeychain, force)
 	}
 
 	if providerFlag != "" {
@@ -158,6 +175,62 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Interactive mode: prompt user to choose.
 	return performInteractiveLogout(ctx, authManager, dryRun, deleteKeychain, force)
+}
+
+// ambientProviderNames returns the sorted names of configured providers whose keyring
+// entries logout clears regardless of --keychain (gcp/adc, azure/cli, the OIDC providers).
+// Sorted so the dry-run preview is deterministic across runs — Go map iteration is not.
+// Takes the providers map rather than fetching it so callers that already have it do not
+// query the manager twice.
+func ambientProviderNames(authManager auth.AuthManager, providers map[string]schema.Provider) []string {
+	var names []string
+	for providerName := range providers {
+		if authTypes.ManagerReportsAmbient(authManager, providerName) {
+			names = append(names, providerName)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// printLogoutAllDryRun renders the `--all --dry-run` preview of everything logout would
+// remove. Kept separate from performLogoutAll so the branching for the keyring section
+// does not add complexity to the orchestrating function.
+func printLogoutAllDryRun(authManager auth.AuthManager, deleteKeychain bool) {
+	// Fetched once and shared by the keyring and file sections below.
+	providers := authManager.GetProviders()
+
+	ui.MarkdownMessagef(msgDryRunMode)
+	ui.MarkdownMessagef("**Would remove:**\n")
+	printLogoutAllKeyringPreview(authManager, providers, deleteKeychain)
+
+	// Show file paths for each provider.
+	if len(providers) > 0 {
+		ui.Writef("  • Files:\n")
+		for providerName := range providers {
+			basePath := authManager.GetFilesDisplayPath(providerName)
+			ui.Writef("    - %s/%s/\n", basePath, providerName)
+		}
+	}
+	ui.Writeln("")
+}
+
+// printLogoutAllKeyringPreview reports which keyring entries `--all` would remove.
+// Without --keychain only ambient providers are cleared, so they are named explicitly
+// rather than implied — see the note in performIdentityLogout for why they are always
+// cleared.
+func printLogoutAllKeyringPreview(authManager auth.AuthManager, providers map[string]schema.Provider, deleteKeychain bool) {
+	if deleteKeychain {
+		ui.Writef("  • All identity keyring entries\n")
+		ui.Writef("  • All provider keyring entries\n")
+		return
+	}
+
+	names := ambientProviderNames(authManager, providers)
+	if len(names) == 0 {
+		return
+	}
+	ui.Writef("  • Keyring entries for ambient providers: %s\n", strings.Join(names, ", "))
 }
 
 // buildKeychainDeletionMessage creates the confirmation message for keychain deletion.
@@ -201,7 +274,7 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 	var confirmed bool
 
 	// Create Huh confirmation prompt.
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := uiutils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes, delete credentials").
 		Negative("No, keep credentials").
@@ -291,11 +364,14 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if dryRun {
 		ui.MarkdownMessagef(msgDryRunMode)
 		ui.MarkdownMessagef("**Would remove:**\n")
-		if deleteKeychain {
+		// Logout clears the keyring for ambient providers (gcp/adc, azure/cli, the OIDC
+		// providers) whether or not --keychain was passed, because their entries hold
+		// nothing durable. The preview must account for that or it under-reports.
+		if deleteKeychain || (providerName != "" && authTypes.ManagerReportsAmbient(authManager, providerName)) {
 			ui.Writef("  • Keyring entry: %s\n", identityName)
-			if providerName != "" {
-				ui.Writef("  • Keyring entry: %s (provider)\n", providerName)
-			}
+		}
+		if deleteKeychain && providerName != "" {
+			ui.Writef("  • Keyring entry: %s (provider)\n", providerName)
 		}
 		if providerName != "" {
 			// Get actual configured path for this provider.
@@ -379,7 +455,9 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		ui.MarkdownMessagef(msgDryRunMode)
 		ui.MarkdownMessagef("**Would remove:**\n")
 		ui.Writef("  • All identities using provider %s\n", providerName)
-		if deleteKeychain {
+		// Ambient providers always have their keyring entries cleared — see the note in
+		// performIdentityLogout.
+		if deleteKeychain || authTypes.ManagerReportsAmbient(authManager, providerName) {
 			ui.Writef("  • Provider keyring entry\n")
 		}
 		// Get actual configured path for this provider.
@@ -533,23 +611,7 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	defer perf.Track(nil, "auth.performLogoutAll")()
 
 	if dryRun {
-		ui.MarkdownMessagef(msgDryRunMode)
-		ui.MarkdownMessagef("**Would remove:**\n")
-		if deleteKeychain {
-			ui.Writef("  • All identity keyring entries\n")
-			ui.Writef("  • All provider keyring entries\n")
-		}
-
-		// Show file paths for each provider.
-		providers := authManager.GetProviders()
-		if len(providers) > 0 {
-			ui.Writef("  • Files:\n")
-			for providerName := range providers {
-				basePath := authManager.GetFilesDisplayPath(providerName)
-				ui.Writef("    - %s/%s/\n", basePath, providerName)
-			}
-		}
-		ui.Writeln("")
+		printLogoutAllDryRun(authManager, deleteKeychain)
 		return nil
 	}
 
@@ -594,6 +656,89 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	displayExternalCredentialWarnings()
 
 	return nil
+}
+
+// performTagsLogout logs out from every provider whose Tags match any of filterTags.
+func performTagsLogout(ctx context.Context, authManager auth.AuthManager, filterTags []string, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive
+	defer perf.Track(nil, "auth.performTagsLogout")()
+
+	providers := authManager.GetProviders()
+
+	matched := make([]string, 0)
+	for name := range providers {
+		if tags.MatchesTags(providers[name].Tags, filterTags, tags.TagModeAny) {
+			matched = append(matched, name)
+		}
+	}
+	sort.Strings(matched)
+
+	if len(matched) == 0 {
+		return buildNoProvidersMatchTagsError(providers, filterTags)
+	}
+
+	if dryRun {
+		ui.MarkdownMessagef(msgDryRunMode)
+		ui.MarkdownMessagef("**Would remove %d provider(s) matching tags %v:**\n", len(matched), filterTags)
+		for _, providerName := range matched {
+			ui.Writef(fmtBulletItem, providerName)
+		}
+		ui.Writeln("")
+		return nil
+	}
+
+	// If deleteKeychain is requested, confirm once for the whole batch (same pattern as
+	// performLogoutAll/performLogoutAllRealms — no additional confirmation beyond keychain).
+	if deleteKeychain {
+		isTTY := term.IsTTYSupportForStdout()
+		confirmed, err := confirmKeychainDeletion(fmt.Sprintf("%d provider(s) matching tags %v", len(matched), filterTags), force, isTTY)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil // User cancelled, exit cleanly.
+		}
+	}
+
+	var successCount int
+	var errs []error
+	for _, providerName := range matched {
+		// force=true: the batch-level confirmation above already covered keychain deletion
+		// consent for every matched provider, so don't re-prompt per provider.
+		if err := performProviderLogout(ctx, authManager, providerName, false, deleteKeychain, true); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", providerName, err))
+			continue
+		}
+		successCount++
+	}
+
+	if len(errs) > 0 {
+		ui.MarkdownMessagef("⚠ **Logout completed with %d error(s):**\n\n", len(errs))
+		for _, err := range errs {
+			ui.Writef("  • %v\n", err)
+		}
+		ui.Writeln("")
+		return errors.Join(errs...)
+	}
+
+	ui.Success(fmt.Sprintf("Logged out from %d provider(s) matching tags %v", successCount, filterTags))
+	ui.Writeln("")
+
+	return nil
+}
+
+// buildNoProvidersMatchTagsError returns a helpful error listing tags that do exist,
+// so the user can retry with a valid tag.
+func buildNoProvidersMatchTagsError(providers map[string]schema.Provider, filterTags []string) error {
+	availableTags := tags.CollectAvailableTags(providers, func(provider schema.Provider) []string {
+		return provider.Tags
+	})
+
+	err := errUtils.Build(errUtils.ErrNoProvidersMatchTags).
+		WithExplanationf("No providers match tags %v", filterTags)
+	if len(availableTags) > 0 {
+		err = err.WithHintf("Available tags: `%s`", strings.Join(availableTags, "`, `"))
+	}
+	return err.Err()
 }
 
 // performLogoutAllRealms logs out from all realms across all repositories.

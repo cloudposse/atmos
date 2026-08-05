@@ -1,0 +1,105 @@
+commands:
+  - name: casts generate examples packer-docker build
+    description: Regenerate the Packer + Docker example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-tools
+        # Warm the toolchain-managed Packer binary install (component-level
+        # `dependencies.tools.packer`) without running `packer init`, so the
+        # recorded `atmos packer init` step below still shows the real
+        # Docker plugin download/install output. `packer inspect` triggers
+        # the same dependency resolution as `init`/`build` but only
+        # statically parses the HCL — it doesn't touch the plugin cache.
+        working_directory: &packer_docker_fixture "../../.context/cast-fixtures/packer-docker"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos --logs-level=Off packer inspect alpine -s alpine
+      - type: cast
+        name: build
+        working_directory: *packer_docker_fixture
+        title: "Packer: build a local image with the Docker builder"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/packer-docker/build.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# init downloads the Docker plugin — no cloud credentials involved"
+          - type: simulate
+            text: &packer_init_cmd atmos packer init alpine -s alpine
+          - type: shell
+            name: packer-init
+            duration: 650ms
+            interval: 750ms
+            command: *packer_init_cmd
+          - type: simulate
+            text: "# build runs entirely against the local Docker daemon — nothing pushed anywhere"
+          - type: simulate
+            text: &packer_build_cmd atmos packer build alpine -s alpine
+          - type: shell
+            name: packer-build
+            duration: 650ms
+            interval: 750ms
+            command: *packer_build_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          import re
+
+          path = Path("../../website/static/casts/examples/packer-docker/build.cast")
+          text = path.read_text()
+          # Packer's docker builder embeds the host's temp-dir path (macOS
+          # /var/folders/..., Linux /tmp/...) in the "Run command:" line and
+          # the provisioner script path — normalize both to a placeholder.
+          text = re.sub(r"/(?:Users|home)/[^/\s]+/\.config/packer/tmp\d+", "~/.config/packer/tmp-workdir", text)
+          text = re.sub(r"/private/var/folders/\S*/packer-shell\d+", "/tmp/packer-shell-script", text)
+          text = re.sub(r"/var/folders/\S*/packer-shell\d+", "/tmp/packer-shell-script", text)
+          path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/examples/packer-docker/build.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate examples packer-docker build
+  - name: casts validate examples packer-docker build
+    description: Validate the Packer + Docker example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/packer-docker/build.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos packer init alpine -s alpine",
+              "atmos packer build alpine -s alpine",
+              "Hello from Atmos + Packer + Docker!",
+              "Build 'docker.example' finished",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"packer-docker cast missing {needle!r}")
+          for bad in ["amazon-ebs", "aws_access_key", "AWS_SECRET", "Error:", "panic"]:
+              if bad in plain:
+                  raise SystemExit(f"packer-docker cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

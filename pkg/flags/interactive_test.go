@@ -56,6 +56,25 @@ func TestPromptForValue(t *testing.T) {
 	})
 }
 
+func TestPromptForMultipleValues(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	t.Run("returns error when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValues("components", "Choose components", []string{"api", "worker"})
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+
+	t.Run("returns error when no options available", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValues("components", "Choose components", nil)
+		assert.Error(t, err)
+	})
+}
+
 // TestPromptForMissingRequired tests the PromptForMissingRequired function.
 func TestPromptForMissingRequired(t *testing.T) {
 	// Save original viper state.

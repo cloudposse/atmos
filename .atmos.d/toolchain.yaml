@@ -3,6 +3,16 @@ toolchain:
     gofumpt: mvdan/gofumpt
     tofu: opentofu/opentofu
   registries:
+    - name: atmos-dev-tools
+      type: atmos
+      priority: 100
+      tools:
+        mvdan/gofumpt:
+          type: github_release
+          repo_owner: mvdan
+          repo_name: gofumpt
+          url: 'gofumpt_{{.Version}}_{{.OS}}_{{.Arch}}'
+          binary_name: gofumpt
     - name: aqua
       type: aqua
       priority: 10

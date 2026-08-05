@@ -47,7 +47,8 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 		true,
 		nil,
 		false,
-		nil, // authManager
+		nil,   // authManager
+		false, // authDisabled
 	)
 	assert.Nil(t, err)
 
@@ -92,7 +93,8 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		true,
 		nil,
 		false,
-		nil, // authManager
+		nil,   // authManager
+		false, // authDisabled
 	)
 	assert.Nil(t, err)
 

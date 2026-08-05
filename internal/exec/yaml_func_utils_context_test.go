@@ -2,12 +2,21 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestProcessCustomYamlTagsWithoutContext(t *testing.T) {
@@ -47,6 +56,39 @@ func TestProcessCustomYamlTagsCreatesContext(t *testing.T) {
 	assert.NotNil(t, ctx)
 }
 
+func TestProcessCustomYamlTagsGitRefSourceVersion(t *testing.T) {
+	repoDir, expectedSHA := initExecTestGitRepo(t, "feature/test")
+	t.Chdir(repoDir)
+	expectedRoot, err := filepath.EvalSymlinks(repoDir)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackYaml := `
+source:
+  uri: github.com/my-org/my-repo//components/terraform/test
+  version: !git.ref
+branch: !git.branch
+root: !git.root
+`
+
+	input, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackYaml, "test.yaml")
+	require.NoError(t, err)
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	require.NoError(t, err)
+
+	sourceMap, ok := result["source"].(map[string]any)
+	require.True(t, ok)
+
+	sourceSpec, err := provSource.ExtractSource(map[string]any{"source": sourceMap})
+	require.NoError(t, err)
+	require.NotNil(t, sourceSpec)
+
+	assert.Equal(t, expectedSHA, sourceSpec.Version)
+	assert.Equal(t, "feature/test", result["branch"])
+	assert.Equal(t, expectedRoot, result["root"])
+}
+
 func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := NewResolutionContext()
@@ -73,6 +115,99 @@ func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	assert.Equal(t, 1, len(ctx.CallStack))
 }
 
+func initExecTestGitRepo(t *testing.T, branch string) (string, string) {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	filePath := filepath.Join(repoDir, "README.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("test\n"), 0o644))
+
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+
+	hash, err := worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Test",
+			Email: "test@example.com",
+			When:  time.Unix(1, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	if branch != "" && branch != "master" {
+		require.NoError(t, worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(branch),
+			Create: true,
+		}))
+	}
+
+	return repoDir, hash.String()
+}
+
+func TestProcessCustomYamlTagsGitRepositoryMetadata(t *testing.T) {
+	repoDir, _ := initExecTestGitRepo(t, "")
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://github.com/cloudposse/atmos.git"},
+	})
+	require.NoError(t, err)
+	t.Chdir(repoDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackYaml := `
+repository: !git.repository
+owner: !git.owner
+name: !git.name
+host: !git.host
+url: !git.url
+`
+
+	input, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackYaml, "test.yaml")
+	require.NoError(t, err)
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "cloudposse/atmos", result["repository"])
+	assert.Equal(t, "cloudposse", result["owner"])
+	assert.Equal(t, "atmos", result["name"])
+	assert.Equal(t, "github.com", result["host"])
+	assert.Equal(t, "https://github.com/cloudposse/atmos.git", result["url"])
+}
+
+func TestProcessCustomYamlTagsGitRepositoryMetadataErrorsOutsideRepo(t *testing.T) {
+	// Outside any Git repository, the repository-metadata tags cannot be resolved and,
+	// with no default value provided, must surface an error. This guards the error
+	// branches in processSimpleTags for each of the five tags.
+	t.Chdir(t.TempDir())
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tags := []string{
+		u.AtmosYamlFuncGitRepository,
+		u.AtmosYamlFuncGitOwner,
+		u.AtmosYamlFuncGitName,
+		u.AtmosYamlFuncGitHost,
+		u.AtmosYamlFuncGitUrl,
+	}
+
+	for _, tag := range tags {
+		t.Run(tag, func(t *testing.T) {
+			ctx := NewResolutionContext()
+			_, err := processCustomTagsWithContext(atmosConfig, tag, "test-stack", nil, ctx, nil)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := NewResolutionContext()
@@ -85,7 +220,7 @@ func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 		},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -106,7 +241,7 @@ func TestProcessNodesWithContextSlices(t *testing.T) {
 		},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -128,7 +263,7 @@ func TestProcessNodesWithContextMixedTypes(t *testing.T) {
 		"complex": []any{map[string]any{"nested": true}},
 	}
 
-	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)

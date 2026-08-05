@@ -302,3 +302,59 @@ func TestProcessChdirFlagPrecedence(t *testing.T) {
 	// On Windows, temp dir cleanup fails if we're still inside it.
 	_ = os.Chdir(originalWd)
 }
+
+func TestProcessEarlyChdirFlagAdditionalBranches(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = originalArgs
+	})
+
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(originalWd)
+	})
+
+	t.Run("already processed returns without reading args or env", func(t *testing.T) {
+		_ = NewTestKit(t)
+		chdirProcessed = true
+		t.Setenv("ATMOS_CHDIR", "/this/path/does/not/exist")
+
+		assert.NoError(t, processEarlyChdirFlag())
+	})
+
+	t.Run("uses env var when args do not specify chdir", func(t *testing.T) {
+		_ = NewTestKit(t)
+		tmpDir := t.TempDir()
+		t.Setenv("ATMOS_CHDIR", tmpDir)
+		os.Args = []string{"atmos", "version"}
+
+		require.NoError(t, processEarlyChdirFlag())
+		wd, err := os.Getwd()
+		require.NoError(t, err)
+		expectedResolved, _ := filepath.EvalSymlinks(tmpDir)
+		currentResolved, _ := filepath.EvalSymlinks(wd)
+		assert.Equal(t, expectedResolved, currentResolved)
+		_ = os.Chdir(originalWd)
+	})
+
+	t.Run("returns error for file path", func(t *testing.T) {
+		_ = NewTestKit(t)
+		tmpFile := filepath.Join(t.TempDir(), "not-a-dir")
+		require.NoError(t, os.WriteFile(tmpFile, []byte("test"), 0o644))
+		os.Args = []string{"atmos", "--chdir", tmpFile, "version"}
+
+		err := processEarlyChdirFlag()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not a directory")
+	})
+
+	t.Run("returns nil when no chdir requested", func(t *testing.T) {
+		_ = NewTestKit(t)
+		os.Args = []string{"atmos", "version"}
+
+		assert.NoError(t, processEarlyChdirFlag())
+	})
+}

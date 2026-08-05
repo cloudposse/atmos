@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 import:
-- mixins/k3s
+- catalog/emulator/kubernetes
 - catalog/demo
 
 vars:
@@ -12,3 +12,12 @@ components:
     demo:
       metadata:
         type: real
+      # Point Helmfile (and the release's kubectl hooks) at the local k3s emulator.
+      # `!emulator kubernetes kubeconfig` harvests the running emulator's admin
+      # kubeconfig to a file and returns its path. It is scoped to this component
+      # (not the stack-global `env`) on purpose: `atmos emulator up kubernetes`
+      # processes the stack with YAML functions enabled, and a stack-global
+      # `!emulator` would deadlock `up` on the very emulator it is starting. It
+      # resolves at apply time, so bring the emulator up first.
+      env:
+        KUBECONFIG: !emulator kubernetes kubeconfig

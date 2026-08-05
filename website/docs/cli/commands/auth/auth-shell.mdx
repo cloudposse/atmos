@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: shell
 description: Launch an interactive shell with authentication environment variables configured for the selected identity.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +15,7 @@ Start an authenticated shell session with all the necessary cloud credentials pr
 
 <DemoVideo id="auth-shell" title="atmos auth shell" showCaption={false} />
 
-<Screengrab title="atmos auth shell --help" slug="atmos-auth-shell--help" />
+<CastPlayer title="atmos auth shell --help" src="/casts/screengrabs/atmos-auth-shell--help.cast" static chrome />
 
 :::tip Shell vs Exec
 Use `shell` for interactive sessions where you'll run multiple commands. Use [`exec`](/cli/commands/auth/exec) for single commands or automation.

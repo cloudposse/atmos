@@ -19,7 +19,7 @@ var restartLongMarkdown string
 
 var restartCmd = &cobra.Command{
 	Use:   "restart <name>",
-	Short: "Restart an MCP server",
+	Short: "Validate that an MCP server can stop and restart cleanly (does not leave the server running)",
 	Long:  restartLongMarkdown,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

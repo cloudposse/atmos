@@ -15,6 +15,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -72,7 +74,8 @@ func waitForAuthWithSpinner(authCtx context.Context, deviceCode *public.DeviceCo
 
 // displayDeviceCodePrompt displays the device code, opens the browser, and waits for user authentication.
 func displayDeviceCodePrompt(userCode, verificationURL string) {
-	log.Debug("Displaying Azure authentication prompt",
+	log.Debug(
+		"Displaying Azure authentication prompt",
 		"url", verificationURL,
 		"code", userCode,
 		"isTTY", isTTY(),
@@ -124,27 +127,27 @@ func displayVerificationDialog(code, url string) {
 		Foreground(lipgloss.Color(theme.ColorBlue))
 
 	// Build simple, readable output.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, titleStyle.Render("🔐 Azure Authentication Required"))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification Code:"), codeStyle.Render(code))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification URL:"), urlStyle.Render(url))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, labelStyle.Render("Opening browser..."))
-	fmt.Fprintln(os.Stderr)
+	ui.Writeln("")
+	ui.Writeln(titleStyle.Render("🔐 Azure Authentication Required"))
+	ui.Writeln("")
+	ui.Writef("%s  %s\n", labelStyle.Render("Verification Code:"), codeStyle.Render(code))
+	ui.Writeln("")
+	ui.Writef("%s  %s\n", labelStyle.Render("Verification URL:"), urlStyle.Render(url))
+	ui.Writeln("")
+	ui.Writeln(labelStyle.Render("Opening browser..."))
+	ui.Writeln("")
 }
 
 // displayVerificationPlainText shows plain text authentication prompt.
 func displayVerificationPlainText(code, url string) {
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "🔐 Azure Authentication Required")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Verification Code: %s\n", code)
-	fmt.Fprintf(os.Stderr, "Verification URL:  %s\n", url)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Please open the URL above and enter the verification code to authenticate.")
-	fmt.Fprintln(os.Stderr, "")
+	ui.Writeln("")
+	ui.Writeln("🔐 Azure Authentication Required")
+	ui.Writeln("")
+	ui.Writef("Verification Code: %s\n", code)
+	ui.Writef("Verification URL:  %s\n", url)
+	ui.Writeln("")
+	ui.Writeln("Please open the URL above and enter the verification code to authenticate.")
+	ui.Writeln("")
 }
 
 // Spinner model for authentication polling.
@@ -167,6 +170,7 @@ func newSpinnerModel() *spinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	fps.Apply(&s)
 	return &spinnerModel{spinner: s}
 }
 

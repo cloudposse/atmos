@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 **Created**: 2025-11-02
-**Last Updated**: 2025-11-02
+**Last Updated**: 2026-01-11
 
 This directory contains documentation for Atmos's automatic secrets masking system.
 
@@ -67,7 +67,11 @@ atmos terraform plan --mask=false
 
 **For Command Developers:**
 
-Just use the standard output functions - masking happens automatically:
+Just use the standard output functions - masking happens automatically. In particular, `list` and `describe` commands must not bypass the masking writers.
+
+**Rules:**
+- Do not write to `os.Stdout`, `os.Stderr`, `fmt.Print*`, or `cmd.Print*` in command/exec paths.
+- Use `pkg/data` (stdout/data) and `pkg/ui` (stderr/UI), or `pkg/io` (`io.Data` / `io.UI`) directly.
 
 ```go
 import (

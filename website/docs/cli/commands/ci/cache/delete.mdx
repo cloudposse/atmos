@@ -1,0 +1,67 @@
+---
+title: atmos ci cache delete
+sidebar_label: delete
+sidebar_class_name: command
+sidebar_position: 4
+id: delete
+description: Delete a CI cache entry by key.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Delete a CI cache entry by its exact key. Deleting a key that does not exist is a no-op.
+</Intro>
+
+<Experimental/>
+
+:::info Runs locally
+Like [`list`](/cli/commands/ci/cache/list), `delete` administers the cache over the provider's public API and works from your workstation as well as inside CI. It needs a GitHub token (`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`, or `gh auth login`) and a GitHub repository (resolved from `GITHUB_REPOSITORY` or your local `git` remote).
+:::
+
+<ActionCard title="Configure the CI Cache">
+    Configure the cache in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos ci cache delete --help" src="/casts/screengrabs/atmos-ci-cache-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos ci cache delete --key=<key>
+```
+
+## Examples
+
+```shell
+# Delete a specific cache entry
+atmos ci cache delete --key="atmos-cache-linux-amd64-abc123"
+```
+
+## Flags
+
+<dl>
+  <dt>`--key` / `-k`</dt>
+  <dd>Exact cache key to delete. **Required.**</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_KEY`</dt>
+  <dd>Overrides `--key`.</dd>
+</dl>
+
+## Related
+
+- [`atmos ci cache list`](/cli/commands/ci/cache/list) - List cache entries
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache

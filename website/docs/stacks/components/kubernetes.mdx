@@ -1,0 +1,337 @@
+---
+title: Kubernetes Components
+sidebar_position: 6
+sidebar_label: kubernetes
+sidebar_class_name: command
+description: Configure Kubernetes-native components in Atmos stack manifests.
+id: kubernetes
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Define Kubernetes resources in stack manifests when you want Atmos to manage
+  plain YAML or Kustomize overlays alongside Terraform, Helmfile, Packer, and
+  Ansible components. A Kubernetes component describes what to render, which
+  values to inject, and how the result should be deployed for each stack.
+</Intro>
+
+## Available Configuration Sections
+
+Kubernetes components use the same stack sections as other Atmos components, so
+the deployment can inherit values, run hooks, use Auth, and be included in
+affected runs.
+
+<dl>
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior, inheritance, and component path selection.</dd>
+
+<dt>[`vars`](/stacks/vars)</dt>
+<dd>Variables available to stack template rendering and inline manifests.</dd>
+
+<dt>[`env`](/stacks/env)</dt>
+<dd>
+  Environment variables applied before Kubernetes clients are created, such as
+  `KUBECONFIG`.
+</dd>
+
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integration metadata and legacy dependency settings.</dd>
+
+<dt>`auth`</dt>
+<dd>Component-level Atmos Auth providers, identities, and integrations.</dd>
+
+<dt>[`dependencies`](/stacks/dependencies/components)</dt>
+<dd>
+  Component, file, and folder dependencies used by affected detection and
+  ordered multi-component runs.
+</dd>
+
+<dt>[`hooks`](/stacks/hooks)</dt>
+<dd>Lifecycle event handlers using dotted Kubernetes events.</dd>
+
+<dt>[`generate`](/stacks/generate)</dt>
+<dd>
+  Declarative file generation before Kubernetes operations when
+  `auto_generate_files` is enabled.
+</dd>
+
+  <dt>`source` and [`provision`](/stacks/components/provision)</dt>
+  <dd>JIT source and workdir/provisioning behavior shared with other component types.</dd>
+</dl>
+
+Kubernetes components do not support `command` in v1 because the provider names
+describe manifest behavior. Atmos does not execute `kubectl` or `kustomize`
+binaries for these operations.
+
+## Component Structure
+
+<File title="stacks/catalog/argocd.yaml">
+```yaml
+components:
+  kubernetes:
+    argocd/defaults:
+      metadata:
+        type: abstract
+        component: argocd
+      provider: kustomize
+      paths:
+        - overlays/{{ .vars.cluster }}
+      vars:
+        namespace: argocd
+        cluster: dev
+      env:
+        KUBECONFIG: /tmp/kubeconfig
+```
+</File>
+
+**stacks/deploy/dev/argocd.yaml**
+
+```yaml
+import:
+  - catalog/argocd
+
+vars:
+  stage: dev
+
+components:
+  kubernetes:
+    argocd:
+      metadata:
+        inherits:
+          - argocd/defaults
+      vars:
+        cluster: dev
+```
+
+## Component Directory Structure
+
+Kubernetes components are located under `components.kubernetes.base_path` from `atmos.yaml`.
+
+**atmos.yaml**
+
+```yaml
+components:
+  kubernetes:
+    base_path: components/kubernetes
+    provider: kubectl
+```
+
+Example structure:
+
+```text
+components/kubernetes/
+├── argocd/
+│   ├── base/
+│   └── overlays/
+│       ├── dev/
+│       └── prod/
+└── namespace/
+    └── namespace.yaml
+```
+
+## Providers
+
+<dl>
+  <dt>`kubectl`</dt>
+  <dd>Loads plain YAML or JSON manifests from files, directories, and inline `manifests` entries.</dd>
+
+  <dt>`kustomize`</dt>
+  <dd>Renders Kustomize directories, then passes rendered objects to the Kubernetes client.</dd>
+</dl>
+
+Provider names describe behavior. Atmos does not require the `kubectl` or `kustomize` binaries.
+
+## Paths And Manifests
+
+`paths` is a list of files or directories relative to the component directory.
+Directories are walked recursively for `.yaml`, `.yml`, and `.json` files. With
+`provider: kustomize`, a directory containing a Kustomize file is rendered as a
+Kustomize root.
+
+```yaml
+components:
+  kubernetes:
+    app:
+      provider: kubectl
+      paths:
+        - namespace.yaml
+        - workloads
+```
+
+`manifests` is a list of inline Kubernetes objects or YAML strings.
+
+```yaml
+components:
+  kubernetes:
+    namespace:
+      provider: kubectl
+      manifests:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ .vars.namespace }}"
+```
+
+## Render Output
+
+`atmos kubernetes render` writes rendered manifests to stdout by default.
+Configure component-level output with `render.output`.
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      render:
+        output:
+          path: rendered/clusters/{{ .vars.cluster }}/argocd
+          split: true
+```
+
+When `split` is `true`, `path` is treated as a directory and Atmos writes one
+file per object. Otherwise `path` is a single multi-document YAML file.
+
+## Delivery Targets
+
+`apply` and `deploy` deliver the rendered manifests to a target. By default they
+apply to the cluster, but a component can declare named delivery targets under
+`provision.targets` and select one with `--target`. Each target has a `kind`:
+
+- `kind: kubernetes` — apply the manifests to the cluster (the default).
+- `kind: git` — render the manifests and commit them to a Git deployment
+  repository (a GitOps source-of-truth reconciled by Argo CD or Flux).
+
+```yaml
+# atmos.yaml declares the managed deployment repository:
+git:
+  repositories:
+    deployments:
+      uri: https://github.com/acme/deployments.git
+      branch: main
+
+# the component selects where apply/deploy delivers:
+components:
+  kubernetes:
+    argocd:
+      provision:
+        default: cluster                 # used when --target is omitted
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments       # references git.repositories.<name>
+            path: "clusters/{{ .vars.cluster }}/argocd"   # supports Go templates
+            auth:
+              identity: platform-admin    # optional; else the repository default
+            commit:
+              message: "Render {{ .vars.app_name }} for {{ .vars.stage }}"
+              signing: auto               # auto | always | never
+```
+
+The git target clones (or fast-forwards) the repository, replaces the managed
+`path` with the rendered manifests, commits that path with provenance trailers
+(`Atmos-Stack`, `Atmos-Component`), and pushes. Re-delivering identical manifests
+is a clean no-op. Credentials come from Atmos Auth (GitHub STS); no tokens are
+written into the manifests. Pull-request publishing is not yet supported.
+
+## Auth
+
+Kubernetes operations use the kubeconfig and client configuration visible to
+Kubernetes Go clients. Atmos Auth can prepare that environment before the client
+is created.
+
+For local clusters, an ambient identity can pass through the existing environment:
+
+```yaml
+auth:
+  identities:
+    local:
+      kind: ambient
+
+components:
+  kubernetes:
+    app:
+      env:
+        KUBECONFIG: /path/to/kubeconfig
+```
+
+For EKS, use an Atmos Auth identity with an `aws/eks` integration to write kubeconfig, then run the Kubernetes command with that identity.
+
+## Native CI Summaries
+
+When `ci.enabled: true` and Atmos runs in a supported CI provider such as GitHub Actions,
+Kubernetes commands write a compact Markdown job summary to the provider summary file
+(`$GITHUB_STEP_SUMMARY` on GitHub Actions).
+
+The summary includes the stack, component, command status, per-action object counts, object rows,
+and an error section when the command fails:
+
+- `render`: rendered objects
+- `plan` / `diff`: created, changed, and no-change objects, plus a collapsible **Kubernetes Diff**
+  block with the per-object unified diff (`Secret` objects are omitted so their data is never
+  written to the job summary)
+- `apply` / `deploy`: applied or delivered objects
+- `delete`: deleted and not-found objects
+- `validate`: valid and invalid objects
+
+Kubernetes CI support is intentionally summary-only in v1. It does not emit `$GITHUB_OUTPUT`
+variables, commit statuses, PR comments, or stored artifacts.
+
+## Hooks
+
+Kubernetes components support dotted lifecycle events:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      hooks:
+        notify:
+          events:
+            - after.kubernetes.apply
+          command: echo "applied argocd"
+```
+
+Supported events:
+
+- `before.kubernetes.render`
+- `after.kubernetes.render`
+- `before.kubernetes.plan`
+- `after.kubernetes.plan`
+- `before.kubernetes.diff`
+- `after.kubernetes.diff`
+- `before.kubernetes.apply`
+- `after.kubernetes.apply`
+- `before.kubernetes.deploy`
+- `after.kubernetes.deploy`
+- `before.kubernetes.delete`
+- `after.kubernetes.delete`
+- `before.kubernetes.validate`
+- `after.kubernetes.validate`
+
+`plan` normalizes to the diff lifecycle for hook matching, and `deploy` normalizes to the apply
+lifecycle for hook matching, so hooks written for either spelling match the equivalent operation.
+
+## Bulk And Affected Runs
+
+Kubernetes commands can process more than one component when you need a full
+environment rollout or a CI job scoped to changed files:
+
+```shell
+atmos kubernetes apply --all -s dev
+atmos kubernetes plan --affected --base origin/main
+atmos kubernetes deploy --affected --base origin/main --include-dependents
+```
+
+`--all` processes matching Kubernetes components in dependency order.
+`--affected` uses affected detection to select changed Kubernetes components,
+includes their dependencies by default, and includes downstream dependents when
+`--include-dependents` is set.
+
+## Related
+
+- [atmos kubernetes commands](/cli/commands/kubernetes/usage)
+- [Kubernetes `atmos.yaml` configuration](/cli/configuration/components/kubernetes)
+- [Component dependencies](/stacks/dependencies/components)

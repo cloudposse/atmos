@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -414,5 +415,59 @@ func TestFindExecutable(t *testing.T) {
 
 		result := findExecutable(dir, "subdir", []string{""})
 		assert.Empty(t, result)
+	})
+}
+
+// TestSession_ToolsReturnsDefensiveCopy is the regression guard for issue #5
+// in docs/fixes/2026-05-15-mcp-review-fixes.md.
+//
+// Pre-fix, Session.Tools() returned the cached slice directly. Callers
+// could mutate the slice header (nil out, reorder, append) and the next
+// call returned the mutated state. Post-fix, Tools() returns a defensive
+// copy so mutations are isolated to the caller.
+//
+// The test populates the Session's `tools` field directly (we're in the
+// same package, so we can write to the unexported field) with two stub
+// tools, then mutates the returned slice and asserts the next call still
+// returns the original.
+func TestSession_ToolsReturnsDefensiveCopy(t *testing.T) {
+	cfg := &ParsedConfig{Name: "test-server", Command: "echo"}
+	session := NewSession(cfg)
+
+	// Populate the internal cache without spinning a subprocess by writing
+	// to the unexported field. The test is in-package, so this is allowed
+	// and exists purely to exercise the read-side contract.
+	originalTools := []*mcpsdk.Tool{
+		{Name: "tool-1", Description: "first"},
+		{Name: "tool-2", Description: "second"},
+	}
+	session.tools = originalTools
+
+	t.Run("mutating the returned slice does not affect the next call", func(t *testing.T) {
+		got := session.Tools()
+		require.Len(t, got, 2)
+
+		// Mutate the slice's *contents* (header changes like reslicing
+		// only affect the local variable and would prove nothing about
+		// defensive copying). nilling got[0] mutates the backing array
+		// of the returned slice — if Tools() returned the cache directly,
+		// the next call would see nil at position 0.
+		got[0] = nil
+
+		// A fresh call MUST return the original cached state.
+		fresh := session.Tools()
+		require.Len(t, fresh, 2, "Tools() MUST return a defensive copy; "+
+			"the previous call's mutations must not affect the cache length")
+		require.NotNil(t, fresh[0], "Tools() MUST return a defensive copy; "+
+			"nilling got[0] in the previous call must NOT affect this call")
+		assert.Equal(t, "tool-1", fresh[0].Name)
+		assert.Equal(t, "tool-2", fresh[1].Name)
+	})
+
+	t.Run("nil tools cache returns nil, not a 0-length slice", func(t *testing.T) {
+		emptySession := NewSession(cfg)
+		// Default state — tools is nil.
+		assert.Nil(t, emptySession.Tools(),
+			"the nil-cache contract is preserved: no allocation when there's nothing to return")
 	})
 }

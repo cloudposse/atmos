@@ -1,6 +1,6 @@
 ---
 name: atmos-introspection
-description: "Introspection & Querying: describe/list commands, config filtering, workspace introspection, dependency graphs, YQ integration"
+description: "Introspection & Querying: describe/list commands, config filtering, workspace introspection, dependency graphs, YQ integration, --help=<topic> scoped CLI help"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -87,7 +87,6 @@ Key flags:
 - `--clone-target-ref` -- Clone the target reference instead of checking out
 - `--include-dependents` -- Include components that depend on changed components
 - `--include-settings` -- Include the settings section for each affected component
-- `--include-spacelift-admin-stacks` -- Include Spacelift admin stacks of affected stacks
 - `--exclude-locked` -- Exclude components marked as locked
 - `--upload` -- Upload results to an HTTP endpoint (for CI/CD integration)
 - `--ssh-key` -- Path to PEM-encoded private key for SSH cloning
@@ -116,7 +115,7 @@ Display the final merged CLI configuration (atmos.yaml resolution result).
 ```bash
 atmos describe config
 atmos describe config --format json
-atmos describe config -q '.stacks.name_pattern'
+atmos describe config -q '.stacks.name_template'
 ```
 
 ### atmos describe workflows
@@ -297,6 +296,27 @@ atmos describe component vpc -s prod -i prod-admin
 # Interactive identity selection
 atmos describe component vpc -s prod -i
 ```
+
+## CLI Help: `--help=<topic>`
+
+Every `atmos` command supports a scoped `--help=<topic>` flag (implemented per
+`docs/prd/topic-specific-cli-help.md`, Status: Implemented) so help output doesn't bury the one thing you
+need. This is the fastest way for an agent to confirm correct command syntax without reading the full flag
+reference:
+
+```bash
+atmos terraform plan --help            # Default: description, usage, examples, subcommands,
+                                        # command-specific flags, and a hint for expanded help
+atmos terraform plan --help=usage      # ONLY the usage line + embedded usage examples --
+                                        # the fastest way to see real invocation examples
+atmos terraform plan --help=flags      # Command-specific flags only, excludes inherited/global flags
+atmos terraform plan --help=all        # Full reference: everything, including inherited/global flags
+```
+
+Prefer `--help=usage` over the default `--help` when you just need to confirm how a command is invoked --
+it skips straight to worked examples instead of the full flag listing. Reach for `--help=all` only when you
+need the complete inherited-flag surface (e.g. global `--stack`/`--format`/logging flags shared across
+commands).
 
 ## Introspection Workflow for AI Agents
 

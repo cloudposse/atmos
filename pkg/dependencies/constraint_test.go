@@ -179,6 +179,62 @@ func TestMergeDependencies(t *testing.T) {
 			errType: errUtils.ErrDependencyConstraint,
 		},
 		{
+			// Regression: the toolchain demo declares jq "^1.7.0" over the
+			// .tool-versions pin "1.7.1" and must merge to the range, which
+			// the installer later resolves against installed versions.
+			name: "child range overrides parent pin",
+			parent: map[string]string{
+				"jq": "1.7.1",
+			},
+			child: map[string]string{
+				"jq": "^1.7.0",
+			},
+			want: map[string]string{
+				"jq": "^1.7.0",
+			},
+		},
+		{
+			// A .tool-versions pin is a default, not policy: a command may
+			// pin a different concrete version ("Override .tool-versions
+			// with a specific version").
+			name: "child pin overrides different parent pin",
+			parent: map[string]string{
+				"jq": "1.7.1",
+			},
+			child: map[string]string{
+				"jq": "1.6.0",
+			},
+			want: map[string]string{
+				"jq": "1.6.0",
+			},
+		},
+		{
+			// Two ranges combine so resolution honors both (Masterminds
+			// comma = AND).
+			name: "child range combines with parent range",
+			parent: map[string]string{
+				"terraform": ">= 1.9.0",
+			},
+			child: map[string]string{
+				"terraform": "~> 1.10.0",
+			},
+			want: map[string]string{
+				"terraform": "~> 1.10.0, >= 1.9.0",
+			},
+		},
+		{
+			name: "child range over parent latest",
+			parent: map[string]string{
+				"jq": "latest",
+			},
+			child: map[string]string{
+				"jq": "^1.7.0",
+			},
+			want: map[string]string{
+				"jq": "^1.7.0",
+			},
+		},
+		{
 			name: "multiple tools mixed inheritance",
 			parent: map[string]string{
 				"terraform": "~> 1.10.0",

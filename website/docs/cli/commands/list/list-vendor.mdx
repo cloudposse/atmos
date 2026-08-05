@@ -5,7 +5,7 @@ sidebar_label: vendor
 sidebar_class_name: command
 description: Use this command to list all vendored components and modules
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +15,7 @@ Use this command to list all components and modules configured for vendoring in 
 
 <DemoVideo id="vendor-pull" title="atmos vendor" showCaption={false} />
 
-<Screengrab title="atmos list vendor --help" slug="atmos-list-vendor--help" />
+<CastPlayer title="atmos list vendor --help" src="/casts/screengrabs/atmos-list-vendor--help.cast" static chrome />
 
 ## Usage
 
@@ -53,6 +53,9 @@ This command is useful for:
 
   <dt>`--stack` / `-s`</dt>
   <dd>Filter by stack pattern (supports glob patterns)</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Filter by the manifest's own declared tags (comma-separated, matches any): `--tags=networking,storage`. These are the `tags` declared on vendor manifest sources (`vendor.yaml`) — not the `metadata.tags` of components in stack manifests, which other `list` commands filter on. Vendor manifests have no labels concept, so `--labels` is not available on this command.<br/>Environment variable: `ATMOS_VENDOR_TAGS`</dd>
 
   <dt>`--filter`</dt>
   <dd>Filter expression using YQ syntax</dd>

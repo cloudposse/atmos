@@ -52,6 +52,10 @@ type ExecuteOptions struct {
 	// for semantics. Required for accurate success/failure reporting on commands
 	// that fail before producing parseable terraform output (e.g., auth errors).
 	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
 }
 
 // Execute runs all CI actions for a hook event.
@@ -163,6 +167,7 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 		Output:         opts.Output,
 		CommandError:   opts.CommandError,
 		ExitCode:       opts.ExitCode,
+		Aggregate:      opts.Aggregate,
 		Provider:       platform,
 		CICtx:          ciCtx,
 		TemplateLoader: loader,

@@ -114,7 +114,10 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledDispatchesToAuthDisabledM
 		nil,  // authManager
 		true, // processTemplates
 		true, // processYamlFunctions
+		nil,  // skip
 		true, // authDisabled — the bit under test.
+		nil,  // tagsFilter
+		nil,  // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -139,10 +142,13 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledFalseUsesRegularPath(t *t
 	_, err := executeDescribeStacksForInstances(
 		atmosConfig,
 		fake,
-		nil,
-		true,
-		false,
+		nil,   // authManager
+		true,  // processTemplates
+		false, // processYamlFunctions
+		nil,   // skip
 		false, // authDisabled=false — regular path expected.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.executeDescribeStacksCalled,
@@ -162,22 +168,52 @@ func TestExecuteDescribeStacksForInstances_FallsBackWhenInterfaceNotImplemented(
 	_, err := executeDescribeStacksForInstances(
 		atmosConfig,
 		fake,
-		nil,
-		false,
-		false,
-		true, // authDisabled=true but processor doesn't implement the optional interface.
+		nil,   // authManager
+		false, // processTemplates
+		false, // processYamlFunctions
+		nil,   // skip
+		true,  // authDisabled=true but processor doesn't implement the optional interface.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.called,
 		"a processor that doesn't implement authDisabledStacksProcessor must still be called via the regular path")
 }
 
-// TestProcessInstancesWithDepsAuthDisabled_PropagatesAuthDisabledFlag verifies
-// the test seam: processInstancesWithDepsAuthDisabled must reach the
-// auth-disabled method on a capable processor and surface no error. The
+// TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported
+// covers the fail-open contract of the scoped dispatch branch: tags/labels
+// filters must not break dispatch for a processor without the optional
+// scopedStacksProcessor interface — the run falls through to the
+// auth-disabled path and simply describes unscoped.
+func TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported(t *testing.T) {
+	fake := &authDisabledFakeProcessor{}
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	_, err := executeDescribeStacksForInstances(
+		atmosConfig,
+		fake,
+		nil,                              // authManager
+		true,                             // processTemplates
+		true,                             // processYamlFunctions
+		nil,                              // skip
+		true,                             // authDisabled
+		[]string{"production"},           // tagsFilter
+		map[string]string{"env": "prod"}, // labelsFilter
+	)
+	require.NoError(t, err)
+	assert.True(t, fake.executeDescribeStacksAuthDisabled,
+		"a processor without the scoped interface must fall back to the auth-disabled path")
+}
+
+// TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag verifies
+// the test seam: processInstancesWithDeps must reach the auth-disabled method
+// on a capable processor when authDisabled=true is passed, and surface no
+// error. The merge of osterman/list-skip-flag with main collapsed
+// processInstancesWithDepsAuthDisabled into processInstancesWithDeps; the
 // previous TestProcessInstancesWithDeps_* coverage hit the authDisabled=false
-// path implicitly; this test pins authDisabled=true → auth-disabled method.
-func TestProcessInstancesWithDepsAuthDisabled_PropagatesAuthDisabledFlag(t *testing.T) {
+// path implicitly, and this test pins authDisabled=true → auth-disabled method.
+func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *testing.T) {
 	fake := &authDisabledFakeProcessor{
 		returnStacks: map[string]any{
 			"dev": map[string]any{
@@ -194,13 +230,17 @@ func TestProcessInstancesWithDepsAuthDisabled_PropagatesAuthDisabledFlag(t *test
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	instances, err := processInstancesWithDepsAuthDisabled(
+	instances, _, err := processInstancesWithDeps(
 		atmosConfig,
 		fake,
-		nil,
-		true,
-		false,
-		true, // authDisabled
+		nil,   // authManager
+		true,  // processTemplates
+		false, // processYamlFunctions
+		nil,   // skip
+		"",    // stackPattern
+		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	require.Len(t, instances, 1)
@@ -210,18 +250,19 @@ func TestProcessInstancesWithDepsAuthDisabled_PropagatesAuthDisabledFlag(t *test
 		"authDisabled=true must route through the auth-disabled method")
 }
 
-// TestProcessInstancesWithAuthDisabled_ConstructsDefaultProcessor is a smoke
-// test for the production wrapper: it must construct a DefaultStacksProcessor
-// and not error when there are no stacks. The function is small but it's the
-// path the CLI actually takes, so a smoke test catches a future signature
-// drift between wrapper and helper.
+// TestProcessInstances_AuthDisabledConstructsDefaultProcessor is a smoke test
+// for the production wrapper with auth disabled: processInstances must
+// construct a DefaultStacksProcessor and not error when there are no stacks.
+// The merge collapsed processInstancesWithAuthDisabled into processInstances
+// with an authDisabled parameter; this test pins the auth-disabled path
+// through that single canonical wrapper.
 //
 // Anchoring BasePath/Stacks.BasePath/Components.Terraform.BasePath to a
 // per-test temp directory makes the assertion CWD-independent. With an empty
 // AtmosConfiguration the underlying FindStacksMap resolves CWD-relative empty
 // paths, which is the kind of ambient-state dependency CLAUDE.md flags. This
 // mirrors the convention in TestDefaultStacksProcessor_ExecuteDescribeStacks.
-func TestProcessInstancesWithAuthDisabled_ConstructsDefaultProcessor(t *testing.T) {
+func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 	testDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: testDir,
@@ -235,12 +276,16 @@ func TestProcessInstancesWithAuthDisabled_ConstructsDefaultProcessor(t *testing.
 		},
 	}
 
-	instances, err := processInstancesWithAuthDisabled(
+	instances, _, err := processInstances(
 		atmosConfig,
-		nil,
-		false,
-		false,
-		true,
+		nil,   // authManager
+		false, // processTemplates
+		false, // processYamlFunctions
+		nil,   // skip
+		"",    // stackPattern
+		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	// With no stacks configured, ExecuteDescribeStacksWithAuthDisabled returns
 	// an empty map; the upstream collector then returns an empty slice. The

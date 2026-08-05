@@ -60,6 +60,36 @@ func NewStore(opts StoreOptions) (Store, error) {
 	return NewBundledStore(backend), nil
 }
 
+// NewBackend creates a raw Backend from the given options without wrapping it in
+// a BundledStore. Callers that store per-object blobs (e.g. the Terraform registry
+// cache writing individual provider zips) need the unbundled Backend so the on-disk
+// object name maps directly to its canonical path, rather than being tar-bundled.
+// Identity-aware auth injection mirrors NewStore.
+func NewBackend(opts StoreOptions) (Backend, error) {
+	defer perf.Track(opts.AtmosConfig, "artifact.NewBackend")()
+
+	registryMu.RLock()
+	factory, ok := factories[opts.Type]
+	registryMu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactStoreNotFound, opts.Type)
+	}
+
+	backend, err := factory(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.Resolver != nil {
+		if ias, ok := backend.(IdentityAwareBackend); ok {
+			ias.SetAuthContext(opts.Resolver, opts.Identity)
+		}
+	}
+
+	return backend, nil
+}
+
 // GetRegisteredTypes returns a list of registered store types.
 func GetRegisteredTypes() []string {
 	defer perf.Track(nil, "artifact.GetRegisteredTypes")()

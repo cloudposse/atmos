@@ -687,3 +687,47 @@ func TestGlobalRegisterValue_Empty(t *testing.T) {
 	RegisterValue("")
 	// No panic or error expected.
 }
+
+func TestMasker_ContainsSecret(t *testing.T) {
+	m := newMasker(&Config{DisableMasking: false})
+	secret := "super-secret-value"
+	m.RegisterSecret(secret)
+
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "empty", value: "", want: false},
+		{name: "exact match", value: secret, want: true},
+		{name: "substring/composed", value: "postgres://user:" + secret + "@host/db", want: true},
+		{name: "base64 encoded match", value: "blob=" + base64.StdEncoding.EncodeToString([]byte(secret)), want: true},
+		{name: "no match", value: "nothing sensitive here", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.ContainsSecret(tt.value); got != tt.want {
+				t.Errorf("ContainsSecret(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMasker_ContainsSecret_IgnoresEnabledFlag(t *testing.T) {
+	// Off-disk protection must hold even when display masking is disabled.
+	m := newMasker(&Config{DisableMasking: true})
+	secret := "off-disk-secret"
+	m.RegisterSecret(secret)
+
+	if m.Enabled() {
+		t.Fatal("expected masker to be disabled")
+	}
+	if !m.ContainsSecret("value=" + secret) {
+		t.Error("ContainsSecret must detect secrets even when masking is disabled")
+	}
+	// Sanity: Mask is a no-op when disabled, proving ContainsSecret is independent.
+	if got := m.Mask("value=" + secret); got != "value="+secret {
+		t.Errorf("expected Mask to be a no-op when disabled, got %q", got)
+	}
+}

@@ -4,6 +4,7 @@
 package template
 
 import (
+	"reflect"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -18,6 +19,8 @@ type FieldRef struct {
 
 // String returns the dot-separated path of the field reference.
 func (f FieldRef) String() string {
+	defer perf.Track(nil, "template.FieldRef.String")()
+
 	return strings.Join(f.Path, ".")
 }
 
@@ -221,4 +224,103 @@ func ExtractAllFieldRefsByPrefix(templateStr string, prefix string) ([]string, e
 		}
 	}
 	return result, nil
+}
+
+// ExtractPlainFieldRef returns the field reference when the template is exactly
+// one plain field action, such as "{{ .locals.default_tags }}".
+func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
+	defer perf.Track(nil, "template.ExtractPlainFieldRef")()
+
+	if !strings.Contains(templateStr, "{{") {
+		return FieldRef{}, false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return FieldRef{}, false, nil
+	}
+	action, ok := singlePlainAction(tmpl)
+	if !ok {
+		return FieldRef{}, false, nil
+	}
+
+	ref, ok := fieldRefFromAction(action)
+	return ref, ok, nil
+}
+
+func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
+	if tmpl.Tree == nil || tmpl.Root == nil {
+		return nil, false
+	}
+
+	var action *parse.ActionNode
+	for _, node := range tmpl.Root.Nodes {
+		if text, ok := node.(*parse.TextNode); ok {
+			if strings.TrimSpace(string(text.Text)) != "" {
+				return nil, false
+			}
+			continue
+		}
+
+		next, ok := node.(*parse.ActionNode)
+		if !ok || action != nil {
+			return nil, false
+		}
+		action = next
+	}
+	return action, action != nil
+}
+
+func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
+	if action.Pipe == nil || len(action.Pipe.Decl) != 0 || len(action.Pipe.Cmds) != 1 {
+		return FieldRef{}, false
+	}
+
+	cmd := action.Pipe.Cmds[0]
+	if cmd == nil || len(cmd.Args) != 1 {
+		return FieldRef{}, false
+	}
+
+	field, ok := cmd.Args[0].(*parse.FieldNode)
+	if !ok || len(field.Ident) == 0 {
+		return FieldRef{}, false
+	}
+
+	return FieldRef{Path: field.Ident}, true
+}
+
+// LookupFieldPath resolves a field path against map-like data.
+func LookupFieldPath(data any, path []string) (any, bool) {
+	defer perf.Track(nil, "template.LookupFieldPath")()
+
+	current := data
+	for _, part := range path {
+		next, ok := lookupMapValue(current, part)
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func lookupMapValue(data any, key string) (any, bool) {
+	if data == nil {
+		return nil, false
+	}
+	if typed, ok := data.(map[string]any); ok {
+		val, found := typed[key]
+		return val, found
+	}
+
+	value := reflect.ValueOf(data)
+	if value.Kind() == reflect.Map && value.Type().Key().Kind() == reflect.String {
+		mapValue := value.MapIndex(reflect.ValueOf(key))
+		if !mapValue.IsValid() {
+			return nil, false
+		}
+		return mapValue.Interface(), true
+	}
+
+	return nil, false
 }

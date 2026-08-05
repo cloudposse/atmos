@@ -262,6 +262,34 @@ func TestEnvCommandProvider(t *testing.T) {
 		aliases := provider.GetAliases()
 		assert.Nil(t, aliases)
 	})
+
+	t.Run("IsExperimental returns false", func(t *testing.T) {
+		assert.False(t, provider.IsExperimental())
+	})
+}
+
+// TestShouldMaskStdout verifies the output-file gate: whenever an explicit
+// output file is provided, stdout masking should never be requested,
+// regardless of TTY/char-device state.
+func TestShouldMaskStdout(t *testing.T) {
+	t.Run("returns false when output file is set", func(t *testing.T) {
+		assert.False(t, shouldMaskStdout("/tmp/some-output-file"))
+	})
+
+	t.Run("does not panic when output is empty", func(t *testing.T) {
+		// Result depends on the test runner's stdout (TTY vs pipe), so we only
+		// assert it doesn't panic and returns a bool.
+		assert.NotPanics(t, func() { shouldMaskStdout("") })
+	})
+}
+
+// TestStdoutIsCharDevice verifies stdoutIsCharDevice runs without error against
+// the real os.Stdout handle for this test process (typically a pipe under `go test`,
+// so it should return false, but the key coverage goal is exercising both branches).
+func TestStdoutIsCharDevice(t *testing.T) {
+	// os.Stdout.Stat() should succeed for a real process, so we just assert
+	// the call completes without panicking.
+	assert.NotPanics(t, func() { stdoutIsCharDevice() })
 }
 
 func TestOutputEnvAsJSON(t *testing.T) {

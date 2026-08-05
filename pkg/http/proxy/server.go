@@ -1,0 +1,263 @@
+package proxy
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"io"
+	stdlog "log"
+	"net"
+	"net/http"
+	"sync"
+	"time"
+
+	"golang.org/x/sync/singleflight"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	httppkg "github.com/cloudposse/atmos/pkg/http"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	defaultReadHeaderTimeout = 30 * time.Second
+	defaultShutdownTimeout   = 5 * time.Second
+)
+
+// Options configure a Server.
+type Options struct {
+	// Mirrors are consulted in order; the first whose Handles returns true owns the
+	// request.
+	Mirrors []Mirror
+	// Store is the cache backend.
+	Store Store
+	// Client performs upstream fetches. Defaults to pkg/http.NewDefaultClient().
+	Client Doer
+	// MetadataTTL is how long KindMetadata stays fresh. Zero serves metadata as
+	// fresh forever (no revalidation).
+	MetadataTTL time.Duration
+	// StaleWhileRevalidate is the window past MetadataTTL during which stale
+	// metadata is served while a background revalidation runs.
+	StaleWhileRevalidate time.Duration
+	// ReadHeaderTimeout bounds slow-header attacks. Defaults to 30s.
+	ReadHeaderTimeout time.Duration
+	// TLSCertificate, when set, makes the proxy serve HTTPS with this certificate and
+	// the base URL uses the https scheme. Terraform/OpenTofu require provider network
+	// mirrors to be https, so the cache always sets this. Nil serves plain HTTP.
+	TLSCertificate *tls.Certificate
+}
+
+// Server is the ephemeral caching proxy.
+type Server struct {
+	opts    Options
+	stats   *Stats
+	httpSrv *http.Server
+	ln      net.Listener
+	baseURL string
+	// group collapses concurrent cold-key fills within this process so exactly one
+	// goroutine fetches a given key upstream while the rest wait and serve from disk.
+	group singleflight.Group
+	// baseCtx bounds the lifetime of a shared fill. A fill runs in a detached
+	// singleflight goroutine on behalf of many waiters, so it must not be tied to any
+	// single request's context (one client disconnecting must not abort the shared
+	// fetch). baseCtx is canceled on Shutdown so in-flight fills stop with the server.
+	baseCtx    context.Context
+	baseCancel context.CancelFunc
+	// fills tracks detached fill goroutines so Shutdown can wait for them to finish.
+	// Without this, a background fill could still be touching the cache directory
+	// (committing, or releasing a per-key lock file) after Shutdown returns.
+	fills sync.WaitGroup
+	// mu guards closed and serializes it against fill goroutine registration so a fill
+	// never starts (and registers with fills) after Shutdown begins waiting.
+	mu     sync.Mutex
+	closed bool
+}
+
+// NewServer constructs a Server. Call Start to bind and serve.
+func NewServer(opts Options) *Server { //nolint:gocritic // Options is a constructor argument passed once by value.
+	defer perf.Track(nil, "proxy.NewServer")()
+
+	if opts.Client == nil {
+		opts.Client = httppkg.NewDefaultClient()
+	}
+	if opts.ReadHeaderTimeout == 0 {
+		opts.ReadHeaderTimeout = defaultReadHeaderTimeout
+	}
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	return &Server{opts: opts, stats: &Stats{}, baseCtx: baseCtx, baseCancel: baseCancel}
+}
+
+// Start binds an ephemeral loopback listener (127.0.0.1:0), serves in a background
+// goroutine, and returns the proxy's base URL. The scheme is https when a
+// TLSCertificate is configured (the cache always configures one), else http.
+func (s *Server) Start(_ context.Context) (string, error) {
+	defer perf.Track(nil, "proxy.Server.Start")()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", fmt.Errorf("%w: binding proxy listener: %w", errUtils.ErrHTTPRequestFailed, err)
+	}
+	s.ln = ln
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	s.httpSrv = &http.Server{
+		Handler:           s,
+		ReadHeaderTimeout: s.opts.ReadHeaderTimeout,
+		// TLS verification failures are expected while the registry-cache trust
+		// preflight probes a newly generated local certificate. The caller turns
+		// that condition into an ErrorBuilder error with a concrete remediation,
+		// so avoid leaking the raw net/http handshake line to the terminal.
+		ErrorLog: stdlog.New(io.Discard, "", 0),
+	}
+
+	scheme := "http"
+	if s.opts.TLSCertificate != nil {
+		scheme = "https"
+		s.httpSrv.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{*s.opts.TLSCertificate},
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	s.baseURL = fmt.Sprintf("%s://127.0.0.1:%d/", scheme, port)
+
+	go func() {
+		serveErr := s.runListener(ln)
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Debug("Registry cache proxy server error", "error", serveErr)
+		}
+	}()
+
+	return s.baseURL, nil
+}
+
+// runListener runs the HTTP or HTTPS server depending on whether TLS is configured.
+// ServeTLS with empty cert/key paths uses TLSConfig.Certificates.
+func (s *Server) runListener(ln net.Listener) error {
+	if s.opts.TLSCertificate != nil {
+		return s.httpSrv.ServeTLS(ln, "", "")
+	}
+	return s.httpSrv.Serve(ln)
+}
+
+// BaseURL returns the proxy base URL (empty before Start).
+func (s *Server) BaseURL() string {
+	defer perf.Track(nil, "proxy.Server.BaseURL")()
+
+	return s.baseURL
+}
+
+// Stats returns a snapshot of per-run cache statistics.
+func (s *Server) Stats() StatsSnapshot {
+	defer perf.Track(nil, "proxy.Server.Stats")()
+
+	return s.stats.Snapshot()
+}
+
+// Shutdown gracefully stops the proxy. Safe to call once.
+//
+// It marks the server closed (so no new fill is started), cancels in-flight fills,
+// drains active HTTP handlers, then waits for the detached fill goroutines to finish.
+// Waiting for the fills guarantees no background goroutine touches the cache directory
+// after Shutdown returns — important for callers that delete the cache dir afterwards.
+func (s *Server) Shutdown(ctx context.Context) error {
+	defer perf.Track(nil, "proxy.Server.Shutdown")()
+
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+
+	if s.baseCancel != nil {
+		s.baseCancel() // Stop any in-flight fills bound to the server lifetime.
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
+	defer cancel()
+
+	var shutdownErr error
+	if s.httpSrv != nil {
+		if err := s.httpSrv.Shutdown(shutdownCtx); err != nil {
+			shutdownErr = fmt.Errorf("%w: shutting down proxy server: %w", errUtils.ErrHTTPRequestFailed, err)
+		}
+	}
+
+	// Wait after canceling baseCtx and draining handlers so detached fills (which the
+	// HTTP server does not track) have fully unwound, including releasing lock files.
+	// Bound the wait by the same shutdown deadline so a stalled fill cannot hang
+	// Shutdown past its context.
+	if err := s.waitForFills(shutdownCtx); err != nil {
+		if shutdownErr != nil {
+			return errors.Join(shutdownErr, err)
+		}
+		return err
+	}
+	return shutdownErr
+}
+
+// waitForFills blocks until all detached fill goroutines finish or ctx expires,
+// returning a wrapped error on expiry so Shutdown never outlives its context.
+func (s *Server) waitForFills(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.fills.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: waiting for in-flight cache fills to finish: %w", errUtils.ErrHTTPRequestFailed, ctx.Err())
+	}
+}
+
+// startFill runs fn in a tracked goroutine, collapsing concurrent cold-key fills via
+// singleflight, and returns a channel delivering the shared result. The goroutine is
+// registered with s.fills so Shutdown can wait for it. It returns ok=false when the
+// server is already shutting down, in which case no fill is started.
+func (s *Server) startFill(key string, fn func() (any, error)) (<-chan singleflight.Result, bool) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, false
+	}
+	s.fills.Add(1)
+	s.mu.Unlock()
+
+	ch := make(chan singleflight.Result, 1)
+	go func() {
+		defer s.fills.Done()
+		v, err, shared := s.group.Do(key, fn)
+		ch <- singleflight.Result{Val: v, Err: err, Shared: shared}
+	}()
+	return ch, true
+}
+
+// ServeHTTP routes the request to the first mirror that handles it, then runs the
+// cache-or-fetch flow.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer perf.Track(nil, "proxy.Server.ServeHTTP")()
+
+	mirror := s.mirrorFor(r)
+	if mirror == nil {
+		http.Error(w, "no mirror handles this request", http.StatusNotFound)
+		return
+	}
+
+	route, err := mirror.Route(r)
+	if err != nil {
+		log.Debug("Registry cache routing failed", "path", r.URL.Path, "error", err)
+		http.Error(w, "routing failed", http.StatusBadGateway)
+		return
+	}
+
+	s.serve(w, r, &route)
+}
+
+func (s *Server) mirrorFor(r *http.Request) Mirror {
+	for _, m := range s.opts.Mirrors {
+		if m.Handles(r) {
+			return m
+		}
+	}
+	return nil
+}

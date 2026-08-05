@@ -14,6 +14,9 @@ type VendorComponentSource struct {
 	// If not set, cached sources are reused indefinitely (only re-pulled on version or URI changes).
 	// Examples: "0s" (always re-pull), "1h" (hourly), "7d" (weekly).
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+	// Constraints controls which upstream versions `atmos vendor update` may select for this
+	// source. Mirrors AtmosVendorSource.Constraints (vendor.yaml).
+	Constraints *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
 }
 
 type VendorComponentMixins struct {

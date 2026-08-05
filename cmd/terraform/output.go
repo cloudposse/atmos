@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -24,6 +25,11 @@ import (
 
 // outputParser handles flag parsing for output command.
 var outputParser *flags.StandardParser
+
+var (
+	outputSetupTerraformAuth  = exec.SetupTerraformAuthForCLI
+	outputGetComponentOutputs = tfoutput.GetComponentOutputs
+)
 
 // outputCmd represents the terraform output command.
 var outputCmd = &cobra.Command{
@@ -37,7 +43,25 @@ Without --format, passes through to native terraform/tofu output command.
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/output
   https://opentofu.org/docs/cli/commands/output`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runBeforeHooks(h.BeforeTerraformOutput, cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		// Reset before any early return so the deferred hook and PostRunE read
+		// consistent state.
+		wasMultiComponentExecution = false
+
+		// On failure, run after hooks with error context. Cobra skips PostRunE on
+		// error, so this is the only place the after.terraform.output hook fires
+		// when reading outputs fails. In multi-component mode the per-component
+		// hook already fired for each component, so the global error call is
+		// suppressed to avoid double-firing.
+		defer func() {
+			if runErr != nil && !wasMultiComponentExecution {
+				runHooksOnErrorWithOutput(h.AfterTerraformOutput, cmd, args, runErr, "")
+			}
+		}()
+
 		v := viper.GetViper()
 		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
@@ -51,6 +75,14 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 		return outputRunWithFormat(cmd, args, format)
 	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, per-component hooks already fired inside the
+		// affected/all/query dispatch. Calling them again here would double-fire.
+		if wasMultiComponentExecution {
+			return nil
+		}
+		return runHooksWithOutput(h.AfterTerraformOutput, cmd, args, "")
+	},
 }
 
 // outputRunWithFormat executes terraform output with atmos formatting.
@@ -60,11 +92,11 @@ func outputRunWithFormat(cmd *cobra.Command, args []string, format string) error
 	if err := validateOutputFormat(format); err != nil {
 		return err
 	}
-	info, atmosConfig, err := prepareOutputContext(cmd, args)
+	info, atmosConfig, authManager, err := prepareOutputContext(cmd, args)
 	if err != nil {
 		return err
 	}
-	return executeOutputWithFormat(atmosConfig, info, format)
+	return executeOutputWithFormat(atmosConfig, info, authManager, format)
 }
 
 // validateOutputFormat checks if the format is supported.
@@ -79,18 +111,22 @@ func validateOutputFormat(format string) error {
 }
 
 // prepareOutputContext validates config and prepares component info.
-func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, error) {
+// Returns the populated info, the initialized Atmos configuration, and the auth manager
+// produced by outputSetupTerraformAuth. The auth manager is returned explicitly (rather
+// than read back off info.AuthManager at the call site) so the handoff to downstream
+// consumers like executeOutputWithFormat is explicit and easy to test.
+func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, any, error) {
 	if err := internal.ValidateAtmosConfig(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{"output"}, args...)
 	info, err := exec.ProcessCommandLineArgs(cfg.TerraformComponentType, terraformCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := resolveAndPromptForArgs(&info, cmd); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	v := viper.GetViper()
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
@@ -104,20 +140,27 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
+		return nil, nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
 	}
-	return &info, &atmosConfig, nil
+	authManager, err := outputSetupTerraformAuth(&atmosConfig, &info)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &info, &atmosConfig, authManager, nil
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
-func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string) error {
+// The authManager produced by outputSetupTerraformAuth is passed explicitly rather than
+// read back off info.AuthManager so callers (and tests) do not need to rely on the
+// side-effect wiring performed inside setupTerraformAuth.
+func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager any, format string) error {
 	v := viper.GetViper()
 	skipInit := v.GetBool("skip-init")
 	outputFile := v.GetString("output-file")
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, nil)
+	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, info.AuthContext, authManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/config/casemap"
@@ -22,6 +23,19 @@ schemas:
 	assert.Equal(t, "some/random/path", resourcePath.BasePath)
 }
 
+func TestConfigSourcesStackDependencyYAMLOrder(t *testing.T) {
+	dependency := ConfigSourcesStackDependency{
+		StackFile:        "catalog/mock/defaults",
+		StackFileSection: "components.terraform.vars",
+		DependencyType:   "import",
+		VariableValue:    true,
+	}
+
+	output, err := yaml.Marshal(dependency)
+	require.NoError(t, err)
+	assert.Equal(t, "dependency_type: import\nstack_file: catalog/mock/defaults\nstack_file_section: components.terraform.vars\nvariable_value: true\n", string(output))
+}
+
 func TestAtmosConfigurationWithSchemas(t *testing.T) {
 	yamlString := `
 schemas:
@@ -37,6 +51,33 @@ schemas:
 	schemas := atmosConfig.GetSchemaRegistry("atmos")
 	assert.Equal(t, "some/random/path", schemas.Manifest)
 	assert.Equal(t, []string{"hello", "world"}, schemas.Matches)
+}
+
+func TestSetSchemaRegistry_NilMap(t *testing.T) {
+	// Reproduces the "assignment to entry in nil map" panic: a config loaded
+	// without a `schemas:` section leaves Schemas nil, and applying a
+	// `--schemas-atmos-manifest` override must not panic.
+	atmosConfig := &AtmosConfiguration{}
+	require.Nil(t, atmosConfig.Schemas, "precondition: Schemas must start nil")
+
+	assert.NotPanics(t, func() {
+		atmosConfig.SetSchemaRegistry("atmos", SchemaRegistry{Manifest: "some/random/path"})
+	})
+
+	registry := atmosConfig.GetSchemaRegistry("atmos")
+	assert.Equal(t, "some/random/path", registry.Manifest)
+}
+
+func TestSetSchemaRegistry_ExistingMapPreservesOtherKeys(t *testing.T) {
+	// Setting one key must not clobber unrelated entries already present.
+	atmosConfig := &AtmosConfiguration{Schemas: map[string]any{
+		"opa": ResourcePath{BasePath: "opa/path"},
+	}}
+
+	atmosConfig.SetSchemaRegistry("atmos", SchemaRegistry{Manifest: "manifest/path"})
+
+	assert.Equal(t, "manifest/path", atmosConfig.GetSchemaRegistry("atmos").Manifest)
+	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
 }
 
 func TestIsColorEnabled(t *testing.T) {

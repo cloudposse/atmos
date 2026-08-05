@@ -47,6 +47,7 @@ type Flags struct {
 
 	// Output configuration.
 	Pager PagerSelector
+	Cast  string // Record command output as an asciinema cast (--cast).
 
 	// Authentication.
 	Identity IdentitySelector
@@ -77,6 +78,15 @@ type Flags struct {
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
+
+	// Edition pins defaults to a date-anchored edition for this invocation
+	// (--edition, "YYYY", "YYYY-MM", or "YYYY-MM-DD"). See pkg/edition.
+	Edition string
 }
 
 // NewFlags creates a Flags with default values.
@@ -93,6 +103,7 @@ func NewFlags() Flags {
 		Mask:         true,       // Enabled by default for security.
 		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
+		Cast:         "",
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",

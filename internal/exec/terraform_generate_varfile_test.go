@@ -1,15 +1,19 @@
 package exec
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -354,4 +358,108 @@ func TestExecuteGenerateBackend_Integration(t *testing.T) {
 	content, err := os.ReadFile(backendFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "nonprod-tfstate")
+}
+
+func TestVarfileVarsToWrite(t *testing.T) {
+	const secret = "genvarfile-secret-aa11bb22"
+	iolib.RegisterSecret(secret)
+
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			ComponentVarsSection: map[string]any{
+				"db_password": secret,
+				"region":      "us-east-1-genvarfile",
+			},
+		}
+	}
+
+	t.Run("default omits secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, false, "test.tfvars.json")
+		_, hasSecret := got["db_password"]
+		assert.False(t, hasSecret, "secret var must be omitted from the varfile by default")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"], "non-secret var must remain")
+	})
+
+	t.Run("with-secrets includes secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, true, "test.tfvars.json")
+		assert.Equal(t, secret, got["db_password"], "secret var must be written with --with-secrets")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"])
+	})
+}
+
+// TestExecuteGenerateVarfile_SensitiveStateValueNeverLeaks reproduces the sensitive
+// YAML-function regression end-to-end. The explicit YAML tag must survive decoding,
+// the state lookup must be evaluated, and the sensitive consumer input must use
+// TF_VAR_ instead of the generated tfvars JSON file.
+func TestExecuteGenerateVarfile_SensitiveStateValueNeverLeaks(t *testing.T) {
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.GetContext().Masker().SetEnabled(true)
+
+	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "yaml-sensitive-state-varfile"))
+	require.NoError(t, err)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		AtmosBasePath:          fixtureDir,
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+	}, true)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalStateGetter := stateGetter
+	stateGetter = mockStateGetter
+	t.Cleanup(func() { stateGetter = originalStateGetter })
+
+	const function = `!terraform.state producer ".fields.PRIVATE_KEY"`
+	const resolved = "demo-secret-value"
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), function, "dev", "producer", ".fields.PRIVATE_KEY", false, gomock.Any(), gomock.Any()).
+		Return(resolved, nil).
+		AnyTimes()
+
+	varfilePath := filepath.Join(t.TempDir(), "consumer.tfvars.json")
+	err = ExecuteGenerateVarfile(&VarfileOptions{
+		Component: "consumer",
+		Stack:     "dev",
+		File:      varfilePath,
+		ProcessingOptions: ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		},
+	}, &atmosConfig)
+	require.NoError(t, err)
+
+	contents, err := os.ReadFile(varfilePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(contents), "sensitive_value")
+	assert.NotContains(t, string(contents), resolved)
+	assert.NotContains(t, string(contents), "producer")
+	assert.NotContains(t, string(contents), "PRIVATE_KEY")
+
+	var written map[string]any
+	require.NoError(t, json.Unmarshal(contents, &written))
+	assert.Equal(t, "ordinary-value", written["ordinary_value"])
+
+	// Re-process once to inspect the exact transient environment handoff without
+	// relying on a Terraform executable. This confirms the resolved value, not
+	// the lookup arguments, becomes TF_VAR_sensitive_value.
+	info, err := ProcessStacks(&atmosConfig, schema.ConfigAndStacksInfo{
+		ComponentFromArg: "consumer",
+		Stack:            "dev",
+		StackFromArg:     "dev",
+		ComponentType:    cfg.TerraformComponentType,
+	}, true, true, true, nil, nil)
+	require.NoError(t, err)
+	computeTerraformSecretVarKeys(&info)
+	env, err := secretVarEnv(&info)
+	require.NoError(t, err)
+	joinedEnv := strings.Join(env, "\n")
+	assert.Contains(t, joinedEnv, "TF_VAR_sensitive_value="+resolved)
+	assert.NotContains(t, joinedEnv, "producer")
+	assert.NotContains(t, joinedEnv, "PRIVATE_KEY")
+	assert.NotContains(t, joinedEnv, function)
 }

@@ -1,0 +1,33 @@
+---
+title: exec
+sidebar_label: exec
+slug: /workflows/steps/type/exec
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `exec` step type hands full process ownership to another command, so your workflows can launch terminal-native tools — interactive sessions, REPLs, or port-forwards — exactly as if you had run them yourself.
+</Intro>
+
+```yaml
+steps:
+  - name: session
+    type: exec
+    command: aws ssm start-session --target i-0123456789abcdef0
+```
+
+## Fields
+
+<dl>
+  <dt>`command`</dt>
+  <dd>Required. Command to execute.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Optional directory where the command starts.</dd>
+
+  <dt>`env`</dt>
+  <dd>Optional environment variables for the command.</dd>
+</dl>
+
+Because the process is replaced, an `exec` step must be the final step. Later workflow steps cannot run after process replacement.

@@ -598,3 +598,47 @@ func TestProvisionAndResolveComponentPath_NoSourceMissingDir(t *testing.T) {
 	assert.False(t, exists)
 	assert.Equal(t, missingDir, got)
 }
+
+func TestSourceMisplacedUnderMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		section schema.AtmosSectionMapType
+		want    bool
+	}{
+		{
+			name:    "source nested under metadata is flagged",
+			section: schema.AtmosSectionMapType{"metadata": map[string]any{"source": "github.com/org/repo//mod"}},
+			want:    true,
+		},
+		{
+			name:    "source map nested under metadata is flagged",
+			section: schema.AtmosSectionMapType{"metadata": map[string]any{"source": map[string]any{"uri": "github.com/org/repo"}}},
+			want:    true,
+		},
+		{
+			name:    "top-level source is not flagged",
+			section: schema.AtmosSectionMapType{"source": "github.com/org/repo//mod", "metadata": map[string]any{"component": "vpc"}},
+			want:    false,
+		},
+		{
+			name:    "empty-string source under metadata is treated as absent",
+			section: schema.AtmosSectionMapType{"metadata": map[string]any{"source": ""}},
+			want:    false,
+		},
+		{
+			name:    "no metadata section",
+			section: schema.AtmosSectionMapType{"vars": map[string]any{"x": 1}},
+			want:    false,
+		},
+		{
+			name:    "metadata without source",
+			section: schema.AtmosSectionMapType{"metadata": map[string]any{"component": "vpc"}},
+			want:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sourceMisplacedUnderMetadata(tt.section))
+		})
+	}
+}

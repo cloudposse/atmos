@@ -3,10 +3,14 @@ package downloader
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-getter"
 
+	"github.com/cloudposse/atmos/pkg/auth/broker"
+	"github.com/cloudposse/atmos/pkg/github"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -15,12 +19,23 @@ import (
 var detectorsMutex sync.Mutex
 
 type goGetterClient struct {
-	client *getter.Client
+	client   *getter.Client
+	metadata *metadataCapturingTransport
 }
 
 // Get executes the download.
 func (c *goGetterClient) Get() error {
 	return c.client.Get()
+}
+
+// Metadata returns best-effort HTTP cache metadata (ETag/Last-Modified) captured while Get() ran,
+// or a zero-value FetchMetadata when this client never attached an HTTP transport (git, file, hg
+// sources never populate it -- see FetchMetadata's own doc comment).
+func (c *goGetterClient) Metadata() FetchMetadata {
+	if c.metadata == nil {
+		return FetchMetadata{}
+	}
+	return c.metadata.captured
 }
 
 type goGetterClientFactory struct {
@@ -32,6 +47,22 @@ type goGetterClientFactory struct {
 // NewClient creates a new `go-getter` client.
 func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error) {
 	clientMode := getter.ClientModeAny
+
+	// Lazily provision ambient credential brokers (e.g., Atmos Pro github/sts) before the first
+	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
+	// the process env, which the git subprocess this client spawns inherits. Process-once and
+	// gated (CI + configured), so local-only fetches and non-Pro repos pay nothing.
+	remote := f.atmosConfig != nil && isRemoteSource(src)
+	if remote {
+		broker.EnsureCredentials(ctx, f.atmosConfig)
+	}
+
+	// When Atmos brokered a fresh token this process, a freshly minted GitHub token can
+	// briefly 401 before GitHub propagates it. Let the git getter retry such auth failures
+	// within a bounded window — only for remote, brokered reads, so static credentials still
+	// fail fast.
+	retryAuthErrors := remote && broker.HasBrokeredCredentials()
+
 	registerCustomDetectors(f.atmosConfig, src)
 	switch mode {
 	case ClientModeAny:
@@ -42,10 +73,41 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		clientMode = getter.ClientModeFile
 	}
 
-	// Create HTTP getter with optional custom client.
+	// Create HTTP getter with optional custom client, always wrapped in a metadataCapturingTransport
+	// so a caller can retrieve ETag/Last-Modified after Get() runs (see goGetterClient.Metadata).
+	// Header capture must happen during the fetch itself -- there is no way to recover response
+	// headers afterward from a staged directory. A caller-supplied test client always wins;
+	// otherwise attach a GitHub token when one is available so http(s):// sources with an explicit
+	// scheme (e.g. https://raw.githubusercontent.com/...) get authenticated requests too —
+	// go-getter's Detect() only runs CustomGitDetector (which already handles token injection) for
+	// scheme-less shorthand sources, never for URLs with a scheme.
+	capture := &metadataCapturingTransport{}
 	httpGetter := &getter.HttpGetter{}
-	if f.httpClient != nil {
-		httpGetter.Client = f.httpClient
+	switch {
+	case f.httpClient != nil:
+		// Shallow-copy so the caller-owned client (used for testing) is never mutated in place;
+		// wrap its existing transport rather than replace it.
+		cloned := *f.httpClient
+		capture.base = cloned.Transport
+		cloned.Transport = capture
+		httpGetter.Client = &cloned
+	default:
+		if token := github.GetGitHubToken(); token != "" {
+			// Shallow-copy to preserve CheckRedirect (and any other fields set by
+			// NewGitHubAuthenticatedHTTPClient) while wrapping its transport, so header capture
+			// still observes the final response.
+			cloned := *httpClient.NewGitHubAuthenticatedHTTPClient(token)
+			capture.base = cloned.Transport
+			cloned.Transport = capture
+			httpGetter.Client = &cloned
+		} else {
+			// Neither a caller-supplied client nor a GitHub token: attach an explicit client
+			// wrapping the capturing transport around Go's default transport, so ETag/Last-Modified
+			// capture still works instead of falling back to go-getter's own internal default
+			// client, which this wrapper could never observe.
+			capture.base = http.DefaultTransport
+			httpGetter.Client = &http.Client{Transport: capture}
+		}
 	}
 
 	client := &getter.Client{
@@ -56,7 +118,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'.
-			"git":   &CustomGitGetter{RetryConfig: f.retryConfig},
+			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
 			"http":  httpGetter,
@@ -66,7 +128,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		},
 	}
 
-	return &goGetterClient{client: client}, nil
+	return &goGetterClient{client: client, metadata: capture}, nil
 }
 
 // registerCustomDetectors prepends the custom detector so it runs before
@@ -81,6 +143,33 @@ func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration, src string)
 		},
 		getter.Detectors...,
 	)
+}
+
+// isRemoteSource reports whether a go-getter source refers to a remote location (so that
+// credential brokers should be consulted). It recognizes explicit non-file schemes
+// (https://, git::https://, ssh://), SCP-style git URLs (git@github.com:org/repo), and
+// scheme-less shorthand for supported hosts (github.com/org/repo). Local and relative file
+// paths return false so local-only fetches do not trigger provisioning.
+func isRemoteSource(src string) bool {
+	s := strings.TrimPrefix(src, GitPrefix)
+
+	if i := strings.Index(s, schemeSeparator); i >= 0 {
+		return !strings.EqualFold(s[:i], "file")
+	}
+
+	if _, rewritten := rewriteSCPURL(s); rewritten {
+		return true
+	}
+
+	// Scheme-less shorthand such as "github.com/org/repo[//subdir]".
+	host := s
+	if idx := strings.IndexAny(host, "/?#"); idx >= 0 {
+		host = host[:idx]
+	}
+	if idx := strings.IndexByte(host, ':'); idx >= 0 {
+		host = host[:idx]
+	}
+	return isSupportedHost(strings.ToLower(host))
 }
 
 // GoGetterOption configures the go-getter downloader.

@@ -147,7 +147,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Retrieve credentials.
-	creds, err := retrieveCredentials(whoami)
+	creds, err := retrieveCredentials(whoami, &atmosConfig.Auth)
 	if err != nil {
 		return err
 	}
@@ -284,7 +284,7 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 	// Check if provider supports console access based on kind.
 	switch providerKind {
-	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML:
+	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML, types.ProviderKindAWSUser:
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
@@ -358,14 +358,16 @@ func resolveIdentityName(cmd *cobra.Command, v *viper.Viper, authManager types.A
 }
 
 // retrieveCredentials retrieves credentials from whoami info.
-func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
+// The authConfig is threaded through so the keyring backend honors
+// auth.keyring.type (issue #2544) when retrieving by reference.
+func retrieveCredentials(whoami *types.WhoamiInfo, authConfig *schema.AuthConfig) (types.ICredentials, error) {
 	defer perf.Track(nil, "auth.retrieveCredentials")()
 
 	switch {
 	case whoami.Credentials != nil:
 		return whoami.Credentials, nil
 	case whoami.CredentialsRef != "":
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 		// Use realm from whoami info for credential retrieval.
 		creds, err := credStore.Retrieve(whoami.CredentialsRef, whoami.Realm)
 		if err != nil {

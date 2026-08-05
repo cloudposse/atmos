@@ -1,0 +1,33 @@
+base_path: "./"
+
+version:
+  dependencies:
+    widget:
+      ecosystem: oci
+      package: library/widget
+      desired: "1.0.0"
+
+  tracks:
+    dev:
+      dependencies:
+        widget:
+          desired: "2.0.0"
+    prod:
+      dependencies:
+        widget:
+          desired: "1.0.0"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+templates:
+  settings:
+    enabled: true

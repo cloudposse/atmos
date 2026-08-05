@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { RiRobot2Line, RiStore2Line, RiPlugLine } from 'react-icons/ri';
+import { RiStackLine, RiGraduationCapLine, RiPlugLine } from 'react-icons/ri';
 import './styles.css';
 
 function AIBadge() {
@@ -10,29 +10,35 @@ function AIBadge() {
       <div className="ai-badge-glow" />
       <div className="ai-badge">
         <span className="ai-badge-text">AI</span>
-        <span className="ai-badge-subtitle">Assisted</span>
+        <span className="ai-badge-subtitle">Native</span>
       </div>
     </Link>
   );
 }
 
+// Each card links to the doc section that proves its claim.
+const MotionLink = motion(Link);
+
 const capabilities = [
   {
-    icon: RiRobot2Line,
-    title: 'Interactive AI Chat',
-    desc: 'Chat with AI about your infrastructure. Get answers about stacks, troubleshoot issues, and automate workflows.',
+    icon: RiStackLine,
+    title: 'Declared, not scripted',
+    desc: 'The tools, workflows, dependencies, and validation — everything you used to script together — is declared and wired end to end. Agents drive one complete system, not a pile of glue scripts.',
+    link: '/stacks',
     delay: 0,
   },
   {
-    icon: RiStore2Line,
-    title: 'Skills Marketplace',
-    desc: '21+ pre-built skills for common infrastructure tasks. Install, configure, and extend with custom skills.',
+    icon: RiGraduationCapLine,
+    title: 'Agent Skills',
+    desc: '22 portable skills in the open Agent Skills format hand agents exactly what they need about your stacks, components, and workflows — working across Claude Code, Cursor, Gemini, and Copilot. Publish your own.',
+    link: '/ai/agent-skills',
     delay: 0.1,
   },
   {
     icon: RiPlugLine,
     title: 'MCP Server',
-    desc: 'Expose Atmos as an MCP server for Claude Code, Cursor, and other AI-powered development tools.',
+    desc: 'Atmos exposes itself over the Model Context Protocol, so any MCP client — Claude Code, Cursor, VS Code — can query and drive your infrastructure as native tools. No custom integration.',
+    link: '/ai/mcp-server',
     delay: 0.2,
   },
 ];
@@ -49,12 +55,15 @@ function AISection() {
           transition={{ duration: 0.6, ease: 'easeOut' }}
         >
           <div className="ai-section-left">
-            <span className="ai-section-eyebrow">AI-Powered</span>
-            <h2>Intelligent Infrastructure Management</h2>
+            <span className="ai-section-eyebrow">Built for agents</span>
+            <h2>Infrastructure agents can actually reason about</h2>
             <p>
-              Atmos integrates AI directly into your workflow with multi-provider
-              support, a skills marketplace, and MCP server integration. Ask
-              questions, automate tasks, and troubleshoot issues naturally.
+              Frontend teams move fast because the framework is consistent and
+              predictable. Atmos brings that to infrastructure. Everything is
+              declarative — the same stack configuration, the same commands,
+              everywhere. Skills teach agents your domain, and every command
+              documents itself. So agents don't string together 25 tools and
+              pray — they operate one provable, end-to-end framework.
             </p>
             <div className="ai-section-cta">
               <Link to="/ai" className="button button--lg button--primary">Explore Atmos AI</Link>
@@ -67,8 +76,9 @@ function AISection() {
 
         <div className="ai-capabilities">
           {capabilities.map((cap, i) => (
-            <motion.div
+            <MotionLink
               key={i}
+              to={cap.link}
               className="ai-capability-card"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -80,7 +90,7 @@ function AISection() {
               </div>
               <h3>{cap.title}</h3>
               <p>{cap.desc}</p>
-            </motion.div>
+            </MotionLink>
           ))}
         </div>
       </div>

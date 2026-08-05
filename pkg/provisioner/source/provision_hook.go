@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -49,6 +50,7 @@ func autoProvisionSourceTerraform(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ *provisioner.TerraformExecContext,
 ) error {
 	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext)
 }
@@ -200,6 +202,15 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
 
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		// Track whether this attempt creates the target directory so a failed
+		// provisioning can remove it again. A leftover directory is worse than
+		// none: an empty one misleads path resolution (the component "exists"
+		// but has no code), and a partially populated one is treated as fully
+		// provisioned by needsProvisioning on the next run, silently skipping
+		// re-provisioning.
+		_, statErr := os.Stat(targetDir)
+		createdTarget := os.IsNotExist(statErr)
+
 		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
@@ -209,6 +220,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		}
 
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+			if createdTarget {
+				if rmErr := os.RemoveAll(targetDir); rmErr != nil {
+					ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
+				}
+			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
 				WithExplanation("Failed to auto-provision component source").
@@ -360,19 +376,21 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 }
 
 // isSourceCacheExpired checks if the source cache has expired based on TTL.
-// A TTL of "0" or "0s" means always expired (always re-pull).
+// A TTL of "0" or "0s" means always expired (always re-pull). The expiry decision
+// is delegated to the shared duration.IsExpired helper; this wrapper adds the
+// source-provisioning-specific human-readable reason strings.
 func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
-	// Handle zero TTL explicitly (always expired).
+	// Handle zero TTL explicitly (always expired) so we can tailor the reason.
 	if isZeroTTL(ttl) {
 		return true, fmt.Sprintf("Source cache expired (TTL: %s, always re-pull)", ttl)
 	}
 
-	ttlDuration, err := duration.ParseDuration(ttl)
+	expired, err := duration.IsExpired(updatedAt, ttl)
 	if err != nil {
 		return true, fmt.Sprintf("Invalid source TTL %q; forcing re-provision to avoid stale cache", ttl)
 	}
 
-	if time.Since(updatedAt) > ttlDuration {
+	if expired {
 		return true, fmt.Sprintf("Source cache expired (TTL: %s, last updated: %s)",
 			ttl, updatedAt.Format(time.RFC3339))
 	}
@@ -381,7 +399,7 @@ func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
 
 // isZeroTTL checks if the TTL string represents a zero duration.
 func isZeroTTL(ttl string) bool {
-	return ttl == "0" || ttl == "0s" || ttl == "0m" || ttl == "0h" || ttl == "0d"
+	return duration.IsZeroTTL(ttl)
 }
 
 // isLocalSource determines if a source URI refers to a local path.
@@ -442,6 +460,14 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 		UpdatedAt:     now,
 		LastAccessed:  now,
 		ContentHash:   "", // Content hash is computed separately for local sources.
+	}
+	// The common artifact resolver records a local, credential-free receipt for
+	// JIT workdirs. Failure is deliberately non-fatal: the provisioning result
+	// remains usable, while SBOM coverage can report the missing evidence.
+	if artifact, err := downloader.ResolveArtifact(context.Background(), nil, sourceSpec.Uri, workdirPath); err == nil {
+		metadata.SourceURI = artifact.Declared
+		metadata.SourceResolved = artifact.Resolved
+		metadata.SourceIdentity = artifact.Identity
 	}
 
 	// Preserve original CreatedAt and ContentHash if metadata already existed.

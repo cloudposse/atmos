@@ -2,15 +2,18 @@ package pager
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -40,19 +43,19 @@ type Writer interface {
 }
 
 // dataWriter is the default implementation that uses the data package.
-// Falls back to fmt.Print if data package isn't initialized.
+// Falls back to the global data writer if data package isn't initialized.
 type dataWriter struct{}
 
 // Write writes content using the data package.
-// If data package isn't initialized (panics), falls back to fmt.Print with masking.
+// If data package isn't initialized (panics), falls back to the global data writer with masking.
 func (d *dataWriter) Write(content string) (err error) {
 	// Use recover to catch panic from data.Write() when not initialized.
 	defer func() {
 		if r := recover(); r != nil {
 			// Data package not initialized, use fallback with native masking.
-			log.Debug("data package not initialized, using fmt.Print fallback")
+			log.Debug("data package not initialized, using global data writer fallback")
 			maskedContent := maskContent(content)
-			fmt.Print(maskedContent)
+			_, _ = iolib.Data.Write([]byte(maskedContent))
 			err = nil
 		}
 	}()
@@ -67,16 +70,33 @@ type PageCreator interface {
 
 type pageCreator struct {
 	enablePager           bool
+	maxHeight             int // Maximum viewport height (0 = use terminal height).
+	maxWidth              int // Maximum viewport width (0 = use terminal width).
 	writer                Writer
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
 	isTTYAccessible       func() bool
+	terminalSpeed         float64
 }
 
-func NewWithAtmosConfig(enablePager bool) PageCreator {
+func NewWithAtmosConfig(enablePager bool, speed ...float64) PageCreator {
 	pager := New()
 	pager.(*pageCreator).enablePager = enablePager
+	pager.(*pageCreator).terminalSpeed = resolveSpeed(speed)
+	return pager
+}
+
+// NewWithViewport creates a pager with optional dimension constraints.
+// If maxHeight or maxWidth are non-zero, they constrain the viewport dimensions.
+// Zero values mean use the full terminal dimensions.
+func NewWithViewport(enablePager bool, maxHeight, maxWidth int, speed ...float64) PageCreator {
+	pager := New()
+	pc := pager.(*pageCreator)
+	pc.enablePager = enablePager
+	pc.maxHeight = maxHeight
+	pc.maxWidth = maxWidth
+	pc.terminalSpeed = resolveSpeed(speed)
 	return pager
 }
 
@@ -88,7 +108,15 @@ func New() PageCreator {
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYAccessible:       isTTYAccessible,
+		terminalSpeed:         viper.GetFloat64("settings.terminal.speed"),
 	}
+}
+
+func resolveSpeed(speed []float64) float64 {
+	if len(speed) > 0 {
+		return speed[0]
+	}
+	return viper.GetFloat64("settings.terminal.speed")
 }
 
 // isTTYAccessible checks if /dev/tty can be opened.
@@ -103,8 +131,12 @@ func isTTYAccessible() bool {
 
 func (p *pageCreator) Run(title, content string) error {
 	// Always print content directly if pager is disabled or no TTY support.
-	if !(p.enablePager) || !p.isTTYSupportForStdout() {
+	if !p.enablePager || !p.isTTYSupportForStdout() {
 		return p.writeContent(content)
+	}
+
+	if terminalpkg.IsSpeedLimited(p.terminalSpeed) {
+		return p.writePacedContent(content)
 	}
 
 	// Check if /dev/tty is accessible before trying to use alternate screen.
@@ -128,10 +160,12 @@ func (p *pageCreator) Run(title, content string) error {
 	// Content doesn't fit - use the pager with alternate screen.
 	_, pagerErr := p.newTeaProgram(
 		&model{
-			title:    title,
-			content:  content,
-			ready:    false,
-			viewport: viewport.New(0, 0),
+			title:     title,
+			content:   content,
+			ready:     false,
+			viewport:  viewport.New(0, 0),
+			maxHeight: p.maxHeight,
+			maxWidth:  p.maxWidth,
 		},
 		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer".
 	).Run()
@@ -145,15 +179,37 @@ func (p *pageCreator) Run(title, content string) error {
 	return nil
 }
 
+func (p *pageCreator) writePacedContent(content string) error {
+	writer := p.writer
+	if writer == nil {
+		log.Warn("pager writer is nil, falling back to global data writer")
+		writer = stringWriterFunc(func(content string) error {
+			maskedContent := maskContent(content)
+			_, _ = iolib.Data.Write([]byte(maskedContent))
+			return nil
+		})
+	}
+
+	adapter := &stringWriterAdapter{writer: writer}
+	pacedWriter := terminalpkg.NewPacingWriter(adapter, p.terminalSpeed)
+	if _, err := io.WriteString(pacedWriter, content); err != nil {
+		return fmt.Errorf("failed to write paced content: %w", err)
+	}
+	if err := pacedWriter.Close(); err != nil {
+		return fmt.Errorf("failed to flush paced content: %w", err)
+	}
+	return nil
+}
+
 // writeContent writes content to the configured writer.
-// If the writer is nil, it falls back to fmt.Print with masking and logs a warning.
+// If the writer is nil, it falls back to the global data writer with masking and logs a warning.
 // Returns any error from the writer.
 func (p *pageCreator) writeContent(content string) error {
 	if p.writer == nil {
 		// Fallback for nil writer (shouldn't happen in production, but safe for tests).
-		log.Warn("pager writer is nil, falling back to fmt.Print")
+		log.Warn("pager writer is nil, falling back to global data writer")
 		maskedContent := maskContent(content)
-		fmt.Print(maskedContent)
+		_, _ = iolib.Data.Write([]byte(maskedContent))
 		return nil
 	}
 
@@ -163,4 +219,21 @@ func (p *pageCreator) writeContent(content string) error {
 	}
 
 	return nil
+}
+
+type stringWriterFunc func(string) error
+
+func (fn stringWriterFunc) Write(content string) error {
+	return fn(content)
+}
+
+type stringWriterAdapter struct {
+	writer Writer
+}
+
+func (w *stringWriterAdapter) Write(p []byte) (int, error) {
+	if err := w.writer.Write(string(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

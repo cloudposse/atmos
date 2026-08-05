@@ -47,6 +47,15 @@ ai:
       api_key: !env "OPENAI_API_KEY"
       max_tokens: 4096
 
+    # GitHub Models — zero-secret CI option.
+    # In GitHub Actions the built-in GITHUB_TOKEN authenticates when the
+    # workflow grants `permissions: models: read` — no extra secrets needed.
+    # Locally, `gh auth token` or any GitHub PAT works too.
+    github:
+      model: "openai/gpt-4o-mini"
+      api_key: !env "GITHUB_TOKEN"
+      max_tokens: 4096
+
     # Ollama — local, no API key needed
     ollama:
       model: "llama4"
@@ -59,7 +68,7 @@ ai:
   tools:
     enabled: true
     require_confirmation: true
-    allowed_tools:
+    allowed:
       - atmos_describe_component
       - atmos_list_stacks
       - atmos_validate_stacks

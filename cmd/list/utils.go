@@ -1,9 +1,12 @@
 package list
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -193,21 +196,54 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerForList creates an AuthManager for list commands.
-// It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity via the SCAN variant.
-// Returns nil AuthManager if no auth is configured (which is valid for many use cases).
-//
-// Category B: list commands operate across multiple stacks/components without a single target
-// (component, stack) pair, so they use the SCAN variant to discover stack-level defaults
-// (including defaults declared in imported _defaults.yaml). See
-// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
-func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	identityName := getIdentityFromCommand(cmd)
+// AuthManagerFactory abstracts auth.CreateAndAuthenticateManagerWithStackScan so
+// createAuthManagerForList's evaluation policy can be verified without performing real
+// authentication.
+type AuthManagerFactory interface {
+	// CreateWithStackScan creates and authenticates an AuthManager, first running the stack-file
+	// pre-scan to discover stack-level default identities.
+	CreateWithStackScan(
+		identity string,
+		authConfig *schema.AuthConfig,
+		selectValue string,
+		atmosConfig *schema.AtmosConfiguration,
+	) (auth.AuthManager, error)
+}
 
-	// Scan variant: follows import: chains, discards conflicting defaults, isolates the scan
-	// into a copy of the auth config (no mutation of atmosConfig.Auth).
-	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
+// defaultAuthManagerFactory implements AuthManagerFactory using pkg/auth.
+type defaultAuthManagerFactory struct{}
+
+func (defaultAuthManagerFactory) CreateWithStackScan(
+	identity string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+) (auth.AuthManager, error) {
+	return auth.CreateAndAuthenticateManagerWithStackScan(identity, authConfig, selectValue, atmosConfig)
+}
+
+// listAuthManagerFactory is replaceable in tests so command-level auth policy can be verified
+// without performing real authentication.
+var listAuthManagerFactory AuthManagerFactory = defaultAuthManagerFactory{}
+
+// createAuthManagerForList creates an AuthManager when the command will evaluate values
+// that can require credentials, or when the caller explicitly selected an identity. Plain
+// inventory runs with both template and YAML-function processing disabled remain credential-free.
+// An explicit --identity=false always disables authentication.
+func createAuthManagerForList(
+	cmd *cobra.Command,
+	atmosConfig *schema.AtmosConfiguration,
+	processTemplates, processYamlFunctions bool,
+) (auth.AuthManager, error) {
+	identityName := getIdentityFromCommand(cmd)
+	if identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+	if identityName == "" && !processTemplates && !processYamlFunctions {
+		return nil, nil
+	}
+
+	authManager, err := listAuthManagerFactory.CreateWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
@@ -218,6 +254,41 @@ func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 	}
 
 	return authManager, nil
+}
+
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
+	if authManager != nil {
+		return skip
+	}
+
+	merged := append([]string{}, skip...)
+	for _, functionName := range []string{
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsRegion,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		name := strings.TrimPrefix(functionName, "!")
+		if !containsString(merged, name) {
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.
@@ -237,7 +308,11 @@ func getComponentFilter(args []string) string {
 
 // initConfigAndAuth initializes CLI config and creates an auth manager.
 // The cmd and v parameters allow honoring config selection flags (--base-path, --config, --config-path, --profile).
-func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfiguration, auth.AuthManager, error) {
+func initConfigAndAuth(
+	cmd *cobra.Command,
+	v *viper.Viper,
+	processTemplates, processYamlFunctions bool,
+) (schema.AtmosConfiguration, auth.AuthManager, error) {
 	// Parse global flags and build ConfigAndStacksInfo to honor config selection flags.
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	configAndStacksInfo := buildConfigAndStacksInfo(&globalFlags)
@@ -246,7 +321,7 @@ func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfigur
 		return schema.AtmosConfiguration{}, nil, &listerrors.InitConfigError{Cause: err}
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, processTemplates, processYamlFunctions)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}
@@ -288,7 +363,7 @@ func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *re
 		}
 
 		// Try to use pager - it handles TTY detection and falls back to direct print.
-		pageCreator := pager.NewWithAtmosConfig(true)
+		pageCreator := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 		if err := pageCreator.Run(title, content); err != nil {
 			// Pager failed, fall back to direct render.
 			return r.Render(data)

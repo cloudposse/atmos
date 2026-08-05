@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: get
 description: Display version information for tools configured in your .tool-versions file.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Display version information for tools configured in your `.tool-versions` file. View the currently configured version or browse all available versions from the registry.
 </Intro>
 
-<Screengrab title="atmos toolchain get --help" slug="atmos-toolchain-get--help" />
+<CastPlayer title="atmos toolchain get --help" src="/casts/screengrabs/atmos-toolchain-get--help.cast" static chrome />
 
 ## Usage
 
@@ -118,6 +118,18 @@ terraform available versions (showing 10 of 150+):
 
         Environment variable: `ATMOS_TOOLCHAIN_LIMIT`
     </dd>
+
+    <dt>`--format`, `-f` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table` (default), `plain`, or `json`.
+
+        Use `plain` to print just the bare version string, ideal for shell substitution in scripts and CI.
+        Use `json` for structured output that includes installation status.
+
+        `plain` cannot be combined with `--all`, since there's no single version to print — use `json` instead.
+
+        Environment variable: `ATMOS_TOOLCHAIN_GET_FORMAT`
+    </dd>
 </dl>
 
 ## Use Cases
@@ -160,15 +172,28 @@ atmos toolchain get > tool-versions.txt
 
 ### Script Integration
 
-Use in scripts to check tool versions:
+Use `--format=plain` to get just the bare version string, no parsing required:
 
 ```shell
 #!/bin/bash
 
 # Get configured Terraform version
-TF_VERSION=$(atmos toolchain get terraform | cut -d' ' -f2)
+TF_VERSION=$(atmos toolchain get terraform --format=plain)
 
 echo "Using Terraform version: $TF_VERSION"
+```
+
+This is the preferred way to capture a version in CI, for example writing to `GITHUB_OUTPUT`:
+
+```shell
+version=$(atmos toolchain get vale-cli/vale --format=plain)
+echo "version=$version" >> "$GITHUB_OUTPUT"
+```
+
+Use `--format=json` when a script needs more than the version, such as installation status:
+
+```shell
+atmos toolchain get terraform --format=json | jq -r '.version'
 ```
 
 ### Update Workflow
@@ -274,6 +299,15 @@ atmos toolchain get unknown-tool --all
 ```
 
 Returns an error indicating the tool is not found in any registry.
+
+### `--format=plain` with `--all`
+
+```shell
+atmos toolchain get terraform --all --format=plain
+```
+
+Returns an error, since `--all` lists multiple versions and there's no single version to print in
+plain format. Use `--format=json` instead.
 
 ## Related Commands
 

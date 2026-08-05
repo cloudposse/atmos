@@ -59,6 +59,7 @@ var varfileCmd = &cobra.Command{
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
+		withSecrets := v.GetBool("with-secrets")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -92,9 +93,10 @@ var varfileCmd = &cobra.Command{
 		}
 
 		opts := &e.VarfileOptions{
-			Component: component,
-			Stack:     stack,
-			File:      file,
+			Component:   component,
+			Stack:       stack,
+			File:        file,
+			WithSecrets: withSecrets,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,
@@ -113,11 +115,13 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithBoolFlag("with-secrets", "", false, "Write resolved secret values into the varfile (off by default so plaintext secrets never hit disk)"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("file", "ATMOS_FILE"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+		flags.WithEnvVars("with-secrets", "ATMOS_WITH_SECRETS"),
 	)
 
 	// Register flags with the command.

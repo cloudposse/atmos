@@ -1,0 +1,93 @@
+commands:
+  - name: casts generate examples demo-component-versions vendor-versions
+    description: Regenerate the Component Versions example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-vendored-components
+        working_directory: &component_versions_fixture "../../.context/cast-fixtures/demo-component-versions"
+        output: none
+        command: rm -rf components/terraform
+      - type: cast
+        name: vendor-versions
+        working_directory: *component_versions_fixture
+        title: "Component version vendoring"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-component-versions/vendor-versions.cast"
+        steps:
+          - type: simulate
+            text: "# list the versioned vendor source"
+          - type: simulate
+            text: &vendor_list_cmd atmos vendor list
+          - type: shell
+            name: vendor-list
+            duration: 450ms
+            interval: 750ms
+            command: *vendor_list_cmd
+          - type: simulate
+            text: "# pull the pinned component version"
+          - type: simulate
+            text: &vendor_pull_cmd atmos vendor pull
+          - type: shell
+            name: vendor-pull
+            duration: 550ms
+            interval: 900ms
+            command: *vendor_pull_cmd
+          - type: simulate
+            text: "# inspect the vendored component files"
+          - type: simulate
+            text: &find_cmd find components/terraform/ipinfo/main -maxdepth 1 -type f | sort
+          - type: shell
+            name: find-components
+            duration: 450ms
+            interval: 750ms
+            command: *find_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-component-versions vendor-versions
+  - name: casts validate examples demo-component-versions vendor-versions
+    description: Validate the Component Versions example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-component-versions/vendor-versions.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "# list the versioned vendor source",
+              "atmos vendor list",
+              "ipinfo",
+              "Vendor Manifest",
+              "components/terraform/ipinfo/main",
+              "# pull the pinned component version",
+              "atmos vendor pull",
+              "Vendored 1 components.",
+              "# inspect the vendored component files",
+              "find components/terraform/ipinfo/main -maxdepth 1 -type f | sort",
+              "components/terraform/ipinfo/main/main.tf",
+              "components/terraform/ipinfo/main/variables.tf",
+              "components/terraform/ipinfo/main/versions.tf",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-component-versions vendor-versions cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[vendor-list]", "[vendor-pull]", "[find-components]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"demo-component-versions vendor-versions cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

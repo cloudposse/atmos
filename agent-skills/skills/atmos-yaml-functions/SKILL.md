@@ -1,6 +1,6 @@
 ---
 name: atmos-yaml-functions
-description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !env, !exec, !include, !template, !literal, !random, !aws.*, !cwd, !repo-root"
+description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !random, !aws.*, !git.*, !cwd, !repo-root"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -27,11 +27,15 @@ templates first, then executes the YAML functions.
 | `!terraform.output` | Read Terraform outputs via `terraform output` (requires init, slower) |
 | `!store` | Read values from stores using component/stack/key pattern |
 | `!store.get` | Read arbitrary keys from stores (no naming convention required) |
+| `!secret` | Resolve declared secrets from configured secret backends |
+| `!emulator` | Resolve local emulator connection details |
 | `!env` | Read environment variables (from stack `env:` sections or OS) |
 | `!exec` | Execute shell scripts and use the output |
 | `!include` | Include local or remote files (YAML, JSON, HCL, text) |
 | `!include.raw` | Include files as raw text regardless of extension |
 | `!template` | Evaluate Go template expressions and convert JSON to YAML types |
+| `!append` | Append values to inherited lists without replacing the whole list |
+| `!unset` | Remove inherited keys or values from merged config |
 | `!literal` | Preserve values verbatim, bypassing all template processing |
 | `!random` | Generate cryptographically secure random integers |
 | `!cwd` | Get the current working directory |
@@ -41,6 +45,11 @@ templates first, then executes the YAML functions.
 | `!aws.caller_identity_user_id` | Get the AWS caller identity user ID |
 | `!aws.organization_id` | Get the current AWS Organization ID |
 | `!aws.region` | Get the current AWS region from SDK config |
+| `!git.host` | Get the current repository host |
+| `!git.name` | Get the current repository name |
+| `!git.owner` | Get the current repository owner |
+| `!git.repository` | Get the owner/repository slug |
+| `!git.url` | Get the repository URL |
 
 ## Supported Sections
 
@@ -70,14 +79,28 @@ vars:
   db_host: !terraform.state config .config_map.username
 
   # Default values for unprovisioned components
-  vpc_id: !terraform.state vpc ".vpc_id // ""default-vpc"""
+  vpc_id: !terraform.state vpc .vpc_id // "default-vpc"
 
   # YQ string concatenation
-  url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+  url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 
   # Bracket notation for keys with special characters
   key: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
+
+### Cold State and `terraform plan --all`
+
+`!terraform.state` resolves configuration before Terraform plans a component. On a first aggregate
+plan, an upstream component may therefore have no state yet. Use a YQ `//` default for values that
+must exist at plan time, with a deterministic, provider-valid mock value:
+
+```yaml
+vars:
+  kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000"'
+```
+
+The deployed upstream output supersedes the fallback automatically. Dependency metadata controls
+deployment order; it does not create state before an aggregate plan.
 
 ## `!terraform.output` -- Remote State Access
 
@@ -117,6 +140,36 @@ vars:
   feature_flag: !store.get ssm /features/new-feature | default "disabled"
   api_key: !store.get redis app-config | query .api.key
   config: !store.get redis "config-{{ .vars.region }}"
+```
+
+## `!secret` -- Declared Secret Access
+
+Use `!secret` for sensitive values declared under `secrets.vars`. Do not use raw `!store` calls for
+values that should be masked and lifecycle-managed as secrets.
+
+```yaml
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            store: prod/ssm
+            required: true
+      vars:
+        datadog_api_key: !secret DATADOG_API_KEY
+```
+
+## `!append` and `!unset` -- Merge Control
+
+Use `!append` when a child stack should add to an inherited list instead of replacing it. Use
+`!unset` when a child stack should remove inherited config.
+
+```yaml
+vars:
+  security_groups: !append
+    - sg-extra
+  deprecated_setting: !unset
 ```
 
 ## `!env` -- Environment Variables
@@ -221,6 +274,7 @@ vars:
 vars:
   working_dir: !cwd
   repo_root: !repo-root
+  repo: !git.repository
 ```
 
 ## When to Use YAML Functions vs. Go Templates
@@ -229,6 +283,8 @@ vars:
 |----------|-----|
 | Reading Terraform outputs | `!terraform.state` or `!terraform.output` |
 | Reading store values | `!store` or `!store.get` |
+| Reading declared secrets | `!secret` |
+| Referencing emulator endpoints | `!emulator` |
 | Environment variables | `!env` |
 | Including files | `!include` |
 | Complex outputs (lists/maps) | `!template` with `toJson` |
@@ -244,7 +300,7 @@ vars:
 2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
 3. **All YAML functions cache results** per execution for repeated calls
 4. **Cold-start errors** -- `!terraform.output` and `!store` fail if the referenced component
-   is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
+    is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
 
 ## Additional Resources
 

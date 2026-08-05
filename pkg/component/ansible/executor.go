@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -19,6 +20,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+var (
+	setupComponentAuthForCLI = e.SetupComponentAuthForCLI
+	processStacks            = e.ProcessStacks
 )
 
 // Flags represents Ansible command-line flags.
@@ -39,6 +45,27 @@ func checkConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if atmosConfig.Components.Ansible.BasePath == "" {
 		return errUtils.ErrMissingAnsibleBasePath
 	}
+	return nil
+}
+
+func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	var authManager auth.AuthManager
+	if info.Identity != "" {
+		// Ansible owns -i for inventory, so only explicit --identity/ATMOS_IDENTITY
+		// should trigger Atmos auth setup before YAML function processing.
+		var err error
+		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
+		if err != nil {
+			return err
+		}
+	}
+
+	processedInfo, err := processStacks(atmosConfig, *info, true, true, true, nil, authManager)
+	if err != nil {
+		return err
+	}
+
+	*info = processedInfo
 	return nil
 }
 
@@ -68,8 +95,7 @@ func ExecutePlaybook(
 		}
 	}
 
-	*info, err = e.ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
-	if err != nil {
+	if err := processStacksWithAuth(&atmosConfig, info); err != nil {
 		return err
 	}
 

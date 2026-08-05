@@ -12,6 +12,33 @@ import (
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
+// init registers the built-in `store` kind with the kind registry. This is
+// the same dispatch the pre-rename `command: store` YAML used, just routed
+// through the kind registry instead of a hardcoded switch in RunAll.
+func init() {
+	if err := RegisterKind(&Kind{
+		Name:   "store",
+		Engine: storeEngine{},
+	}); err != nil {
+		panic("failed to register built-in store kind: " + err.Error())
+	}
+}
+
+// storeEngine adapts the existing StoreCommand to the Engine interface.
+// It produces no structured Output (store hooks write directly to a
+// configured store backend), so Run returns (nil, err).
+type storeEngine struct{}
+
+// Run satisfies Engine. It instantiates a StoreCommand bound to the active
+// AtmosConfiguration/Info and delegates to the existing RunE logic.
+func (storeEngine) Run(ctx *ExecContext) (*Output, error) {
+	sc, err := NewStoreCommand(ctx.AtmosConfig, ctx.Info)
+	if err != nil {
+		return nil, err
+	}
+	return nil, sc.RunE(ctx.Hook, ctx.Event, ctx.Cmd, ctx.Args)
+}
+
 // TerraformOutputGetter retrieves terraform outputs.
 // This enables dependency injection for testing.
 // Returns:
@@ -59,7 +86,7 @@ func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 		return nil
 	}
 
-	log.Debug("Executing store hook", "hook", hook.Name, "command", hook.Command)
+	log.Debug("Executing store hook", "hook", hook.Name, "kind", hook.Kind)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue, err := c.getOutputValue(hook.Name, event, value)
 		if err != nil {

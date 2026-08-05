@@ -29,7 +29,7 @@ All sources are public repositories and require no authentication for read acces
 
 ### Environment
 
-- **Atmos CLI**: Must be built and available (run `make build` from the repository root)
+- **Atmos CLI**: Must be built and available (run `atmos build` from the repository root)
 - **Network Access**: Required to download remote sources
 - **Working Directory**: Tests should be run from `tests/fixtures/scenarios/source-provisioner-workdir/`
 

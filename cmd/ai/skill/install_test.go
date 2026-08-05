@@ -8,17 +8,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
-	assert.Equal(t, "install <source>", installCmd.Use)
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "install [source]", installCmd.Use)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 	assert.NotEmpty(t, installCmd.Long)
 	assert.NotNil(t, installCmd.RunE)
 }
@@ -38,11 +38,49 @@ func TestInstallCmd_Flags(t *testing.T) {
 		assert.Equal(t, "false", flag.DefValue)
 		assert.Equal(t, "y", flag.Shorthand)
 	})
+
+	t.Run("has path flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag, "path flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("has client flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag, "client flag should be registered")
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+		assert.Equal(t, "c", flag.Shorthand)
+	})
+
+	t.Run("has all-clients flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag, "all-clients flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("has scope flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag, "scope flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("has global flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag, "global flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+		assert.Equal(t, "g", flag.Shorthand)
+	})
 }
 
 func TestInstallCmd_LongDescription(t *testing.T) {
 	// Verify long description contains important information.
-	assert.Contains(t, installCmd.Long, "Install AI skills from a GitHub repository")
+	assert.Contains(t, installCmd.Long, "Install AI skills")
+	assert.Contains(t, installCmd.Long, "bundled Atmos skill name")
+	assert.Contains(t, installCmd.Long, "atmos-terraform")
 	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
 	assert.Contains(t, installCmd.Long, "agentskills.io")
 	assert.Contains(t, installCmd.Long, "SKILL.md")
@@ -51,26 +89,146 @@ func TestInstallCmd_LongDescription(t *testing.T) {
 }
 
 func TestInstallCmd_ArgsValidation(t *testing.T) {
-	// The command expects exactly 1 argument.
+	// The command accepts at most 1 argument; an omitted <source> means
+	// "install every bundled skill".
 	assert.NotNil(t, installCmd.Args)
 
-	// Test ExactArgs(1) validation.
-	t.Run("rejects zero arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
+	t.Run("accepts zero arguments (install all bundled)", func(t *testing.T) {
+		err := installCmd.Args(installCmd, []string{})
+		assert.NoError(t, err)
 	})
 
 	t.Run("accepts exactly one argument", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{"github.com/user/repo"})
+		err := installCmd.Args(installCmd, []string{"github.com/user/repo"})
 		assert.NoError(t, err)
 	})
 
 	t.Run("rejects two arguments", func(t *testing.T) {
-		err := cobra.ExactArgs(1)(installCmd, []string{"arg1", "arg2"})
+		err := installCmd.Args(installCmd, []string{"arg1", "arg2"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "accepts 1 arg(s)")
 	})
+}
+
+// TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill covers the CLI wiring
+// for "atmos ai skill install" with no <source>: it must reach
+// InstallAllBundled rather than erroring on a missing argument.
+func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	// Project-scope client detection stats basePath (== os.Getwd()) for
+	// .claude/.vscode/.gemini signal directories. Without isolating CWD to an
+	// empty temp dir, this test would read whatever real project happens to
+	// be checked out (and, worse, distributeToClients would create real
+	// signal directories on disk under the actual source tree).
+	t.Chdir(t.TempDir())
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "Discovered")
+	assert.Contains(t, output, "skills installed successfully in",
+		"batch install should say where the skills landed, combined with the count on one line")
+	assert.Contains(t, output, filepath.Join("~", ".atmos", "skills"))
+	assert.NotContains(t, output, "atmos ai chat",
+		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
+
+	// A representative skill actually landed on disk under the fake HOME.
+	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_DistributingToShowsRealClientDirectory guards against
+// the exact bug reported live, where "Distributing to: claude-code" appeared
+// right above a "successfully in ~/.atmos/skills" line and read as if that
+// were claude-code's own directory, when claude-code actually reads skills
+// from ~/.claude/skills. The completion line (this test runs
+// non-interactively, so the spinner's in-progress-only text never renders --
+// only its completion message does) must show each client's real target
+// directory so the two are never confused.
+func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+		_ = installCmd.Flags().Set("client", "")
+		_ = installCmd.Flags().Set("scope", "project")
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, installCmd.Flags().Set("scope", "user"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "claude-code")
+	assert.Contains(t, output, filepath.Join("~", ".claude", "skills"),
+		"the distribution line must show claude-code's actual skill directory, not Atmos's own ~/.atmos/skills store")
+}
+
+// TestInstallCmd_RunE_AlreadyInstalledOmitsHintAndLocation covers the exact
+// screenshot bug: re-running install with everything already installed (0
+// new, 0 updated) must not claim a location or print the chat hint -- there
+// is nothing to report either did.
+func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+	t.Chdir(t.TempDir()) // isolate project-scope client detection; see the sibling test above.
+
+	setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "0 skills installed")
+	assert.NotContains(t, output, filepath.Join(".atmos", "skills"),
+		"nothing was installed, so there's no location to report")
+	assert.NotContains(t, output, "atmos ai chat")
 }
 
 func TestInstallCmd_Examples(t *testing.T) {
@@ -89,6 +247,7 @@ func TestInstallCmd_SecuritySection(t *testing.T) {
 
 func TestInstallCmd_SourceFormats(t *testing.T) {
 	// Verify all documented source formats are mentioned.
+	assert.Contains(t, installCmd.Long, "Bundled skill by name")
 	assert.Contains(t, installCmd.Long, "user/repo")
 	assert.Contains(t, installCmd.Long, "user/repo@v1.2.3")
 	assert.Contains(t, installCmd.Long, "github.com/user/repo")
@@ -161,6 +320,41 @@ func TestInstallCmd_FlagUsage(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.NotEmpty(t, flag.Usage)
 		assert.Contains(t, flag.Usage, "confirmation")
+	})
+
+	t.Run("path flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "install directory")
+	})
+
+	t.Run("client flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI client")
+	})
+
+	t.Run("all-clients flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI clients")
+	})
+
+	t.Run("scope flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "Distribution scope")
+	})
+
+	t.Run("global flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "--scope user")
 	})
 }
 
@@ -418,6 +612,8 @@ func TestInstallCmd_CommandRegistration(t *testing.T) {
 }
 
 func TestInstallCmd_OutputDuringInstall(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
 	// Reset flags.
 	forceFlag := installCmd.Flags().Lookup("force")
 	if forceFlag != nil {
@@ -428,23 +624,11 @@ func TestInstallCmd_OutputDuringInstall(t *testing.T) {
 		_ = yesFlag.Value.Set("false")
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
 	// Run with valid source format.
 	_ = installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill"})
 
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
-
 	// Should print "Downloading skill from..." message.
-	assert.Contains(t, output, "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
 }
 
 func TestInstallCmd_RunENotNil(t *testing.T) {
@@ -452,11 +636,11 @@ func TestInstallCmd_RunENotNil(t *testing.T) {
 }
 
 func TestInstallCmd_UseFieldCorrect(t *testing.T) {
-	assert.Equal(t, "install <source>", installCmd.Use)
+	assert.Equal(t, "install [source]", installCmd.Use)
 }
 
 func TestInstallCmd_ShortDescription(t *testing.T) {
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 }
 
 func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
@@ -576,27 +760,16 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 	}
 
 	t.Run("uses context in installer", func(t *testing.T) {
+		uiOutput := setupSkillCommandUI(t)
 		resetFlags()
 		_ = installCmd.Flags().Set("yes", "true")
-
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
 
 		// Run with a valid source - it will fail at download but shows context is used.
 		err := installCmd.RunE(installCmd, []string{"github.com/nonexistent/repo@v1.0.0"})
 
-		w.Close()
-		os.Stdout = oldStdout
-
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-
 		assert.Error(t, err)
 		// Verify output shows downloading started.
-		assert.Contains(t, buf.String(), "Downloading skills from")
+		assert.Contains(t, uiOutput.String(), "Downloading skills from")
 	})
 }
 
@@ -658,6 +831,8 @@ func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
 }
 
 func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
 	// Reset flags before test.
 	forceFlag := installCmd.Flags().Lookup("force")
 	if forceFlag != nil {
@@ -668,28 +843,15 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 		_ = yesFlag.Value.Set("true")
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
 	// Run the command.
 	err := installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill@v2.0.0"})
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	// Drain the pipe.
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
 	// Should proceed to download stage.
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "download")
 
 	// Verify download message was printed.
-	output := buf.String()
-	assert.Contains(t, output, "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.
@@ -851,5 +1013,99 @@ func TestInstallCmd_ViperPrecedence(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.False(t, v.GetBool("force"), "CLI flag should override env var")
+	})
+
+	t.Run("path flag defaults to empty via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("env var binding for path flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/custom-skills")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/custom-skills", v.GetString("path"), "path should come from ATMOS_AI_SKILL_PATH env var")
+	})
+
+	t.Run("CLI path flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/env-skills")
+
+		oldVal := installCmd.Flags().Lookup("path").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("path", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("path", "/tmp/cli-skills"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/cli-skills", v.GetString("path"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for client flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_CLIENT", "vscode")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"vscode"}, v.GetStringSlice("client"))
+	})
+
+	t.Run("env var binding for all-clients flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_ALL_CLIENTS", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("all-clients"), "all-clients should be true from ATMOS_AI_SKILL_ALL_CLIENTS env var")
+	})
+
+	t.Run("scope flag defaults to project via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("env var binding for scope flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "user", v.GetString("scope"), "scope should come from ATMOS_AI_SKILL_SCOPE env var")
+	})
+
+	t.Run("CLI scope flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		oldVal := installCmd.Flags().Lookup("scope").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("scope", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("scope", "project"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "project", v.GetString("scope"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for global flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_GLOBAL", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("global"), "global should be true from ATMOS_AI_SKILL_GLOBAL env var")
 	})
 }

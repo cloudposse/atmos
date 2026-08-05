@@ -126,37 +126,24 @@ func (i *ambientIdentity) LoadCredentials(_ context.Context) (types.ICredentials
 	return nil, nil
 }
 
-// IsStandaloneAmbientChain checks if the authentication chain represents a standalone ambient identity.
-func IsStandaloneAmbientChain(chain []string, identities map[string]schema.Identity) bool {
-	if len(chain) != 1 {
-		return false
-	}
+// IsStandalone reports that generic ambient identities authenticate without an upstream
+// provider step. Part of the types.StandaloneIdentity interface.
+func (i *ambientIdentity) IsStandalone() bool { return true }
 
-	identityName := chain[0]
-	if identity, exists := identities[identityName]; exists {
-		return identity.Kind == "ambient"
-	}
+// AuthenticateStandalone authenticates a standalone ambient identity directly. Ambient
+// identities mint nothing, so this returns nil credentials. Part of the
+// types.StandaloneIdentity interface.
+func (i *ambientIdentity) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "ambient.ambientIdentity.AuthenticateStandalone")()
 
-	return false
-}
-
-// AuthenticateStandaloneAmbient handles authentication for standalone ambient identities.
-func AuthenticateStandaloneAmbient(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
-	defer perf.Track(nil, "ambient.AuthenticateStandaloneAmbient")()
-
-	log.Debug("Authenticating ambient identity directly", logKeyIdentityAmbient, identityName)
-
-	identity, exists := identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf("%w: ambient identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
-	}
+	log.Debug("Authenticating ambient identity directly", logKeyIdentityAmbient, i.name)
 
 	// Ambient identities return nil credentials — they don't manage credentials.
-	credentials, err := identity.Authenticate(ctx, nil)
+	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: ambient identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, fmt.Errorf("%w: ambient identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.name, err)
 	}
 
-	log.Debug("Ambient identity authenticated successfully", logKeyIdentityAmbient, identityName)
+	log.Debug("Ambient identity authenticated successfully", logKeyIdentityAmbient, i.name)
 	return credentials, nil
 }

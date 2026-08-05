@@ -3,15 +3,26 @@ package workdir
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// Terraform and OpenTofu both use .terraform as the default TF_DATA_DIR.
+	terraformDataDir           = ".terraform"
+	terraformWorkspaceStateDir = "terraform.tfstate.d"
+	// Suffix shared by the canonical .terraform.lock.hcl and the per-instance
+	// .<stack>-<component>.terraform.lock.hcl that Atmos manages.
+	terraformLockFileSuffix = ".terraform.lock.hcl"
 )
 
 // copyDir recursively copies a directory from src to dst.
@@ -74,7 +85,8 @@ func (f *DefaultFileSystem) CopyDir(src, dst string) error {
 
 // SyncDir performs a true sync: copies changed files, adds new files, deletes removed files.
 // Returns true if any changes were made, false if directories were already in sync.
-// Skips the .atmos/ directory which contains Atmos metadata.
+// Skips runtime metadata/cache directories that should not be copied from source
+// components or deleted from workdirs.
 func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.SyncDir")()
 
@@ -89,7 +101,7 @@ func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error
 
 // syncSourceToDest copies new/changed files from src to dst.
 // Returns a map of relative paths for deletion detection, and whether any changes were made.
-// Skips the .atmos/ directory which contains Atmos metadata.
+// Skips runtime metadata/cache directories.
 func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, error) {
 	srcFiles := make(map[string]bool)
 	anyChanged := false
@@ -104,8 +116,7 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 			return err
 		}
 
-		// Skip .atmos/ directory entirely (contains Atmos metadata).
-		if d.IsDir() && relPath == AtmosDir {
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
 			return filepath.SkipDir
 		}
 
@@ -113,6 +124,13 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 
 		if d.IsDir() {
 			return os.MkdirAll(dstPath, DirPermissions)
+		}
+
+		// Lock files are managed by the providers-lock restore/persist lifecycle, not by
+		// the source→workdir sync: do not copy a source lock into the workdir (and, via the
+		// matching skip in deleteRemovedFiles, do not let the workdir's own lock be deleted).
+		if shouldSkipSyncFile(relPath) {
+			return nil
 		}
 
 		srcFiles[relPath] = true
@@ -159,7 +177,7 @@ func fileNeedsCopy(srcPath, dstPath string, hasher Hasher) bool {
 }
 
 // deleteRemovedFiles removes files in dst that no longer exist in src.
-// Skips the .atmos/ directory which contains metadata.
+// Skips runtime metadata/cache directories.
 func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 	anyDeleted := false
 
@@ -173,12 +191,17 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 			return err
 		}
 
-		// Skip .atmos/ directory entirely (contains Atmos metadata).
-		if d.IsDir() && relPath == AtmosDir {
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
 			return filepath.SkipDir
 		}
 
 		if d.IsDir() || srcFiles[relPath] {
+			return nil
+		}
+
+		// Preserve the workdir's managed lock files (canonical + per-instance) across
+		// re-sync; they are not part of the source tree and must not be deleted.
+		if shouldSkipSyncFile(relPath) {
 			return nil
 		}
 
@@ -187,6 +210,24 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 	})
 
 	return anyDeleted, err
+}
+
+// shouldSkipSyncDir reports whether relPath is runtime state excluded from sync.
+func shouldSkipSyncDir(relPath string) bool {
+	switch filepath.Base(filepath.Clean(relPath)) {
+	case AtmosDir, terraformDataDir, terraformWorkspaceStateDir:
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldSkipSyncFile reports whether relPath is a Terraform dependency lock file
+// (canonical .terraform.lock.hcl or a per-instance .<stack>-<component>.terraform.lock.hcl).
+// Lock files are owned by the providers-lock restore/persist lifecycle, so the source→workdir
+// sync must neither copy them in nor delete the workdir's own.
+func shouldSkipSyncFile(relPath string) bool {
+	return strings.HasSuffix(filepath.Base(relPath), terraformLockFileSuffix)
 }
 
 // copyFile copies a single file from src to dst.
@@ -246,13 +287,20 @@ func NewDefaultHasher() *DefaultHasher {
 func (h *DefaultHasher) HashDir(path string) (string, error) {
 	defer perf.Track(nil, "workdir.DefaultHasher.HashDir")()
 
-	hash := sha256.New()
+	hash := fnv.New128a()
 
 	// Collect all file paths first for sorted order.
 	var files []string
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		relPath, relErr := filepath.Rel(path, p)
+		if relErr != nil {
+			return relErr
+		}
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() {
 			files = append(files, p)
@@ -274,6 +322,7 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 			return "", err
 		}
 		// Normalize to forward slashes for cross-platform consistency.
+		// codeql[go/weak-sensitive-data-hashing] -- this hashes a file path for a workdir content-checksum cache, never a password or credential.
 		hash.Write([]byte(filepath.ToSlash(relPath)))
 
 		// Hash file contents.
@@ -298,6 +347,7 @@ func (h *DefaultHasher) HashFile(path string) (string, error) {
 	defer file.Close()
 
 	hash := sha256.New()
+	// codeql[go/weak-sensitive-data-hashing]: workdir file hashes detect content changes and are not used for credential storage.
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
 	}

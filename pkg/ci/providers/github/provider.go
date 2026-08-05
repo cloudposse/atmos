@@ -105,6 +105,13 @@ func (p *Provider) Context() (*provider.Context, error) {
 		}
 	}
 
+	// Checkout metadata: honor GITHUB_SERVER_URL so GitHub Enterprise
+	// clone URLs resolve to the right host.
+	ctx.ServerURL = serverURLOrDefault()
+	if ctx.Repository != "" {
+		ctx.CloneURL = ctx.ServerURL + "/" + ctx.Repository + ".git"
+	}
+
 	// Set branch name (prefer GITHUB_HEAD_REF for PRs, fall back to GITHUB_REF_NAME).
 	branch := os.Getenv("GITHUB_HEAD_REF") // PR head branch.
 	if branch == "" {
@@ -116,6 +123,11 @@ func (p *Provider) Context() (*provider.Context, error) {
 	if ctx.EventName == "pull_request" || ctx.EventName == "pull_request_target" {
 		ctx.PullRequest = parsePRInfo()
 	}
+
+	// pull_request_target and workflow_run run with the base repository's
+	// secrets even though the requested checkout may target untrusted fork
+	// content. Mark them elevated so the fork-checkout safety gate engages.
+	ctx.ElevatedEvent = ctx.EventName == "pull_request_target" || ctx.EventName == "workflow_run"
 
 	return ctx, nil
 }
@@ -155,10 +167,7 @@ func parsePRInfo() *provider.PRInfo {
 	}
 
 	repo := os.Getenv("GITHUB_REPOSITORY")
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
-	if serverURL == "" {
-		serverURL = "https://github.com"
-	}
+	serverURL := serverURLOrDefault()
 
 	var prURL string
 	if prNumber > 0 && repo != "" {
@@ -193,10 +202,21 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 }
 
 func init() {
-	// Only register if we can detect GitHub Actions.
-	// The client is lazily initialized — GITHUB_TOKEN is not required at init time.
-	p := NewProvider()
-	if p.Detect() {
-		ci.Register(p)
+	// Register unconditionally: registration advertises the provider's
+	// capabilities, while Detect() decides whether it is active for the current
+	// run (GITHUB_ACTIONS=true). Registering outside a runner lets cache
+	// administration (`atmos ci cache list`/`delete`) resolve the GitHub cache
+	// backend locally via ci.ResolveAdminCache, without making the provider the
+	// detected one. The client is lazily initialized — GITHUB_TOKEN is not
+	// required at init time.
+	ci.Register(NewProvider())
+}
+
+// serverURLOrDefault returns GITHUB_SERVER_URL, defaulting to github.com.
+// GitHub Enterprise sets this to the enterprise host.
+func serverURLOrDefault() string {
+	if serverURL := os.Getenv("GITHUB_SERVER_URL"); serverURL != "" {
+		return serverURL
 	}
+	return "https://github.com"
 }

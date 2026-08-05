@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -366,14 +367,11 @@ func TestGetGlobMatches_Basic(t *testing.T) {
 	assert.Contains(t, matches, "glob_utils_test.go",
 		"expected glob_utils_test.go to be in the matches")
 
-	// Verify sort order is deterministic: assert first and last element by
-	// their known alphabetical position within pkg/utils.
-	// "component_path_absolute_test.go" sorts before all other .go files in
-	// this package; "yq_utils_test.go" sorts after all others.
-	assert.Equal(t, "component_path_absolute_test.go", matches[0],
-		"first element should be component_path_absolute_test.go (alphabetically first)")
-	assert.Equal(t, "yq_utils_test.go", matches[len(matches)-1],
-		"last element should be yq_utils_test.go (alphabetically last)")
+	// Verify the result is deterministically sorted. We assert sortedness rather
+	// than hard-coding the first/last filename, which would break whenever a .go
+	// file is added to or removed from this package (e.g. array_cleanup.go).
+	assert.True(t, sort.StringsAreSorted(matches),
+		"GetGlobMatches must return a deterministically sorted slice, got %v", matches)
 }
 
 // TestGetGlobMatches_ConsistentResults tests that multiple calls return consistent results.

@@ -1,3 +1,8 @@
+---
+title: AI with Claude Code CLI
+tags: [AI]
+---
+
 # Example: AI with Claude Code CLI
 
 Use your Claude Pro/Max subscription instead of API tokens. Claude Code manages the AI

@@ -2,6 +2,7 @@ package flags
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -50,6 +51,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -78,7 +80,49 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+
+		// Settings overrides.
+		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+
+		// Edition pin.
+		Edition: v.GetString("edition"),
 	}
+}
+
+func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
+	if cmd == nil {
+		return nil, false
+	}
+
+	flagSets := []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		cmd.PersistentFlags(),
+	}
+
+	for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
+		flagSets = append(flagSets, parent.PersistentFlags())
+	}
+
+	var first *pflag.Flag
+	for _, flagSet := range flagSets {
+		if flagSet == nil {
+			continue
+		}
+
+		flag := flagSet.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if first == nil {
+			first = flag
+		}
+		if flag.Changed {
+			return flag, true
+		}
+	}
+
+	return first, false
 }
 
 // BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
@@ -107,30 +151,14 @@ func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigA
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The identity flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(identityFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(identityFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(identityFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, identityFlagName)
 	if flag == nil {
 		// Identity flag not registered on this command or its parents.
 		return global.NewIdentitySelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(identityFlagName) ||
-		cmd.InheritedFlags().Changed(identityFlagName) ||
-		cmd.PersistentFlags().Changed(identityFlagName)
-
 	if changed {
-		value := v.GetString(identityFlagName)
+		value := flag.Value.String()
 		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
@@ -153,6 +181,23 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
+	if flag == nil {
+		return ""
+	}
+	if changed {
+		return flag.Value.String()
+	}
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
+	}
+	return ""
+}
+
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
 // The pager flag has three states:
 //  1. Not provided → PagerSelector{provided: false}
@@ -161,30 +206,14 @@ func normalizeIdentityValue(value string) string {
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flags.parsePagerFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The pager flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(pagerFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(pagerFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(pagerFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, pagerFlagName)
 	if flag == nil {
 		// Pager flag not registered on this command or its parents.
 		return global.NewPagerSelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(pagerFlagName) ||
-		cmd.InheritedFlags().Changed(pagerFlagName) ||
-		cmd.PersistentFlags().Changed(pagerFlagName)
-
 	if changed {
-		value := v.GetString(pagerFlagName)
+		value := flag.Value.String()
 		return global.NewPagerSelector(value, true)
 	}
 
@@ -217,6 +246,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
 	registerAIFlags(registry)
+	registerSettingsFlags(registry)
 
 	return registry
 }
@@ -310,6 +340,16 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Description: "Enable pager for output",
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:                    cfg.CastFlagName,
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Record command output as an asciinema cast",
+		NoOptDefVal:             cfg.CastFlagAutoValue,
+		NoOptDefValNoSpaceValue: true,
+		EnvVars:                 []string{cfg.CastEnvVarName},
 	})
 }
 
@@ -411,6 +451,27 @@ func registerAIFlags(registry *FlagRegistry) {
 		Default:     []string{},
 		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
 		EnvVars:     []string{"ATMOS_SKILL"},
+	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func registerSettingsFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerSettingsFlags")()
+
+	registry.Register(&StringFlag{
+		Name:        "settings-list-merge-strategy",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
+		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "edition",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+		EnvVars:     []string{"ATMOS_EDITION"},
 	})
 }
 

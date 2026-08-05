@@ -148,3 +148,66 @@ func TestParseDuration_OverflowProtection(t *testing.T) {
 		})
 	}
 }
+
+func TestIsZeroTTL(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		// Zero values.
+		{name: "bare zero", input: "0", expected: true},
+		{name: "zero seconds", input: "0s", expected: true},
+		{name: "zero minutes", input: "0m", expected: true},
+		{name: "zero hours", input: "0h", expected: true},
+		{name: "zero days", input: "0d", expected: true},
+
+		// Zero values with surrounding whitespace (regression for trimming).
+		{name: "whitespace around zero seconds", input: " 0s ", expected: true},
+		{name: "whitespace around bare zero", input: "  0  ", expected: true},
+		{name: "tabs and newlines around zero hours", input: "\t0h\n", expected: true},
+
+		// Non-zero / non-TTL values.
+		{name: "one hour", input: "1h", expected: false},
+		{name: "thirty minutes", input: "30m", expected: false},
+		{name: "empty string", input: "", expected: false},
+		{name: "keyword", input: "daily", expected: false},
+		{name: "whitespace only", input: "   ", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsZeroTTL(tt.input), "unexpected result for input %q", tt.input)
+		})
+	}
+}
+
+func TestIsExpired(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name        string
+		updatedAt   time.Time
+		ttl         string
+		wantExpired bool
+		wantErr     bool
+	}{
+		{name: "zero TTL is always expired", updatedAt: now, ttl: "0s", wantExpired: true},
+		{name: "zero TTL with whitespace is always expired", updatedAt: now, ttl: " 0s ", wantExpired: true},
+		{name: "fresh entry within TTL", updatedAt: now.Add(-1 * time.Minute), ttl: "1h", wantExpired: false},
+		{name: "stale entry beyond TTL", updatedAt: now.Add(-2 * time.Hour), ttl: "1h", wantExpired: true},
+		{name: "invalid TTL returns error", updatedAt: now, ttl: "nonsense", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expired, err := IsExpired(tt.updatedAt, tt.ttl)
+			if tt.wantErr {
+				assert.Error(t, err, "expected error for ttl %q", tt.ttl)
+				return
+			}
+			require.NoError(t, err, "unexpected error for ttl %q", tt.ttl)
+			assert.Equal(t, tt.wantExpired, expired, "unexpected expiry for ttl %q", tt.ttl)
+		})
+	}
+}

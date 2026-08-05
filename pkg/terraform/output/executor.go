@@ -160,6 +160,7 @@ func (e *Executor) GetAllOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authContext *schema.AuthContext,
 	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
@@ -175,7 +176,7 @@ func (e *Executor) GetAllOutputs(
 
 	// Use quiet mode to suppress terraform init/workspace output.
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
-	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
+	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
 		ui.ClearLine()
 		ui.Error(message)
@@ -562,6 +563,7 @@ func (e *Executor) execute(
 	if err != nil {
 		return nil, err
 	}
+	pluginCache := configurePluginCache(atmosConfig, config, environMap)
 	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
 	// any PATH overrides from the component's env section.
@@ -583,7 +585,7 @@ func (e *Executor) execute(
 		workspaceMgr := &defaultWorkspaceManager{}
 		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
-		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
+		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache); err != nil {
 			return nil, err
 		}
 

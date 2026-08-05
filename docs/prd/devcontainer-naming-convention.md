@@ -119,11 +119,11 @@ Every new devcontainer gets labels that explicitly store the parsed name and ins
 
 ```go
 Labels: {
-    "com.atmos.type": "devcontainer",
-    "com.atmos.devcontainer.name": "my-app",
-    "com.atmos.devcontainer.instance": "test-1",
-    "com.atmos.workspace": "/path/to/workspace",
-    "com.atmos.created": "2025-11-10T14:00:00Z"
+    "tools.atmos.type": "devcontainer",
+    "tools.atmos.devcontainer.name": "my-app",
+    "tools.atmos.devcontainer.instance": "test-1",
+    "tools.atmos.workspace": "/path/to/workspace",
+    "tools.atmos.created": "2025-11-10T14:00:00Z"
 }
 ```
 

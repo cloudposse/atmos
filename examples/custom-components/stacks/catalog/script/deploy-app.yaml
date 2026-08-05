@@ -1,0 +1,14 @@
+components:
+  script:
+    deploy-app:
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+        replicas: 3
+      env:
+        # Values in the `env` section are exported as real environment variables to the
+        # custom command's steps (just like terraform/helmfile/packer/ansible components).
+        # Use `!secret NAME` here for sensitive values so they are resolved from a secret
+        # backend and never inlined into the command string. See /cli/configuration/secrets.
+        APP_VERSION: "1.0.0"
+        DEPLOY_REGION: "us-east-1"

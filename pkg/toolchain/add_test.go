@@ -208,7 +208,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			tool:          "",
 			version:       "1.0.0",
 			expectError:   true,
-			expectedError: errUtils.ErrToolNotInRegistry,
+			expectedError: ErrInvalidToolSpec,
 		},
 		{
 			name:          "empty version",

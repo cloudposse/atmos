@@ -3,6 +3,7 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -161,6 +162,113 @@ func TestWalkAndDeferYAMLFunctions(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Len(t, result, 0)
 	})
+}
+
+// TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit verifies the Phase 3
+// optimization: when the input contains no YAML functions anywhere in its
+// nested structure, WalkAndDeferYAMLFunctions returns the input map as-is
+// without allocating a deep copy. The function-free fast path is critical
+// for the merge pipeline in describe affected, where most component
+// configurations contain no YAML functions but were previously deep-copied
+// on every merge call.
+func TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit(t *testing.T) {
+	t.Run("returns same map reference for function-free flat map", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"region":      "us-east-1",
+			"environment": "prod",
+			"replicas":    3,
+			"enabled":     true,
+		}
+		// Capture a pointer-identity reference. The fast path must return
+		// the same map object, not a copy.
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.True(t, sameMapHeader(input, result),
+			"function-free input should be returned as-is (zero allocation)")
+		assert.False(t, dctx.HasDeferredValues(),
+			"no deferrals expected when no YAML functions are present")
+	})
+
+	t.Run("returns same map reference for function-free nested map", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"tags": map[string]interface{}{
+				"namespace": "acme",
+				"stage":     "prod",
+				"meta": map[string]interface{}{
+					"owner": "platform",
+				},
+			},
+			"settings": map[string]interface{}{
+				"spacelift": map[string]interface{}{
+					"workspace_enabled": true,
+				},
+			},
+		}
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.True(t, sameMapHeader(input, result),
+			"function-free nested input should be returned as-is (zero allocation)")
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("walks normally when any subtree contains a YAML function", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"tags": map[string]interface{}{
+				"namespace": "acme", // No function here.
+			},
+			"vars": map[string]interface{}{
+				"region": "!template '{{ .stage }}'", // Function here — must walk.
+			},
+		}
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.False(t, sameMapHeader(input, result),
+			"presence of any YAML function must force a deep walk")
+		assert.True(t, dctx.HasDeferredValues())
+
+		// The non-function tags subtree should still be reachable in the result.
+		tags, ok := result["tags"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "acme", tags["namespace"])
+
+		// The function value should be replaced with nil placeholder.
+		vars, ok := result["vars"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Nil(t, vars["region"])
+	})
+
+	t.Run("short-circuit return is safe under read-only access", func(t *testing.T) {
+		// The fast path returns the input directly. The caller contract says
+		// the result is read-only. This test documents the contract by
+		// asserting that subsequent reads yield identical values, and that
+		// the input itself was not modified.
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"key":   "value",
+			"count": 42,
+		}
+		original := map[string]interface{}{
+			"key":   "value",
+			"count": 42,
+		}
+
+		_ = WalkAndDeferYAMLFunctions(dctx, input, []string{})
+
+		// Input must be unchanged.
+		assert.Equal(t, original, input,
+			"WalkAndDeferYAMLFunctions must not mutate function-free inputs")
+	})
+}
+
+// sameMapHeader returns true if a and b reference the same underlying
+// runtime map. The reflect.Value.Pointer documentation says the returned
+// value is the underlying pointer for Map/Chan/Func/Pointer/Slice/etc.,
+// so reflect.ValueOf(m).Pointer() is the canonical way to obtain the map
+// pointer for identity comparison. Previously this used fmt.Sprintf("%p",
+// ...); that works in practice but %p formatting isn't a formal documented
+// mechanism for map identity.
+func sameMapHeader(a, b map[string]interface{}) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
 
 func TestIsMap(t *testing.T) {
@@ -592,6 +700,157 @@ func TestMergeWithDeferred(t *testing.T) {
 		assert.Equal(t, "value1", result["key1"])
 		assert.Equal(t, "value2", result["key2"])
 		assert.False(t, dctx.HasDeferredValues())
+	})
+}
+
+// TestMergeWithDeferred_TrivialInputShortCircuits exercises the all-empty
+// fast path and asserts that the single-non-empty-input case follows the
+// regular merge path (which always returns a deep-copied, caller-mutable
+// map). The 1-input shortcut was tried in an earlier iteration and reverted
+// after it broke TestSpaceliftStackProcessor by returning a shared reference
+// to the caller — downstream mutation of the result then corrupted upstream
+// cached settings/vars/auth for sibling components.
+func TestMergeWithDeferred_TrivialInputShortCircuits(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
+	}
+
+	t.Run("zero non-empty inputs returns empty result", func(t *testing.T) {
+		result, dctx, err := MergeWithDeferred(cfg, []map[string]any{nil, {}, nil})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Empty(t, result)
+		assert.NotNil(t, dctx)
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("single non-empty input returns a fresh map (not shared with input)", func(t *testing.T) {
+		single := map[string]any{
+			"region":      "us-east-1",
+			"environment": "prod",
+		}
+		inputs := []map[string]any{nil, {}, single, nil}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		assert.False(t, sameMapHeader(single, result),
+			"single non-empty input must NOT share a map header with the caller — Merge contract is that the result is independent and caller-mutable")
+		// Values still round-trip.
+		assert.Equal(t, "us-east-1", result["region"])
+		assert.Equal(t, "prod", result["environment"])
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("single non-empty input with YAML functions defers correctly", func(t *testing.T) {
+		single := map[string]any{
+			"region":   "us-east-1",
+			"template": "!template 'prod-{{ .region }}'",
+		}
+		inputs := []map[string]any{nil, single, nil}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		assert.False(t, sameMapHeader(single, result),
+			"input with YAML functions must be walked into a fresh map")
+		assert.Equal(t, "us-east-1", result["region"])
+		assert.Nil(t, result["template"], "YAML function should be deferred to nil placeholder")
+		assert.True(t, dctx.HasDeferredValues())
+		deferred := dctx.GetDeferredValues()
+		require.Contains(t, deferred, "template")
+	})
+
+	t.Run("two non-empty inputs use the full merge path", func(t *testing.T) {
+		a := map[string]any{"key": "value-a", "shared": "from-a"}
+		b := map[string]any{"key": "value-b", "extra": "from-b"}
+		inputs := []map[string]any{a, b}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		// Full merge: later wins for overlapping keys.
+		assert.Equal(t, "value-b", result["key"])
+		assert.Equal(t, "from-a", result["shared"])
+		assert.Equal(t, "from-b", result["extra"])
+		// Result is a fresh map, not shared with either input.
+		assert.False(t, sameMapHeader(a, result))
+		assert.False(t, sameMapHeader(b, result))
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("MergeWithDeferred does not mutate function-free input", func(t *testing.T) {
+		single := map[string]any{"key": "value"}
+		original := map[string]any{"key": "value"}
+		inputs := []map[string]any{nil, single}
+
+		_, _, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+
+		// Input must be unchanged after the call.
+		assert.Equal(t, original, single,
+			"MergeWithDeferred must not mutate its input")
+	})
+
+	t.Run("mutating the result does not mutate the input (regression guard)", func(t *testing.T) {
+		// Regression guard for the original Phase 5 1-input shortcut, which
+		// returned the input map directly when WalkAndDeferYAMLFunctions's
+		// short-circuit kicked in. Downstream mutation of the result then
+		// corrupted upstream cached settings, dropping spacelift stacks in
+		// TestSpaceliftStackProcessor.
+		single := map[string]any{
+			"region": "us-east-1",
+			"nested": map[string]any{"inner": "original"},
+		}
+		inputs := []map[string]any{single}
+
+		result, _, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+
+		// Mutate every level of the result.
+		result["region"] = "MUTATED"
+		result["newKey"] = "added"
+		if nested, ok := result["nested"].(map[string]any); ok {
+			nested["inner"] = "MUTATED"
+		}
+
+		// The input must be unchanged.
+		assert.Equal(t, "us-east-1", single["region"],
+			"mutating Merge's result must not mutate the input")
+		_, hasNewKey := single["newKey"]
+		assert.False(t, hasNewKey, "input map must not gain keys added to the result")
+		if nestedSingle, ok := single["nested"].(map[string]any); ok {
+			assert.Equal(t, "original", nestedSingle["inner"],
+				"nested maps must also be deep-copied")
+		}
+	})
+
+	t.Run("mutating the input after merge does not mutate the result (regression guard)", func(t *testing.T) {
+		// Mirror of the result→src isolation test above: also verify the
+		// src→result direction. Mutating the source map after the merge
+		// must not propagate into the returned result. Per CLAUDE.md
+		// testing convention: aliasing tests must verify BOTH directions.
+		single := map[string]any{
+			"region": "us-east-1",
+			"nested": map[string]any{"inner": "original"},
+		}
+		inputs := []map[string]any{single}
+
+		result, _, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+
+		// Mutate every level of the input AFTER the merge.
+		single["region"] = "MUTATED_SRC"
+		single["newKey"] = "added-src"
+		if nested, ok := single["nested"].(map[string]any); ok {
+			nested["inner"] = "MUTATED_SRC"
+		}
+
+		// The result must be unchanged.
+		assert.Equal(t, "us-east-1", result["region"],
+			"mutating the input after Merge must not mutate the result")
+		_, hasNewKey := result["newKey"]
+		assert.False(t, hasNewKey, "result must not gain keys added to the input post-merge")
+		if nestedResult, ok := result["nested"].(map[string]any); ok {
+			assert.Equal(t, "original", nestedResult["inner"],
+				"nested maps must be deep-copied so post-merge src mutation cannot reach the result")
+		}
 	})
 }
 

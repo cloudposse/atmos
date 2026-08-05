@@ -4,26 +4,32 @@ on:
 
   pull_request:
 
+  # Required checks must also run against the synthetic commit created for a
+  # GitHub merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
 jobs:
   validate-codeowners:
     runs-on: ubuntu-latest
     steps:
     - name: "Checkout source code at current commit"
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
+        persist-credentials: false
         fetch-depth: 0  # Required for tj-actions/changed-files
 
     - name: Check if CODEOWNERS changed
       id: changed-files
-      uses: tj-actions/changed-files@v45
+      uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
       with:
         files: .github/CODEOWNERS
 
     # Leave pinned at 0.7.1 until https://github.com/mszostok/codeowners-validator/issues/173 is resolved
-    - uses: mszostok/codeowners-validator@v0.7.4
-      # This condition verifies that the PR repo equals the Github Repo and it's NOT dependabot
-      # Also runs on workflow_dispatch (manual trigger) or when CODEOWNERS file is changed
-      if: ${{ github.event_name == 'workflow_dispatch' || (steps.changed-files.outputs.any_changed == 'true' && (github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]')) }}
+    - uses: mszostok/codeowners-validator@7f3f5e28c6d7b8dfae5731e54ce2272ca384592f # v0.7.4
+      # Validate all CODEOWNERS changes on trusted merge-group commits. PRs from
+      # forks remain syntax-only because their runs do not receive repository secrets.
+      if: ${{ github.event_name == 'workflow_dispatch' || (steps.changed-files.outputs.any_changed == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))) }}
       name: "Full check of CODEOWNERS"
       with:
         # For now, remove "files" check to allow CODEOWNERS to specify non-existent
@@ -34,10 +40,10 @@ jobs:
         # GitHub access token is required only if the `owners` check is enabled
         github_access_token: "${{ secrets.REPO_ACCESS_TOKEN }}"
 
-    - uses: mszostok/codeowners-validator@v0.7.4
-      # This condition verifies that the PR repo does NOT equal the Github Repo (fork PR)
-      # Only runs when CODEOWNERS file is changed
-      if: ${{ steps.changed-files.outputs.any_changed == 'true' && github.event.pull_request.head.repo.full_name != github.repository }}
+    - uses: mszostok/codeowners-validator@7f3f5e28c6d7b8dfae5731e54ce2272ca384592f # v0.7.4
+      # Only fork PRs receive the syntax-only check. A merge_group payload has
+      # no pull_request object, so it must not evaluate this branch.
+      if: ${{ github.event_name == 'pull_request' && steps.changed-files.outputs.any_changed == 'true' && github.event.pull_request.head.repo.full_name != github.repository }}
       name: "Syntax check of CODEOWNERS"
       with:
         checks: "syntax,duppatterns"

@@ -5,21 +5,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestDescribeCommandsWithIdentityFlag verifies that describe commands handle the --identity flag correctly.
 // These tests cover the code paths where identity flag is parsed and CreateAuthManagerFromIdentity is called.
 func TestDescribeCommandsWithIdentityFlag(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for describe identity test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	tests := []struct {
 		name string
@@ -82,12 +73,7 @@ func TestDescribeCommandsWithIdentityFlag(t *testing.T) {
 
 // TestDescribeCommandsWithoutAuthWork verifies that commands work normally without --identity flag.
 func TestDescribeCommandsWithoutAuthWork(t *testing.T) {
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("describe stacks without auth should work", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/basic")

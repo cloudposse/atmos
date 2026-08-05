@@ -29,6 +29,8 @@ func executeDescribeAffected(
 	skip []string,
 	excludeLocked bool,
 	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -43,7 +45,7 @@ func executeDescribeAffected(
 	log.Debug("Current", "HEAD", localRepoHead)
 	log.Debug("Current", "BASE", remoteRepoHead)
 
-	currentStacks, err := ExecuteDescribeStacks(
+	currentStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		stack,
 		nil,
@@ -55,6 +57,8 @@ func executeDescribeAffected(
 		false,
 		skip,
 		authManager,
+		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -139,7 +143,8 @@ func executeDescribeAffected(
 		}
 		// No stack manifests found in BASE (e.g. greenfield branch introducing Atmos for the first time,
 		// or BASE branch uses a different stack structure). Treat BASE as empty: all HEAD stacks are new.
-		log.Warn("No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
+		log.Warn(
+			"No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
 			"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
 			"error", err,
 		)
@@ -147,7 +152,7 @@ func executeDescribeAffected(
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
 
-	remoteStacks, err := ExecuteDescribeStacks(
+	remoteStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		stack,
 		nil,
@@ -159,13 +164,16 @@ func executeDescribeAffected(
 		false,
 		skip,
 		authManager,
+		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		// If the BASE cannot be processed (e.g. greenfield: no atmos.yaml or stack configs in BASE,
 		// or BASE uses a different/incompatible stack structure), treat it as empty so that all HEAD
 		// components are reported as affected.  This is correct: everything is "new" relative to BASE.
 		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
-			log.Warn("Could not process BASE stack configuration; treating BASE as empty (all HEAD components will be reported as affected)",
+			log.Warn(
+				"Could not process BASE stack configuration; treating BASE as empty (all HEAD components will be reported as affected)",
 				"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
 				"error", err,
 			)

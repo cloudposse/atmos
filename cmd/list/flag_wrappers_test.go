@@ -247,6 +247,104 @@ func TestWithProcessFunctionsFlag(t *testing.T) {
 	assert.Contains(t, flag.Usage, "YAML functions processing")
 }
 
+// TestWithSkipFlag verifies skip flag registration.
+func TestWithSkipFlag(t *testing.T) {
+	parser := NewListParser(WithSkipFlag)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify flag exists.
+	flag := cmd.Flags().Lookup("skip")
+	require.NotNil(t, flag, "skip flag should be registered")
+	assert.Equal(t, "[]", flag.DefValue)
+	assert.Equal(t, "stringSlice", flag.Value.Type())
+	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
+}
+
+// TestWithAffectedSkipFlag verifies skip flag registration for list affected.
+func TestWithAffectedSkipFlag(t *testing.T) {
+	parser := NewListParser(WithAffectedSkipFlag)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("skip")
+	require.NotNil(t, flag, "skip flag should be registered")
+	assert.Equal(t, "[]", flag.DefValue)
+	assert.Equal(t, "stringSlice", flag.Value.Type())
+	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
+}
+
+// TestWithClosureFlags verifies the depth-carrying closure preview flags are
+// registered with the bare-flag NoOptDefVal (unlimited) behavior.
+func TestWithClosureFlags(t *testing.T) {
+	parser := NewListParser(WithClosureFlags)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	for _, name := range []string{flags.FlagIncludeDependencies, flags.FlagIncludeDependents} {
+		flag := cmd.Flags().Lookup(name)
+		require.NotNil(t, flag, "%s flag should be registered", name)
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, flags.ClosureDepthUnlimited, flag.NoOptDefVal, "%s: bare flag should mean unlimited", name)
+	}
+}
+
+// TestParseListClosureOptions covers parseListClosureOptions' viper→int
+// mapping (0 = off, -1 = unlimited, N>0 = N levels) for both closure flags,
+// including the invalid-value error path.
+func TestParseListClosureOptions(t *testing.T) {
+	buildViper := func(includeDependencies, includeDependents string) *viper.Viper {
+		cmd := &cobra.Command{Use: "test"}
+		parser := NewListParser(WithClosureFlags)
+		parser.RegisterFlags(cmd)
+		if includeDependencies != "" {
+			require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, includeDependencies))
+		}
+		if includeDependents != "" {
+			require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependents, includeDependents))
+		}
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		return v
+	}
+
+	t.Run("defaults to off", func(t *testing.T) {
+		v := buildViper("", "")
+		var deps, dependents int
+		require.NoError(t, parseListClosureOptions(v, &deps, &dependents))
+		assert.Equal(t, 0, deps)
+		assert.Equal(t, 0, dependents)
+	})
+
+	t.Run("bare unlimited and bounded depth", func(t *testing.T) {
+		v := buildViper(flags.ClosureDepthUnlimited, "3")
+		var deps, dependents int
+		require.NoError(t, parseListClosureOptions(v, &deps, &dependents))
+		assert.Equal(t, -1, deps)
+		assert.Equal(t, 3, dependents)
+	})
+
+	t.Run("invalid include-dependencies value returns error", func(t *testing.T) {
+		v := buildViper("not-a-depth", "")
+		var deps, dependents int
+		err := parseListClosureOptions(v, &deps, &dependents)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid include-dependents value returns error", func(t *testing.T) {
+		v := buildViper("", "not-a-depth")
+		var deps, dependents int
+		err := parseListClosureOptions(v, &deps, &dependents)
+		require.Error(t, err)
+	})
+}
+
 // TestWithUploadFlag verifies upload flag registration.
 func TestWithUploadFlag(t *testing.T) {
 	parser := NewListParser(WithUploadFlag)
@@ -307,8 +405,9 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 				WithTypeFlag,
 				WithEnabledFlag,
 				WithLockedFlag,
+				WithSkipFlag,
 			},
-			expectedFlags: []string{"format", "columns", "sort", "filter", "stack", "type", "enabled", "locked"},
+			expectedFlags: []string{"format", "columns", "sort", "filter", "stack", "type", "enabled", "locked", "skip"},
 			missingFlags:  []string{"component", "file", "max-columns", "query", "upload"},
 		},
 		{
@@ -318,9 +417,24 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 				WithStacksColumnsFlag,
 				WithSortFlag,
 				WithComponentFlag,
+				WithSkipFlag,
 			},
-			expectedFlags: []string{"format", "columns", "sort", "component"},
+			expectedFlags: []string{"format", "columns", "sort", "component", "skip"},
 			missingFlags:  []string{"stack", "filter", "type", "enabled", "locked"},
+		},
+		{
+			name: "instances command (skip wired)",
+			builders: []func(*[]flags.Option){
+				WithFormatFlag,
+				WithInstancesColumnsFlag,
+				WithStackFlag,
+				WithUploadFlag,
+				WithProcessTemplatesFlag,
+				WithProcessFunctionsFlag,
+				WithSkipFlag,
+			},
+			expectedFlags: []string{"format", "columns", "stack", "upload", "process-templates", "process-functions", "skip"},
+			missingFlags:  []string{"component", "type", "enabled", "locked"},
 		},
 		{
 			name: "workflows command",
@@ -393,6 +507,8 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 		{"component", WithComponentFlag, "component", "ATMOS_COMPONENT"},
 		{"delimiter", WithDelimiterFlag, "delimiter", "ATMOS_LIST_DELIMITER"},
 		{"query", WithQueryFlag, "query", "ATMOS_LIST_QUERY"},
+		{"skip", WithSkipFlag, "skip", "ATMOS_SKIP"},
+		{"affected skip", WithAffectedSkipFlag, "skip", "ATMOS_AFFECTED_SKIP"},
 	}
 
 	for _, tt := range tests {
@@ -413,6 +529,38 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 	}
 }
 
+func TestSkipEnvVarScope(t *testing.T) {
+	t.Run("shared skip ignores affected legacy env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+		t.Setenv("ATMOS_SKIP", "")
+
+		v := viper.New()
+		parser := NewListParser(WithSkipFlag)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, parser.BindToViper(v))
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.Empty(t, v.GetStringSlice("skip"))
+	})
+
+	t.Run("affected skip honors affected legacy env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+		t.Setenv("ATMOS_SKIP", "")
+
+		v := viper.New()
+		parser := NewListParser(WithAffectedSkipFlag)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, parser.BindToViper(v))
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.Equal(t, []string{"terraform.state"}, v.GetStringSlice("skip"))
+	})
+}
+
 // TestFlagDefaultValues verifies default values for flags.
 func TestFlagDefaultValues(t *testing.T) {
 	tests := []struct {
@@ -428,6 +576,8 @@ func TestFlagDefaultValues(t *testing.T) {
 		{"abstract false", WithAbstractFlag, "abstract", "false"},
 		{"process-templates true", WithProcessTemplatesFlag, "process-templates", "true"},
 		{"process-functions true", WithProcessFunctionsFlag, "process-functions", "true"},
+		{"skip empty", WithSkipFlag, "skip", "[]"},
+		{"affected skip empty", WithAffectedSkipFlag, "skip", "[]"},
 		{"upload false", WithUploadFlag, "upload", "false"},
 		{"max-columns zero", WithMaxColumnsFlag, "max-columns", "0"},
 	}

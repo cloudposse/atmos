@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -741,13 +743,19 @@ func (s stubUserID) Paths() ([]types.Path, error)            { return []types.Pa
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUserID) Logout(_ context.Context) error                                { return nil }
-func (s stubUserID) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubUserID) Logout(_ context.Context) error  { return nil }
+func (s stubUserID) CredentialsExist() (bool, error) { return true, nil }
+
 func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+
 func (s stubUserID) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
-func (s stubUserID) SetRealm(_ string) {}
+func (s stubUserID) SetRealm(_ string)  {}
+func (s stubUserID) IsStandalone() bool { return true }
+func (s stubUserID) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	return s.Authenticate(ctx, nil)
+}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -908,6 +916,31 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	assert.True(t, called, "PostAuthenticate should be called")
 }
 
+func TestManager_Authenticate_PostAuthenticatePreservesHints(t *testing.T) {
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	postAuthErr := errUtils.Build(errUtils.ErrEmulatorNotRunning).
+		WithHint("Start it with `atmos emulator up aws -s local`.").
+		Err()
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: postAuthErr}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	_, err := m.Authenticate(types.WithSuppressAuthErrors(context.Background(), true), "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Start it with `atmos emulator up aws -s local`.")
+}
+
 func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
 	now := ptrTime(time.Now().UTC().Add(30 * time.Minute))
 
@@ -965,6 +998,49 @@ func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
 	assert.True(t, called, "PostAuthenticate should be called for fresh authentication")
 }
 
+func TestManager_Authenticate_PostAuthenticateErrorDoesNotPrint(t *testing.T) {
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: assert.AnError}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		// Close both pipe endpoints even if an assertion below fails early via
+		// require, so we never leak file descriptors.
+		_ = w.Close()
+		_ = r.Close()
+	})
+
+	_, err = m.Authenticate(context.Background(), "dev")
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	require.ErrorIs(t, err, assert.AnError)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "Post-authentication failed.")
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, err = io.Copy(&output, r)
+	require.NoError(t, err)
+	require.Empty(t, output.String(), "Authenticate must return post-authentication errors for the command boundary to render")
+}
+
 func TestManager_ListProviders(t *testing.T) {
 	m := &manager{
 		config: &schema.AuthConfig{
@@ -1002,9 +1078,11 @@ func (s stubIdentity) Paths() ([]types.Path, error)            { return []types.
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubIdentity) Logout(_ context.Context) error                                { return nil }
-func (s stubIdentity) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubIdentity) Logout(_ context.Context) error  { return nil }
+func (s stubIdentity) CredentialsExist() (bool, error) { return true, nil }
+
 func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+
 func (s stubIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }

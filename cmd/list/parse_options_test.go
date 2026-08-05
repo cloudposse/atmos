@@ -54,6 +54,8 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.Nil(t, opts.Locked, "locked should be nil when flag was not changed")
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip, "skip should default to empty")
+		assert.Equal(t, "", opts.ErrorMode, "unresolved default is empty; exec.ResolveErrorMode fills in warn/atmos.yaml later")
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -64,6 +66,9 @@ func TestParseComponentsOptions(t *testing.T) {
 		setFlag(t, cmd, "locked", "false")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		setFlag(t, cmd, "skip", "terraform.output")
+		setFlag(t, cmd, "error-mode", "strict")
 		v := bindFlagsToViper(t, cmd, componentsParser)
 
 		opts := parseComponentsOptions(cmd, v)
@@ -76,6 +81,8 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.False(t, *opts.Locked)
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state", "terraform.output"}, opts.Skip)
+		assert.Equal(t, "strict", opts.ErrorMode)
 	})
 }
 
@@ -97,6 +104,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		assert.Equal(t, "", opts.Format)
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -105,6 +113,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		setFlag(t, cmd, "stack", "dev-*")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "true")
+		setFlag(t, cmd, "skip", "terraform.state")
 		v := bindFlagsToViper(t, cmd, metadataParser)
 
 		opts := parseMetadataOptions(cmd, v)
@@ -113,6 +122,19 @@ func TestParseMetadataOptions(t *testing.T) {
 		assert.Equal(t, "dev-*", opts.Stack)
 		assert.False(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, metadataParser)
+
+		opts := parseMetadataOptions(cmd, v)
+
+		assert.Equal(t, []string{"network"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw)
 	})
 }
 
@@ -135,6 +157,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		assert.Equal(t, "", opts.Component, "no positional arg → empty component filter")
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("component_filter_from_args", func(t *testing.T) {
@@ -151,6 +174,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		setFlag(t, cmd, "format", "json")
 		setFlag(t, cmd, "stack", "prod-us-east-1")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
 		v := bindFlagsToViper(t, cmd, sourcesParser)
 
 		opts := parseSourcesOptions(cmd, v, nil)
@@ -159,6 +183,86 @@ func TestParseSourcesOptions(t *testing.T) {
 		assert.Equal(t, "prod-us-east-1", opts.Stack)
 		assert.True(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, sourcesParser)
+
+		opts := parseSourcesOptions(cmd, v, nil)
+
+		assert.Equal(t, []string{"network"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw)
+	})
+}
+
+// TestParseDependenciesOptions verifies the viper→options mapping for
+// `list dependencies`, including the optional positional component arg and the
+// --direction default.
+func TestParseDependenciesOptions(t *testing.T) {
+	buildCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "dependencies"}
+		dependenciesParser.RegisterFlags(cmd)
+		return cmd
+	}
+
+	t.Run("defaults_no_args", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, nil)
+
+		assert.Equal(t, "", opts.Format)
+		assert.Equal(t, "both", opts.Direction, "direction defaults to both")
+		assert.Equal(t, "", opts.Component, "no positional arg → empty component filter")
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
+	})
+
+	t.Run("component_from_args", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, []string{"vpc"})
+
+		assert.Equal(t, "vpc", opts.Component, "args[0] becomes the component filter")
+	})
+
+	t.Run("explicit_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "format", "json")
+		setFlag(t, cmd, "direction", "forward")
+		setFlag(t, cmd, "stack", "plat-ue2-dev")
+		setFlag(t, cmd, "process-templates", "false")
+		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, []string{"app"})
+
+		assert.Equal(t, "json", opts.Format)
+		assert.Equal(t, "forward", opts.Direction)
+		assert.Equal(t, "plat-ue2-dev", opts.Stack)
+		assert.Equal(t, "app", opts.Component)
+		assert.False(t, opts.ProcessTemplates)
+		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network,tier-1")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, nil)
+
+		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed in the RunE closure")
 	})
 }
 
@@ -181,6 +285,8 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.False(t, opts.Provenance)
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
+		assert.Equal(t, "", opts.ErrorMode, "unresolved default is empty; exec.ResolveErrorMode fills in warn/atmos.yaml later")
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -190,6 +296,8 @@ func TestParseStacksOptions(t *testing.T) {
 		setFlag(t, cmd, "component", "vpc")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		setFlag(t, cmd, "error-mode", "silent")
 		v := bindFlagsToViper(t, cmd, stacksParser)
 
 		opts := parseStacksOptions(cmd, v)
@@ -199,5 +307,29 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.Equal(t, "vpc", opts.Component)
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+		assert.Equal(t, "silent", opts.ErrorMode)
+	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "tags", "network, tier-1")
+		setFlag(t, cmd, "labels", "team:platform")
+		v := bindFlagsToViper(t, cmd, stacksParser)
+
+		opts := parseStacksOptions(cmd, v)
+
+		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed at execution time")
+	})
+
+	t.Run("invalid_error_mode_value_rejected", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "error-mode", "bogus")
+		bindFlagsToViper(t, cmd, stacksParser)
+
+		_, err := stacksParser.Parse(t.Context(), nil)
+
+		require.Error(t, err)
 	})
 }

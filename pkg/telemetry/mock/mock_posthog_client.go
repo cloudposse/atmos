@@ -83,6 +83,21 @@ func (mr *MockClientMockRecorder) Enqueue(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enqueue", reflect.TypeOf((*MockClient)(nil).Enqueue), arg0)
 }
 
+// EvaluateFlags mocks base method.
+func (m *MockClient) EvaluateFlags(arg0 posthog.EvaluateFlagsPayload) (*posthog.FeatureFlagEvaluations, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvaluateFlags", arg0)
+	ret0, _ := ret[0].(*posthog.FeatureFlagEvaluations)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EvaluateFlags indicates an expected call of EvaluateFlags.
+func (mr *MockClientMockRecorder) EvaluateFlags(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvaluateFlags", reflect.TypeOf((*MockClient)(nil).EvaluateFlags), arg0)
+}
+
 // GetAllFlags mocks base method.
 func (m *MockClient) GetAllFlags(arg0 posthog.FeatureFlagPayloadNoKey) (map[string]any, error) {
 	m.ctrl.T.Helper()

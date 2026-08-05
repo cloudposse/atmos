@@ -1,3 +1,7 @@
 import:
   - orgs/acme/plat/_defaults
-  - mixins/stage/prod
+
+# Production account context. Component settings live in the regional top-level
+# stacks that import and deploy the backend catalog.
+vars:
+  stage: prod

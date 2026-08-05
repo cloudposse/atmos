@@ -57,3 +57,29 @@ func (f AtmosFuncs) Store(store string, stack string, component string, key stri
 
 	return storeFunc(f.atmosConfig, store, stack, component, key)
 }
+
+// Resolve evaluates an Atmos YAML-function string (e.g. "!git.repository", "!exec ...",
+// "!store ...") at template-render time and returns the resolved value.
+//
+// It enables composing a YAML-function result with other strings and template variables
+// in a single value, which a bare YAML tag cannot do because a tag owns the entire scalar.
+// For example:
+//
+//	settings:
+//	  context:
+//	    repo: "!git.repository"
+//	  terraform:
+//	    workspace_key_prefix: '{{ atmos.Resolve .settings.context.repo }}/{{ .atmos_component }}'
+//
+// Because it runs during template rendering (before the eager YAML-function pass), it has
+// the same evaluation semantics as atmos.Component. A plain (untagged) string is returned
+// unchanged.
+func (f AtmosFuncs) Resolve(input string) (any, error) {
+	defer perf.Track(f.atmosConfig, "exec.AtmosFuncs.Resolve")()
+
+	var stack string
+	if f.configAndStacksInfo != nil {
+		stack = f.configAndStacksInfo.Stack
+	}
+	return processCustomTags(f.atmosConfig, input, stack, nil, f.configAndStacksInfo)
+}

@@ -47,7 +47,7 @@ can be overridden in the derived Atmos components by using [Atmos Component Inhe
 
 When executing the [CLI commands](/cheatsheets/commands), Atmos does not use the stack file names and their filesystem locations to search for the stack where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The stack config file names (stack manifest names) can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
 
-For example, when executing the `atmos terraform apply station -s dev` command, the Atmos stack `dev` is specified by the `-s` flag. By looking at `name_pattern: "{stage}"` (see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the `stage` is `dev`. This `name_pattern` also supports `{namespace}`, `{tenant}`, and `{environment}`.
+For example, when executing the `atmos terraform deploy --all -s dev` command, the Atmos stack `dev` is specified by the `-s` flag. Atmos evaluates `name_template: "{{ .vars.stage }}"` (see [Configure CLI](/quick-start/advanced/configure-project)) for each stack and finds the stack whose `stage` renders to `dev`.
 
 <dl>
   <dt>`{namespace}`</dt>
@@ -121,6 +121,7 @@ components:
     station:
       metadata:
         component: weather
+        description: "Weather station component"
 ```
 <Note title="Pro Tip">To support multiple versions of a component, simply place each component version in a subfolder, which is the typical convention for versioning in a monorepo. For example, `components/terraform/weather/v1`. The goal for maintainable infrastructure as code is to have as few versions as possible and to have all environments converge on the same version.</Note>
 

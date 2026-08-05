@@ -32,15 +32,19 @@ tests:
   - name: describe component provenance advanced
     enabled: true
     snapshot: true
-    description: "Test provenance output with complex multi-level imports (quick-start-advanced)"
-    workdir: "../examples/quick-start-advanced"
+    # Repointed off quick-start-advanced (its components now use runtime YAML functions
+    # that require a live emulator). The provenance fixture merges the `mock` component's
+    # `tags` across four import depths, so it exercises the same "complex multi-level
+    # imports" provenance path while resolving fully offline.
+    description: "Test provenance output with complex multi-level imports (tag merge across depths)"
+    workdir: "fixtures/scenarios/provenance"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "vpc-flow-logs-bucket"
+      - "mock"
       - "-s"
-      - "plat-ue2-dev"
+      - "acme-dev-us-east-1"
       - "--provenance"
     expect:
       exit_code: 0
@@ -50,6 +54,5 @@ tests:
         - "○ \\[2\\]"  # Inherited from depth 2
         - "vars:"  # Should have vars section
         - "enabled: true"
-      diff:
-        # Ignore lines with variable whitespace alignment in provenance comments
-        - "provisioned_by_user:.*#"
+        - "tags:"  # Tags are merged from multiple import depths
+        - "managed_by:"  # Originates at the deepest catalog default

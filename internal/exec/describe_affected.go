@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -55,9 +55,11 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -78,6 +80,8 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -93,6 +97,8 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -107,6 +113,8 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -117,6 +125,8 @@ type describeAffectedExec struct {
 		skip []string,
 		onlyInStack string,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -136,9 +146,9 @@ func NewDescribeAffectedExec(
 
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
-		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
-		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
-		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckout,
+		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPathWithOptions,
+		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
+		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
@@ -167,11 +177,18 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// describe.error_mode, else "warn".
+	result.ErrorMode = ResolveErrorMode(result.ErrorMode, atmosConfig.Describe.ErrorMode)
+
 	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+	}
+	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
+		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
 	}
 
 	return result, nil
@@ -189,7 +206,6 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"ssh-key":                        &describe.SSHKeyPath,
 		"ssh-key-password":               &describe.SSHKeyPassword,
 		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
-		"include-dependents":             &describe.IncludeDependents,
 		"include-settings":               &describe.IncludeSettings,
 		"upload":                         &describe.Upload,
 		"clone-target-ref":               &describe.CloneTargetRef,
@@ -204,6 +220,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"error-mode":                     &describe.ErrorMode,
 	}
 
 	// By default, process templates and YAML functions
@@ -228,6 +245,15 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+	// --include-dependents is a plain bool on `atmos describe affected` but a
+	// depth-carrying string flag on the terraform commands (bare = unlimited,
+	// --include-dependents=N bounds the expansion), so it cannot go through the
+	// typed map above — read it according to the flag type actually registered.
+	if flags.Changed(flagsPkg.FlagIncludeDependents) {
+		describe.IncludeDependents, err = includeDependentsFlagValue(flags)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Resolve --base flag: auto-detect ref vs SHA and populate the appropriate field.
 	if describe.Base != "" {
 		if ci.IsCommitSHA(describe.Base) {
@@ -250,6 +276,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+}
+
+// includeDependentsFlagValue reads the include-dependents flag as a boolean
+// regardless of how the owning command registered it: `atmos describe affected`
+// uses a bool flag, while the terraform commands use a depth-carrying string
+// flag where any enabled depth (unlimited or bounded) means "include them".
+func includeDependentsFlagValue(flags *pflag.FlagSet) (bool, error) {
+	flag := flags.Lookup(flagsPkg.FlagIncludeDependents)
+	if flag == nil {
+		return false, nil
+	}
+	if flag.Value.Type() == "bool" {
+		return flags.GetBool(flagsPkg.FlagIncludeDependents)
+	}
+	value, err := flags.GetString(flagsPkg.FlagIncludeDependents)
+	if err != nil {
+		return false, err
+	}
+	depth, err := flagsPkg.ParseClosureDepth(flagsPkg.FlagIncludeDependents, value)
+	if err != nil {
+		return false, err
+	}
+	return depth != 0, nil
 }
 
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
@@ -313,6 +362,11 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var repoUrl string
 	var err error
 
+	// Built once and reused across every describe-stacks call this command makes (HEAD,
+	// BASE, and any dependents resolution) so the end-of-command summary reports one
+	// combined count instead of one per call site.
+	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
+
 	switch {
 	case a.RepoPath != "":
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
@@ -326,6 +380,8 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -342,6 +398,8 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -357,6 +415,8 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
+			errOptions,
 		)
 	}
 	if err != nil {
@@ -365,7 +425,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
 		if err != nil {
 			return err
 		}
@@ -377,7 +437,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		affected = StripAffectedForUpload(affected)
 	}
 
-	return d.view(a, repoUrl, headHead, baseHead, affected)
+	if err := d.view(a, repoUrl, headHead, baseHead, affected); err != nil {
+		return err
+	}
+
+	PrintErrorModeSummary(a.ErrorMode, collector)
+	return nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
@@ -447,8 +512,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	// Parse the repo URL.
-	gitURL, err := giturl.NewGitURL(repoUrl)
+	repoURLParts, err := atmosgit.ParseRepoURL(repoUrl)
 	if err != nil {
 		return err
 	}
@@ -478,9 +542,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
-		RepoName:  gitURL.GetRepoName(),
-		RepoOwner: gitURL.GetOwnerName(),
-		RepoHost:  gitURL.GetHostName(),
+		RepoName:  repoURLParts.Name,
+		RepoOwner: repoURLParts.Owner,
+		RepoHost:  repoURLParts.Host,
 		Stacks:    affected,
 	}
 

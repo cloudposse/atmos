@@ -2,16 +2,35 @@ package hooks
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
+	cockroachdberrors "github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// testSaveAndClearRegistry snapshots the CI provider registry, replaces it with
+// an empty one, and returns the restore function. Tests that call RunCIHooks
+// must use this to avoid depending on the host environment's CI detection
+// (e.g., GITHUB_ACTIONS=true on CI runners would make ci.IsCI() return true).
+func testSaveAndClearRegistry() func() {
+	return ci.SwapRegistryForTest()
+}
+
+// testRestoreRegistry restores the CI provider registry from the snapshot
+// returned by testSaveAndClearRegistry.
+func testRestoreRegistry(restore func()) {
+	restore()
+}
 
 func TestHasHooks(t *testing.T) {
 	tests := []struct {
@@ -38,8 +57,8 @@ func TestHasHooks(t *testing.T) {
 			hooks: Hooks{
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
 					},
 				},
 			},
@@ -49,8 +68,8 @@ func TestHasHooks(t *testing.T) {
 			name: "returns true when hooks items has multiple hooks",
 			hooks: Hooks{
 				items: map[string]Hook{
-					"hook1": {Events: []string{"after-terraform-apply"}, Command: "store"},
-					"hook2": {Events: []string{"before-terraform-plan"}, Command: "store"},
+					"hook1": {Events: []string{"after-terraform-apply"}, Kind: "store"},
+					"hook2": {Events: []string{"before-terraform-plan"}, Kind: "store"},
 				},
 			},
 			expected: true,
@@ -152,7 +171,472 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.Equal(t, info, hooks.info)
 	assert.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "vpc-store-outputs")
-	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
+	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Kind)
+}
+
+func TestGetHooks_DoesNotProcessTemplates(t *testing.T) {
+	tempDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "orgs", "acme"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "catalog"), 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**"
+  name_pattern: "{tenant}-{environment}-{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+
+	// The invalid template would fail if ProcessTemplates=true in GetHooks.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "catalog", "vpc.yaml"),
+		[]byte(`components:
+  terraform:
+    vpc:
+      hooks:
+        static-hook:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            broken: "{{"
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "_defaults.yaml"),
+		[]byte(`import:
+  - catalog/vpc
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "acme-dev-test.yaml"),
+		[]byte(`import:
+  - orgs/acme/_defaults
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
+`),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "acme-dev-test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	require.NotNil(t, hooks.items)
+	assert.Contains(t, hooks.items, "static-hook")
+	assert.Equal(t, "store", hooks.items["static-hook"].Kind)
+	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
+}
+
+func TestRunAll_RendersStoreHookExecutionFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		storeName string
+	}{
+		{
+			name:      "yaml template function",
+			storeName: `!template "{{ index .settings.context.project_to_store .settings.context.project_id }}"`,
+		},
+		{
+			name:      "bare go template",
+			storeName: `"{{ index .settings.context.project_to_store .settings.context.project_id }}"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := setupStoreHookTemplateFixture(t, tt.storeName)
+			t.Chdir(tempDir)
+
+			mockStore := NewMockStore()
+			atmosConfig := &schema.AtmosConfiguration{
+				Stores: store.StoreRegistry{
+					"staging": mockStore,
+				},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				ComponentFromArg: "component",
+				Stack:            "acme-dev-test",
+			}
+
+			hooks, err := GetHooks(atmosConfig, info)
+			require.NoError(t, err)
+			require.NotNil(t, hooks)
+			require.NotNil(t, hooks.items)
+			require.Contains(t, hooks.items["store-outputs"].Name, "project_to_store")
+
+			err = hooks.RunAll(AfterTerraformApply, atmosConfig, info, nil, nil)
+			require.NoError(t, err)
+
+			data := mockStore.GetData()
+			assert.Equal(t, "my-project", data["acme-dev-test/component/my-project_label"])
+		})
+	}
+}
+
+func TestRunAll_DoesNotRenderNonMatchingStoreHookExecutionFields(t *testing.T) {
+	tempDir := setupStoreHookTemplateFixture(t, `!template "{{"`)
+	t.Chdir(tempDir)
+
+	atmosConfig := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "component",
+		Stack:            "acme-dev-test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	require.NotNil(t, hooks.items)
+
+	err = hooks.RunAll(BeforeTerraformPlan, atmosConfig, info, nil, nil)
+	require.NoError(t, err)
+}
+
+func TestResolveHookForExecutionBranches(t *testing.T) {
+	t.Run("returns original hook when raw section is unavailable", func(t *testing.T) {
+		original := &Hook{Kind: "store", Name: "static-store"}
+		hooks := &Hooks{}
+
+		resolved, err := hooks.resolveHookForExecution("missing", original, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
+		require.NoError(t, err)
+		assert.Same(t, original, resolved)
+	})
+
+	t.Run("uses stored component sections when info is nil", func(t *testing.T) {
+		hooks := &Hooks{
+			items: map[string]Hook{
+				"store-outputs": {Kind: "store"},
+			},
+			sections: map[string]any{
+				"settings": map[string]any{
+					"context": map[string]any{
+						"project_id": "my-project",
+					},
+				},
+				"vars": map[string]any{"stage": "test"},
+				"hooks": map[string]any{
+					"store-outputs": map[string]any{
+						"command": "store",
+						"name":    "{{ .settings.context.project_id }}",
+						"outputs": map[string]any{
+							"label": "{{ .vars.stage }}",
+						},
+					},
+				},
+			},
+		}
+
+		resolved, err := hooks.resolveHookForExecution("store-outputs", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, nil, Outcome{Status: RunSuccess})
+		require.NoError(t, err)
+		assert.Equal(t, "store", resolved.Kind)
+		assert.Equal(t, "my-project", resolved.Name)
+		assert.Equal(t, "test", resolved.Outputs["label"])
+	})
+
+	t.Run("returns render error", func(t *testing.T) {
+		hooks := &Hooks{
+			sections: map[string]any{
+				"hooks": map[string]any{
+					"broken": map[string]any{
+						"command": "store",
+						"name":    "{{",
+					},
+				},
+			},
+		}
+
+		_, err := hooks.resolveHookForExecution("broken", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to render hook")
+	})
+}
+
+func TestProcessHookExecutionValueBranches(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Stack: "test-stack",
+		ComponentSection: map[string]any{
+			"settings": map[string]any{
+				"context": map[string]any{
+					"project_id": "my-project",
+				},
+			},
+		},
+	}
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("processes slices from yaml template functions", func(t *testing.T) {
+		result, err := processHookExecutionValue(atmosConfig, `!template ["{{ .settings.context.project_id }}", "static"]`, info)
+		require.NoError(t, err)
+		assert.Equal(t, []any{"my-project", "static"}, result)
+	})
+
+	t.Run("processes any maps and non-string keys", func(t *testing.T) {
+		result, err := processHookExecutionValue(atmosConfig, map[any]any{
+			`{{ .settings.context.project_id }}`: `{{ .settings.context.project_id }}`,
+			42:                                   `!template "{{ .settings.context.project_id }}"`,
+		}, info)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{
+			"my-project": "my-project",
+			"42":         "my-project",
+		}, result)
+	})
+
+	t.Run("preserves scalar defaults and unknown yaml functions", func(t *testing.T) {
+		result, err := processHookExecutionValue(atmosConfig, 42, info)
+		require.NoError(t, err)
+		assert.Equal(t, 42, result)
+
+		result, err = processHookExecutionValue(atmosConfig, "!unknown value", info)
+		require.NoError(t, err)
+		assert.Equal(t, "!unknown value", result)
+	})
+
+	t.Run("returns map key render errors", func(t *testing.T) {
+		_, err := processHookExecutionValue(atmosConfig, map[string]any{
+			"{{": "value",
+		}, info)
+		require.Error(t, err)
+	})
+
+	t.Run("returns nested value render errors", func(t *testing.T) {
+		_, err := processHookExecutionValue(atmosConfig, []any{"{{"}, info)
+		require.Error(t, err)
+	})
+}
+
+func setupStoreHookTemplateFixture(t *testing.T, storeName string) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "orgs", "acme"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "catalog"), 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**"
+  name_pattern: "{tenant}-{environment}-{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "catalog", "component.yaml"),
+		[]byte(`components:
+  terraform:
+    component:
+      settings:
+        context:
+          project_id: my-project
+          project_to_store:
+            my-project: staging
+      vars:
+        stage: test
+      hooks:
+        store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: `+storeName+`
+          outputs:
+            "{{ .settings.context.project_id }}_label": "{{ .settings.context.project_id }}"
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "_defaults.yaml"),
+		[]byte(`import:
+  - catalog/component
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "acme-dev-test.yaml"),
+		[]byte(`import:
+  - orgs/acme/_defaults
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
+`),
+		0o644,
+	))
+
+	return tempDir
+}
+
+// TestRunPerComponentHooks exercises the full GetHooks + SetOutcome + RunAll
+// sequence that RunPerComponentHooks wraps for the bulk-dispatch hook fix
+// (pkg/scheduler/adapters/terraform.go's Dispatch calls this indirectly via
+// cmd/terraform's terraformNodeHooks / cmd/helmfile's helmfileNodeHooks). The
+// returned error must reflect hooks.RunAll's own on_failure resolution
+// (already covered at the CommandEngine level by
+// TestCommandEngine_OnFailureFailPropagates and its siblings) rather than
+// invent new semantics — RunPerComponentHooks is a thin pass-through.
+func TestRunPerComponentHooks(t *testing.T) {
+	t.Run("no-op when component/stack are empty", func(t *testing.T) {
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        &schema.ConfigAndStacksInfo{},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("nil opts is a no-op", func(t *testing.T) {
+		assert.NoError(t, RunPerComponentHooks(nil))
+	})
+
+	t.Run("nil Info is a no-op", func(t *testing.T) {
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        nil,
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("GetHooks error is propagated", func(t *testing.T) {
+		// A non-empty component/stack pair that doesn't exist in any stack
+		// forces ExecuteDescribeComponent (called by GetHooks) to fail, which
+		// RunPerComponentHooks must surface rather than swallow.
+		t.Chdir(t.TempDir())
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "nonexistent", Stack: "nonexistent"},
+		})
+		assert.Error(t, err)
+	})
+
+	// newFixture writes a minimal atmos project with one terraform component
+	// ("vpc") whose after.terraform.apply hook always fails (kind: command,
+	// running the test binary itself with _ATMOS_TEST_EXIT_ONE=1 — a
+	// cross-platform stand-in for "exit 1", per this repo's testing rules),
+	// configured with the given on_failure mode.
+	newFixture := func(t *testing.T, onFailure string) *schema.ConfigAndStacksInfo {
+		t.Helper()
+		exe, err := os.Executable()
+		require.NoError(t, err)
+
+		tempDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform", "vpc"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf"), nil, 0o644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tempDir, "atmos.yaml"),
+			[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+			0o644,
+		))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tempDir, "stacks", "test.yaml"),
+			[]byte(fmt.Sprintf(`vars:
+  stage: test
+components:
+  terraform:
+    vpc:
+      hooks:
+        always-fails:
+          events:
+            - after-terraform-apply
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_EXIT_ONE: "1"
+          on_failure: %s
+`, exe, onFailure)),
+			0o644,
+		))
+
+		t.Chdir(tempDir)
+		return &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "test"}
+	}
+
+	t.Run("on_failure fail propagates the error", func(t *testing.T) {
+		info := newFixture(t, "fail")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.Error(t, err)
+	})
+
+	t.Run("on_failure warn resolves to nil", func(t *testing.T) {
+		info := newFixture(t, "warn")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("on_failure ignore resolves to nil", func(t *testing.T) {
+		info := newFixture(t, "ignore")
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        info,
+			Outcome:     Outcome{Status: RunSuccess},
+		})
+		assert.NoError(t, err)
+	})
 }
 
 func TestRunAll(t *testing.T) {
@@ -194,9 +678,9 @@ func TestRunAll(t *testing.T) {
 				},
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
-						Name:    "test-store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
+						Name:   "test-store",
 						Outputs: map[string]string{
 							"key1": "value1",
 						},
@@ -220,13 +704,13 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"hook1": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store1",
 						Outputs: map[string]string{"key1": "value1"},
 					},
 					"hook2": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store2",
 						Outputs: map[string]string{"key2": "value2"},
 					},
@@ -249,7 +733,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "nonexistent-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -272,7 +756,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "test-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -309,6 +793,90 @@ func TestRunAll(t *testing.T) {
 	}
 }
 
+func TestRunAll_GroupsEachExecutedHook(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+	cfg.Stores["store1"] = NewMockStore()
+	cfg.Stores["store2"] = NewMockStore()
+	cfg.Stores["store3"] = NewMockStore()
+
+	h := Hooks{
+		config: cfg,
+		info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		items: map[string]Hook{
+			"first": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "store",
+				Name:    "store1",
+				Outputs: map[string]string{"key": "value1"},
+			},
+			"second": {
+				Events:  []string{"after.terraform.plan"},
+				Kind:    "store",
+				Name:    "store2",
+				Outputs: map[string]string{"key": "value2"},
+			},
+			"wrong-event": {
+				Events:  []string{"before-terraform-plan"},
+				Kind:    "store",
+				Name:    "store3",
+				Outputs: map[string]string{"key": "value3"},
+			},
+		},
+	}
+
+	type groupCall struct {
+		dim  ci.Dimension
+		name string
+	}
+	var calls []groupCall
+	prev := runHookLogGroup
+	runHookLogGroup = func(_ *schema.AtmosConfiguration, dim ci.Dimension, name string, fn func() error) error {
+		calls = append(calls, groupCall{dim: dim, name: name})
+		return fn()
+	}
+	t.Cleanup(func() { runHookLogGroup = prev })
+
+	err := h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []groupCall{
+		{dim: ci.DimensionPhase, name: "hook first (after.terraform.plan)"},
+		{dim: ci.DimensionPhase, name: "hook second (after.terraform.plan)"},
+	}, calls)
+}
+
+func TestRunAll_GroupedHookErrorsPropagate(t *testing.T) {
+	mockStore := NewMockStore()
+	mockStore.SetSetError(errors.New("store error"))
+	cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+	cfg.Stores["test-store"] = mockStore
+	h := Hooks{
+		config: cfg,
+		info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		items: map[string]Hook{
+			"failing": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "store",
+				Name:    "test-store",
+				Outputs: map[string]string{"key": "value"},
+			},
+		},
+	}
+
+	var calls []string
+	prev := runHookLogGroup
+	runHookLogGroup = func(_ *schema.AtmosConfiguration, dim ci.Dimension, name string, fn func() error) error {
+		require.Equal(t, ci.DimensionPhase, dim)
+		calls = append(calls, name)
+		return fn()
+	}
+	t.Cleanup(func() { runHookLogGroup = prev })
+
+	err := h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.Error(t, err)
+	assert.Equal(t, []string{"hook failing (after.terraform.plan)"}, calls)
+}
+
 // TestRunAll_EventFiltering verifies that RunAll only executes hooks whose Events list
 // includes the current event. This is the guard that prevents after-terraform-apply hooks
 // from firing during before-terraform-apply (and vice-versa).
@@ -322,9 +890,9 @@ func TestRunAll_EventFiltering(t *testing.T) {
 			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
 			items: map[string]Hook{
 				"hook": {
-					Events:  events,
-					Command: "store",
-					Name:    "test-store",
+					Events: events,
+					Kind:   "store",
+					Name:   "test-store",
 					// Literal value (no dot prefix) — no terraform output call needed.
 					Outputs: map[string]string{"label_id": "literal-value"},
 				},
@@ -349,6 +917,29 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		require.NoError(t, err)
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
+	})
+
+	t.Run("before-init hook runs on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "before-init hook must fire on before-init event")
+	})
+
+	t.Run("after-init hook runs on after-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(AfterTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-init hook must fire on after-init event")
+	})
+
+	t.Run("after-init hook does not run on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "after-init hook must not fire on before-init event")
 	})
 
 	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
@@ -382,6 +973,406 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
+
+	// Issue #1055: store-write hooks bound to `after.terraform.output` let users
+	// backfill a store from already-deployed infrastructure without re-running
+	// apply. Pin the same event-matching contract for the new output/refresh events.
+	t.Run("after-output hook runs on after-output event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-output hook must fire on after-output event")
+	})
+
+	t.Run("after-output hook does not run on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-output must not fire on after-apply")
+	})
+
+	t.Run("after-apply hook does not run on after-output event", func(t *testing.T) {
+		// The converse of the above: existing hooks scoped to apply/plan/etc.
+		// must not suddenly start firing just because output now fires hooks.
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-apply must not fire on after-output")
+	})
+
+	t.Run("after-refresh hook runs on after-refresh event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.refresh"})
+		err := h.RunAll(AfterTerraformRefresh, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-refresh hook must fire on after-refresh event")
+	})
+}
+
+// TestRunAll_SkipHooksFromCobraFlag is the regression guard for the before-event
+// skip bug: before-* hooks run in PreRunE, before the global --skip-hooks flag is
+// bound to viper in RunE, so reading viper.GetString missed the CLI value and the
+// hooks fired anyway. This drives a REAL parsed Cobra flag (not viper.Set) through
+// RunAll on a before-terraform-plan event and asserts the hook is skipped. The
+// negative path confirms the hook still fires when the flag is absent.
+func TestRunAll_SkipHooksFromCobraFlag(t *testing.T) {
+	makeHooks := func() Hooks {
+		mockStore := NewMockStore()
+		cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+		cfg.Stores["test-store"] = mockStore
+		return Hooks{
+			config: cfg,
+			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
+			items: map[string]Hook{
+				"cost": {
+					Events: []string{"before-terraform-plan"},
+					Kind:   "store",
+					Name:   "test-store",
+					// Literal value (no dot prefix) — no terraform output call needed.
+					Outputs: map[string]string{"label_id": "literal-value"},
+				},
+			},
+		}
+	}
+	getStore := func(h Hooks) *MockStore {
+		return h.config.Stores["test-store"].(*MockStore)
+	}
+
+	// Ensure the viper fallback can never mask the flag-driven behavior under test.
+	prev := viper.Get("skip-hooks")
+	viper.Set("skip-hooks", "")
+	t.Cleanup(func() { viper.Set("skip-hooks", prev) })
+
+	t.Run("bare --skip-hooks skips a before-event hook", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t)
+		require.NoError(t, cmd.ParseFlags([]string{"--skip-hooks"}))
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "before-event hook must be skipped when --skip-hooks is set on the CLI")
+	})
+
+	t.Run("--skip-hooks=cost skips the named before-event hook", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t)
+		require.NoError(t, cmd.ParseFlags([]string{"--skip-hooks=cost"}))
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "named before-event hook must be skipped")
+	})
+
+	// Negative path: without the flag, the same before-event hook must still fire.
+	t.Run("before-event hook fires when --skip-hooks is absent", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t) // flag registered but not parsed → Changed=false.
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "before-event hook must fire when --skip-hooks is not set")
+	})
+}
+
+func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
+	prev := viper.Get("skip-hooks")
+	viper.Set("skip-hooks", "missing-tool")
+	t.Cleanup(func() { viper.Set("skip-hooks", prev) })
+
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"missing-tool": {
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformPlan, h.config, h.info, nil, nil)
+	require.NoError(t, err)
+}
+
+func TestRunAll_PreflightOnlyChecksMatchingEvent(t *testing.T) {
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"plan-scanner": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+	require.NoError(t, err, "plan-only hook must not block apply preflight")
+
+	err = h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.Error(t, err, "matching event must still preflight hook binaries")
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestHooksPreflight_CacheIncludesStatusAndCI(t *testing.T) {
+	t.Run("ci state", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"ci-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("ci"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   false,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   true,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("status", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"failure-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("failure"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunFailure,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
+func TestHooksPreflight_NoOpBranches(t *testing.T) {
+	skipNone := func(string) bool { return false }
+
+	tests := []struct {
+		name  string
+		hooks Hooks
+		cfg   *schema.AtmosConfiguration
+		info  *schema.ConfigAndStacksInfo
+		skip  func(string) bool
+	}{
+		{
+			name: "already done",
+			hooks: Hooks{
+				preflightDone: true,
+				items: map[string]Hook{
+					"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+				},
+			},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name:  "empty hooks",
+			hooks: Hooks{items: map[string]Hook{}},
+			cfg:   &schema.AtmosConfiguration{},
+			info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip:  skipNone,
+		},
+		{
+			name: "nil config",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  nil,
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name: "nil info",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: nil,
+			skip: skipNone,
+		},
+		{
+			name: "all hooks skipped",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: func(string) bool { return true },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.hooks.preflight(tt.cfg, tt.info, hookFilter{
+				event:         BeforeTerraformPlan,
+				skipPredicate: tt.skip,
+				status:        RunSuccess,
+				isCI:          false,
+			})
+			require.NoError(t, err)
+			assert.True(t, tt.hooks.preflightDone)
+		})
+	}
+}
+
+func TestHooksVerifyAllBinaries(t *testing.T) {
+	t.Run("skips deprecated skipped and no-command hooks", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"deprecated": {Kind: "ci.summary", Command: "definitely-not-on-path-atmos-test"},
+			"store":      {Kind: "store"},
+			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{
+			event:         BeforeTerraformPlan,
+			skipPredicate: func(name string) bool { return name == "skipped" },
+			status:        RunSuccess,
+			isCI:          false,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("errors on an unregistered kind instead of silently skipping it", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"unknown": {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUnknownHookKind)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "not-registered")
+	})
+
+	t.Run("errors on an invalid on_failure value instead of silently treating it as warn", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"typo": {Kind: "store", OnFailure: "waarn"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidHookOnFailure)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "waarn")
+	})
+
+	t.Run("skips hooks for other events", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"plan-only": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformApply, status: RunSuccess})
+		require.NoError(t, err)
+	})
+
+	t.Run("returns command-not-found for missing command hook", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("skips hooks that do not run for the current outcome status", func(t *testing.T) {
+		// A success-only hook (default `when`) with a missing binary must not
+		// fail preflight on the failure path. The only command to verify is the
+		// success-only hook; the failure hook has no command.
+		h := Hooks{items: map[string]Hook{
+			"success-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+			"on-failure":   {Kind: "store", When: schema.MustCondition(WhenFailure)},
+		}}
+
+		// Failure path: the success-only hook is skipped, so its missing binary
+		// does not block the run.
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunFailure}))
+
+		// Success path: the success-only hook IS verified and its missing binary
+		// is reported (proving the skip above was status-driven, not a no-op).
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("skips ci-only hooks outside ci during preflight", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"ci-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test", When: schema.MustCondition("ci")},
+		}}
+
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess}))
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess, isCI: true})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
+func TestIsDeprecatedCIKind(t *testing.T) {
+	tests := []struct {
+		name string
+		kind string
+		want bool
+	}{
+		{name: "ci check", kind: "ci.check", want: true},
+		{name: "ci output", kind: "ci.output", want: true},
+		{name: "ci summary", kind: "ci.summary", want: true},
+		{name: "ci upload", kind: "ci.upload", want: true},
+		{name: "ci download", kind: "ci.download", want: true},
+		{name: "command", kind: "command", want: false},
+		{name: "store", kind: "store", want: false},
+		{name: "empty", kind: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isDeprecatedCIKind(tt.kind))
+		})
+	}
 }
 
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
@@ -437,6 +1428,51 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+// TestRunCIHooks_LocalRunSkipsExperimentalGate verifies that local runs do not
+// hit the experimental CI gate unless CI mode is explicitly forced.
+func TestRunCIHooks_LocalRunSkipsExperimentalGate(t *testing.T) {
+	// Disable all registered CI providers for the duration of this test so the
+	// first subtest's ci.IsCI() check returns false regardless of the host
+	// environment (e.g., when this suite runs under GitHub Actions itself).
+	// Without this isolation, the github provider's Detect() would see
+	// GITHUB_ACTIONS=true and cause the non-force branch to fall through to
+	// the experimental gate, failing the test.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	config := &schema.AtmosConfiguration{
+		CI: schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{
+			Experimental: "disable",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "test-stack",
+		ComponentFromArg: "test-component",
+	}
+
+	t.Run("local run without force skips CI hooks before experimental gate", func(t *testing.T) {
+		err := RunCIHooks(&RunCIHooksOptions{
+			Event:       "before.terraform.plan",
+			AtmosConfig: config,
+			Info:        info,
+			ForceCIMode: false,
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("forced CI mode still evaluates the experimental gate", func(t *testing.T) {
+		err := RunCIHooks(&RunCIHooksOptions{
+			Event:       "before.terraform.plan",
+			AtmosConfig: config,
+			Info:        info,
+			ForceCIMode: true,
+		})
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled), "expected %v, got %v", errUtils.ErrExperimentalDisabled, err)
+	})
 }
 
 // TestRunCIHooks_ForwardsErrorAndExitCode verifies that RunCIHooksOptions

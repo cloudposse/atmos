@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -20,14 +21,7 @@ func TerraformFlags() *flags.FlagRegistry {
 
 // registerIdentityFlags adds identity and authentication related flags.
 func registerIdentityFlags(registry *flags.FlagRegistry) {
-	registry.Register(&flags.StringFlag{
-		Name:        "identity",
-		Shorthand:   "i",
-		Default:     "",
-		Description: "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.",
-		EnvVars:     []string{"ATMOS_IDENTITY"},
-		NoOptDefVal: "__SELECT__",
-	})
+	shared.RegisterIdentityFlags(registry)
 }
 
 // registerExecutionFlags adds flags related to terraform execution behavior.
@@ -62,32 +56,28 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
+	// current invocation; --skip-hooks=name1,name2 skips only the named hooks.
+	// Per-invocation only — does not propagate to nested commands.
+	registry.Register(&flags.StringFlag{
+		Name:        "skip-hooks",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name",
+		EnvVars:     []string{"ATMOS_SKIP_HOOKS"},
+		NoOptDefVal: "*", // bare --skip-hooks means "skip all".
+	})
 }
 
 // BackendExecutionFlags returns flags for commands that generate backend files or run init.
 // These flags are used by: init, workspace, plan, apply, deploy.
 func BackendExecutionFlags() *flags.FlagRegistry {
-	registry := flags.NewFlagRegistry()
-	registry.Register(&flags.StringFlag{
-		Name:        "auto-generate-backend-file",
-		Shorthand:   "",
-		Default:     "",
-		Description: "Override auto_generate_backend_file setting from atmos.yaml (true/false)",
-		EnvVars:     []string{"ATMOS_AUTO_GENERATE_BACKEND_FILE"},
-	})
-	registry.Register(&flags.StringFlag{
-		Name:        "init-run-reconfigure",
-		Shorthand:   "",
-		Default:     "",
-		Description: "Override init_run_reconfigure setting from atmos.yaml (true/false)",
-		EnvVars:     []string{"ATMOS_INIT_RUN_RECONFIGURE"},
-	})
-	return registry
+	return shared.BackendExecutionFlags()
 }
 
 // WithBackendExecutionFlags returns a flags.Option that adds backend execution flags.
 func WithBackendExecutionFlags() flags.Option {
-	return flags.WithFlagRegistry(BackendExecutionFlags())
+	return shared.WithBackendExecutionFlags()
 }
 
 // registerProcessingFlags adds flags for template and function processing.
@@ -105,6 +95,13 @@ func registerProcessingFlags(registry *flags.FlagRegistry) {
 		Default:     true,
 		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
 		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
+	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "use-mocks",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands",
+		EnvVars:     []string{"ATMOS_USE_MOCKS"},
 	})
 	registry.Register(&flags.StringSliceFlag{
 		Name:        "skip",
@@ -130,6 +127,20 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Default:     nil,
 		Description: "Filter by specific components",
 		EnvVars:     []string{"ATMOS_COMPONENTS"},
+	})
+	registry.Register(&flags.StringSliceFlag{
+		Name:        "tags",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
+		EnvVars:     []string{"ATMOS_TAGS"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "labels",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }
 
@@ -188,14 +199,27 @@ func registerSSHFlags(registry *flags.FlagRegistry) {
 	})
 }
 
-// registerAffectedBehaviorFlags adds flags for affected command behavior.
+// registerAffectedBehaviorFlags adds the dependency-closure flags (usable
+// with every multi-component selection: --all, --components, --query, -s,
+// --tags, --labels, and --affected) plus affected-specific behavior flags.
+// The closure flags carry an optional depth: bare means unlimited,
+// --include-dependencies=N bounds the expansion to N levels.
 func registerAffectedBehaviorFlags(registry *flags.FlagRegistry) {
-	registry.Register(&flags.BoolFlag{
+	registry.Register(&flags.StringFlag{
 		Name:        "include-dependents",
 		Shorthand:   "",
-		Default:     false,
-		Description: "For each affected component, detect the dependent components and process them in the dependency order",
+		Default:     "",
+		Description: "Also process everything that depends on the selected components, in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependents=N",
 		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENTS"},
+		NoOptDefVal: flags.ClosureDepthUnlimited,
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "include-dependencies",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Also process everything the selected components depend on (their prerequisites), in dependency order (reversed for destroy). Optionally bound the expansion: --include-dependencies=N",
+		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENCIES"},
+		NoOptDefVal: flags.ClosureDepthUnlimited,
 	})
 	registry.Register(&flags.BoolFlag{
 		Name:        "clone-target-ref",

@@ -37,6 +37,14 @@ type ComponentConfig struct {
 	// AutoProvisionWorkdirForOutputs controls whether the executor auto-provisions
 	// JIT working directories before terraform init.
 	AutoProvisionWorkdirForOutputs bool
+	// PassVars mirrors components.terraform.init.pass_vars. When true, the
+	// component's vars are exported as TF_VAR_* so that `terraform init` can
+	// resolve init-time variable dependencies (e.g. a module `version` bound to
+	// var.foo) while resolving !terraform.output. See issue #1412.
+	PassVars bool
+	// Vars holds the component's resolved vars section, used to build TF_VAR_*
+	// environment variables when PassVars is true.
+	Vars map[string]any
 }
 
 // IsComponentProcessable determines if a component should be processed for terraform output.
@@ -220,6 +228,9 @@ func extractOptionalFields(sections map[string]any, config *ComponentConfig) {
 	if env, ok := sections[cfg.EnvSectionName].(map[string]any); ok {
 		config.Env = env
 	}
+	if vars, ok := sections[cfg.VarsSectionName].(map[string]any); ok {
+		config.Vars = vars
+	}
 }
 
 // ExtractComponentConfig extracts and validates component configuration from sections.
@@ -232,6 +243,7 @@ func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map
 		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
 		InitRunReconfigure:             atmosConfig.Components.Terraform.InitRunReconfigure,
 		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		PassVars:                       atmosConfig.Components.Terraform.Init.PassVars,
 	}
 
 	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {

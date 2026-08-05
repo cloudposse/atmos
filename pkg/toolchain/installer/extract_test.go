@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -645,6 +646,80 @@ func TestExtractTarGz_Function(t *testing.T) {
 	})
 }
 
+// TestUnpackTarGz_ErrorPaths covers unpackTarGz's failure returns: a source that
+// is not a valid gzip stream, and an entry error surfaced from extractEntry (a
+// regular-file entry whose name escapes the destination).
+func TestUnpackTarGz_ErrorPaths(t *testing.T) {
+	t.Run("returns error for a non-gzip source", func(t *testing.T) {
+		tmp := t.TempDir()
+		notGz := filepath.Join(tmp, "not.tar.gz")
+		require.NoError(t, os.WriteFile(notGz, []byte("this is not gzip"), 0o644))
+
+		_, _, err := unpackTarGz(notGz, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("propagates an entry error (path traversal)", func(t *testing.T) {
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "evil.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "../escape", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestUnpackZip_ErrorPaths covers unpackZip's entry-error propagation (a name
+// escaping the destination) and the directory-entry branch of extractZipFile.
+func TestUnpackZip_ErrorPaths(t *testing.T) {
+	t.Run("propagates an entry error (path traversal)", func(t *testing.T) {
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "evil.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "../escape", content: "x"}})
+
+		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("creates directory entries", func(t *testing.T) {
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "withdir.zip")
+		// Build a zip with an explicit directory entry (its name ends in "/").
+		f, err := os.Create(archive)
+		require.NoError(t, err)
+		zw := zip.NewWriter(f)
+		_, err = zw.Create("emptydir/")
+		require.NoError(t, err)
+		require.NoError(t, zw.Close())
+		require.NoError(t, f.Close())
+
+		dest := filepath.Join(tmp, "out")
+		symlinks, err := unpackZip(archive, dest)
+		require.NoError(t, err)
+		assert.Empty(t, symlinks)
+		info, err := os.Stat(filepath.Join(dest, "emptydir"))
+		require.NoError(t, err)
+		assert.True(t, info.IsDir())
+	})
+
+	t.Run("rejects an oversized symlink target", func(t *testing.T) {
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "bigsymlink.zip")
+		// A symlink whose target payload exceeds the dedicated limit must be
+		// rejected rather than read into memory.
+		writeZipTree(t, archive, []zipEntry{
+			{name: "bin/link", link: strings.Repeat("a", maxSymlinkTargetBytes+1)},
+		})
+
+		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
 func TestInstaller_extractZip(t *testing.T) {
 	t.Run("extracts zip and finds binary", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -690,9 +765,15 @@ func TestInstaller_extractZip(t *testing.T) {
 		err := installer.extractZip(zipPath, binaryPath, tool)
 		assert.NoError(t, err)
 
-		// Verify primary binary was extracted.
-		_, err = os.Stat(binaryPath)
+		// The archive has an undeclared "secondary" file alongside "primary", so
+		// this is a onedir (multi-file) install: the tree is preserved and the
+		// primary entrypoint is exposed via the sidecar manifest rather than at
+		// binaryPath directly (Atmos creates no symlink for it).
+		manifest, ok := readOnedirManifest(binDir)
+		require.True(t, ok)
+		content, err := os.ReadFile(filepath.Join(binDir, manifest.Entrypoints[manifest.Primary]))
 		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\nprimary", string(content))
 	})
 }
 
@@ -930,7 +1011,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(srcDir, binaryPath, tool)
+		err := installer.extractFilesFromDir(srcDir, binaryPath, tool, nil, nil)
 		assert.NoError(t, err)
 
 		content, err := os.ReadFile(binaryPath)
@@ -948,7 +1029,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			Files: []registry.File{},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
 		assert.Error(t, err)
 	})
 
@@ -964,8 +1045,9 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
-		assert.Error(t, err)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
 	})
 }
 
@@ -1069,7 +1151,9 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o755,
 		}
 
-		err := extractEntry(nil, header, destDir)
+		var symlinks []pendingSymlink
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.NoError(t, err)
 
 		// Verify directory was created.
@@ -1089,25 +1173,85 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o644,
 		}
 
-		err := extractEntry(nil, header, destDir)
+		var symlinks []pendingSymlink
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
-	t.Run("skips unknown type with warning", func(t *testing.T) {
+	// extractEntry defers symlink creation: it collects the entry verbatim
+	// (never calling os.Symlink from the archive-reading loop) so the target is
+	// validated later, at materialization, by createValidatedSymlink. This runs
+	// on every platform because nothing is written to disk.
+	t.Run("collects symlink entry without creating it", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
 
 		header := &tar.Header{
-			Name:     "symlink",
-			Typeflag: tar.TypeSymlink, // Symlink is an unknown/unhandled type.
+			Name:     "bin/npm",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../lib/npm-cli.js", // Relative target within the tree.
 			Mode:     0o755,
 		}
 
-		// Should not return error for unknown types (just skip them).
-		err := extractEntry(nil, header, destDir)
+		var symlinks []pendingSymlink
+		var hardLinks []pendingHardLink
+		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
+
+		// The entry is collected verbatim, not written to disk.
+		require.Len(t, symlinks, 1)
+		assert.Equal(t, "bin/npm", symlinks[0].rel)
+		assert.Equal(t, "../lib/npm-cli.js", symlinks[0].target)
+		_, statErr := os.Lstat(filepath.Join(destDir, "bin", "npm"))
+		assert.True(t, os.IsNotExist(statErr), "extraction must not create the symlink; that is deferred to materialization")
+	})
+
+	// An escaping target is NOT rejected here — extractEntry does not validate,
+	// it only collects. Rejection is enforced when the collected link is
+	// materialized (see createValidatedSymlink and the end-to-end
+	// TestExtractTarGz_RejectsSymlinkEscapingRoot). Collecting the raw target
+	// verbatim keeps that untrusted string out of any os.Symlink call here.
+	t.Run("collects an escaping symlink target verbatim (validation deferred)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "evil",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../../../../etc/passwd",
+			Mode:     0o755,
+		}
+
+		var symlinks []pendingSymlink
+		var hardLinks []pendingHardLink
+		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
+		require.Len(t, symlinks, 1)
+		assert.Equal(t, "../../../../etc/passwd", symlinks[0].target)
+		_, statErr := os.Lstat(filepath.Join(destDir, "evil"))
+		assert.True(t, os.IsNotExist(statErr), "nothing may be written for a symlink entry during extraction")
+	})
+
+	t.Run("skips truly unknown type with warning", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "fifo",
+			Typeflag: tar.TypeFifo, // Genuinely unhandled type.
+			Mode:     0o755,
+		}
+
+		// Should not return an error for unknown types (just skip them).
+		var symlinks []pendingSymlink
+		var hardLinks []pendingHardLink
+		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
 		assert.NoError(t, err)
+		_, statErr := os.Lstat(filepath.Join(destDir, "fifo"))
+		assert.True(t, os.IsNotExist(statErr), "unknown type must not be materialized")
 	})
 }
 

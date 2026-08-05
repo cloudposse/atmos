@@ -7,7 +7,7 @@ type AWSSecuritySettings struct {
 	Region          string                `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`       // Default AWS region (e.g., Security Hub aggregation region).
 	Sources         AWSSecuritySources    `yaml:"sources,omitempty" json:"sources,omitempty" mapstructure:"sources"`
 	DefaultSeverity []string              `yaml:"default_severity,omitempty" json:"default_severity,omitempty" mapstructure:"default_severity"` // Default severity filter (e.g., ["CRITICAL", "HIGH"]).
-	MaxFindings     int                   `yaml:"max_findings,omitempty" json:"max_findings,omitempty" mapstructure:"max_findings"`             // Maximum findings per analysis run (controls AI costs).
+	MaxFindings     int                   `yaml:"max_findings,omitempty" json:"max_findings,omitempty" mapstructure:"max_findings"`             // Maximum findings per analysis run (0 = unlimited; controls AI costs when > 0).
 	TagMapping      AWSSecurityTagMapping `yaml:"tag_mapping,omitempty" json:"tag_mapping,omitempty" mapstructure:"tag_mapping"`
 	AccountMap      map[string]string     `yaml:"account_map,omitempty" json:"account_map,omitempty" mapstructure:"account_map"` // Account ID → name for account-level findings.
 	Frameworks      []string              `yaml:"frameworks,omitempty" json:"frameworks,omitempty" mapstructure:"frameworks"`    // Compliance frameworks to track (e.g., ["cis-aws", "pci-dss"]).

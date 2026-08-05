@@ -1,0 +1,82 @@
+---
+title: outputs
+sidebar_label: outputs
+sidebar_position: 10
+slug: /workflows/steps/outputs
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `outputs` field declares named outputs derived from a step's result, so later steps and templates can reference structured values from it.
+</Intro>
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      tags:
+        - app:local
+    outputs:
+      image: "{{ .metadata.image }}"
+
+  - name: smoke
+    type: container
+    action: run
+    run:
+      image: "{{ .steps.build.outputs.image }}"
+      command: uname -a
+```
+
+Later steps can read declared outputs with `{{ .steps.<name>.outputs.<key> }}`.
+
+## Command Output
+
+Successful named `shell` and `atmos` steps expose their captured output to later steps. The primary `value` is trimmed, while `metadata.stdout` and `metadata.stderr` preserve the captured streams.
+
+Declared outputs are evaluated once after the command succeeds. A failed command attempt can be retried, but an invalid output template fails the step without running the successful command again.
+
+```yaml
+steps:
+  - name: discover
+    type: shell
+    command: printf 'vpc\n'
+    outputs:
+      component: "{{ .value }}"
+
+  - name: summary
+    type: markdown
+    content: |
+      Component: `{{ .steps.discover.value }}`
+      Raw stdout: `{{ .steps.discover.metadata.stdout }}`
+      Declared output: `{{ .steps.discover.outputs.component }}`
+```
+
+Shell steps with `tty` or `interactive` attach directly to the terminal. They complete with an empty command result because terminal session output cannot be captured.
+
+## Step Result Context
+
+Templates can access prior step results:
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>Primary value from the step.</dd>
+
+  <dt>`{{ .steps.<name>.values }}`</dt>
+  <dd>Array of values, used by multi-select steps.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.<key> }}`</dt>
+  <dd>Metadata such as stdout, stderr, exit code, image, or digest when available.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.<key> }}`</dt>
+  <dd>Declared output value.</dd>
+
+  <dt>`{{ .steps.<name>.skipped }}`</dt>
+  <dd>Whether the step was skipped.</dd>
+
+  <dt>`{{ .steps.<name>.error }}`</dt>
+  <dd>Error message if the step failed.</dd>
+</dl>

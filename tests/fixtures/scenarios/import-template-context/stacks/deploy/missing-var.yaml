@@ -1,0 +1,4 @@
+# The templated import path references `catalog_ref`, but no earlier import (or
+# `context`) defines it, so rendering must fail with ErrImportPathTemplate.
+import:
+  - "catalog/{{ .settings.context.catalog_ref }}/service"

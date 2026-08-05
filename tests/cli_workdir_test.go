@@ -10,19 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestCLIWorkdirCommands tests the workdir CLI commands using the workdir fixture.
 func TestCLIWorkdirCommands(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -235,13 +227,7 @@ func testWorkdirCleanAll(t *testing.T) {
 
 // TestCLIWorkdirListFormats tests different output formats.
 func TestCLIWorkdirListFormats(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -301,13 +287,7 @@ func TestCLIWorkdirListFormats(t *testing.T) {
 
 // TestCLIWorkdirHelp tests that help commands work.
 func TestCLIWorkdirHelp(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("workdir_help", func(t *testing.T) {
 		stdout, stderr, err := runWorkdirCommand(t, "--help")

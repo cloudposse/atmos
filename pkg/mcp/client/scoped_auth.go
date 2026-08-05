@@ -7,7 +7,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ScopedAuthProvider is a thin MCP adapter over the generic
@@ -26,11 +25,6 @@ import (
 // another subsystem ever needs scoped auth it calls the pkg/auth primitive
 // directly — not this adapter.
 type ScopedAuthProvider struct {
-	// baseConfig is retained for future extensibility (e.g., fallback when no
-	// env override is in effect). Currently unused because every call path
-	// goes through the env-overrides primitive.
-	baseConfig *schema.AtmosConfiguration
-
 	// buildManagerFn is overridable for tests. Production code always uses
 	// auth.CreateAndAuthenticateManagerWithEnvOverrides.
 	buildManagerFn func(map[string]string) (auth.AuthManager, error)
@@ -46,11 +40,14 @@ var (
 	_ PerServerAuthProvider = (*ScopedAuthProvider)(nil)
 )
 
-// NewScopedAuthProvider creates a ScopedAuthProvider using the given base
-// config as future fallback context.
-func NewScopedAuthProvider(baseConfig *schema.AtmosConfiguration) *ScopedAuthProvider {
+// NewScopedAuthProvider creates a ScopedAuthProvider that delegates per-server
+// auth manager construction to
+// auth.CreateAndAuthenticateManagerWithEnvOverrides. The provider holds no
+// per-instance state beyond the build function — the parent atmos config is
+// re-loaded inside the primitive on every ForServer call (with the server's
+// env: block applied), so passing a base config here would be unused.
+func NewScopedAuthProvider() *ScopedAuthProvider {
 	return &ScopedAuthProvider{
-		baseConfig:     baseConfig,
 		buildManagerFn: auth.CreateAndAuthenticateManagerWithEnvOverrides,
 	}
 }

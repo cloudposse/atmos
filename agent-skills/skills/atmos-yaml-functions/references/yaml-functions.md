@@ -41,9 +41,9 @@ vpc_id: !terraform.state vpc {{ .stack }} vpc_id
 first_subnet: !terraform.state vpc .private_subnet_ids[0]
 username: !terraform.state config .config_map.username
 # Default value for unprovisioned components
-vpc_id: !terraform.state vpc ".vpc_id // ""default"""
+vpc_id: !terraform.state vpc .vpc_id // "default"
 # YQ string concatenation
-url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 # Bracket notation for keys with special characters
 key: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
@@ -82,9 +82,9 @@ vpc_id: !terraform.output vpc {{ .stack }} vpc_id
 first_subnet: !terraform.output vpc .private_subnet_ids[0]
 username: !terraform.output config .config_map.username
 # Default value for unprovisioned components
-vpc_id: !terraform.output vpc ".vpc_id // ""fallback-id"""
+vpc_id: !terraform.output vpc .vpc_id // "fallback-id"
 # YQ string concatenation
-url: !terraform.output aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+url: !terraform.output 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 # Bracket notation for keys with special characters
 key: !terraform.output security '.users["github-dependabot"].access_key_id'
 ```
@@ -167,6 +167,73 @@ client_id: !store.get gsm oauth-config | query .client_id
 |---------|----------|--------------|
 | Key format | Constructs from stack/component/key | Exact key as provided |
 | Use case | Atmos component outputs | Arbitrary external values |
+
+## `!secret`
+
+Resolve a declared secret from its configured secret backend. The secret must be declared under the
+component's `secrets.vars` before it can be referenced.
+
+```yaml
+components:
+  terraform:
+    api:
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            store: app-secrets
+            required: true
+          DATABASE_CONFIG:
+            store: app-secrets
+            required: true
+      vars:
+        datadog_api_key: !secret DATADOG_API_KEY
+        db_host: !secret DATABASE_CONFIG | path ".host" | default "localhost"
+```
+
+Use `!secret` instead of `!store` for sensitive values. Secret values are registered with the I/O
+masker and are redacted in output.
+
+## `!append` and `!unset`
+
+Use `!append` to concatenate lists during stack inheritance instead of replacing them:
+
+```yaml
+components:
+  terraform:
+    eks:
+      dependencies:
+        components: !append
+          - component: rds
+          - component: elasticache
+```
+
+Use `!unset` to delete inherited keys:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_vpn_gateway: !unset
+```
+
+## `!emulator`
+
+Resolve connection details from an emulator component. Use this when local containers or components
+need endpoints for stack-scoped emulators instead of hardcoded localhost values.
+
+## Git Functions
+
+Git functions derive repository metadata from the current Git repository:
+
+```yaml
+vars:
+  git_host: !git.host
+  git_owner: !git.owner
+  git_name: !git.name
+  git_repo: !git.repository
+  git_url: !git.url
+```
 
 ## `!env`
 
@@ -487,10 +554,10 @@ Several YAML functions accept YQ expressions for querying complex data:
 !terraform.output config .config_map.username
 
 # Default values (// operator)
-!terraform.output vpc ".vpc_id // ""fallback"""
+!terraform.output vpc .vpc_id // "fallback"
 
 # String concatenation
-!terraform.output db ".hostname | ""jdbc://"" + . + "":5432"""
+!terraform.output 'db .hostname | "jdbc://" + . + ":5432"'
 
 # Bracket notation for special characters
 !terraform.output security '.users["github-dependabot"].key'
@@ -498,7 +565,7 @@ Several YAML functions accept YQ expressions for querying complex data:
 
 ### Quoting Rules
 
-- Wrap the entire YQ expression in single quotes when it contains double quotes
+- Use a single-quoted YAML scalar when an expression contains readable JSON or YQ string literals
 - Use double quotes inside brackets for string keys
-- Escape double quotes inside YQ with two double quotes: `""value""`
-- Escape single quotes by doubling: `''`
+- Compact JSON such as `{"key":"value"}` may be a plain scalar; JSON containing `: ` needs YAML quoting
+- Double a single quote only when it appears inside a single-quoted YAML scalar

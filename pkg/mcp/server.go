@@ -13,14 +13,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-// Server wraps the official MCP SDK server with Atmos-specific functionality.
+// Server wraps the MCP SDK server with Atmos-specific functionality.
 type Server struct {
 	sdk      *mcpsdk.Server
 	adapter  *Adapter
 	registry *tools.Registry
 }
 
-// NewServer creates a new MCP server using the official SDK.
+// NewServer creates a new MCP server using the MCP SDK.
 func NewServer(adapter *Adapter) *Server {
 	defer perf.Track(nil, "mcp.NewServer")()
 
@@ -208,6 +208,5 @@ func mapParamTypeToJSONSchema(paramType tools.ParamType) string {
 func (s *Server) Run(ctx context.Context, transport mcpsdk.Transport) error {
 	defer perf.Track(nil, "mcp.Server.Run")()
 
-	log.Info("MCP server started (using official SDK)")
 	return s.sdk.Run(ctx, transport)
 }

@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: destroy
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +15,7 @@ Use this command to destroy Terraform-managed infrastructure for an Atmos compon
 
 <DemoVideo id="terraform-destroy" title="atmos terraform destroy" showCaption={false} />
 
-<Screengrab title="atmos terraform destroy --help" slug="atmos-terraform-destroy--help" />
+<CastPlayer title="atmos terraform destroy --help" src="/casts/screengrabs/atmos-terraform-destroy--help.cast" static chrome />
 
 ## Usage
 
@@ -75,6 +75,42 @@ atmos terraform destroy vpc -s dev -auto-approve
 atmos terraform destroy vpc -s dev -target=aws_instance.web
 ```
 
+### Graph-backed Bulk Destroy
+
+Run destroys for multiple components through the Terraform dependency graph:
+
+```shell
+# Destroy every Terraform component, with dependents before dependencies
+atmos terraform destroy --all -s dev
+
+# Destroy only selected components
+atmos terraform destroy --components eks/apps,eks/cluster,vpc -s dev
+```
+
+Destroy reverses the dependency graph so dependents are destroyed before the components they depend on. For example, an application component is destroyed before its cluster, and the cluster is destroyed before the VPC.
+
+Independent destroy nodes can run concurrently when `--max-concurrency` is greater than `1`. Concurrent destroy requires non-interactive approval with `-auto-approve`.
+
+```shell
+atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve
+```
+
+Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
+
+Use `--include-dependents` to tear down a selection plus everything that depends on it, dependents first:
+
+```shell
+# Destroy the vpc components and everything that depends on them, dependents first
+atmos terraform destroy --components=vpc -s dev --include-dependents
+
+# Bound the expansion to direct dependents only
+atmos terraform destroy --components=vpc -s dev --include-dependents=1
+```
+
+:::warning
+Using `--include-dependencies` with destroy also destroys the shared prerequisites of your selection — components that other, unselected components may still depend on. Atmos prints a warning when this flag is used with destroy. Prefer `--include-dependents`, which tears down the selection plus everything that depends on it, in safe dependents-first order.
+:::
+
 ## Arguments
 
 <dl>
@@ -108,6 +144,43 @@ atmos terraform destroy vpc -s dev -target=aws_instance.web
         ```shell
         atmos terraform destroy vpc -s dev --dry-run
         ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DESTROY_LOG_ORDER`
+
+        ```shell
+        atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve --log-order grouped
+        ```
+    </dd>
+
+    <dt>`--include-dependents` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`), also destroy everything that depends on the selected components, dependents first. Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=1` bounds it to direct dependents. Pass the depth with `=`; a space-separated value is not bound to the flag.
+
+        ```shell
+        atmos terraform destroy --components=vpc -s dev --include-dependents
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENTS`
+    </dd>
+
+    <dt>`--include-dependencies` <em>(optional)</em></dt>
+    <dd>
+        With a multi-component selection, also destroy the prerequisites of the selected components — even prerequisites in other stacks. Because prerequisites may be shared with components outside the selection, Atmos warns when this flag is used with destroy; prefer `--include-dependents` for safe teardown. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).
+
+        ```shell
+        atmos terraform destroy --components=eks/cluster -s dev --include-dependencies
+        ```
+
+        **Environment variable:** `ATMOS_INCLUDE_DEPENDENCIES`
     </dd>
 </dl>
 

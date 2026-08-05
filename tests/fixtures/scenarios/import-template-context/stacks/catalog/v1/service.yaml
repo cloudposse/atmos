@@ -1,0 +1,5 @@
+components:
+  terraform:
+    service:
+      vars:
+        catalog_version: v1

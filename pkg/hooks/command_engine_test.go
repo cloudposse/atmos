@@ -1,0 +1,744 @@
+package hooks
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// testExePath returns the running test binary, used as a cross-platform
+// stand-in for arbitrary subprocess behavior (see TestMain).
+func testExePath(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	return exe
+}
+
+// runEngine builds an ExecContext from a Hook and runs the CommandEngine.
+func runEngine(t *testing.T, hook *Hook) (*Output, error) {
+	t.Helper()
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
+	kind := &Kind{
+		Name:      "command",
+		OnFailure: OnFailureWarn,
+		Engine:    &CommandEngine{},
+	}
+	resolved := kind.ResolveDefaults(hook)
+	ctx := &ExecContext{
+		Hook: resolved,
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test-component",
+		},
+	}
+	return kind.Engine.Run(ctx)
+}
+
+func TestCommandEngine_RejectsEmptyCommand(t *testing.T) {
+	_, err := runEngine(t, &Hook{Kind: "command"})
+	require.Error(t, err)
+	// Error builder wraps ErrInvalidConfig; explanation/context is attached
+	// as hints (not in Error() string) — assertion checks the sentinel.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestValidateCtx_RejectsMissingRequiredFields(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+	}{
+		{name: "nil context", ctx: nil},
+		{name: "nil hook", ctx: &ExecContext{Kind: &Kind{Name: "command"}}},
+		{name: "nil kind", ctx: &ExecContext{Hook: &Hook{Command: "tool"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCtx(tt.ctx)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrNilParam)
+		})
+	}
+}
+
+func TestCommandEngine_SuccessNoOutput(t *testing.T) {
+	// Use the test binary itself as a no-op command via os.Executable(). The
+	// _ATMOS_TEST_WRITE_OUTPUT gate is not set, so it just runs the test
+	// suite again (without filtering) — that's fine; we don't assert on
+	// its stdout. But to avoid recursive test execution, we use a
+	// non-matching test filter via the -run flag.
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"}, // run no tests, exit cleanly
+	}
+	out, err := runEngine(t, hook)
+	require.NoError(t, err)
+	// No structured output produced; artifact is nil.
+	assert.Nil(t, out.Artifact)
+}
+
+func TestCommandEngine_CapturesOutputFile(t *testing.T) {
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_WRITE_OUTPUT": "1",
+			"_ATMOS_TEST_OUTPUT_BODY":  "hello from tool",
+		},
+	}
+	out, err := runEngine(t, hook)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact)
+	assert.Equal(t, "hello from tool", string(out.Artifact.Body))
+	assert.Equal(t, "command", out.Artifact.Metadata["kind"])
+	assert.Equal(t, "test-stack", out.Artifact.Metadata["stack"])
+	assert.Equal(t, "test-component", out.Artifact.Metadata["component"])
+}
+
+// runEngineWithKind runs the CommandEngine for a hook under a caller-supplied
+// kind, so tests can exercise kind-level behavior such as CaptureStdout.
+func runEngineWithKind(t *testing.T, kind *Kind, hook *Hook) (*Output, error) {
+	t.Helper()
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
+	resolved := kind.ResolveDefaults(hook)
+	ctx := &ExecContext{
+		Hook: resolved,
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test-component",
+		},
+	}
+	return kind.Engine.Run(ctx)
+}
+
+func TestCommandEngine_CaptureStdoutWritesToOutputFile(t *testing.T) {
+	// A tool (tflint) that emits structured output to STDOUT with no
+	// file-output flag: with CaptureStdout the engine redirects stdout into
+	// ATMOS_OUTPUT_FILE, so captureOutput reads it back as the artifact body.
+	const body = `{"runs":[{"tool":{"driver":{"name":"tflint"}}}]}`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:          "command",
+		OnFailure:     OnFailureWarn,
+		Engine:        &CommandEngine{},
+		CaptureStdout: true,
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact, "stdout should have been captured into the output file")
+	assert.Equal(t, body, string(out.Artifact.Body))
+}
+
+func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
+	// Negative path: without CaptureStdout the same stdout streams to the
+	// terminal and never reaches the output file, so no artifact is produced.
+	const body = `should not be captured`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:      "command",
+		OnFailure: OnFailureWarn,
+		Engine:    &CommandEngine{},
+		// CaptureStdout intentionally left false.
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
+}
+
+func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {
+	exe := testExePath(t)
+	prep := &subprocessPrep{
+		binary: exe,
+		args:   []string{"-test.run", "^$"},
+		env:    os.Environ(),
+		// The parent directory does not exist, so os.Create must fail.
+		captureStdoutPath: filepath.Join(t.TempDir(), "missing-dir", "output"),
+	}
+
+	err := runSubprocess(prep)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateFile)
+}
+
+func TestCaptureOutput_AllowsNilInfo(t *testing.T) {
+	outputFile := filepath.Join(t.TempDir(), "output")
+	require.NoError(t, os.WriteFile(outputFile, []byte("hello"), 0o600))
+
+	out := captureOutput(&ExecContext{
+		Hook: &Hook{Kind: "command"},
+		Kind: &Kind{Name: "command"},
+	}, outputFile)
+
+	require.NotNil(t, out.Artifact)
+	assert.Equal(t, "command", out.Artifact.Metadata["kind"])
+	assert.NotContains(t, out.Artifact.Metadata, "stack")
+	assert.NotContains(t, out.Artifact.Metadata, "component")
+}
+
+func TestCommandEngine_OnFailureFailPropagates(t *testing.T) {
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:      "command",
+		Command:   exe,
+		Args:      []string{"-test.run", "^$"},
+		Env:       map[string]string{"_ATMOS_TEST_EXIT_ONE": "1"},
+		OnFailure: OnFailureFail,
+	}
+	_, err := runEngine(t, hook)
+	require.Error(t, err)
+}
+
+func TestCommandEngine_OnFailureWarnDoesNotPropagate(t *testing.T) {
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:      "command",
+		Command:   exe,
+		Args:      []string{"-test.run", "^$"},
+		Env:       map[string]string{"_ATMOS_TEST_EXIT_ONE": "1"},
+		OnFailure: OnFailureWarn,
+	}
+	_, err := runEngine(t, hook)
+	require.NoError(t, err, "warn mode should not propagate the subprocess error")
+}
+
+func TestCommandEngine_OnFailureIgnoreDoesNotPropagate(t *testing.T) {
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:      "command",
+		Command:   exe,
+		Args:      []string{"-test.run", "^$"},
+		Env:       map[string]string{"_ATMOS_TEST_EXIT_ONE": "1"},
+		OnFailure: OnFailureIgnore,
+	}
+	_, err := runEngine(t, hook)
+	require.NoError(t, err)
+}
+
+func TestCommandEngine_ExpandsAtmosVarsInArgs(t *testing.T) {
+	// Capture which file path was passed in args via $ATMOS_OUTPUT_FILE
+	// expansion by having the helper subprocess write the value back.
+	exe := testExePath(t)
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		// The args themselves don't affect the helper, but we exercise
+		// the expander on a tag we know exists.
+		Args: []string{"-test.run", "^$", "--", "$ATMOS_COMPONENT_PATH", "$ATMOS_STACK"},
+		Env: map[string]string{
+			"_ATMOS_TEST_WRITE_OUTPUT": "1",
+			"_ATMOS_TEST_OUTPUT_BODY":  "$ATMOS_STACK",
+		},
+	}
+	out, err := runEngine(t, hook)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact)
+	// The Env-value `$ATMOS_STACK` should NOT be expanded inside the
+	// subprocess body (we write the literal env value, which already had
+	// the engine substitute $ATMOS_STACK → "test-stack" before exec).
+	assert.Equal(t, "test-stack", string(out.Artifact.Body))
+}
+
+func TestCommandEngine_UsesComponentDirectoryForCWDAndEnv(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	kind := &Kind{Name: "command", OnFailure: OnFailureFail, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: testExePath(t),
+			Args:    []string{"-test.run", "^$"},
+			Env:     map[string]string{"_ATMOS_TEST_WRITE_CWD": "1"},
+		}),
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+	}
+
+	out, err := kind.Engine.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact)
+	paths := strings.Split(string(out.Artifact.Body), "\n")
+	require.Len(t, paths, 2)
+	for _, path := range paths {
+		resolved, resolveErr := filepath.EvalSymlinks(path)
+		require.NoError(t, resolveErr)
+		expected, expectedErr := filepath.EvalSymlinks(componentDir)
+		require.NoError(t, expectedErr)
+		assert.Equal(t, expected, resolved)
+	}
+}
+
+func TestRunSubprocess_FailsForMissingComponentDirectory(t *testing.T) {
+	prep := &subprocessPrep{
+		binary: testExePath(t),
+		args:   []string{"-test.run", "^$"},
+		env:    os.Environ(),
+		dir:    filepath.Join(t.TempDir(), "missing-component"),
+	}
+
+	require.Error(t, runSubprocess(prep))
+}
+
+// TestCommandEngine_FallsBackToAmbientCWDWhenComponentDirMissing verifies that
+// a `kind: command` hook still runs when the resolved component directory
+// doesn't exist yet (e.g. an early failure before Terraform ever provisions
+// it), rather than refusing to start. `runSubprocess` itself still fails
+// outright for an explicit missing cmd.Dir (see the test above) — the fix
+// is that prepareSubprocess never hands it one: it falls back to leaving
+// cmd.Dir unset, so the subprocess inherits the ambient process working
+// directory. $ATMOS_COMPONENT_PATH still reports the resolved (nonexistent)
+// path unconditionally; only the subprocess's actual cwd degrades.
+// Regression test for a `when: always` after-hook needing to fire even when
+// the component was never provisioned (see cmd/helmfile's
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure, which exercises this
+// through the real early-failure call path).
+func TestCommandEngine_FallsBackToAmbientCWDWhenComponentDirMissing(t *testing.T) {
+	ambientCWD, err := os.Getwd()
+	require.NoError(t, err)
+
+	terraformDir := t.TempDir()
+	missingComponentDir := filepath.Join(terraformDir, "myapp")
+
+	kind := &Kind{Name: "command", OnFailure: OnFailureFail, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: testExePath(t),
+			Args:    []string{"-test.run", "^$"},
+			Env:     map[string]string{"_ATMOS_TEST_WRITE_CWD": "1"},
+		}),
+		Kind:        kind,
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "myapp", FinalComponent: "myapp"},
+	}
+
+	out, runErr := kind.Engine.Run(ctx)
+	require.NoError(t, runErr, "the hook must still run when the component directory doesn't exist")
+	require.NotNil(t, out.Artifact)
+
+	lines := strings.Split(string(out.Artifact.Body), "\n")
+	require.Len(t, lines, 2)
+	actualCWD, componentPath := lines[0], lines[1]
+
+	resolvedActual, err := filepath.EvalSymlinks(actualCWD)
+	require.NoError(t, err)
+	resolvedAmbient, err := filepath.EvalSymlinks(ambientCWD)
+	require.NoError(t, err)
+	assert.Equal(t, resolvedAmbient, resolvedActual, "subprocess must inherit the ambient cwd, not fail to start")
+	assert.Equal(t, missingComponentDir, componentPath, "$ATMOS_COMPONENT_PATH still reports the resolved path even though it doesn't exist")
+}
+
+func TestCommandEngine_InvokesResultHandler(t *testing.T) {
+	exe := testExePath(t)
+	handlerCalled := false
+	kind := &Kind{
+		Name:   "command-with-handler",
+		Engine: &CommandEngine{},
+		ResultHandler: func(ctx *ExecContext) (*Summary, error) {
+			handlerCalled = true
+			return &Summary{
+				Kind:   ctx.Hook.Kind,
+				Status: StatusSuccess,
+				Title:  "ran",
+				Body:   "**done**",
+			}, nil
+		},
+	}
+	hook := &Hook{
+		Kind:    "command-with-handler",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_WRITE_OUTPUT": "1",
+			"_ATMOS_TEST_OUTPUT_BODY":  "ignored",
+		},
+	}
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "c"), 0o755))
+	ctx := &ExecContext{
+		Hook:        kind.ResolveDefaults(hook),
+		Kind:        kind,
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "c"},
+	}
+	out, err := kind.Engine.Run(ctx)
+	require.NoError(t, err)
+	assert.True(t, handlerCalled)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, "command-with-handler", out.Summary.Kind)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+	assert.Equal(t, "ran", out.Summary.Title)
+}
+
+func TestCommandEngine_CommandKindIsRegistered(t *testing.T) {
+	k, ok := GetKind("command")
+	require.True(t, ok, "generic command kind must self-register via init()")
+	require.NotNil(t, k.Engine)
+	assert.Equal(t, OnFailureWarn, k.OnFailure)
+}
+
+func TestPrepareSubprocess_MissingCommandReturnsCommandNotFound(t *testing.T) {
+	ctx := &ExecContext{
+		Hook: &Hook{
+			Kind:    "command",
+			Command: filepath.Join(t.TempDir(), "missing-tool"),
+		},
+		Kind: &Kind{Name: "command"},
+	}
+
+	_, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestPrepareSubprocess_PropagatesCILogGroupSentinel(t *testing.T) {
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
+	prev := shouldPropagateHookLogGroupSentinel
+	t.Cleanup(func() { shouldPropagateHookLogGroupSentinel = prev })
+
+	tests := []struct {
+		name      string
+		propagate bool
+		want      bool
+	}{
+		{name: "propagates when hook group is active", propagate: true, want: true},
+		{name: "does not propagate when hook group is inactive", propagate: false, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldPropagateHookLogGroupSentinel = func(*schema.AtmosConfiguration, ci.Dimension) bool {
+				return tt.propagate
+			}
+
+			ctx := &ExecContext{
+				Hook: &Hook{
+					Kind:    "command",
+					Command: testExePath(t),
+				},
+				Kind:        &Kind{Name: "command"},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+
+			prep, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
+			require.NoError(t, err)
+
+			if tt.want {
+				assert.Contains(t, prep.env, ci.LogGroupSentinelEnv())
+			} else {
+				assert.NotContains(t, prep.env, ci.LogGroupSentinelEnv())
+			}
+		})
+	}
+}
+
+func TestResolveBinaryOnPath_RejectsNonExecutableUnixFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable bits do not apply on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tool")
+	require.NoError(t, os.WriteFile(path, []byte("not executable"), 0o600))
+
+	_, err := resolveBinaryOnPathWithEnv("tool", dir, "", "", runtime.GOOS)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestResolveBinaryOnPath_UsesWindowsPATHEXTForToolchainPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "trivy.EXE")
+	require.NoError(t, os.WriteFile(path, []byte("exe"), 0o600))
+
+	got, err := resolveBinaryOnPathWithEnv("trivy", dir, "", ".EXE;.BAT", "windows")
+	require.NoError(t, err)
+	assert.Equal(t, path, got)
+}
+
+func TestResolveBinaryOnPathWithEnv_ErrorsOnEmptyAndMissingCommands(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  string
+	}{
+		{name: "empty command", cmd: ""},
+		{name: "missing command", cmd: "definitely-not-on-path-atmos-test"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolveBinaryOnPathWithEnv(tt.cmd, "", "", "", runtime.GOOS)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+		})
+	}
+}
+
+func TestVerifyCommandAvailable_RejectsNonExecutableExplicitPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable bits do not apply on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "tool")
+	require.NoError(t, os.WriteFile(path, []byte("not executable"), 0o600))
+
+	err := verifyCommandAvailable(path, "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestCommandEngine_PathHelpers(t *testing.T) {
+	t.Run("combineSearchPath", func(t *testing.T) {
+		sep := string(os.PathListSeparator)
+		assert.Equal(t, "toolchain", combineSearchPath("toolchain", ""))
+		assert.Equal(t, "process", combineSearchPath("", "process"))
+		assert.Equal(t, "toolchain"+sep+"process", combineSearchPath("toolchain", "process"))
+	})
+
+	t.Run("candidateBinaryNames default Windows extensions", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]string{"trivy", "trivy.com", "trivy.exe", "trivy.bat", "trivy.cmd"},
+			candidateBinaryNames("trivy", "", "windows"),
+		)
+	})
+
+	t.Run("candidateBinaryNames normalizes custom PATHEXT and removes duplicates", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]string{"trivy", "trivy.EXE", "trivy.BAT"},
+			candidateBinaryNames("trivy", "EXE;.EXE;.BAT", "windows"),
+		)
+	})
+
+	t.Run("candidateBinaryNames keeps explicit extensions unchanged", func(t *testing.T) {
+		assert.Equal(t, []string{"trivy.exe"}, candidateBinaryNames("trivy.exe", ".COM;.EXE", "windows"))
+		assert.Equal(t, []string{"trivy"}, candidateBinaryNames("trivy", ".EXE", "linux"))
+	})
+
+	t.Run("prependToolchainPATH", func(t *testing.T) {
+		sep := string(os.PathListSeparator)
+		base := []string{"HOME=/tmp", "PATH=/usr/bin"}
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/tools" + sep + "/usr/bin"}, prependToolchainPATH(base, "/tools"))
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/usr/bin"}, prependToolchainPATH(base, ""))
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/tools"}, prependToolchainPATH([]string{"HOME=/tmp"}, "/tools"))
+	})
+}
+
+func TestComponentPathFor_Fallbacks(t *testing.T) {
+	wd := t.TempDir()
+	t.Chdir(wd)
+	// Rooted at wd (not a hand-rolled filepath.Separator-prefixed path): on
+	// Windows, a driveless path like `\repo\...` is not "absolute" per
+	// filepath.IsAbs, so u.GetComponentPath's Abs() call would silently
+	// prepend the current drive and break equality against the literal
+	// `want` value below. wd is already a genuine absolute path on every
+	// platform.
+	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
+
+	// Pre-create a provisioned workdir directory so a test case below can
+	// exercise resolveProvisionedWorkdir's "exists on disk" true branch,
+	// which the fallback-only cases above never reach.
+	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(provisionedWorkdirPath, 0o755))
+
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		want string
+	}{
+		{
+			name: "nil context uses working directory",
+			ctx:  nil,
+			want: wd,
+		},
+		{
+			name: "nil config uses working directory",
+			ctx:  &ExecContext{Info: &schema.ConfigAndStacksInfo{}},
+			want: wd,
+		},
+		{
+			name: "nil info uses working directory",
+			ctx:  &ExecContext{AtmosConfig: &schema.AtmosConfiguration{}},
+			want: wd,
+		},
+		{
+			name: "empty terraform base path uses working directory",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			},
+			want: wd,
+		},
+		{
+			name: "uses final component when set",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "vpc",
+					FinalComponent:        "vpc-final",
+				},
+			},
+			want: filepath.Join(terraformBasePath, "catalog", "vpc-final"),
+		},
+		{
+			name: "uses the configured component type base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{HelmfileDirAbsolutePath: filepath.Join(wd, "repo", "components", "helmfile")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "helmfile",
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "app-alias",
+					FinalComponent:        "shared-app",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "helmfile", "catalog", "shared-app"),
+		},
+		{
+			name: "falls back to component argument",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "vpc",
+				},
+			},
+			want: filepath.Join(terraformBasePath, "catalog", "vpc"),
+		},
+		{
+			// Exercises resolveProvisionedWorkdir's true branch: BasePath +
+			// componentType + stack + component match the pre-created
+			// directory above, so the provisioned workdir wins over the
+			// in-repo fallback that the other cases exercise.
+			name: "prefers an actually provisioned workdir over the in-repo fallback",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{BasePath: wd, TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					FinalComponent:   "vpc",
+					Stack:            "dev",
+					ComponentSection: schema.AtmosSectionMapType{},
+				},
+			},
+			want: provisionedWorkdirPath,
+		},
+		{
+			name: "uses the packer component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{PackerDirAbsolutePath: filepath.Join(wd, "repo", "components", "packer")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "packer",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "image",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "packer", "catalog", "image"),
+		},
+		{
+			name: "uses the ansible component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{AnsibleDirAbsolutePath: filepath.Join(wd, "repo", "components", "ansible")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "ansible",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "playbook",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "ansible", "catalog", "playbook"),
+		},
+		{
+			name: "uses the kubernetes component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{KubernetesDirAbsolutePath: filepath.Join(wd, "repo", "components", "kubernetes")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "kubernetes",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "deployment",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "kubernetes", "catalog", "deployment"),
+		},
+		{
+			name: "uses the helm component base path",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{HelmDirAbsolutePath: filepath.Join(wd, "repo", "components", "helm")},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:         "helm",
+					ComponentFolderPrefix: "catalog",
+					FinalComponent:        "chart",
+				},
+			},
+			want: filepath.Join(wd, "repo", "components", "helm", "catalog", "chart"),
+		},
+		{
+			// componentBasePath's default case: an unrecognized component
+			// type has no configured base path to fall back to, so
+			// ComponentPath degrades all the way to the working directory.
+			name: "unknown component type falls back to working directory",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentType:  "unknown-type",
+					FinalComponent: "vpc",
+				},
+			},
+			want: wd,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ComponentPath(tt.ctx))
+		})
+	}
+}

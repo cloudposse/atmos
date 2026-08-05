@@ -89,7 +89,25 @@ func newGitHubClientWithToken(ctx context.Context, token string) *github.Client 
 func handleGitHubAPIError(err error, resp *github.Response) error {
 	defer perf.Track(nil, "github.handleGitHubAPIError")()
 
-	if resp != nil && resp.Rate.Remaining == 0 {
+	// A 401 means the credentials were rejected (bad or expired token), not a rate limit.
+	// GitHub returns X-RateLimit-Remaining: 0 on 401 responses, so this must be checked
+	// before the rate-limit heuristic below to avoid misreporting bad credentials.
+	if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+		return errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanation("GitHub rejected the provided credentials (bad or expired token)").
+			WithHint("Verify your token: `gh auth status`").
+			WithHint("Try re-authenticating: `gh auth login`").
+			WithHint("Or set a valid `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`").
+			WithExitCode(1).
+			Err()
+	}
+
+	// Genuine rate limiting is signalled with HTTP 403 (primary) or 429 (secondary),
+	// always alongside X-RateLimit-Remaining: 0. Requiring the status code prevents
+	// other zero-remaining responses (e.g. 401) from being misclassified.
+	if resp != nil && resp.Rate.Remaining == 0 &&
+		(resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
 		resetTime := resp.Rate.Reset.Time
 		waitDuration := time.Until(resetTime)
 

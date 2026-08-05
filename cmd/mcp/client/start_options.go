@@ -25,6 +25,18 @@ func buildStartOptions(atmosConfig *schema.AtmosConfiguration) []mcpclient.Start
 
 // buildToolchainOption creates a toolchain StartOption if .tool-versions or component deps are available.
 func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
+	tenv := resolveToolchainEnvironment(atmosConfig)
+	if tenv == nil {
+		return nil
+	}
+	return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+}
+
+// resolveToolchainEnvironment loads the Atmos toolchain environment for the
+// current project, trying `.tool-versions` first and falling back to a
+// terraform-component resolution. Returns nil when no toolchain is
+// configured (callers should treat this as a no-op rather than an error).
+func resolveToolchainEnvironment(atmosConfig *schema.AtmosConfiguration) *dependencies.ToolchainEnvironment {
 	// Load dependencies from .tool-versions (the standard toolchain source).
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if err != nil {
@@ -32,7 +44,7 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	} else if len(deps) > 0 {
 		tenv, tenvErr := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
 		if tenvErr == nil && tenv != nil {
-			return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+			return tenv
 		}
 		log.Debug("Failed to create toolchain environment for MCP", "error", tenvErr)
 	}
@@ -40,7 +52,7 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	// Fall back to component-based resolution.
 	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
 	if tenvErr == nil && tenv != nil {
-		return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+		return tenv
 	}
 	return nil
 }
@@ -54,7 +66,7 @@ func buildAuthOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOp
 	if !mcpServersNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-	return []mcpclient.StartOption{mcpclient.WithAuthManager(mcpclient.NewScopedAuthProvider(atmosConfig))}
+	return []mcpclient.StartOption{mcpclient.WithAuthManager(mcpclient.NewScopedAuthProvider())}
 }
 
 // mcpServersNeedAuth returns true if any configured MCP server has identity set.

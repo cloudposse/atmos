@@ -1,0 +1,73 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    platforms:
+      - darwin_arm64
+      - linux_amd64
+
+stacks:
+  base_path: "stacks"
+  # Only `deploy/` manifests are deployable stacks. Catalog manifests are imported,
+  # not stacks themselves — including them here would make `describe stacks` (and the
+  # interactive component/stack pickers that depend on it) evaluate `name_template`
+  # against catalog files that have no `vars.stage`, which fails.
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds every component to the local sandbox.
+# The provider-config contributor and this identity wire Terraform (including
+# `terraform test`) to it — no providers.tf, no endpoint configuration.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true
+
+# Enable the native-CI pass/fail step summary for `terraform test`. In a CI job
+# (where $GITHUB_STEP_SUMMARY is set and CI is auto-detected) the test results
+# render in the job summary, the same native-CI path as plan/apply.
+# `ci.enabled` is the master switch — without it, the per-feature `summary`/`output`
+# toggles do nothing (RunCIHooks short-circuits when ci.enabled is false).
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+  # Inline PR annotations (`::error file=…,line=…`) on failing test assertions.
+  # Enabled by default; shown explicitly here so the knob is discoverable. Only
+  # failing/errored runs produce annotations, so the all-passing demo emits none.
+  annotations:
+    enabled: true
+
+# Custom CLI commands.
+commands:
+  - name: "test"
+    description: "Run the Terraform tests for the app component against fixture infrastructure in the local AWS emulator"
+    # The emulator lifecycle is declarative: component hooks on
+    # before/after.terraform.test bring the sandbox and fixture VPC up and down
+    # (see stacks/catalog/app.yaml), so this command is just validate + test.
+    steps:
+      - atmos validate stacks
+      - atmos terraform test app -s fixtures
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - atmos terraform clean --everything --force

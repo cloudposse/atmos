@@ -28,16 +28,20 @@ var deployCmd = &cobra.Command{
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformDeploy, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformDeploy, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
-		// Reset captured output for this run.
+		// Reset per-run globals. Both must be initialised before any early return
+		// so that the deferred hook and PostRunE read consistent state.
 		capturedDeployOutput = ""
+		wasMultiComponentExecution = false
 
 		// On failure, run after hooks with error context so CI check runs
 		// are updated to failure status. Cobra skips PostRunE on error.
+		// In multi-component mode the per-component hook already fired for each
+		// component, so the global error call is suppressed to avoid double-firing.
 		defer func() {
-			if runErr != nil {
+			if runErr != nil && !wasMultiComponentExecution {
 				runHooksOnErrorWithOutput(h.AfterTerraformDeploy, cmd, args, runErr, capturedDeployOutput)
 			}
 		}()
@@ -53,7 +57,10 @@ This ensures that the changes defined in your Terraform configuration are applie
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
 		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.
@@ -77,7 +84,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -93,6 +100,12 @@ This ensures that the changes defined in your Terraform configuration are applie
 		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, CI hooks already fired per-component inside
+		// ExecuteTerraformQuery. Calling them again here would double-fire on the
+		// last component or fire with empty/misattributed output.
+		if wasMultiComponentExecution {
+			return nil
+		}
 		return runHooksWithOutput(h.AfterTerraformDeploy, cmd, args, capturedDeployOutput)
 	},
 }
@@ -107,8 +120,14 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform deploy failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform deploy components to execute concurrently"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform deploy logs. Supported values: stream, grouped"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
-		flags.WithBoolFlag("verify-plan", "", false, "Verify stored planfile matches current state before applying"),
+		flags.WithBoolFlag("verify-plan", "", false, "Force planfile drift verification before applying, overriding config (use --verify-plan=false to disable)"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_DEPLOY_FAILURE_MODE"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_DEPLOY_LOG_ORDER"),
 		flags.WithEnvVars("deploy-run-init", "ATMOS_TERRAFORM_DEPLOY_RUN_INIT"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_DEPLOY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_DEPLOY_PLANFILE"),

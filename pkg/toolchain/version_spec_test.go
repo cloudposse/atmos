@@ -85,6 +85,20 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "semver release candidate (issue #2839)",
+			input:     "1.225.0-rc.3",
+			wantType:  VersionTypeSemver,
+			wantValue: "1.225.0-rc.3",
+			wantErr:   false,
+		},
+		{
+			name:      "semver release candidate with v prefix",
+			input:     "v1.225.0-rc.3",
+			wantType:  VersionTypeSemver,
+			wantValue: "v1.225.0-rc.3",
+			wantErr:   false,
+		},
+		{
 			name:      "latest keyword",
 			input:     "latest",
 			wantType:  VersionTypeSemver,
@@ -143,6 +157,59 @@ func TestParseVersionSpec(t *testing.T) {
 			wantType:  VersionTypeSHA,
 			wantValue: "abcdefab",
 			wantErr:   false,
+		},
+
+		// Explicit ref prefix (branch or tag).
+		{
+			name:      "ref branch name",
+			input:     "ref:main",
+			wantType:  VersionTypeRef,
+			wantValue: "main",
+			wantErr:   false,
+		},
+		{
+			name:      "ref tag name",
+			input:     "ref:v1.2.3",
+			wantType:  VersionTypeRef,
+			wantValue: "v1.2.3",
+			wantErr:   false,
+		},
+		{
+			name:      "ref qualified branch heads/",
+			input:     "ref:heads/main",
+			wantType:  VersionTypeRef,
+			wantValue: "heads/main",
+			wantErr:   false,
+		},
+		{
+			name:      "ref qualified tag tags/",
+			input:     "ref:tags/v1.199.0",
+			wantType:  VersionTypeRef,
+			wantValue: "tags/v1.199.0",
+			wantErr:   false,
+		},
+		{
+			name:      "ref release branch with slash",
+			input:     "ref:release/v1.199",
+			wantType:  VersionTypeRef,
+			wantValue: "release/v1.199",
+			wantErr:   false,
+		},
+
+		// Invalid ref formats.
+		{
+			name:      "ref: - empty ref value",
+			input:     "ref:",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "ref with whitespace",
+			input:     "ref:my branch",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
 		},
 
 		// Invalid formats (should error).
@@ -474,6 +541,82 @@ func TestIsSHAVersion(t *testing.T) {
 	}
 }
 
+// TestIsRefVersion verifies IsRefVersion detects ref: specifiers and rejects non-ref inputs.
+func TestIsRefVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		version   string
+		wantRef   string
+		wantIsRef bool
+	}{
+		// Valid ref versions (explicit prefix only).
+		{
+			name:      "ref branch",
+			version:   "ref:main",
+			wantRef:   "main",
+			wantIsRef: true,
+		},
+		{
+			name:      "ref tag",
+			version:   "ref:v1.199.0",
+			wantRef:   "v1.199.0",
+			wantIsRef: true,
+		},
+		{
+			name:      "ref qualified branch",
+			version:   "ref:heads/main",
+			wantRef:   "heads/main",
+			wantIsRef: true,
+		},
+
+		// Not ref versions — refs are never auto-detected.
+		{
+			name:      "bare branch name (no prefix)",
+			version:   "main",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "semver",
+			version:   "1.2.3",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "PR number",
+			version:   "2040",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "SHA",
+			version:   "ceb7526",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "empty ref",
+			version:   "ref:",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "empty string",
+			version:   "",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotRef, gotIsRef := IsRefVersion(tt.version)
+			assert.Equal(t, tt.wantRef, gotRef, "ref mismatch")
+			assert.Equal(t, tt.wantIsRef, gotIsRef, "isRef mismatch")
+		})
+	}
+}
+
 func TestIsAllDigits(t *testing.T) {
 	tests := []struct {
 		input string
@@ -526,9 +669,18 @@ func TestIsValidSemver(t *testing.T) {
 		{"1.", false},
 		{".1", false},
 		{"1..2", false},
-		{"1.2.3.4.5", true}, // Valid - multiple parts allowed.
-		{"1.2.a", false},    // Non-numeric part.
-		{"1.2-beta", false}, // Pre-release suffix not supported in simple check.
+		{"1.2.3.4.5", false}, // Not valid semver - more than major.minor.patch.
+		{"1.2.a", false},     // Non-numeric part.
+		{"1.2-beta", true},   // Two-part version with pre-release suffix.
+
+		// Release-candidate / pre-release / build-metadata suffixes (issue #2839).
+		{"1.225.0-rc.3", true},
+		{"v1.225.0-rc.3", true},
+		{"1.2.3-alpha.1", true},
+		{"1.2.3+build.5", true},
+		{"1.2.3-rc.1+build.5", true},
+		{"1.2.3-01", false}, // Leading-zero numeric pre-release identifier is invalid.
+		{"1.2.3-", false},   // Empty pre-release identifier.
 	}
 
 	for _, tt := range tests {

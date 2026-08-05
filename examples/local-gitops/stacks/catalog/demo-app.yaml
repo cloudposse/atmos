@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The application the GitOps loop delivers. `apply demo-app -s local --target
+# deployments` renders these manifests and pushes them to the Gitea `deployments`
+# repository under clusters/<stage>/demo-app; Flux's Kustomization (watching
+# clusters/<stage>) then reconciles them into the cluster. Selecting the default
+# (cluster) target applies directly instead — handy for comparing the two paths.
+#
+# A Namespace + ConfigMap keeps the round trip fast and image-pull-free: the test
+# (and you) can confirm reconciliation the moment the ConfigMap appears in-cluster.
+components:
+  kubernetes:
+    demo-app/defaults:
+      metadata:
+        type: abstract
+        component: demo-app
+      provider: kubectl
+      vars:
+        namespace: gitops-demo
+        app_name: demo-app
+        message: "Delivered by Atmos -> Gitea -> Flux"
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployments:
+            kind: git
+            repository: deployments
+            path: 'clusters/{{ .vars.stage }}/{{ .vars.app_name }}'
+            commit:
+              message: 'Render {{ .vars.app_name }} for {{ .vars.stage }}'
+      manifests:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: '{{ .vars.namespace }}'
+            labels:
+              app.kubernetes.io/managed-by: atmos
+        - |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ .vars.app_name }}"
+            namespace: "{{ .vars.namespace }}"
+            labels:
+              app.kubernetes.io/name: "{{ .vars.app_name }}"
+              app.kubernetes.io/managed-by: atmos
+          data:
+            message: "{{ .vars.message }}"
+            stage: "{{ .vars.stage }}"

@@ -42,6 +42,10 @@ type userIdentity struct {
 	name   string
 	config *schema.Identity
 	realm  string // Credential isolation realm set by auth manager.
+	// credStore is the config-aware credential store injected by the auth
+	// manager via SetCredentialStore. When nil (e.g. identity constructed
+	// directly in tests), credentialStore() falls back to the default store.
+	credStore types.CredentialStore
 }
 
 // NewUserIdentity creates a new AWS user identity.
@@ -69,6 +73,25 @@ func (i *userIdentity) SetRealm(realm string) {
 	i.realm = realm
 }
 
+// SetCredentialStore injects the auth manager's config-aware credential store.
+// Implements the manager's optional credentialStoreReceiver interface so that
+// keyring I/O performed by this identity honors auth.keyring.type (issue #2544).
+func (i *userIdentity) SetCredentialStore(store types.CredentialStore) {
+	i.credStore = store
+}
+
+// credentialStore returns the injected config-aware store, falling back to the
+// default store when none was injected (e.g. identity constructed directly in
+// tests).
+func (i *userIdentity) credentialStore() types.CredentialStore {
+	if i.credStore != nil {
+		return i.credStore
+	}
+	// No config available in this construction path; nil selects the default
+	// keyring backend (same behavior as the deprecated no-arg constructor).
+	return atmosCredentials.NewCredentialStoreWithConfig(nil)
+}
+
 // GetProviderName returns the provider name for this identity.
 // AWS user identities always return "aws-user" as they are standalone.
 func (i *userIdentity) GetProviderName() (string, error) {
@@ -79,6 +102,18 @@ func (i *userIdentity) GetProviderName() (string, error) {
 // or generating new session tokens if needed.
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
 	defer perf.Track(nil, "aws.userIdentity.Authenticate")()
+
+	// --webflow is an invocation-scoped escape hatch for users that have IAM
+	// credentials configured but want to sign in through the browser instead.
+	// Do this before reading the session file, YAML, or keyring so none of those
+	// long-lived credentials are consulted or modified.
+	if types.ForceAWSWebflow(ctx) {
+		creds, err := i.authenticateViaBrowserWebflow(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return creds, nil
+	}
 
 	// First, try to load existing session credentials from AWS files.
 	// This prevents unnecessary GetSessionToken API calls when valid credentials already exist.
@@ -97,19 +132,17 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
-		// Only try browser webflow when credentials are unavailable, not for config errors.
-		// Config errors (e.g. partial access_key_id/secret_access_key) must be surfaced immediately
-		// to avoid silently authenticating as a different principal.
-		if i.isWebflowEnabled() && !errors.Is(err, errUtils.ErrInvalidAuthConfig) {
-			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
+		// Only try browser webflow when credentials are genuinely absent.
+		// Skip webflow for:
+		//   - ErrInvalidAuthConfig: partial access_key_id/secret_access_key in YAML; surfacing
+		//     this immediately avoids silently authenticating as a different principal.
+		//   - ErrAwsUserKeyringReadFailed: the user configured credentials but the keyring
+		//     is unreadable (locked keychain, permission denial, corrupted entry). Falling
+		//     through to webflow would mask the real problem and ignore configured creds.
+		if i.shouldFallBackToWebflow(err) {
+			log.Debug("Starting browser-based authentication", logKeyIdentity, i.name, "reason", err.Error())
+			webflowCreds, webflowErr := i.authenticateViaWebflow(ctx)
 			if webflowErr == nil {
-				region := i.resolveRegion()
-				if webflowCreds.Region == "" {
-					webflowCreds.Region = region
-				}
-				if writeErr := i.writeAWSFiles(webflowCreds, region); writeErr != nil {
-					return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, writeErr)
-				}
 				return webflowCreds, nil
 			}
 			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
@@ -127,6 +160,64 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 
 	// Generate a session token (handles MFA when configured).
 	return i.generateSessionToken(ctx, longLivedCreds, region)
+}
+
+// authenticateViaBrowserWebflow performs a fresh browser OAuth2/PKCE flow.
+// It deliberately skips refresh-token reuse, which is required when the caller
+// explicitly requests --webflow.
+func (i *userIdentity) authenticateViaBrowserWebflow(ctx context.Context) (*types.AWSCredentials, error) {
+	if !i.isWebflowEnabled() {
+		return nil, errUtils.ErrWebflowDisabled
+	}
+
+	log.Debug("Starting forced browser-based authentication", logKeyIdentity, i.name)
+	region := i.resolveRegion()
+	webflowCreds, err := i.browserWebflow(ctx, region)
+	if err != nil {
+		return nil, err
+	}
+	return i.persistWebflowCredentials(webflowCreds, region)
+}
+
+// authenticateViaWebflow obtains credentials from the normal webflow path,
+// which may reuse a refresh token before opening the browser.
+func (i *userIdentity) authenticateViaWebflow(ctx context.Context) (*types.AWSCredentials, error) {
+	webflowCreds, err := i.resolveCredentialsViaWebflow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return i.persistWebflowCredentials(webflowCreds, i.resolveRegion())
+}
+
+// persistWebflowCredentials stores temporary credentials in the AWS session-file
+// cache. It intentionally does not interact with the configured credential store.
+func (i *userIdentity) persistWebflowCredentials(creds *types.AWSCredentials, region string) (*types.AWSCredentials, error) {
+	if creds.Region == "" {
+		creds.Region = region
+	}
+	if err := i.writeAWSFiles(creds, region); err != nil {
+		return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, err)
+	}
+	return creds, nil
+}
+
+// shouldFallBackToWebflow reports whether a credential-resolution error is
+// recoverable via browser-based authentication. Webflow is appropriate only
+// when the user has NOT supplied credentials anywhere; it must never bypass
+// configured credentials that simply could not be read.
+func (i *userIdentity) shouldFallBackToWebflow(err error) bool {
+	if !i.isWebflowEnabled() {
+		return false
+	}
+	// Partial / invalid YAML config — surface the real error.
+	if errors.Is(err, errUtils.ErrInvalidAuthConfig) {
+		return false
+	}
+	// Keyring read failed — user likely has credentials but we can't read them.
+	if errors.Is(err, errUtils.ErrAwsUserKeyringReadFailed) {
+		return false
+	}
+	return true
 }
 
 // resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
@@ -166,8 +257,16 @@ func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMf
 	keystoreCreds, keystoreErr := i.credentialsFromStore()
 	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
 
-	// No keyring credentials - prompt for new ones if allowed.
 	if keystoreErr != nil {
+		// A real keyring read failure (corrupted entry, deserialization error,
+		// permission denial) must propagate as-is so Authenticate skips the
+		// webflow fallback — otherwise webflow would silently bypass the
+		// credentials the user has already configured.
+		if errors.Is(keystoreErr, errUtils.ErrAwsUserKeyringReadFailed) {
+			return nil, keystoreErr
+		}
+		// "Not found" - prompt for new ones if allowed, else return
+		// ErrAwsUserNotConfigured so Authenticate may try webflow.
 		return i.promptOrError(allowPrompts, yamlMfaArn, "No credentials found",
 			fmt.Sprintf("AWS User credentials not found for identity %q", i.name),
 			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
@@ -238,20 +337,33 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 }
 
 // credentialsFromStore retrieves AWS credentials from the keyring store.
+// Distinguishes "credentials not configured" (ErrAwsUserNotConfigured) from
+// "keyring read failed" (ErrAwsUserKeyringReadFailed) so callers can decide
+// whether webflow is an appropriate fallback. A read failure means the user
+// likely DID configure credentials but the keyring is unreadable — falling
+// through to webflow would mask the real problem.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
 	// Use realm for credential isolation between different repositories.
-	credStore := atmosCredentials.NewCredentialStore()
+	credStore := i.credentialStore()
 	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		// Only "not found" maps to "not configured" — every other keyring error
+		// (locked keychain, permission denial, deserialization failure, etc.) is
+		// a real read failure and must not trigger webflow fallback.
+		if errors.Is(err, atmosCredentials.ErrCredentialsNotFound) {
+			return nil, fmt.Errorf("%w: AWS User credentials not found in keyring for identity %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		}
+		return nil, fmt.Errorf("%w: identity %q: %w", errUtils.ErrAwsUserKeyringReadFailed, i.name, err)
 	}
 
 	longLivedCreds, ok := retrieved.(*types.AWSCredentials)
 	if !ok {
-		return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
+		// Stored value exists but is the wrong type — keyring is corrupted, not "missing".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are not AWS credentials", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 	if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
-		return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
+		// Entry exists but is incomplete — also a read failure, not "not configured".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are incomplete (missing access key or secret)", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 
 	log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
@@ -313,7 +425,7 @@ func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *
 			longLivedCreds.AccessKeyID, longLivedCreds.SecretAccessKey, "",
 		)),
 	}
-	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -436,7 +548,7 @@ func (i *userIdentity) handleInvalidClientTokenId(ctx context.Context, apiErr sm
 // clearStaleCredentials removes stale credentials from the keyring.
 func (i *userIdentity) clearStaleCredentials() {
 	// Use realm for credential isolation between different repositories.
-	credStore := atmosCredentials.NewCredentialStore()
+	credStore := i.credentialStore()
 	if delErr := credStore.Delete(i.name, i.realm); delErr != nil {
 		log.Debug("Failed to clear stale credentials from keyring", logKeyIdentity, i.name, "error", delErr)
 	} else {
@@ -730,37 +842,25 @@ func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[strin
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
 }
 
-// IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
-func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
-	if len(chain) != 1 {
-		return false
-	}
+// IsStandalone reports that aws/user identities authenticate without an upstream
+// provider step. Part of the types.StandaloneIdentity interface the chain manager
+// dispatches through.
+func (i *userIdentity) IsStandalone() bool { return true }
 
-	identityName := chain[0]
-	if identity, exists := identities[identityName]; exists {
-		return identity.Kind == "aws/user"
-	}
+// AuthenticateStandalone authenticates a standalone aws/user identity directly, without
+// upstream provider credentials. Part of the types.StandaloneIdentity interface.
+func (i *userIdentity) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.AuthenticateStandalone")()
 
-	return false
-}
-
-// AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities.
-func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
-	log.Debug("Authenticating AWS user identity directly", logKeyIdentity, identityName)
-
-	// Get the identity instance.
-	userIdentity, exists := identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf("%w: AWS user identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
-	}
+	log.Debug("Authenticating AWS user identity directly", logKeyIdentity, i.name)
 
 	// AWS user identities authenticate directly without provider credentials.
-	credentials, err := userIdentity.Authenticate(ctx, nil)
+	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.name, err)
 	}
 
-	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
+	log.Debug("AWS user identity authenticated successfully", logKeyIdentity, i.name)
 	return credentials, nil
 }
 
@@ -793,6 +893,7 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 		IdentityName: identityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)

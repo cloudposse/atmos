@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: info
 description: Display detailed registry information about a toolchain tool.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Display detailed information about a toolchain tool from the registry, including download sources, available versions, and package metadata. This helps you verify tool configuration and understand how tools are resolved.
 </Intro>
 
-<Screengrab title="atmos toolchain info --help" slug="atmos-toolchain-info--help" />
+<CastPlayer title="atmos toolchain info --help" src="/casts/screengrabs/atmos-toolchain-info--help.cast" static chrome />
 
 ## Usage
 
@@ -48,14 +48,14 @@ Tool Information: hashicorp/terraform
                 terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip
 
   Latest Versions:
-    1.9.8 (latest)
-    1.9.7
-    1.9.6
-    1.9.5
-    1.9.4
+    1.15.6 (latest)
+    1.15.5
+    1.15.4
+    1.15.3
+    1.15.2
 
   Installed Versions:
-    ● 1.9.8 (default)
+    ● 1.15.6 (default)
     ● 1.8.5
 
   Configured Version: 1.9.8 (from .tool-versions)

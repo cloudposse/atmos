@@ -1,3 +1,11 @@
+---
+title: Config Profiles
+tags: [Stacks]
+cast:
+  file: /casts/examples/config-profiles/list-and-show.cast
+  title: atmos config profiles
+---
+
 # Config Profiles Example
 
 This example demonstrates Atmos config profiles - a powerful feature for managing environment-specific configurations without duplicating settings across your infrastructure.
@@ -130,7 +138,7 @@ jobs:
       id-token: write  # Required for OIDC
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Deploy with CI profile
         env:

@@ -61,6 +61,7 @@ func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName strin
 		ConfigFile:      aws.ConfigFile,
 		Profile:         aws.Profile,
 		Region:          aws.Region,
+		EndpointURL:     aws.EndpointURL,
 	}, nil
 }
 
@@ -115,5 +116,7 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 	return &store.GCPAuthConfig{
 		CredentialsFile: gcpCtx.CredentialsFile,
 		ProjectID:       gcpCtx.ProjectID,
+		AccessToken:     gcpCtx.AccessToken,
+		TokenExpiry:     gcpCtx.TokenExpiry,
 	}, nil
 }

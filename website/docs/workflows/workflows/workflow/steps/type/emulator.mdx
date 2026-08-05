@@ -1,0 +1,58 @@
+---
+title: emulator
+sidebar_label: emulator
+slug: /workflows/steps/type/emulator
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `emulator` step type starts, stops, or resets a local cloud [emulator](/stacks/components/emulator) component from a workflow, custom command, or lifecycle hook. It is the declarative way to bracket an operation with a sandbox — most commonly a [`kind: step` hook](/stacks/hooks) on the `before.terraform.test` / `after.terraform.test` events that brings the emulator up before Terraform tests and tears it down after. No shelling out to `atmos emulator`.
+</Intro>
+
+```yaml
+steps:
+  - name: start-sandbox
+    type: emulator
+    component: aws        # the emulator component to operate on
+    action: up            # up | down | reset (default: up)
+```
+
+The most common use is on the `terraform test` lifecycle so apply-backed tests run against a local sandbox with no cloud account:
+
+```yaml
+hooks:
+  start-emulator:
+    kind: step
+    type: emulator
+    events: [before.terraform.test]
+    with: { component: aws, action: up }
+  stop-emulator:
+    kind: step
+    type: emulator
+    events: [after.terraform.test]
+    when: always          # tear down even if a test fails
+    with: { component: aws, action: down }
+```
+
+## Fields
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Required. The name of the emulator component to operate on (e.g. `aws`). Supports Go templates.</dd>
+
+  <dt>`action`</dt>
+  <dd>Lifecycle action: `up` (start or reuse the sandbox), `down` (stop and remove it), or `reset` (stop and wipe persisted state, non-interactively). Defaults to `up`.</dd>
+
+  <dt>`ephemeral`</dt>
+  <dd>When `true` with `action: up`, runs the emulator without persistence for this invocation, overriding the component's `ephemeral:` config. Defaults to `false`.</dd>
+
+  <dt>`stack`</dt>
+  <dd>The stack the emulator belongs to. As a lifecycle hook this defaults to the component's stack, so it is rarely set explicitly.</dd>
+</dl>
+
+## See also
+
+- [Emulator components](/stacks/components/emulator)
+- [Manage lifecycle events with hooks](/stacks/hooks)
+- [Job summaries](/ci/job-summaries) — `atmos terraform test` writes a pass/fail step summary in CI.

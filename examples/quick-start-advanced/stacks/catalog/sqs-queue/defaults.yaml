@@ -1,0 +1,26 @@
+components:
+  terraform:
+    sqs-queue:
+      metadata:
+        component: sqs-queue
+        description: "SQS queue subscribed to the events topic."
+        tags: [messaging]
+        labels:
+          tier: application
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: sns-topic
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            queue_url: .queue_url
+      vars:
+        name: events
+        # Real state supersedes this deterministic plan-time placeholder
+        # (a provider-valid mock ARN so a cold `terraform plan --all` succeeds).
+        topic_arn: !terraform.state sns-topic .topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"

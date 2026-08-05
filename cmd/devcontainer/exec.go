@@ -1,16 +1,19 @@
 package devcontainer
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var execParser *flags.StandardParser
+var execParser *flags.StandardFlagParser
 
 // ExecOptions contains parsed flags for the exec command.
 type ExecOptions struct {
@@ -33,23 +36,20 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 The container must already be running. Use '--' to separate devcontainer arguments
 from the command to execute.`,
 	Example: markdown.DevcontainerExecUsageMarkdown,
-	Args:    cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.exec.RunE")()
 
-		// Parse flags using new options pattern.
-		v := viper.GetViper()
-		if err := execParser.BindFlagsToViper(cmd, v); err != nil {
+		parsed, err := execParser.Parse(cmd.Context(), args)
+		if err != nil {
 			return err
 		}
+		opts := parseExecOptions(parsed)
 
-		opts, err := parseExecOptions(cmd, v, args)
+		name, command, err := parseExecInvocation(args, parsed)
 		if err != nil {
 			return err
 		}
 
-		name := args[0]
-		command := args[1:]
 		mgr := devcontainer.NewManager()
 		return mgr.Exec(atmosConfigPtr, devcontainer.ExecParams{
 			Name:        name,
@@ -63,25 +63,37 @@ from the command to execute.`,
 
 // parseExecOptions parses command flags into ExecOptions.
 //
-// ParseExecOptions constructs an ExecOptions populated from viper configuration values.
-// It reads the "instance", "interactive", and "pty" keys from v and returns the populated
-// ExecOptions. The cmd and args parameters are unused but accepted for consistency with
-// other parse functions.
-func parseExecOptions(_ *cobra.Command, v *viper.Viper, _ []string) (*ExecOptions, error) {
+// ParseExecOptions constructs an ExecOptions populated from parsed configuration values.
+func parseExecOptions(parsed *flags.ParsedConfig) *ExecOptions {
 	return &ExecOptions{
-		Instance:    v.GetString("instance"),
-		Interactive: v.GetBool("interactive"),
-		UsePTY:      v.GetBool("pty"),
-	}, nil
+		Instance:    flags.GetString(parsed.Flags, "instance"),
+		Interactive: flags.GetBool(parsed.Flags, "interactive"),
+		UsePTY:      flags.GetBool(parsed.Flags, "pty"),
+	}
 }
 
-// init registers the exec subcommand and its flags: it constructs the exec-specific
-// StandardParser with the instance, interactive, and pty flags (including environment
-// variable bindings), registers those flags with execCmd, and attaches execCmd to
-// the devcontainer command tree.
+func parseExecInvocation(args []string, parsed *flags.ParsedConfig) (string, []string, error) {
+	hasSeparator := slices.Contains(args, "--")
+	if hasSeparator {
+		if len(parsed.PositionalArgs) != 1 {
+			return "", nil, fmt.Errorf("%w: devcontainer exec requires exactly one name before `--`", errUtils.ErrInvalidArguments)
+		}
+		if len(parsed.SeparatedArgs) == 0 {
+			return "", nil, fmt.Errorf("%w: devcontainer exec requires a command after `--`", errUtils.ErrInvalidArguments)
+		}
+		return parsed.PositionalArgs[0], parsed.SeparatedArgs, nil
+	}
+
+	if len(parsed.PositionalArgs) < 2 {
+		return "", nil, fmt.Errorf("%w: devcontainer exec requires a name and command", errUtils.ErrInvalidArguments)
+	}
+	return parsed.PositionalArgs[0], parsed.PositionalArgs[1:], nil
+}
+
+// init registers the exec subcommand and its flags.
 func init() {
 	// Create parser with exec-specific flags using functional options.
-	execParser = flags.NewStandardParser(
+	execParser = flags.NewStandardFlagParser(
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithBoolFlag("interactive", "i", false, "Enable interactive TTY mode (disables output masking)"),
 		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),

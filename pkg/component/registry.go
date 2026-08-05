@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -148,4 +149,38 @@ func MustGetProvider(componentType string) ComponentProvider {
 		panic(fmt.Errorf("%w: %s", errUtils.ErrComponentProviderNotFound, componentType))
 	}
 	return provider
+}
+
+// ListAllComponents lists all components of a given type across all stacks.
+// This is useful for shell completion and interactive prompts.
+// Returns a sorted, deduplicated list of component names.
+func ListAllComponents(ctx context.Context, componentType string, stacksMap map[string]any) ([]string, error) {
+	defer perf.Track(nil, "component.ListAllComponents")()
+
+	provider, ok := GetProvider(componentType)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrComponentProviderNotFound, componentType)
+	}
+
+	componentSet := make(map[string]bool)
+	for stackName, stackData := range stacksMap {
+		stackConfig, ok := stackData.(map[string]any)
+		if !ok {
+			continue
+		}
+		components, err := provider.ListComponents(ctx, stackName, stackConfig)
+		if err != nil {
+			continue // Graceful degradation for completion.
+		}
+		for _, comp := range components {
+			componentSet[comp] = true
+		}
+	}
+
+	result := make([]string, 0, len(componentSet))
+	for name := range componentSet {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result, nil
 }

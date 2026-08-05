@@ -7,7 +7,7 @@ description: This command produces a list of the affected Atmos components and s
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -17,7 +17,7 @@ Use this command to show a list of the affected Atmos components and stacks give
 
 <DemoVideo id="describe-affected" title="atmos describe affected" showCaption={false} />
 
-<Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
+<CastPlayer title="atmos describe affected --help" src="/casts/screengrabs/atmos-describe-affected--help.cast" static chrome />
 
 ## Description
 
@@ -32,7 +32,7 @@ The deprecated `--ref` and `--sha` flags are still supported for backward compat
 
 :::tip Zero-Config CI
 When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
-- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v4` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
+- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v6` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
 - **Push events**: Compares against the previous commit
 - **Merge groups**: Compares against the merge queue base
 
@@ -82,6 +82,50 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
+
+## Evaluated sections
+
+When comparing the deep-merged configuration of each component between the two refs, Atmos evaluates the following
+top-level component sections. A change in any of them marks the component as affected (with the corresponding
+[`affected`](#output) reason):
+
+`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`,
+`backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
+`source`, `provision`.
+
+In addition, changes to a component's Terraform/OpenTofu files (and any local modules they reference) are detected by
+scanning the component folder — reported as `component` and `component.module`.
+
+The following sections are **intentionally not** evaluated:
+
+<dl>
+  <dt>`locals`</dt>
+  <dd>Used only to render templates, so any effective change already shows up in the rendered `vars`/`env`/etc.</dd>
+
+  <dt>`overrides`</dt>
+  <dd>Folded into the merged `vars`/`env`/`settings`/etc., so it would double-report.</dd>
+
+  <dt>`inheritance`</dt>
+  <dd>A derived (computed) inheritance chain; any real effect already appears in the other sections.</dd>
+
+  <dt>`retry`</dt>
+  <dd>Operational/execution-time behavior (how a run is retried), not provisioned infrastructure configuration.</dd>
+
+  <dt>`hooks`</dt>
+  <dd>
+    Operational/execution-time behavior (commands that run before/after an operation, e.g. policy or cost checks),
+    not provisioned infrastructure — so a hook change does not mark a component as affected by default. If you want
+    hook changes to count, add `hooks` to [`describe.affected.sections`](/cli/configuration/describe); it then reports
+    as `stack.hooks`.
+  </dd>
+</dl>
+
+:::tip Customize the evaluated sections
+Use [`describe.affected.sections`](/cli/configuration/describe) in `atmos.yaml` to define your own list of evaluated
+sections — for example to add a custom section or to narrow the set. When set, it fully replaces the defaults above
+(`metadata` and `settings` are always evaluated regardless).
+:::
+
 :::tip Use in GitHub Actions
 Run `atmos describe affected --format=matrix` directly in your workflow to fan out across affected components. When `ci.enabled` is `true` in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT`. See the [Deploy Affected workflow](/ci#deploy-affected) for the full pattern.
 :::
@@ -102,7 +146,7 @@ resolution logic.
 | `push` (force-push) | Parent of current commit (`HEAD~1`) |
 | `merge_group` | Target branch (`GITHUB_BASE_REF`) |
 
-The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v4`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
+The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v6`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
 
 **Example workflow** — no `--ref` or `--sha` needed:
 
@@ -568,6 +612,78 @@ where:
                 The `metadata` component section in the stack config has been modified.
             </dd>
 
+            <dt>`stack.providers`</dt>
+            <dd>
+                The `providers` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_providers`</dt>
+            <dd>
+                The `required_providers` component section (provider versions) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_version`</dt>
+            <dd>
+                The `required_version` component section (the required Terraform/OpenTofu version) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.hooks`</dt>
+            <dd>
+                The `hooks` component section in the stack config has been modified. Only reported when `hooks` is
+                added to [`describe.affected.sections`](/cli/configuration/describe) — it is not evaluated by default.
+            </dd>
+
+            <dt>`stack.generate`</dt>
+            <dd>
+                The `generate` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend`</dt>
+            <dd>
+                The `backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend_type`</dt>
+            <dd>
+                The `backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend`</dt>
+            <dd>
+                The `remote_state_backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend_type`</dt>
+            <dd>
+                The `remote_state_backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.auth`</dt>
+            <dd>
+                The `auth` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.command`</dt>
+            <dd>
+                The `command` component section (the binary used to provision the component) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.dependencies`</dt>
+            <dd>
+                The `dependencies` component section in the stack config has been modified (for example, a component dependency was added or removed).
+                This is complementary to the `file` and `folder` reasons, which fire when a _referenced_ file or folder changes.
+            </dd>
+
+            <dt>`stack.source`</dt>
+            <dd>
+                The `source` component section (vendoring configuration) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.provision`</dt>
+            <dd>
+                The `provision` component section (working directory configuration) in the stack config has been modified.
+            </dd>
+
             <dt>`component`</dt>
             <dd>
                 The Terraform or Helmfile component that the Atmos component provisions has been changed.
@@ -700,7 +816,7 @@ where:
             <dd>
                 An external file on the local filesystem that the Atmos component depends on was changed.
 
-                Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
+                Dependencies on external files (not in the component's folder) are declared with the [`dependencies.files`](/stacks/dependencies/components) sibling key.
 
 
                 For example:
@@ -711,15 +827,22 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                      dependencies:
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
                 `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: file, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `file:` attribute.
+
+                New configurations should use `dependencies.files` instead.
+                :::
 
 
                 For example:
@@ -747,7 +870,7 @@ where:
             <dd>
                 Any file in an external folder that the Atmos component depends on was changed.
 
-                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+                Dependencies on external folders are declared with the [`dependencies.folders`](/stacks/dependencies/components) sibling key. You can mix `files` and `folders` keys in the same `dependencies` block.
 
 
                 For example:
@@ -758,17 +881,24 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-                          2:
-                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                      dependencies:
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                        folders:
+                          - "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
                 `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: folder, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `folder:` attribute.
+
+                New configurations should use `dependencies.folders` instead.
+                :::
 
 
                 For example:
@@ -1081,19 +1211,17 @@ For example, suppose that we have the following configuration for the Atmos comp
           metadata:
             component: "terraform-component-2"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-1"
+          dependencies:
+            components:
+              - name: "component-1"
 
         component-3:
           metadata:
             component: "terraform-component-3"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-2"
+          dependencies:
+            components:
+              - name: "component-2"
   ```
 </File>
 
@@ -1204,7 +1332,7 @@ jobs:
       modified: ${{ steps.affected.outputs.modified }}
       deleted: ${{ steps.affected.outputs.deleted }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: cloudposse/github-action-setup-atmos@v2
@@ -1230,7 +1358,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
@@ -1244,7 +1372,7 @@ jobs:
     steps:
       # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
       # The deleted component's configuration only exists in BASE.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
       - uses: cloudposse/github-action-setup-atmos@v2

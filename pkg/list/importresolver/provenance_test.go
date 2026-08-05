@@ -409,6 +409,45 @@ func TestBuildImportTreeFromChain(t *testing.T) {
 	}
 }
 
+func TestBuildImportTreeFromChain_DisplaysRemoteImportSpecNotCachePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(filepath.Join(stacksDir, "deploy"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(stacksDir, "catalog"), 0o755))
+
+	parentPath := filepath.Join(stacksDir, "deploy", "demo.yaml")
+	remoteImport := "https://raw.githubusercontent.com/cloudposse/atmos/main/tests/fixtures/remote-imports/shared.yaml"
+	require.NoError(t, os.WriteFile(parentPath, []byte("imports:\n  - catalog/base\n  - "+remoteImport+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "catalog", "base.yaml"), []byte("imports:\n  - catalog/common\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "catalog", "common.yaml"), []byte("vars: {}\n"), 0o644))
+
+	cachePath := filepath.Join(tmpDir, ".cache", "atmos", "stack-imports", "b4f0da9db33395b8.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cachePath), 0o755))
+	require.NoError(t, os.WriteFile(cachePath, []byte("vars: {}\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: stacksDir,
+	}
+	importChain := []string{
+		filepath.Join("deploy", "demo.yaml"),
+		filepath.Join("catalog", "base.yaml"),
+		cachePath,
+	}
+
+	nodes := buildImportTreeFromChain(importChain, atmosConfig)
+
+	require.Len(t, nodes, 2)
+	assert.Equal(t, "catalog/base", nodes[0].Path)
+	require.Len(t, nodes[0].Children, 1)
+	assert.Equal(t, "catalog/common", nodes[0].Children[0].Path)
+	assert.Equal(t, remoteImport, nodes[1].Path)
+
+	for _, node := range nodes {
+		assert.NotContains(t, node.Path, ".cache/atmos")
+		assert.NotContains(t, node.Path, "..")
+	}
+}
+
 // TestStripBasePath tests base path removal.
 func TestStripBasePath(t *testing.T) {
 	// Use t.TempDir() to get an OS-appropriate temp directory.

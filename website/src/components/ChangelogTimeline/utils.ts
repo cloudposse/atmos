@@ -140,9 +140,12 @@ export function groupBlogPostsByYearMonth(items: BlogPostItem[]): YearGroup[] {
       return;
     }
 
-    const year = `${date.getFullYear()}`;
-    const month = date.toLocaleString('default', { month: 'long' });
-    const monthNum = date.getMonth();
+    // Changelog dates are publication dates, not instants in the viewer's
+    // timezone. Format and group them in UTC so a date-only post does not
+    // move to the prior day for users west of UTC.
+    const year = `${date.getUTCFullYear()}`;
+    const month = date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
+    const monthNum = date.getUTCMonth();
 
     if (!yearMonthMap.has(year)) {
       yearMonthMap.set(year, new Map());
@@ -187,7 +190,7 @@ export function extractYears(items: BlogPostItem[]): string[] {
   items.forEach((item) => {
     const date = new Date(item.content.metadata.date);
     if (!isNaN(date.getTime())) {
-      years.add(`${date.getFullYear()}`);
+      years.add(`${date.getUTCFullYear()}`);
     }
   });
   return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
@@ -221,7 +224,7 @@ export function filterBlogPosts(
     if (selectedYear) {
       const date = new Date(metadata.date);
       if (isNaN(date.getTime())) return false;
-      if (`${date.getFullYear()}` !== selectedYear) return false;
+      if (`${date.getUTCFullYear()}` !== selectedYear) return false;
     }
 
     // Filter by tag.
@@ -267,7 +270,7 @@ export function filterBlogPostsMulti(
     if (selectedYears.length > 0) {
       const date = new Date(metadata.date);
       if (isNaN(date.getTime())) return false;
-      const itemYear = `${date.getFullYear()}`;
+      const itemYear = `${date.getUTCFullYear()}`;
       if (!selectedYears.includes(itemYear)) return false;
     }
 

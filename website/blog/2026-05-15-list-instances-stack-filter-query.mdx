@@ -1,0 +1,65 @@
+---
+slug: list-instances-stack-filter-query
+title: "`atmos list instances`: --stack, --filter, and --query now work"
+authors: [osterman]
+tags: [bugfix]
+date: 2026-05-15T00:00:00.000Z
+---
+
+Three documented flags on `atmos list instances` were silently ignored:
+`--stack`, `--filter`, and `--query`. They now do what the docs say.
+
+<!--truncate-->
+
+## What Changed
+
+| Flag       | Before                                       | After                                                                                  |
+| ---------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `--stack`  | Returned every component in every stack.     | Filters with `path.Match` glob semantics (e.g. `tenant1-*`).                            |
+| `--filter` | TODO stub — no filtering applied.            | Evaluates a YQ predicate per row and keeps rows where the expression is truthy.        |
+| `--query`  | Set on the options struct but never read.    | Projects each row via YQ. Scalars land in a `value` column; maps become row keys.       |
+
+The fix also closes a latent ENV-precedence gap: `ATMOS_LIST_FORMAT` and
+`ATMOS_UPLOAD` are now honored. Previously the implementation re-read
+`--format` and `--upload` directly from cobra, bypassing viper.
+
+## How to Use It
+
+```shell
+# Filter by stack glob — the original bug report
+atmos list instances --stack 'tenant1-*'
+
+# YQ predicate on instance rows
+atmos list instances --filter '.component == "vpc"'
+atmos list instances --filter '.vars.region == "us-east-2"'
+
+# YQ projection — pull specific values across all instances
+atmos list instances --query '.vars.region' \
+  --columns 'Stack={{ .stack }},Region={{ .value }}'
+
+# Map projection for multi-field extraction
+atmos list instances \
+  --query '{"region": .vars.region, "tenant": .vars.tenant}' \
+  --columns 'Stack={{ .stack }},Tenant={{ .tenant }},Region={{ .region }}'
+```
+
+`--filter` and `--query` are rejected with `--format=tree` and
+`--format=matrix` — those output modes are not row-shaped, so per-row
+transforms have no meaningful target. Use them with `table`, `json`, `yaml`,
+`csv`, or `tsv`.
+
+## Why This Matters
+
+When a documented flag silently does nothing, it's worse than not having the
+flag at all — users build pipelines and dashboards assuming the filter is
+applied. The `--upload` workflow in particular was sending every instance
+across every stack instead of the targeted subset; this change fixes that
+mismatch between docs and behavior.
+
+`list metadata --stack` got the same fix in passing — it shared the same
+underlying `processInstances` plumbing.
+
+## Get Involved
+
+If you find another `list` flag that doesn't do what the docs claim, please
+[open an issue](https://github.com/cloudposse/atmos/issues).

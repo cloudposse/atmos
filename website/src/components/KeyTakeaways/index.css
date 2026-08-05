@@ -1,55 +1,69 @@
 .key-takeaways {
-  background-color: transparent;
-  border: 1px solid #28a745;
-  border-radius: 20px;
-  padding: 20px;
-  margin-top: 2em;
-  margin-bottom: 2em;
-}
-
-[data-theme='dark'] .key-takeaways {
-  color: #67ffded2;
-  border: 1px solid #67ffded2;
-}
-
-[data-theme='dark'] .key-takeaways strong {
-  color: inherit;
-}
-
-[data-theme='dark'] .key-takeaways a {
-  color: inherit;
-}
-
-.key-takeaways a {
-  color: inherit;
+  margin: 2rem 0;
+  padding: 1.25rem 1.35rem;
+  overflow: hidden;
+  background: var(--atmos-docs-surface-elevated);
+  border: 1px solid var(--atmos-docs-border);
+  border-radius: var(--atmos-docs-radius);
+  box-shadow: var(--atmos-docs-shadow);
+  color: var(--atmos-docs-text);
+  font-family: var(--atmos-docs-font-sans);
 }
 
 .key-takeaways h2 {
-  margin-top: 0;
-  font-size: 1.5em;
+  margin: 0 0 0.85rem;
+  color: var(--atmos-docs-text);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.key-takeaways a {
+  color: var(--atmos-docs-accent-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.key-takeaways strong {
+  color: var(--atmos-docs-text);
+  font-weight: 600;
 }
 
 .key-takeaways-content ul {
-  padding-left: 20px;
-  margin: 10px 0;
+  margin: 0;
+  padding-left: 0;
   list-style: none;
 }
 
 .key-takeaways-content li {
-  margin-bottom: 10px;
-  font-size: 1.1em;
   position: relative;
-  padding-left: 1.5em;
+  margin: 0.45rem 0;
+  padding-left: 1.35rem;
+  color: var(--atmos-docs-muted);
+  font-size: 0.98rem;
+  line-height: 1.65;
 }
 
 .key-takeaways-content li::before {
-  content: '\2713';
+  content: "";
   position: absolute;
-  left: 0;
-  color: #28a745;
-  font-weight: bold;
+  top: 0.7em;
+  left: 0.15rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  background: var(--atmos-docs-accent);
+  border-radius: 999px;
 }
 
-[data-theme='dark'] .key-takeaways-content li::before {
-  color: #67ffded2;
+/* In forced-colors / high-contrast mode, background colors are stripped and the
+   bullet would vanish; keep a visible marker using a system color. */
+@media (forced-colors: active) {
+  .key-takeaways-content li::before {
+    background: CanvasText;
+  }
+}
+
+.key-takeaways-content li:last-child {
+  margin-bottom: 0;
 }

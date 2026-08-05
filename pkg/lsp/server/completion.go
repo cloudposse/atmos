@@ -135,7 +135,7 @@ func (h *Handler) getTopLevelCompletions() []protocol.CompletionItem {
 			Label:         "components",
 			Kind:          kindPtr(protocol.CompletionItemKindKeyword),
 			Detail:        stringPtr("Define components"),
-			Documentation: "Define Terraform, Helmfile, or other components",
+			Documentation: "Define Terraform, Helmfile, Kubernetes, or other components",
 			InsertText:    stringPtr("components:\n  terraform:\n    "),
 		},
 		{
@@ -176,6 +176,12 @@ func (h *Handler) getComponentTypeCompletions() []protocol.CompletionItem {
 			Kind:          kindPtr(protocol.CompletionItemKindModule),
 			Detail:        stringPtr("Helmfile components"),
 			Documentation: "Define Helmfile components",
+		},
+		{
+			Label:         "kubernetes",
+			Kind:          kindPtr(protocol.CompletionItemKindModule),
+			Detail:        stringPtr("Kubernetes components"),
+			Documentation: "Define SDK-backed Kubernetes manifest components",
 		},
 	}
 }

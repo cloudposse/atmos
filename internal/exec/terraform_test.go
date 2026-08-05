@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -103,6 +105,9 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -195,6 +200,9 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -259,6 +267,9 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -328,12 +339,11 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
 	}
-	output := buf.String()
 
-	// Check the output.
-	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
-		t.Errorf("The output should contain 'nonprod-component-1'")
-	}
+	envFile := filepath.Join("..", "..", "components", "terraform", "mock", ".terraform", "environment")
+	workspace, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "nonprod-component-1", strings.TrimSpace(string(workspace)))
 }
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
@@ -360,18 +370,20 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	require.Error(t, err)
 	// The `invalid-stacks` fixture contains several invalid files with
 	// different error shapes (invalid template syntax in import paths, missing
-	// imports, malformed schemas, etc.). Filesystem walk order is not
+	// imports, malformed schemas, required properties, etc.). Filesystem walk order is not
 	// deterministic across OSes, so this assertion accepts any of the
 	// documented error messages those files can surface — previously the test
 	// was brittle and only passed when Linux/Windows happened to hit a file
 	// whose error contained "invalid".
 	errMsg := strings.ToLower(err.Error())
-	assert.True(t,
+	assert.True(
+		t,
 		strings.Contains(errMsg, "invalid") ||
 			strings.Contains(errMsg, "unclosed") ||
 			strings.Contains(errMsg, "no matches found") ||
 			strings.Contains(errMsg, "function") ||
-			strings.Contains(errMsg, "template"),
+			strings.Contains(errMsg, "template") ||
+			strings.Contains(errMsg, "missing properties"),
 		"expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches, got: %s",
 		err.Error(),
 	)
@@ -424,12 +436,15 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
+	// Wait for the reader goroutine to finish before inspecting the captured output.
+	<-done
+
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
-	// Wait for the reader goroutine to finish.
-	<-done
 
 	output := buf.String()
 
@@ -473,27 +488,35 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 }
 
 func TestExecuteTerraform_Version(t *testing.T) {
-	// Skip if terraform is not installed
-	tests.RequireTerraform(t)
 	tests := []struct {
 		name           string
 		workDir        string
 		expectedOutput string
+		// requireTool resolves the required binary's path (skipping the test if
+		// missing) and returns it. Returning the path here -- instead of a
+		// separate exec.LookPath call in the test body -- avoids a TOCTOU race:
+		// see requireExecutablePath's doc comment in tests/preconditions.go.
+		requireTool func(*testing.T) string
 	}{
 		{
 			name:           "terraform version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
 			expectedOutput: "Terraform v",
+			requireTool:    tests.RequireTerraformPath,
 		},
 		{
 			name:           "tofu version",
 			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
 			expectedOutput: "OpenTofu v",
+			requireTool:    tests.RequireTofuPath,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			binaryPath := tt.requireTool(t)
+			isolateTerraformTestBinary(t, binaryPath)
+
 			// Set info for ExecuteTerraform.
 			info := schema.ConfigAndStacksInfo{
 				SubCommand: "version",
@@ -696,49 +719,24 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
-			// Create a pipe to capture stdout and stderr.
-			oldStdout := os.Stdout
-			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-			os.Stderr = w
-
-			// Ensure stdout/stderr are restored even if test fails.
-			defer func() {
-				os.Stdout = oldStdout
-				os.Stderr = oldStderr
-			}()
+			// Capture subprocess output through the supported process streams.
+			// Reassigning os.Stdout/os.Stderr does not reliably redirect child
+			// process handles on Windows.
+			var buf bytes.Buffer
+			outputWriter := &synchronizedWriter{w: &buf}
 
 			// Save original logger and set up test logger.
 			originalLogger := log.Default()
 			logger := log.New()
-			logger.SetOutput(w)
+			logger.SetOutput(outputWriter)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
-			// Create a channel to signal when the pipe is closed.
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				defer w.Close()
-				_ = ExecuteTerraform(info)
-			}()
-
-			// Read the output.
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r)
-			if err != nil {
-				t.Fatalf("Failed to read from pipe: %v", err)
-			}
+			_ = ExecuteTerraform(info, WithProcessStreams(process.Streams{
+				Stdout: outputWriter,
+				Stderr: outputWriter,
+			}))
 			output := buf.String()
-
-			// Restore stdout, stderr, and logger.
-			os.Stdout = oldStdout
-			os.Stderr = oldStderr
-			log.SetDefault(log.Default())
-
-			// Wait for the command to finish
-			<-done
 
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
@@ -761,7 +759,7 @@ func extractKeyValuePairs(input string) map[string]string {
 
 	for _, line := range lines {
 		// Trim whitespace and skip empty lines
-		line = strings.TrimSpace(line)
+		line = strings.TrimSpace(atmosansi.Strip(line))
 		if line == "" {
 			continue
 		}
@@ -775,6 +773,10 @@ func extractKeyValuePairs(input string) map[string]string {
 		// Extract key and value
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
+		if strings.Contains(key, ":") {
+			prefixParts := strings.Split(key, ":")
+			key = strings.TrimSpace(prefixParts[len(prefixParts)-1])
+		}
 
 		// Remove surrounding quotes from the value
 		value = strings.Trim(value, `"`)

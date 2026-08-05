@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -58,6 +59,7 @@ func NewSpinner(message string) *tea.Program {
 
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
 	// Always output to UI (stderr) to avoid blocking /dev/tty.
 	// Without this, bubbletea defaults to /dev/tty which can block credential resolution
@@ -69,6 +71,10 @@ func NewSpinner(message string) *tea.Program {
 		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		ui.Writeln(message)
+	} else if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
 	}
 
 	p := tea.NewProgram(modelSpinner{

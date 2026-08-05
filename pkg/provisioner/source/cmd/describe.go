@@ -7,10 +7,11 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // DescribeCommand creates a describe command for the given component type.
@@ -136,5 +137,17 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 		},
 	}
 
-	return data.WriteYAML(output)
+	atmosConfig, err := initCliConfigFunc(schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}, false)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrFailedToInitConfig).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
+
+	return u.PrintAsYAML(&atmosConfig, output)
 }

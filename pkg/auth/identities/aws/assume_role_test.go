@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -610,8 +611,8 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
-	// Test assume role identity with custom resolver configuration.
+func TestAssumeRoleIdentity_WithCustomEndpoint(t *testing.T) {
+	// Test assume role identity with custom endpoint configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -619,12 +620,8 @@ func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
 			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
 			"region":      "us-east-1",
 		},
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -637,16 +634,14 @@ func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "test-role", ari.name)
 	assert.NotNil(t, ari.config)
-	assert.NotNil(t, ari.config.Credentials)
+	assert.NotNil(t, ari.config.Spec)
 
-	// Verify resolver config exists.
-	awsCreds, ok := ari.config.Credentials["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsCreds)
+	// Verify endpoint config exists.
+	assert.Equal(t, "http://localhost:4566", ari.config.Spec["endpoint_url"])
 }
 
-func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
-	// Test assume role identity without custom resolver configuration.
+func TestAssumeRoleIdentity_WithoutCustomEndpoint(t *testing.T) {
+	// Test assume role identity without custom endpoint configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -660,15 +655,15 @@ func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, identity)
 
-	// Verify it works without resolver config.
+	// Verify it works without endpoint config.
 	assert.NoError(t, identity.Validate())
 }
 
-func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
+func TestAssumeRoleIdentity_newSTSClient_WithEndpoint(t *testing.T) {
 	// This test requires AWS credentials to create an STS client.
 	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 
-	// Test newSTSClient with custom resolver.
+	// Test newSTSClient with custom endpoint.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -676,12 +671,8 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
 			"region":      "us-east-1",
 		},
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -699,17 +690,17 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 		Region:          "us-east-1",
 	}
 
-	// Call newSTSClient - this should not error even with custom resolver.
+	// Call newSTSClient - this should not error even with custom endpoint.
 	client, err := ari.newSTSClient(context.Background(), baseCreds)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 }
 
-func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
+func TestAssumeRoleIdentity_newSTSClient_WithoutEndpoint(t *testing.T) {
 	// This test requires AWS credentials to create an STS client.
 	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 
-	// Test newSTSClient without custom resolver.
+	// Test newSTSClient without custom endpoint.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -1116,6 +1107,75 @@ func TestAssumeRoleIdentity_buildAssumeRoleWithWebIdentityInput(t *testing.T) {
 			} else {
 				assert.Nil(t, input.DurationSeconds)
 			}
+		})
+	}
+}
+
+// TestAssumeRoleIdentity_resolveRoleSessionName verifies that an explicit
+// `principal.session_name` is honored (sanitized + length-capped) and that the
+// session name falls back to a generated `atmos-<name>-<unix>` value when absent.
+// Both assume-role input builders must surface the resolved name.
+func TestAssumeRoleIdentity_resolveRoleSessionName(t *testing.T) {
+	longName := strings.Repeat("a", 80) // exceeds the 64-char STS limit.
+
+	tests := []struct {
+		name        string
+		sessionName string // value for principal.session_name ("" = omit the key).
+		// assertName checks the resolved/sanitized session name.
+		assertName func(t *testing.T, got string)
+	}{
+		{
+			name:        "honors configured session_name",
+			sessionName: "cloudposse-atmos-ci-deploy-demos",
+			assertName: func(t *testing.T, got string) {
+				assert.Equal(t, "cloudposse-atmos-ci-deploy-demos", got)
+			},
+		},
+		{
+			name:        "falls back to generated name when omitted",
+			sessionName: "",
+			assertName: func(t *testing.T, got string) {
+				assert.Contains(t, got, "atmos-fallback-role")
+			},
+		},
+		{
+			name:        "sanitizes disallowed characters",
+			sessionName: "my session/name",
+			assertName: func(t *testing.T, got string) {
+				assert.Equal(t, "my-session-name", got)
+			},
+		},
+		{
+			name:        "truncates to the 64-char STS limit",
+			sessionName: longName,
+			assertName: func(t *testing.T, got string) {
+				assert.LessOrEqual(t, len(got), maxSessionNameLength)
+				assert.Equal(t, strings.Repeat("a", maxSessionNameLength), got)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			principal := map[string]any{
+				"assume_role": "arn:aws:iam::123456789012:role/Dev",
+			}
+			if tt.sessionName != "" {
+				principal["session_name"] = tt.sessionName
+			}
+			i := &assumeRoleIdentity{name: "fallback-role", config: &schema.Identity{
+				Kind:      "aws/assume-role",
+				Principal: principal,
+			}}
+			require.NoError(t, i.Validate())
+
+			// Direct helper result.
+			tt.assertName(t, i.resolveRoleSessionName())
+
+			// Both builders must use the resolved name.
+			tt.assertName(t, *i.buildAssumeRoleInput().RoleSessionName)
+			webInput := i.buildAssumeRoleWithWebIdentityInput(&types.OIDCCredentials{Token: "tok"})
+			tt.assertName(t, *webInput.RoleSessionName)
 		})
 	}
 }
@@ -1615,14 +1675,26 @@ func (m *mockResolveAuthManager) PrepareShellEnvironment(_ context.Context, _ st
 func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
 	return nil
 }
+
+func (m *mockResolveAuthManager) EnsureIdentityEnvironment(_ context.Context, _ string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+
 func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (m *mockResolveAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
 }
 
 func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
+
+func (m *mockResolveAuthManager) CredentialStoreType() string { return "" }
 
 func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
 	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity

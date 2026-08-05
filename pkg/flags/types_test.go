@@ -44,6 +44,7 @@ func TestBoolFlag(t *testing.T) {
 	assert.False(t, flag.IsRequired()) // Bool flags are never required
 	assert.Equal(t, "", flag.GetNoOptDefVal())
 	assert.Equal(t, []string{"VERBOSE"}, flag.GetEnvVars())
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
 }
 
 func TestIntFlag(t *testing.T) {
@@ -63,6 +64,30 @@ func TestIntFlag(t *testing.T) {
 	assert.True(t, flag.IsRequired())
 	assert.Equal(t, "", flag.GetNoOptDefVal())
 	assert.Equal(t, []string{"COUNT"}, flag.GetEnvVars())
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+}
+
+// TestStringSliceFlag verifies StringSliceFlag getters, including the
+// NoOptDefVal-related methods which always return false/empty for slice flags.
+func TestStringSliceFlag(t *testing.T) {
+	flag := &StringSliceFlag{
+		Name:        "config",
+		Shorthand:   "c",
+		Default:     []string{"a.yaml"},
+		Description: "Config files",
+		Required:    true,
+		EnvVars:     []string{"ATMOS_CONFIG"},
+	}
+
+	assert.Equal(t, "config", flag.GetName())
+	assert.Equal(t, "c", flag.GetShorthand())
+	assert.Equal(t, []string{"a.yaml"}, flag.GetDefault())
+	assert.Equal(t, "Config files", flag.GetDescription())
+	assert.True(t, flag.IsRequired())
+	assert.Equal(t, "", flag.GetNoOptDefVal())
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+	assert.Equal(t, []string{"ATMOS_CONFIG"}, flag.GetEnvVars())
+	assert.Nil(t, flag.GetCompletionFunc())
 }
 
 func TestIdentityFlag(t *testing.T) {

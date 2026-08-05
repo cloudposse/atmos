@@ -54,7 +54,7 @@ jobs:
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Get affected components
         id: affected
         run: atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"

@@ -6,7 +6,7 @@ description: Atmos Authentication Commands
 ---
 
 import DocCardList from '@theme/DocCardList';
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -24,7 +24,7 @@ Atmos Auth gives you a single, consistent way to authenticate with multiple clou
 
 ## Usage
 
-<Screengrab title="atmos auth --help" slug="atmos-auth--help" />
+<CastPlayer title="atmos auth --help" src="/casts/screengrabs/atmos-auth--help.cast" static chrome />
 
 ## Examples
 
@@ -475,7 +475,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4

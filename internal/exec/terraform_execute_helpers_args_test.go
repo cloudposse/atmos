@@ -13,6 +13,8 @@ package exec
 //   - assembleComponentEnvVars
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +42,27 @@ func TestBuildTerraformCommandArgs_Plan(t *testing.T) {
 	assert.Contains(t, args, "vars.json")
 	assert.Contains(t, args, outFlag)
 	assert.Contains(t, args, "plan.tfplan")
+}
+
+func TestTerraformPhaseLabel(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		phase   string
+		want    string
+	}{
+		{name: "blank command defaults to terraform", command: "", phase: "plan", want: "terraform plan"},
+		{name: "dot command defaults to terraform", command: ".", phase: "init", want: "terraform init"},
+		{name: "absolute tool path uses base name", command: "/opt/bin/tofu", phase: "apply", want: "tofu apply"},
+		{name: "trimmed tool path uses base name", command: "  /opt/bin/terraform  ", phase: "destroy", want: "terraform destroy"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{Command: tt.command}
+			assert.Equal(t, tt.want, terraformPhaseLabel(info, tt.phase))
+		})
+	}
 }
 
 func TestBuildTerraformCommandArgs_PlanSkipPlanfile(t *testing.T) {
@@ -125,6 +148,57 @@ func TestBuildTerraformCommandArgs_Refresh(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, args, "refresh")
 	assert.Contains(t, args, varFileFlag)
+}
+
+func TestBuildTerraformCommandArgs_Test(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "test"}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAdditionalVarFileOverridesGeneratedVarFile(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAddsTestVarFileBeforeUserArgs(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "test-vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestAddTerraformTestVarfileArgIgnoresNonTestCommands(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		AdditionalArgsAndFlags: []string{"-compact-warnings"},
+	}
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+
+	assert.Equal(t, []string{"-compact-warnings"}, info.AdditionalArgsAndFlags)
 }
 
 func TestBuildTerraformCommandArgs_Apply_WithoutPlan(t *testing.T) {
@@ -484,6 +558,63 @@ func TestAssembleComponentEnvVars_AppendUserAgentFromOSEnvOverridesConfig(t *tes
 
 	envMap := envListToMap(info.ComponentEnvList)
 	assert.Equal(t, "os-agent/2.0", envMap["TF_APPEND_USER_AGENT"])
+}
+
+func TestAssembleComponentEnvVars_RCEnabledSetsCLIConfigAndCleanup(t *testing.T) {
+	t.Setenv("TF_CLI_CONFIG_FILE", "") // Ensure no user override leaks in.
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	atmosConfig.Components.Terraform.RC = &schema.TerraformRCConfig{
+		Enabled: true,
+		Config: map[string]any{
+			"provider_installation": []any{
+				map[string]any{"network_mirror": map[string]any{"url": "http://127.0.0.1:5000/"}},
+			},
+		},
+	}
+
+	info := schema.ConfigAndStacksInfo{}
+	err := assembleComponentEnvVars(&atmosConfig, &info, nil)
+	require.NoError(t, err)
+
+	envMap := envListToMap(info.ComponentEnvList)
+	cliConfig, ok := envMap["TF_CLI_CONFIG_FILE"]
+	require.True(t, ok, "TF_CLI_CONFIG_FILE should be set when RC is enabled")
+	require.NotEmpty(t, cliConfig)
+
+	content, readErr := os.ReadFile(cliConfig)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "network_mirror {")
+
+	require.NotNil(t, info.RCCleanup)
+	require.NoError(t, info.RCCleanup())
+	_, statErr := os.Stat(cliConfig)
+	assert.True(t, os.IsNotExist(statErr), "cleanup should remove the temp CLI config")
+}
+
+func TestAssembleComponentEnvVars_RCDefersToUserCLIConfig(t *testing.T) {
+	t.Setenv("TF_CLI_CONFIG_FILE", "/user/managed.tfrc")
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	atmosConfig.Components.Terraform.RC = &schema.TerraformRCConfig{
+		Enabled: true,
+		Config:  map[string]any{"plugin_cache_dir": "/cache"},
+	}
+
+	info := schema.ConfigAndStacksInfo{}
+	err := assembleComponentEnvVars(&atmosConfig, &info, nil)
+	require.NoError(t, err)
+
+	// Atmos must not add its own TF_CLI_CONFIG_FILE when the user already set one.
+	count := 0
+	for _, e := range info.ComponentEnvList {
+		if strings.HasPrefix(e, "TF_CLI_CONFIG_FILE=") {
+			count++
+		}
+	}
+	assert.Zero(t, count, "Atmos must defer to the user-set TF_CLI_CONFIG_FILE")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

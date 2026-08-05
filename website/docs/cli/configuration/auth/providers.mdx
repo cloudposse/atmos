@@ -34,6 +34,8 @@ auth:
       kind: aws/iam-identity-center
       region: us-east-1
       start_url: https://company.awsapps.com/start
+      spec:
+        endpoint_url: "http://localhost:4566"  # Optional for Floci/LocalStack-compatible endpoints
 
       # Automatically discover all accounts and permission sets
       auto_provision_identities: true
@@ -65,6 +67,9 @@ auth:
 
   <dt>`console.session_duration`</dt>
   <dd>Optional. Web console session duration. Maximum 12 hours for AWS.</dd>
+
+  <dt>`spec.endpoint_url`</dt>
+  <dd>Optional. AWS-compatible base endpoint URL for SDK calls, useful for Floci, LocalStack, and other test endpoints.</dd>
 </dl>
 
 ### IAM Permissions for Identity Provisioning
@@ -165,6 +170,12 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
+:::info Credentials are never cached
+`github/oidc` requests a fresh token from the GitHub Actions token endpoint on every
+authentication, and Atmos never writes the resulting credentials to the keyring. A rotated
+Actions token is always picked up on the next run.
+:::
+
 </TabItem>
 <TabItem value="azure" label="Azure">
 
@@ -259,6 +270,13 @@ auth:
   <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
 </dl>
 
+:::info Credentials are never cached
+`azure/oidc` re-reads its federated token on every authentication — from `spec.token_file_path`,
+the `AZURE_FEDERATED_TOKEN_FILE` environment variable, or the GitHub Actions OIDC endpoint,
+whichever applies — and Atmos never writes the resulting tokens (or credentials derived from
+them) to the keyring. Rotate the token at its source and the next run picks it up.
+:::
+
 ### GitHub Actions Setup
 
 <File title=".github/workflows/deploy.yaml">
@@ -269,7 +287,7 @@ jobs:
       id-token: write    # Required for OIDC
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Deploy with Atmos
         run: atmos terraform apply mycomponent -s prod
         env:
@@ -315,6 +333,13 @@ auth:
 
 :::note
 The `azure/cli` provider requires existing Azure CLI credentials. Run `az login` first.
+:::
+
+:::info Credentials are never cached
+`azure/cli` re-reads your Azure CLI session on every authentication, and Atmos never writes
+its tokens (or any credentials derived from them) to the keyring. Switch accounts with
+`az login` and the next `atmos auth login` picks up the new principal — no `atmos auth logout`
+needed.
 :::
 
 ## Sovereign Clouds (GCC High, China)
@@ -414,6 +439,13 @@ auth:
 The `gcp/adc` provider requires existing Application Default Credentials. Run `gcloud auth application-default login` first.
 :::
 
+:::info Credentials are never cached
+`gcp/adc` re-reads Application Default Credentials on every authentication, and Atmos never
+writes its tokens (or any credentials derived from them) to the keyring. Switch accounts with
+`gcloud auth application-default login` and the next `atmos auth login` picks up the new
+principal — no `atmos auth logout` needed.
+:::
+
 ## Workload Identity Federation
 
 For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
@@ -508,6 +540,13 @@ auth:
   <dd>Optional. OAuth scopes for the access token.</dd>
 </dl>
 
+:::info Credentials are never cached
+Like `gcp/adc`, `gcp/workload-identity-federation` re-reads its OIDC token from whichever
+`token_source` you configured — `url`, `file`, or `environment` — on every authentication, and
+Atmos never writes the resulting tokens (or credentials derived from them) to the keyring.
+Rotate the token at its source and the next run picks it up, with no `atmos auth logout` needed.
+:::
+
 ### GitHub Actions Setup
 
 In GitHub Actions, the only requirement is `id-token: write` permission. No `token_source` configuration is needed:
@@ -520,7 +559,7 @@ jobs:
       id-token: write    # Required for OIDC
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Deploy with Atmos
         run: atmos terraform apply mycomponent -s prod
 ```
@@ -528,6 +567,39 @@ jobs:
 
 </TabItem>
 </Tabs>
+
+## Atmos Pro
+
+The `atmos/pro` provider authenticates the Atmos CLI **to [Atmos Pro](https://atmos-pro.com)** (not to a cloud), by federating the GitHub Actions runner's OIDC token into an Atmos Pro session. It is the prerequisite for the [`github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro). v1 is OIDC-only and requires a GitHub Actions environment.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+        base_url: https://atmos-pro.com     # optional; or ATMOS_PRO_BASE_URL
+        audience: atmos-pro.com             # optional OIDC audience
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `atmos/pro`.</dd>
+
+  <dt>`spec.workspace_id`</dt>
+  <dd>**Required.** Atmos Pro workspace ID. May also be supplied via `ATMOS_PRO_WORKSPACE_ID` (set automatically in most Atmos Pro CI setups).</dd>
+
+  <dt>`spec.base_url`</dt>
+  <dd>Optional. Atmos Pro base URL. Defaults to `https://atmos-pro.com`. May also be supplied via `ATMOS_PRO_BASE_URL`.</dd>
+
+  <dt>`spec.audience`</dt>
+  <dd>Optional. OIDC audience for the Atmos Pro token exchange. Defaults to `atmos-pro.com`.</dd>
+</dl>
+
+Your GitHub Actions workflow only needs `permissions: id-token: write`. Pair this provider with an `atmos/pro` identity and a `github/sts` integration to mint just-in-time GitHub tokens for private module/source/vendor access.
 
 ## Multiple Providers
 

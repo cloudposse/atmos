@@ -65,11 +65,19 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 		verbose = v
 	}
 
+	atmosConfig, err := currentStackConfig(t.atmosConfig)
+	if err != nil {
+		return &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("failed to describe affected: %w", err),
+		}, nil
+	}
+
 	log.Debugf("Describing affected components (ref: %s, verbose: %v)", ref, verbose)
 
 	// Execute describe affected command.
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-		t.atmosConfig,
+		atmosConfig,
 		ref,
 		false,      // includeSpaceliftAdminStacks
 		false,      // includeSettings
@@ -79,6 +87,7 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 		[]string{}, // skip
 		false,      // excludeLocked
 		nil,        // authManager
+		false,      // authDisabled
 	)
 	if err != nil {
 		return &tools.Result{

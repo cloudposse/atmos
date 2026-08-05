@@ -1,3 +1,7 @@
 import:
   - orgs/acme/_defaults
-  - mixins/tenant/plat
+
+# Defaults for the `plat` tenant/OU. The tenant context variable lives right here in the
+# tenant's `_defaults` (no separate one-line mixin to chase).
+vars:
+  tenant: plat

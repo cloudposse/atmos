@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -97,16 +98,24 @@ func (o *gcsObjectHandleImpl) NewReader(ctx context.Context) (io.ReadCloser, err
 // It's a map[string]GCSClient.
 var gcsClientCache sync.Map
 
-func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
+func getCachedGCSClient(backend *map[string]any, authContext *schema.AuthContext) (GCSClient, error) {
 	credentials := GetGCSBackendCredentials(backend)
 	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
+	// Resolve the active identity's GCS emulator endpoint (if any).
+	endpoint := identityGCSEndpoint(authContext)
+
 	// Build a deterministic cache key (hash credentials to avoid exposing sensitive data in cache key).
-	// Create a proper hash to avoid collisions.
+	// Create a proper hash to avoid collisions. Append the identity endpoint only when
+	// present so an emulator-backed read and a real-GCS read (same credentials) never
+	// alias to the same cached client; the real-cloud key format is preserved unchanged.
 	h := sha256.Sum256([]byte(credentials))
 	cacheKey := fmt.Sprintf("credentials_hash=%s;impersonate=%s",
 		hex.EncodeToString(h[:8]), // Use first 8 bytes for brevity.
 		impersonateServiceAccount)
+	if endpoint != "" {
+		cacheKey += ";endpoint=" + endpoint
+	}
 
 	// Check the cache.
 	if cached, ok := gcsClientCache.Load(cacheKey); ok {
@@ -118,7 +127,7 @@ func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	gcsClient, err := createGCSClient(ctx, backend)
+	gcsClient, err := createGCSClient(ctx, backend, authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -127,12 +136,22 @@ func getCachedGCSClient(backend *map[string]any) (GCSClient, error) {
 	return gcsClient, nil
 }
 
+// identityGCSEndpoint returns the active GCP identity's GCS emulator endpoint
+// (STORAGE_EMULATOR_HOST), or "" when no identity endpoint is set. GCP is per-service,
+// so only the storage endpoint is relevant to the GCS state backend reader.
+func identityGCSEndpoint(authContext *schema.AuthContext) string {
+	if authContext == nil || authContext.GCP == nil {
+		return ""
+	}
+	return authContext.GCP.StorageEmulatorHost
+}
+
 // ReadTerraformBackendGCS reads the Terraform state file from the configured GCS backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendGCS(
 	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
-	_ *schema.AuthContext,
+	authContext *schema.AuthContext,
 ) ([]byte, error) {
 	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendGCS")()
 
@@ -147,7 +166,7 @@ func ReadTerraformBackendGCS(
 		gcsBackend = backend
 	}
 
-	gcsClient, err := getCachedGCSClient(&gcsBackend)
+	gcsClient, err := getCachedGCSClient(&gcsBackend, authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -157,14 +176,36 @@ func ReadTerraformBackendGCS(
 
 // createGCSClient creates a GCS client with proper authentication based on backend configuration.
 // This uses the unified GCP authentication utility for consistency across all Google Cloud services.
-func createGCSClient(ctx context.Context, backend *map[string]any) (GCSClient, error) {
+func createGCSClient(ctx context.Context, backend *map[string]any, authContext *schema.AuthContext) (GCSClient, error) {
 	credentials := GetGCSBackendCredentials(backend)
 	impersonateServiceAccount := GetGCSBackendImpersonateServiceAccount(backend)
 
-	// Use unified GCP authentication.
-	opts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: credentials,
-	})
+	var opts []option.ClientOption
+	if endpoint := identityGCSEndpoint(authContext); endpoint != "" {
+		// Point the in-process HTTP storage client at the active identity's emulator.
+		// When the identity carries a STORAGE_EMULATOR_HOST (a local emulator), reads
+		// target the emulator instead of real GCS — mirroring how the S3 reader honors
+		// authContext.AWS.EndpointURL. Unlike the gRPC services that gcp.GetClientOptions
+		// serves, the storage client is HTTP and needs the full URL (scheme kept), so we
+		// set the option directly rather than via that gRPC-oriented helper. The emulator
+		// does not validate credentials, so skip authentication.
+		//
+		// Normalize host-only values like "localhost:9000" to "http://localhost:9000"
+		// so option.WithEndpoint receives a valid URL. Real GCS uses HTTPS, but emulators
+		// typically listen on plain HTTP.
+		normalizedEndpoint := endpoint
+		if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+			normalizedEndpoint = "http://" + endpoint
+		}
+		opts = append(opts, option.WithEndpoint(normalizedEndpoint))
+		// Always disable ADC for the emulator branch — the emulator does not validate
+		// credentials, and falling back to ADC on a machine with GCP creds configured
+		// would silently target real GCS instead.
+		opts = append(opts, option.WithoutAuthentication())
+	} else {
+		// Use unified GCP authentication.
+		opts = gcp.GetClientOptions(gcp.AuthOptions{Credentials: credentials})
+	}
 
 	if credentials != "" {
 		if strings.HasPrefix(strings.TrimSpace(credentials), "{") {
@@ -244,7 +285,8 @@ func ReadTerraformBackendGCSInternal(
 			if attempt < maxGCSRetryCount {
 				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
 				backoff := time.Second * time.Duration(1<<attempt)
-				log.Debug("Failed to read Terraform state file from GCS bucket",
+				log.Debug(
+					"Failed to read Terraform state file from GCS bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					log.FieldBucket, bucket,

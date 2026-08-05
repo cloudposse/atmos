@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -23,6 +24,7 @@ import (
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -70,8 +72,8 @@ func createExpectedAffectedResults(componentPath string, templatesProcessed bool
 			Dependents:           nil,
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     tgwCrossRegionStack,
 					},
@@ -105,8 +107,8 @@ func createExpectedAffectedResults(componentPath string, templatesProcessed bool
 			Dependents:           nil,
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     tgwHubStack,
 					},
@@ -128,15 +130,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -145,7 +147,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -246,6 +248,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	assert.Nil(t, err)
 
@@ -253,9 +256,68 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	assert.Equal(t, 0, len(affected))
 }
 
+// shouldSkipRepoCopyPath reports whether src should be excluded when copying the whole repo into
+// a temp dir for a describe-affected test (see setupDescribeAffectedTest and
+// setupDescribeAffectedTestWithFixture below). Beyond node_modules/.claude/.terraform, this also
+// excludes the repo's own local, gitignored build output (build/, custom-gcl, website/build),
+// which otherwise gets swept into every one of these copies too -- several hundred MB combined,
+// regenerated by routine `atmos build`/`atmos lint custom-gcl`/website-build runs, and irrelevant
+// to what these tests actually exercise.
+func shouldSkipRepoCopyPath(src string) bool {
+	if strings.Contains(src, "node_modules") ||
+		strings.Contains(src, ".claude") ||
+		strings.Contains(src, ".terraform") {
+		return true
+	}
+	sep := string(filepath.Separator)
+	if strings.Contains(src, sep+"build"+sep) || strings.HasSuffix(src, sep+"build") {
+		return true
+	}
+	if strings.HasSuffix(src, sep+"custom-gcl") {
+		return true
+	}
+	if strings.Contains(src, sep+"website"+sep+"build") {
+		return true
+	}
+	return false
+}
+
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
+// if the copy fails because a source file vanished mid-copy. The source is the actual
+// checked-out repository, which can have transient files appear and disappear under
+// .git/objects/pack while git performs routine background housekeeping (e.g. an
+// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
+// them within milliseconds). The otiai10/copy directory walk stats every entry it
+// lists, so it can observe one of these files mid-flight and fail the whole copy with
+// "no such file or directory". Retrying a moment later almost always succeeds, since
+// the transient file is long gone by the next attempt.
+func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
+	t.Helper()
+
+	const maxAttempts = 5
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = cp.Copy(src, dest, *opts)
+		if err == nil || !os.IsNotExist(err) {
+			return err
+		}
+		if attempt == maxAttempts {
+			return err
+		}
+		// Remove any partial copy before retrying so the next attempt starts clean.
+		require.NoError(t, os.RemoveAll(dest))
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
+}
+
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
 func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfiguration, repoPath, componentPath string) {
 	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping in short mode: copies the entire repo into a temp dir")
+	}
 
 	// Check for valid Git remote URL before running the test.
 	tests.RequireGitRemoteWithValidURL(t)
@@ -275,9 +337,9 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.Contains(src, "node_modules") ||
-				strings.Contains(src, ".terraform") {
+			if shouldSkipRepoCopyPath(src) {
 				return true, nil
 			}
 			isSocket, err := u.IsSocket(src)
@@ -292,7 +354,7 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
@@ -330,6 +392,7 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -353,6 +416,7 @@ func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -391,8 +455,8 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 			Dependents:           nil, // must be nil to match actual
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
+				"depends_on": map[string]any{ // note: stringified integer keys
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -411,6 +475,7 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 		nil,
 		true,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -447,11 +512,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: true,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -468,8 +533,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-hub",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 								"stack":     "ue1-network",
 							},
@@ -486,11 +551,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 							StackSlug:            "ue1-network-tgw-attachment",
 							IncludedInDependents: false,
 							Settings: map[string]any{
-								"depends_on": map[any]any{
-									1: map[string]any{
+								"depends_on": map[string]any{
+									"1": map[string]any{
 										"component": "vpc",
 									},
-									2: map[string]any{
+									"2": map[string]any{
 										"component": "tgw/hub",
 									},
 								},
@@ -513,8 +578,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: true,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -531,11 +596,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -556,8 +621,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -591,6 +656,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -602,6 +668,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -637,9 +705,9 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{"component": "vpc"},
-							2: map[string]any{"component": "tgw/hub"},
+						"depends_on": map[string]any{
+							"1": map[string]any{"component": "vpc"},
+							"2": map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -658,8 +726,8 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "{{ .vars.environment }}-{{ .vars.stage }}",
 					},
@@ -676,9 +744,9 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{"component": "vpc"},
-							2: map[string]any{"component": "tgw/hub"},
+						"depends_on": map[string]any{
+							"1": map[string]any{"component": "vpc"},
+							"2": map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -697,8 +765,8 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-{{ .vars.stage }}",
 					},
@@ -732,6 +800,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -743,6 +812,8 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -781,11 +852,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: true,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -802,8 +873,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-hub",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 								"stack":     "ue1-network",
 							},
@@ -820,11 +891,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 							StackSlug:            "ue1-network-tgw-attachment",
 							IncludedInDependents: false,
 							Settings: map[string]any{
-								"depends_on": map[any]any{
-									1: map[string]any{
+								"depends_on": map[string]any{
+									"1": map[string]any{
 										"component": "vpc",
 									},
-									2: map[string]any{
+									"2": map[string]any{
 										"component": "tgw/hub",
 									},
 								},
@@ -847,8 +918,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: true,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -865,11 +936,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -890,8 +961,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -925,6 +996,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -936,6 +1008,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		nil,
 		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -979,8 +1053,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -1000,8 +1074,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -1036,6 +1110,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -1047,6 +1122,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		nil,
 		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1083,6 +1160,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1096,6 +1174,8 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		nil,
 		onlyInStack,
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err)
 
@@ -1158,6 +1238,10 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
 	t.Helper()
 
+	if testing.Short() {
+		t.Skip("skipping in short mode: copies the entire repo into a temp dir")
+	}
+
 	// Check for valid Git remote URL before running the test.
 	tests.RequireGitRemoteWithValidURL(t)
 
@@ -1176,9 +1260,9 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.Contains(src, "node_modules") ||
-				strings.Contains(src, ".terraform") {
+			if shouldSkipRepoCopyPath(src) {
 				return true, nil
 			}
 			isSocket, err := u.IsSocket(src)
@@ -1193,7 +1277,7 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	}
 
 	// Copy the local repository into a temp dir.
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	err = copyRepoWithRetry(t, pathPrefix, tempDir, &copyOptions)
 	require.NoError(t, err)
 
 	// Copy the affected stacks into the `stacks` folder in the temp dir.
@@ -1242,6 +1326,7 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 
 	// The test should pass - new components in BASE should be handled gracefully.
@@ -1296,6 +1381,7 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
 	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
@@ -1362,6 +1448,7 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	// Check if there was an error.
 	require.NoError(t, err)
@@ -1444,6 +1531,7 @@ func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1546,6 +1634,7 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1826,6 +1915,123 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 	})
 }
 
+// TestIncludeDependentsFlagValue covers includeDependentsFlagValue's dual flag
+// shape: `atmos describe affected` registers --include-dependents as a plain
+// bool, while the terraform commands register it as a depth-carrying string
+// flag (bare = unlimited, --include-dependents=N bounds the expansion). The
+// function must read either registration correctly.
+func TestIncludeDependentsFlagValue(t *testing.T) {
+	t.Run("flag not registered returns false with no error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("bool flag type set true", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Bool(flagsPkg.FlagIncludeDependents, false, "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "true"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
+
+	t.Run("bool flag type set false", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Bool(flagsPkg.FlagIncludeDependents, false, "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "false"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("depth-carrying string flag bare/unlimited", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, flagsPkg.ClosureDepthUnlimited))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got, "unlimited depth means dependents are included")
+	})
+
+	t.Run("depth-carrying string flag bounded depth", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "2"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.True(t, got, "a bounded but non-zero depth still means dependents are included")
+	})
+
+	t.Run("depth-carrying string flag explicitly off", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "0"))
+
+		got, err := includeDependentsFlagValue(flags)
+
+		require.NoError(t, err)
+		assert.False(t, got)
+	})
+
+	t.Run("flag registered as neither bool nor string returns a GetString error", func(t *testing.T) {
+		// Defensive path: includeDependentsFlagValue only special-cases "bool"
+		// and otherwise assumes "string" (the two shapes this flag is actually
+		// registered as across commands). Registering it as a third type proves
+		// the GetString error is still propagated rather than panicking.
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.Int(flagsPkg.FlagIncludeDependents, 0, "")
+
+		_, err := includeDependentsFlagValue(flags)
+
+		require.Error(t, err)
+	})
+
+	t.Run("depth-carrying string flag invalid value returns error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		flags.String(flagsPkg.FlagIncludeDependents, "", "")
+		require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, "not-a-depth"))
+
+		_, err := includeDependentsFlagValue(flags)
+
+		require.Error(t, err)
+	})
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_IncludeDependents proves the
+// caller in SetDescribeAffectedFlagValueInCliArgs actually wires
+// includeDependentsFlagValue's result into describe.IncludeDependents when
+// the flag was explicitly changed by the user, using the depth-carrying
+// string-flag shape the terraform commands register.
+func TestSetDescribeAffectedFlagValueInCliArgs_IncludeDependents(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("CI", "")
+
+	// Built without newDescribeAffectedFlagSet's bool registration for
+	// --include-dependents: the terraform commands register it as a
+	// depth-carrying string flag instead, and the two can't coexist on one
+	// FlagSet, so this test exercises that shape end to end on its own set.
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.String(flagsPkg.FlagIncludeDependents, "", "")
+	require.NoError(t, flags.Set(flagsPkg.FlagIncludeDependents, flagsPkg.ClosureDepthUnlimited))
+
+	describe := &DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	assert.True(t, describe.IncludeDependents)
+}
+
 // TestExecute_MatrixFormat tests the matrix format code path through Execute.
 func TestExecute_MatrixFormat(t *testing.T) {
 	ioCtx, err := iolib.NewContext()
@@ -1843,6 +2049,8 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		stack string, processTemplates, processYamlFunctions bool,
 		skip []string, excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
@@ -1853,7 +2061,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 			},
 		}, nil, nil, "", nil
 	}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -1988,6 +2196,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -2013,6 +2222,8 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
+		DescribeStacksErrorOptions{},
 	)
 	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
 

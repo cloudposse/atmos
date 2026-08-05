@@ -1115,7 +1115,7 @@ func TestDefaultHasher_HashDir_WithSubdirectories(t *testing.T) {
 	hash, err := hasher.HashDir(tmpDir)
 	require.NoError(t, err)
 	assert.NotEmpty(t, hash)
-	assert.Len(t, hash, 64) // SHA256 hex is 64 chars.
+	assert.Len(t, hash, 32) // FNV-128a hex is 32 chars.
 }
 
 // TestExtractComponentName_EmptyStrings tests extraction with empty string values.

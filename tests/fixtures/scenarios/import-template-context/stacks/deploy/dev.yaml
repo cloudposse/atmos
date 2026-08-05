@@ -1,0 +1,12 @@
+# `catalog_ref` is defined by the earlier `_defaults` import and is used to
+# select which versioned catalog file to import. This exercises templated
+# import paths driven by settings accumulated from a previous import.
+import:
+  - _defaults
+  - "catalog/{{ .settings.context.catalog_ref }}/service"
+
+components:
+  terraform:
+    service:
+      vars:
+        deployed: true

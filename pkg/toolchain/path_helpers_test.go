@@ -453,3 +453,124 @@ func TestBuildPathEntriesWithLocator_SortingConsistency(t *testing.T) {
 	assert.Equal(t, "middle", toolPaths[1].Tool)
 	assert.Equal(t, "zebra", toolPaths[2].Tool)
 }
+
+// fakePathsLocator implements InstallLocator plus the optional binaryPathsLocator
+// so onedir multi-directory PATH behavior can be exercised.
+type fakePathsLocator struct {
+	owner, repo string
+	primary     string
+	all         []string
+	findErr     error // When set, FindBinaryPath returns this error (simulates a not-installed tool).
+}
+
+func (f *fakePathsLocator) ParseToolSpec(string) (string, string, error) {
+	return f.owner, f.repo, nil
+}
+
+func (f *fakePathsLocator) FindBinaryPath(_, _, _ string, _ ...string) (string, error) {
+	if f.findErr != nil {
+		return "", f.findErr
+	}
+	return f.primary, nil
+}
+
+func (f *fakePathsLocator) GetBinaryPaths(_, _, _ string) []string {
+	return f.all
+}
+
+// TestBuildPathEntriesWithLocator_OnedirMultipleDirs verifies that a onedir
+// package's separate entrypoint directories are all added to PATH, while a
+// single ToolPath record is kept for the tool (keyed to its primary directory).
+func TestBuildPathEntriesWithLocator_OnedirMultipleDirs(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "nodejs",
+		repo:    "node",
+		primary: filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+		all: []string{
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin/npm"),
+		},
+	}
+	toolVersions := &ToolVersions{Tools: map[string][]string{"node": {"24.18.0"}}}
+
+	pathEntries, toolPaths, err := buildPathEntriesWithLocator(toolVersions, loc, true)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin"),
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin"),
+	}, pathEntries, "every entrypoint directory must be on PATH")
+
+	require.Len(t, toolPaths, 1)
+	assert.Equal(t, filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin"), toolPaths[0].Path)
+}
+
+// TestBuildPathEntriesWithLocator_OnedirSameDirDeduped verifies that multiple
+// entrypoints in the same directory collapse to a single PATH entry.
+func TestBuildPathEntriesWithLocator_OnedirSameDirDeduped(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "aws",
+		repo:    "aws-cli",
+		primary: filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws"),
+		all: []string{
+			filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws"),
+			filepath.FromSlash("/tools/aws/aws-cli/2.35.15/.pkg/dist/aws_completer"),
+		},
+	}
+	toolVersions := &ToolVersions{Tools: map[string][]string{"aws-cli": {"2.35.15"}}}
+
+	pathEntries, _, err := buildPathEntriesWithLocator(toolVersions, loc, true)
+	require.NoError(t, err)
+	assert.Len(t, pathEntries, 1, "entrypoints in the same directory collapse to one PATH entry")
+}
+
+// TestEntrypointDirsForVersion_OnedirMultipleDirs verifies that a onedir
+// package's entrypoints resolve to each of their (distinct) directories.
+func TestEntrypointDirsForVersion_OnedirMultipleDirs(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "nodejs",
+		repo:    "node",
+		primary: filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+		all: []string{
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin/node"),
+			filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin/npm"),
+		},
+	}
+
+	dirs := EntrypointDirsForVersion(loc, "nodejs", "node", "24.18.0", true)
+
+	assert.ElementsMatch(t, []string{
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/bin"),
+		filepath.FromSlash("/tools/nodejs/node/24.18.0/.pkg/lib/node_modules/npm/bin"),
+	}, dirs, "each onedir entrypoint directory must be returned")
+}
+
+// TestEntrypointDirsForVersion_Flat verifies that a flat install (no onedir
+// manifest, so GetBinaryPaths returns nothing) resolves to the single directory
+// containing its primary binary.
+func TestEntrypointDirsForVersion_Flat(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "kubernetes",
+		repo:    "kubectl",
+		primary: filepath.FromSlash("/tools/kubernetes/kubectl/1.31.0/kubectl"),
+		all:     nil, // No manifest entrypoints => flat install.
+	}
+
+	dirs := EntrypointDirsForVersion(loc, "kubernetes", "kubectl", "1.31.0", true)
+
+	assert.Equal(t, []string{filepath.FromSlash("/tools/kubernetes/kubectl/1.31.0")}, dirs)
+}
+
+// TestEntrypointDirsForVersion_NotInstalled verifies that a tool whose binary
+// cannot be located returns nil, letting callers apply their own fallback.
+func TestEntrypointDirsForVersion_NotInstalled(t *testing.T) {
+	loc := &fakePathsLocator{
+		owner:   "nodejs",
+		repo:    "node",
+		findErr: errors.New("not installed"),
+	}
+
+	dirs := EntrypointDirsForVersion(loc, "nodejs", "node", "24.18.0", true)
+
+	assert.Nil(t, dirs)
+}

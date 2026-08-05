@@ -165,6 +165,8 @@ func (l *Loader) getComponentOverrides(componentType string) map[string]string {
 	switch componentType {
 	case "terraform":
 		return cfg.Terraform
+	case "helm":
+		return cfg.Helm
 	case "helmfile":
 		return cfg.Helmfile
 	default:

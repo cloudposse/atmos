@@ -224,14 +224,14 @@ atmos help                             # Should NOT use pager
 
 #### Screengrab Generation
 ```bash
-# Set in demo/screengrabs/build-all.sh
+# Set by the screengrab cast pipeline (demo/casts/atmos.d/screengrabs/cli.yaml)
 export ATMOS_FORCE_COLOR=true
 export CLICOLOR_FORCE=1
 export FORCE_COLOR=1
 export ATMOS_PAGER=false
 
-# Generate screengrabs
-bash build-all.sh demo-stacks.txt
+# Generate screengrabs (records demo/casts/screengrabs/demo-stacks.txt via --cast)
+atmos --chdir=demo/casts casts generate screengrabs cli
 
 # Verify colors in HTML
 grep "color:#00ff00" website/src/components/Screengrabs/*.html

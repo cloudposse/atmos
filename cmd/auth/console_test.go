@@ -13,6 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -130,7 +131,7 @@ func TestRetrieveCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			creds, err := retrieveCredentials(tt.whoami)
+			creds, err := retrieveCredentials(tt.whoami, nil)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
@@ -265,10 +266,11 @@ func TestGetConsoleProvider(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		setupMock     func(*authTypes.MockAuthManager)
-		identityName  string
-		expectedError error
+		name             string
+		setupMock        func(*authTypes.MockAuthManager)
+		identityName     string
+		expectedProvider any
+		expectedError    error
 	}{
 		{
 			name: "AWS IAM Identity Center provider",
@@ -285,6 +287,15 @@ func TestGetConsoleProvider(t *testing.T) {
 			},
 			identityName:  "prod",
 			expectedError: nil,
+		},
+		{
+			name: "AWS user identity",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetProviderKindForIdentity("cp-root/admin").Return(authTypes.ProviderKindAWSUser, nil)
+			},
+			identityName:     "cp-root/admin",
+			expectedProvider: &awsAuth.ConsoleURLGenerator{},
+			expectedError:    nil,
 		},
 		{
 			name: "Azure OIDC provider",
@@ -353,6 +364,9 @@ func TestGetConsoleProvider(t *testing.T) {
 			default:
 				assert.NoError(t, err)
 				assert.NotNil(t, provider)
+				if tt.expectedProvider != nil {
+					assert.IsType(t, tt.expectedProvider, provider)
+				}
 			}
 		})
 	}
@@ -538,7 +552,7 @@ func TestPrintConsoleHelpers(t *testing.T) {
 // WhoamiInfo (no Credentials, no CredentialsRef) errors out cleanly.
 func TestRetrieveCredentials_NoCredentialsAvailable(t *testing.T) {
 	whoami := &authTypes.WhoamiInfo{Identity: "id"}
-	creds, err := retrieveCredentials(whoami)
+	creds, err := retrieveCredentials(whoami, nil)
 	require.Error(t, err)
 	assert.Nil(t, creds)
 	assert.ErrorIs(t, err, errUtils.ErrAuthConsole)
@@ -557,7 +571,7 @@ func TestRetrieveCredentials_InlineCredentials(t *testing.T) {
 		Credentials: mockCreds,
 	}
 
-	got, err := retrieveCredentials(whoami)
+	got, err := retrieveCredentials(whoami, nil)
 	require.NoError(t, err)
 	assert.Same(t, mockCreds, got,
 		"inline Credentials must be returned verbatim without store lookup")

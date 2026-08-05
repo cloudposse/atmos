@@ -1,0 +1,51 @@
+commands:
+  - name: casts generate demo fixtures
+    description: Regenerate casts sourced from demo/casts/fixtures
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts generate demo fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts generate demo fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts generate demo fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts generate demo fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts generate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures
+    description: Validate casts sourced from demo/casts/fixtures
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts validate demo fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts validate demo fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts validate demo fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts validate demo fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts validate demo fixtures basic describe-stacks

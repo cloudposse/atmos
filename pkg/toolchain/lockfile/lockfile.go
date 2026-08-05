@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -66,9 +66,11 @@ type Tool struct {
 
 // PlatformEntry represents platform-specific download information.
 type PlatformEntry struct {
-	URL      string `yaml:"url"`
-	Checksum string `yaml:"checksum"`
-	Size     int64  `yaml:"size"`
+	URL               string   `yaml:"url"`
+	Checksum          string   `yaml:"checksum"`
+	Size              int64    `yaml:"size"`
+	ChecksumAlgorithm string   `yaml:"checksum_algorithm,omitempty"`
+	Verification      []string `yaml:"verification,omitempty"`
 }
 
 // LockFileMetadata contains metadata about the lock file.
@@ -88,7 +90,7 @@ func New() *LockFile {
 		Tools:   make(map[string]*Tool),
 		Metadata: LockFileMetadata{
 			GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
-			AtmosVersion:    version.Version,
+			AtmosVersion:    atmosVersion(),
 			Platform:        runtime.GOOS + "_" + runtime.GOARCH,
 			LockFileVersion: 1,
 		},
@@ -131,7 +133,7 @@ func Save(filePath string, lockFile *LockFile) error {
 
 	// Update metadata
 	lockFile.Metadata.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
-	lockFile.Metadata.AtmosVersion = version.Version
+	lockFile.Metadata.AtmosVersion = atmosVersion()
 	lockFile.Metadata.Platform = runtime.GOOS + "_" + runtime.GOARCH
 
 	data, err := yaml.Marshal(lockFile)
@@ -158,6 +160,16 @@ func Save(filePath string, lockFile *LockFile) error {
 	}
 
 	return nil
+}
+
+// atmosVersion reads build metadata without importing pkg/version. Keeping the
+// lock-format package below the toolchain installer avoids an import cycle and
+// lets every writer use this canonical model.
+func atmosVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "unknown"
 }
 
 // GetOrCreateTool gets or creates a tool entry in the lock file.
