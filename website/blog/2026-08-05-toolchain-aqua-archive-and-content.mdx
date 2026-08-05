@@ -21,7 +21,7 @@ Two more are now supported:
 - `github_archive` — the auto-generated source tarball produced by GitHub for any tag, downloaded from `github.com/{owner}/{repo}/archive/refs/tags/{version}.tar.gz`. Always `.tar.gz`, regardless of the `format` field.
 - `github_content` — a single file from a GitHub repo at a tag, downloaded from `raw.githubusercontent.com/{owner}/{repo}/{version}/{path}`. The required `path` field points to the file inside the repo.
 
-Both implementations match upstream `aquaproj/aqua` exactly. For `github_archive`, the `asset`, `url`, and `format` fields are intentionally ignored (Aqua hardcodes `tar.gz` and the URL pattern). For `github_content`, the same fields are ignored — only `repo_owner`, `repo_name`, and `path` are used.
+Both implementations match upstream `aquaproj/aqua` exactly. For `github_archive`, the `asset`, `url`, `format`, and `format_overrides` fields are intentionally ignored (Aqua hardcodes `tar.gz` and the URL pattern). For `github_content`, the same fields are ignored — only `repo_owner`, `repo_name`, and `path` are used.
 
 Before this release, any Aqua registry entry using either type failed with `unsupported tool type: ...`. Those entries now resolve correctly.
 

@@ -2986,7 +2986,7 @@ func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
 //   - Validate fails when repo_owner/repo_name missing
 //     (aqua: pkg/config/registry/package_info_test.go)
 //   - Required fields parsed correctly with both owner and name set
-//     (aqua: pkg/config/registry/package_info_test.go)
+//     (aqua: pkg/config/registry/package_info_test.go).
 
 // TestAquaRegistry_parseRegistryFile_GitHubArchive verifies that a github_archive
 // package definition from a fixture file parses correctly, including the files[]
@@ -3124,7 +3124,7 @@ packages:
 //   - Validate fails when repo_owner/repo_name/path missing
 //   - Required fields (including Path) parsed correctly
 //   - Path field flows through the AquaPackage -> Tool conversion
-//   - Version override switching applies/resets Path correctly
+//   - Version override switching applies/resets Path correctly.
 
 // TestResetByPkgType_GitHubContent covers every switch direction involving
 // github_content, including the Path-clearing rule for non-github_content types.
