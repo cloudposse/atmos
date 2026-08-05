@@ -273,6 +273,7 @@ func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	result, err := applyRelease(context.Background(), spec, false)
 
 	require.ErrorIs(t, err, waitErr)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
 	assert.Equal(t, releaseOperationInstall, result.Operation)
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
 }
