@@ -149,9 +149,11 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 		},
 	}, vars)
 	require.NoError(t, err)
-	assert.Equal(t, ".", buildCfg.Context)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, cwd, buildCfg.Context)
 	assert.Equal(t, "buildx", buildCfg.Engine)
-	assert.Equal(t, "Dockerfile", buildCfg.Dockerfile)
+	assert.Equal(t, filepath.Join(cwd, "Dockerfile"), buildCfg.Dockerfile)
 	assert.Equal(t, []string{"app:test"}, buildCfg.Tags)
 	assert.Equal(t, map[string]string{"VERSION": "1.0.0"}, buildCfg.Args)
 	assert.Equal(t, "runtime", buildCfg.Target)

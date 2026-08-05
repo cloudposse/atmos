@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/container"
@@ -94,13 +95,16 @@ func buildSpinnerMessage(verb, image string) string {
 
 func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Variables) (*container.BuildConfig, error) {
 	build := effectiveBuildStep(step)
-	contextDir, err := resolveOptional(vars, defaultString(build.Context, "."), "build.context", step.Name)
+	contextDir, err := h.ResolveInWorkingDirectory(step, vars, defaultString(build.Context, "."), "build.context")
 	if err != nil {
 		return nil, err
 	}
 	dockerfile, err := resolveOptional(vars, defaultString(build.Dockerfile, "Dockerfile"), "build.dockerfile", step.Name)
 	if err != nil {
 		return nil, err
+	}
+	if dockerfile != "" && !filepath.IsAbs(dockerfile) {
+		dockerfile = filepath.Join(contextDir, dockerfile)
 	}
 	target, err := resolveOptional(vars, build.Target, "build.target", step.Name)
 	if err != nil {

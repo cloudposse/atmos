@@ -1031,6 +1031,43 @@ func TestStepEngineRunsArchiveType(t *testing.T) {
 	assert.Equal(t, "handler.js", r.File[0].Name)
 }
 
+// TestStepEngineRunsArchiveTypeWithRelativeWorkingDirectory reproduces the
+// originally-reported regression: a `type: archive` hook step with relative
+// source/destination must resolve them against step.WorkingDirectory (either
+// explicitly set here, or defaulted by setDefaultStepWorkingDirectory to the
+// resolved component path), not against the Atmos process's own cwd.
+func TestStepEngineRunsArchiveTypeWithRelativeWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	// Process cwd differs from working_directory — this is the crux of the bug.
+	t.Chdir(t.TempDir())
+
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "archive",
+		With: map[string]any{
+			"source":            "src",
+			"destination":       "out/handler.zip",
+			"working_directory": workDir,
+		},
+	}
+
+	out, err := stepEngine{}.Run(stepExecContext(hook))
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	wantDest := filepath.Join(workDir, "out", "handler.zip")
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
 func TestVerifyStepsHookTypes(t *testing.T) {
 	t.Run("known types", func(t *testing.T) {
 		hook := &Hook{

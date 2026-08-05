@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -36,6 +37,27 @@ func TestWorkdirHandlerExecuteProvisionsLocalSource(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(targetDir, "nested", "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "nested\n", string(content))
+}
+
+func TestWorkdirHandlerExecuteResolvesPathAgainstWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("demo\n"), 0o644))
+	t.Chdir(t.TempDir())
+
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "fixture",
+		Type:             schema.TaskTypeWorkdir,
+		Source:           sourceDir,
+		Path:             "target",
+		WorkingDirectory: workDir,
+	}, NewVariables())
+
+	require.NoError(t, err)
+	want := filepath.Join(workDir, "target")
+	assert.Equal(t, want, result.Value)
+	assert.FileExists(t, filepath.Join(want, "README.md"))
 }
 
 func TestWorkdirHandlerExecuteRequiresResetForExistingTarget(t *testing.T) {
@@ -191,7 +213,7 @@ func TestWorkdirHandlerExecutePropagatesPathTemplateError(t *testing.T) {
 		Path:   "{{ range .steps }}",
 	}, NewVariables())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to resolve path")
+	assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }
 
 func TestResolveWorkdirSourceValuePassesThroughUnknownTypes(t *testing.T) {

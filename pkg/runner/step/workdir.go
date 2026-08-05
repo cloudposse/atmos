@@ -45,21 +45,14 @@ func (h *WorkdirHandler) Validate(step *schema.WorkflowStep) error {
 func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.WorkdirHandler.Execute")()
 
-	targetPath, err := vars.Resolve(step.Path)
+	targetPath, err := h.ResolveInWorkingDirectory(step, vars, step.Path, "path")
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
+		return nil, err
 	}
 	if targetPath == "" {
 		return nil, errUtils.Build(ErrWorkdirPathRequired).
 			WithContext("step", step.Name).
 			Err()
-	}
-	if !filepath.IsAbs(targetPath) {
-		absPath, err := filepath.Abs(targetPath)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve absolute path %q: %w", step.Name, targetPath, err)
-		}
-		targetPath = absPath
 	}
 	targetPath = filepath.Clean(targetPath)
 

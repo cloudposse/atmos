@@ -2,6 +2,7 @@ package step
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -150,6 +151,44 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *testing.T) {
+	h := &ContainerHandler{}
+	workDir := t.TempDir()
+
+	t.Run("relative context and dockerfile", func(t *testing.T) {
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker", Dockerfile: "Dockerfile.prod"},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "docker"), cfg.Context)
+		assert.Equal(t, filepath.Join(workDir, "docker", "Dockerfile.prod"), cfg.Dockerfile)
+	})
+
+	t.Run("defaults: dockerfile lands inside context, not working directory directly", func(t *testing.T) {
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker"},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "docker"), cfg.Context)
+		assert.Equal(t, filepath.Join(workDir, "docker", "Dockerfile"), cfg.Dockerfile)
+	})
+
+	t.Run("absolute dockerfile is not re-anchored to context", func(t *testing.T) {
+		absDockerfile := filepath.Join(t.TempDir(), "Dockerfile.custom")
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker", Dockerfile: absDockerfile},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, absDockerfile, cfg.Dockerfile)
+	})
 }
 
 func TestRunConfigResolutionErrors(t *testing.T) {

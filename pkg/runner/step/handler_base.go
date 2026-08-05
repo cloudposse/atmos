@@ -3,6 +3,8 @@ package step
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -193,4 +195,79 @@ func (h BaseHandler) ResolveCommand(ctx context.Context, step *schema.WorkflowSt
 			Err()
 	}
 	return resolved, nil
+}
+
+// ResolveInWorkingDirectory resolves a Go-template field, then anchors a
+// relative result to step.WorkingDirectory (itself template-resolved),
+// returning an absolute path. An empty raw value short-circuits to "" (no
+// resolve, no join) like the other Resolve* helpers. A value that resolves
+// to "" or to an already-absolute path passes through unchanged — it is
+// never re-anchored to WorkingDirectory.
+func (h BaseHandler) ResolveInWorkingDirectory(step *schema.WorkflowStep, vars *Variables, value, field string) (string, error) {
+	defer perf.Track(nil, "step.BaseHandler.ResolveInWorkingDirectory")()
+
+	if value == "" {
+		return "", nil
+	}
+	resolved, err := vars.Resolve(value)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", field).
+			Err()
+	}
+	if resolved == "" || filepath.IsAbs(resolved) {
+		return resolved, nil
+	}
+
+	workDir, err := h.resolveWorkingDirectory(step, vars)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workDir, resolved), nil
+}
+
+// resolveWorkingDirectory resolves step.WorkingDirectory (itself a possible
+// template) to an absolute base directory, falling back to the process's
+// current working directory when unset — preserving the historical
+// filepath.Abs-against-cwd behavior for steps that never set
+// working_directory.
+func (h BaseHandler) resolveWorkingDirectory(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	defer perf.Track(nil, "step.BaseHandler.resolveWorkingDirectory")()
+
+	workDir := step.WorkingDirectory
+	if workDir != "" {
+		resolved, err := vars.Resolve(workDir)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "working_directory").
+				Err()
+		}
+		workDir = resolved
+	}
+	if workDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithContext("step", step.Name).
+				Err()
+		}
+		workDir = cwd
+	}
+	if !filepath.IsAbs(workDir) {
+		abs, err := filepath.Abs(workDir)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "working_directory").
+				Err()
+		}
+		workDir = abs
+	}
+	return workDir, nil
 }
