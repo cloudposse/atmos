@@ -33,6 +33,7 @@ func TestParseConfig(t *testing.T) {
 	block := map[string]any{
 		"repository": "deployments",
 		"path":       "clusters/dev/argocd",
+		"split":      false,
 		"auth":       map[string]any{"identity": "platform-admin"},
 		"commit": map[string]any{
 			"message": "Render argocd",
@@ -47,6 +48,8 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "Render argocd", cfg.CommitMessage)
 	assert.Equal(t, "always", cfg.Signing)
 	assert.True(t, cfg.PullRequest)
+	require.NotNil(t, cfg.Split)
+	assert.False(t, *cfg.Split)
 }
 
 func TestParseConfigEmpty(t *testing.T) {
@@ -54,6 +57,30 @@ func TestParseConfigEmpty(t *testing.T) {
 	assert.Empty(t, cfg.Repository)
 	assert.Empty(t, cfg.Identity)
 	assert.False(t, cfg.PullRequest)
+	assert.Nil(t, cfg.Split, "split is unset until the target block explicitly configures it")
+}
+
+func TestResolveSplit(t *testing.T) {
+	trueVal, falseVal := true, false
+
+	tests := []struct {
+		name  string
+		split *bool
+		path  string
+		want  bool
+	}{
+		{"explicit true overrides manifest-looking path", &trueVal, filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml"), true},
+		{"explicit false overrides directory-looking path", &falseVal, filepath.Join("clusters", "dev"), false},
+		{"unset with .yaml extension infers single-file mode", nil, filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml"), false},
+		{"unset with .yml extension infers single-file mode", nil, filepath.Join("overlays", "prod", "patch.yml"), false},
+		{"unset with .json extension infers single-file mode", nil, filepath.Join("overlays", "prod", "patch.JSON"), false},
+		{"unset with no extension preserves directory default", nil, filepath.Join("clusters", "dev", "argocd"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveSplit(tt.split, tt.path))
+		})
+	}
 }
 
 func TestDeliverPullRequestNotSupported(t *testing.T) {
@@ -88,7 +115,7 @@ func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
 		"deployment.yaml": []byte("kind: Deployment\n"),
 		"old/stale.yaml":  []byte("stale\n"),
 	}}
-	require.NoError(t, writeArtifact(workdir, path, &first))
+	require.NoError(t, writeArtifact(workdir, path, &first, true))
 	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "namespace.yaml"))
 	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "old", "stale.yaml"))
 
@@ -96,7 +123,7 @@ func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
 	second := target.ProvisionArtifact{Files: map[string][]byte{
 		"namespace.yaml": []byte("kind: Namespace\n"),
 	}}
-	require.NoError(t, writeArtifact(workdir, path, &second))
+	require.NoError(t, writeArtifact(workdir, path, &second, true))
 	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "namespace.yaml"))
 	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "old", "stale.yaml"))
 	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "deployment.yaml"))
@@ -110,7 +137,7 @@ func TestReadManagedTreeRoundTrip(t *testing.T) {
 		"namespace.yaml":      []byte("kind: Namespace\n"),
 		"app/deployment.yaml": []byte("kind: Deployment\n"),
 	}}
-	require.NoError(t, writeArtifact(workdir, path, &written))
+	require.NoError(t, writeArtifact(workdir, path, &written, true))
 
 	got, err := readManagedTree(workdir, path)
 	require.NoError(t, err)
@@ -140,7 +167,7 @@ func TestReadManagedTreeSingleFile(t *testing.T) {
 
 func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 	workdir := t.TempDir()
-	err := writeArtifact(workdir, "../escape", &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})
+	err := writeArtifact(workdir, "../escape", &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}}, true)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 }
@@ -153,7 +180,7 @@ func TestWriteArtifactRejectsRootPath(t *testing.T) {
 		sentinel := filepath.Join(workdir, ".git")
 		require.NoError(t, os.WriteFile(sentinel, []byte("gitdir"), 0o600))
 
-		err := writeArtifact(workdir, path, &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})
+		err := writeArtifact(workdir, path, &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}}, true)
 		require.ErrorIs(t, err, errUtils.ErrGitTargetPathInvalid)
 		assert.FileExists(t, sentinel)
 	}
@@ -211,9 +238,62 @@ func TestWriteArtifactRejectsFilePathEscape(t *testing.T) {
 	// the per-file ValidateRepoRelativePath must reject it.
 	err := writeArtifact(workdir, "clusters/dev", &target.ProvisionArtifact{Files: map[string][]byte{
 		"../../../escape.yaml": []byte("x"),
-	}})
+	}}, true)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+}
+
+func TestWriteArtifactSingleFileMode(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml")
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_kustomize.config.k8s.io_v1beta1_Component_cert-manager.yaml": []byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Component\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	abs := filepath.Join(workdir, "kustomize", "overlays", "prod", "kustomization.yaml")
+	info, err := os.Stat(abs)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir(), "path must be written as a file, not a directory")
+
+	got, err := os.ReadFile(abs)
+	require.NoError(t, err)
+	assert.Equal(t, "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Component\n", string(got))
+}
+
+func TestWriteArtifactSingleFileModeMergesMultipleDocuments(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("clusters", "dev", "manifest.yaml")
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"a.yaml": []byte("kind: Namespace\n"),
+		"b.yaml": []byte("kind: Deployment\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	got, err := os.ReadFile(filepath.Join(workdir, "clusters", "dev", "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Namespace\n---\nkind: Deployment\n", string(got))
+}
+
+func TestWriteArtifactSingleFileModeReplacesExistingDirectory(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml")
+
+	// Simulate the reported bug's on-disk state: a stale directory left over from a
+	// prior split=true delivery to the same path.
+	stale := filepath.Join(workdir, "kustomize", "overlays", "prod", "kustomization.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Join(stale, "001_stale.yaml"), 0o755))
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_kustomize.config.k8s.io_v1beta1_Component.yaml": []byte("kind: Component\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	info, err := os.Stat(stale)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir(), "the stale directory must be replaced by a single file")
 }
 
 func TestWriteArtifactWriteFailure(t *testing.T) {
@@ -235,7 +315,7 @@ func TestWriteArtifactWriteFailure(t *testing.T) {
 
 	err := writeArtifact(workdir, filepath.Join("clusters", "dev"), &target.ProvisionArtifact{Files: map[string][]byte{
 		"namespace.yaml": []byte("kind: Namespace\n"),
-	}})
+	}}, true)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
 }

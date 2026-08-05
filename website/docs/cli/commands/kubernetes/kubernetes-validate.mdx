@@ -90,7 +90,8 @@ atmos kubernetes validate --affected --labels cost-center=platform
 Offline (default):
 
 - `apiVersion` and `kind` are present (also enforced during rendering).
-- `metadata.name` is present and is a valid DNS-1123 subdomain.
+- `metadata.name` is present and is a valid DNS-1123 subdomain (with a
+  [Kustomize-specific exemption](#kustomize-config-objects) for `Kustomization`/`Component` objects).
 - The object resolves to a non-empty group/version/kind.
 
 With `--server`:
@@ -99,6 +100,40 @@ With `--server`:
   apply, surfacing schema errors (unknown or mistyped fields) and missing
   Custom Resource Definitions authoritatively. Requires a reachable cluster and
   a configured kubeconfig.
+
+### Kustomize config objects
+
+Kustomize's own `Kustomization` and `Component` objects
+(`apiVersion: kustomize.config.k8s.io/*`) are not Kubernetes API resources —
+they are local input consumed by the `kustomize` build tool itself, and
+Kustomize does not require (or, historically, even permit) a `metadata.name`
+on them. `validate` recognizes these two kinds specifically and does not
+require `metadata.name` for them; every other offline check (a resolvable
+group/version/kind, and DNS-1123 validity for a name that *is* given) still
+applies. See
+[Generating a Kustomize component for GitOps](/stacks/components/kubernetes#generating-a-kustomize-component-for-gitops)
+for the pattern this supports.
+
+### Disabling validation
+
+Set `validate: false` on a component to opt out of both the offline checks
+above and the automatic pre-apply/deploy gate for that component entirely:
+
+```yaml
+components:
+  kubernetes:
+    legacy-manifests:
+      validate: false
+      manifests:
+        - apiVersion: v1
+          kind: ConfigMap
+          # ...
+```
+
+This is a manual override for manifests Atmos has no reserved-kind knowledge
+of — for example objects owned by another tool's format. It does not affect
+`--server`, which validates against the live cluster's own API rather than
+Atmos's offline opinion.
 
 ## Flags
 

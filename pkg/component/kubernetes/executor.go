@@ -248,13 +248,20 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 	case OperationApply:
 		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
 		// before contacting the cluster or delivering to a provision target.
-		if err := validateObjectsStructural(objects); err != nil {
-			return nil, err
+		// Component-level `validate: false` opts out explicitly.
+		if resolveComponentValidateEnabled(info.ComponentSection) {
+			if err := validateObjectsStructural(objects); err != nil {
+				return nil, err
+			}
 		}
 		return deliverApply(atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
 		return runDelete(objects)
 	case OperationValidate:
+		if !resolveComponentValidateEnabled(info.ComponentSection) {
+			ui.Warningf("structural validation skipped: 'validate: false' is set for this component")
+			return objectsToResults("skipped", objects), nil
+		}
 		return runValidate(objects, resolveValidateOptions(ctx.Flags))
 	default:
 		return nil, fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)

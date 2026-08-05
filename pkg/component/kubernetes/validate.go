@@ -9,6 +9,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apivalidation "k8s.io/apimachinery/pkg/util/validation"
+	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -66,13 +67,18 @@ func validateObjectsStructural(objects []*unstructured.Unstructured) error {
 // structuralErrorsForObject returns the offline validation errors for a single
 // object: a present, DNS-1123-conformant metadata.name and a resolvable GVK.
 // (apiVersion/kind presence is already guaranteed upstream by decodeObjects.)
+// Kustomize's own config objects (see isKustomizeConfigObject) are exempt from
+// the metadata.name presence requirement only — a name, if given, is still
+// validated, and the GVK check remains unconditional.
 func structuralErrorsForObject(index int, obj *unstructured.Unstructured) []error {
 	var errs []error
 	ref := objectRef(index, obj)
 
 	name := obj.GetName()
 	if name == "" {
-		errs = append(errs, fmt.Errorf("%s: %w", ref, errUtils.ErrKubernetesMissingMetadataName))
+		if !isKustomizeConfigObject(obj) {
+			errs = append(errs, fmt.Errorf("%s: %w", ref, errUtils.ErrKubernetesMissingMetadataName))
+		}
 	} else if msgs := apivalidation.IsDNS1123Subdomain(name); len(msgs) > 0 {
 		errs = append(errs, fmt.Errorf("%s: %w: %s", ref, errUtils.ErrKubernetesManifestInvalidName, strings.Join(msgs, "; ")))
 	}
@@ -82,6 +88,38 @@ func structuralErrorsForObject(index int, obj *unstructured.Unstructured) []erro
 	}
 
 	return errs
+}
+
+// isKustomizeConfigObject reports whether obj is one of Kustomize's own reserved
+// config-object kinds (Kustomization or Component). These are matched against
+// Kustomize's own exported kind/version constants (sigs.k8s.io/kustomize/api/types,
+// already vendored by this repo's native kustomize provider) rather than a guessed
+// string, mirroring exactly what Kustomize's own EnforceFields validation checks.
+// Such objects are never submitted to the Kubernetes API — they are local build
+// input consumed by the kustomize tool itself — and Kustomize does not require
+// (or, historically, even permit) a metadata.name on them.
+func isKustomizeConfigObject(obj *unstructured.Unstructured) bool {
+	apiVersion, kind := obj.GetAPIVersion(), obj.GetKind()
+	switch {
+	case apiVersion == kustomizetypes.KustomizationVersion && kind == kustomizetypes.KustomizationKind:
+		return true
+	case apiVersion == kustomizetypes.ComponentVersion && kind == kustomizetypes.ComponentKind:
+		return true
+	default:
+		return false
+	}
+}
+
+// resolveComponentValidateEnabled reports whether structural validation is
+// enabled for this component. Component-level `validate: false` opts out of all
+// automatic (apply/deploy auto-gate) and explicit (`atmos kubernetes validate`)
+// structural checks; it does not affect --server, which validates against the
+// live cluster's own API rather than Atmos's offline opinion.
+func resolveComponentValidateEnabled(componentSection map[string]any) bool {
+	if v, ok := componentSection["validate"].(bool); ok {
+		return v
+	}
+	return true
 }
 
 // objectRef builds a human-readable identifier for an object in validation

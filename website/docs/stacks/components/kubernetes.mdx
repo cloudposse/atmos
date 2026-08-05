@@ -236,6 +236,83 @@ The git target clones (or fast-forwards) the repository, replaces the managed
 is a clean no-op. Credentials come from Atmos Auth (GitHub STS); no tokens are
 written into the manifests. Pull-request publishing is not yet supported.
 
+By default `path` is a directory (one generated file per rendered object, same
+as `split: true`). Set `split: false` to write `path` as a single exact file
+instead — required whenever the consumer expects a specific filename, such as
+Kustomize's `kustomization.yaml`. See
+[File vs. directory delivery](/cli/commands/kubernetes/deploy#file-vs-directory-delivery-split)
+and the walkthrough below.
+
+## Generating a Kustomize component for GitOps
+
+A common pattern: inject a Terraform-derived value (a security group ID, a
+Route53 zone ID, an ARN) into an existing Kustomize/Argo CD deployment without
+hand-editing the Kustomize overlay. Atmos renders a Kustomize `Component`
+manifest — a JSON6902 patch, using `atmos.Component`/`!terraform.state` to pull
+the value — and commits it to the deployment repository as an exact
+`kustomization.yaml`, which the real overlay then includes as a remote
+component.
+
+```yaml
+components:
+  kubernetes:
+    cert-manager-patch:
+      provision:
+        targets:
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "kustomize/overlays/{{ .vars.environment }}/kustomization.yaml"
+            commit:
+              message: "Render manifests for {{ .vars.environment }}"
+      manifests:
+        - apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Component
+          patches:
+            - target:
+                kind: ClusterIssuer
+                name: letsencrypt-dns
+              patch: |
+                - op: add
+                  path: /spec/acme/solvers
+                  value:
+                    - dns01:
+                        cnameStrategy: Follow
+                        route53:
+                          region: "{{ .vars.aws_region }}"
+                          hostedZoneID: "{{ atmos.Resolve \"!terraform.state route53 public_zone_id\" }}"
+```
+
+```shell
+atmos kubernetes deploy cert-manager-patch -s plat-ue2-dev --target=deployment-repo
+```
+
+Two things make this work that are easy to miss:
+
+- **No `split` is set.** The `path` ends in `kustomization.yaml`, so Atmos
+  infers `split: false` and writes it as a single file rather than a directory
+  by that name — see [File vs. directory delivery](/cli/commands/kubernetes/deploy#file-vs-directory-delivery-split).
+- **No `metadata.name` is needed on the `Component` object.** Kustomize's own
+  `Kustomization`/`Component` objects are not Kubernetes API resources — they
+  are local input to the `kustomize` build tool — and Kustomize does not
+  require a name on them. Atmos recognizes these two kinds specifically and
+  does not require `metadata.name` for them; see
+  [`atmos kubernetes validate`](/cli/commands/kubernetes/validate#kustomize-config-objects)
+  for details, including the `validate: false` escape hatch for other cases.
+
+The real Kustomize overlay then includes the generated file as a remote
+component:
+
+```yaml
+# kustomize/overlays/prod/kustomization.yaml (hand-maintained, in the same repo)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+components:
+  - github.com/acme/deployments//kustomize/overlays/prod?ref=main
+```
+
 ## Auth
 
 Kubernetes operations use the kubeconfig and client configuration visible to
