@@ -166,7 +166,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return "", ctxErr
+			return "", releaseOperationError("upgrade", spec, errors.Join(ctxErr, err))
 		}
 		return "", releaseOperationError("upgrade", spec, err)
 	}

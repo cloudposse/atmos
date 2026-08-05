@@ -201,6 +201,7 @@ func TestApplyReleaseUsesLifecycleTimeoutAndWaitContext(t *testing.T) {
 	elapsed := time.Since(started)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
 	assert.Equal(t, releaseOperationUpgrade, result.Operation)
 	assert.Less(t, elapsed, time.Second, "upgrade must return at the lifecycle deadline")
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
