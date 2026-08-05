@@ -9,6 +9,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// gitRootResolver resolves the Git repository root for a "!repo-root" style tag.
+// Overridden in tests to force the error path in applyGitRootBasePath, since
+// u.ProcessTagGitRoot's own default-value fallback otherwise swallows every
+// underlying git-detection failure when called with a non-empty default.
+var gitRootResolver = u.ProcessTagGitRoot
+
 // applyGitRootBasePath automatically sets the base path to the Git repository root
 // when base_path is empty or set to the default value.
 //
@@ -56,7 +62,7 @@ func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	// Resolve git root.
-	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
+	gitRoot, err := gitRootResolver("!repo-root .")
 	if err != nil {
 		log.Trace("Git root detection failed", "error", err)
 		return err
