@@ -56,9 +56,10 @@ type AzureCredentials struct {
 
 // Azure credential auth methods (values of AzureCredentials.AuthMethod).
 const (
-	AzureAuthMethodCLI        = "cli"
-	AzureAuthMethodDeviceCode = "device_code"
-	AzureAuthMethodOIDC       = "oidc"
+	AzureAuthMethodCLI         = "cli"
+	AzureAuthMethodDeviceCode  = "device_code"
+	AzureAuthMethodInteractive = "interactive"
+	AzureAuthMethodOIDC        = "oidc"
 )
 
 // IsExpired returns true if the credentials are expired.

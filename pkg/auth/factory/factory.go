@@ -110,6 +110,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return azureProviders.NewCLIProvider(name, config)
 	case "azure/device-code":
 		return azureProviders.NewDeviceCodeProvider(name, config)
+	case "azure/interactive":
+		return azureProviders.NewInteractiveProvider(name, config)
 	case "azure/oidc":
 		return azureProviders.NewOIDCProvider(name, config)
 	case "github/oidc":
