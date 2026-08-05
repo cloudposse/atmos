@@ -37,12 +37,12 @@ func TestCommandProviderMetadata(t *testing.T) {
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
+	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	for _, name := range []string{"target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds"} {
+	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds"} {
 		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
 	}
 	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
@@ -57,7 +57,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, templateCmd.Flag("wait"))
 
 	deleteCmd := newOperationCommand("delete", "Delete")
-	for _, name := range []string{"wait", "timeout", "no-hooks"} {
+	for _, name := range []string{"namespace", "wait", "timeout", "no-hooks"} {
 		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
 	}
 	assert.Nil(t, deleteCmd.Flag("on-failure"))
@@ -86,6 +86,7 @@ func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
 
 func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"namespace":          "incident-ns",
 		"on-failure":         "rollback",
 		"cleanup-on-failure": "true",
 		"wait":               "legacy",
@@ -97,6 +98,7 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	})
 
 	actual := getOperationFlags(cmd)
+	assert.Equal(t, "incident-ns", actual["namespace"])
 	assert.Equal(t, "rollback", actual[cfg.HelmOnFailureSectionName])
 	assert.Equal(t, true, actual[cfg.HelmCleanupOnFailureSectionName])
 	assert.Equal(t, "legacy", actual[cfg.HelmWaitStrategySectionName])
@@ -107,6 +109,7 @@ func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
 	assert.Equal(t, "skip", actual[cfg.HelmCRDsSectionName])
 
 	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	assert.NotContains(t, defaults, "namespace")
 	for _, key := range []string{
 		cfg.HelmOnFailureSectionName,
 		cfg.HelmCleanupOnFailureSectionName,

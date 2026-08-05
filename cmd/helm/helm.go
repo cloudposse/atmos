@@ -126,6 +126,7 @@ func newOperationCommand(name, short string) *cobra.Command {
 // command: the shared selection/affected flags plus operation-specific output and target flags.
 func operationFlagOptions(name string) []flags.Option {
 	options := []flags.Option{
+		flags.WithStringFlag("namespace", "n", "", "Override the component's target Kubernetes namespace."),
 		flags.WithBoolFlag("all", "", false, "Process all Helm components in dependency order."),
 		flags.WithBoolFlag("affected", "", false, "Process affected Helm components in dependency order."),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
@@ -296,6 +297,9 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 	}
 	if splitFlag := cmd.Flag("split"); splitFlag != nil {
 		result["split"] = splitFlag.Value.String() == valueTrue
+	}
+	if flag := cmd.Flag("namespace"); flag != nil && flag.Changed {
+		result["namespace"] = flag.Value.String()
 	}
 	addLifecycleOperationFlags(cmd, result)
 	return result

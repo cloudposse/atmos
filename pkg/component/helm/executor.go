@@ -162,6 +162,9 @@ func runWithHooks(
 	if spec.ReleaseName == "" {
 		return errUtils.ErrHelmReleaseNameRequired
 	}
+	if namespace, ok := ctx.Flags["namespace"].(string); ok && namespace != "" {
+		spec.Namespace = namespace
+	}
 	if operation == OperationApply {
 		spec.LifecycleFlags = ctx.Flags
 	}

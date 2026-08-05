@@ -158,6 +158,16 @@ func TestResolveReleaseNameAndNamespace(t *testing.T) {
 	assert.Equal(t, "prod", resolveNamespace(map[string]any{"namespace": "prod"}))
 }
 
+func TestNewSettingsForNamespaceOverridesKubeconfigDefault(t *testing.T) {
+	settings := newSettingsForNamespace("component-ns")
+	assert.Equal(t, "component-ns", settings.Namespace())
+
+	namespace, overridden, err := settings.RESTClientGetter().ToRawKubeConfigLoader().Namespace()
+	require.NoError(t, err)
+	assert.True(t, overridden)
+	assert.Equal(t, "component-ns", namespace)
+}
+
 func TestBuildValues_MergeAndFiles(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	dir := t.TempDir()

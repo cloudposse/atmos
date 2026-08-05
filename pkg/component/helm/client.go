@@ -41,7 +41,7 @@ const (
 // The RESTClientGetter resolves credentials from the ambient KUBECONFIG, which
 // the toolchain/auth environment configures before execution.
 var newActionContext = func(namespace string) (*actionContext, error) {
-	settings := newSettings()
+	settings := newSettingsForNamespace(namespace)
 
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
