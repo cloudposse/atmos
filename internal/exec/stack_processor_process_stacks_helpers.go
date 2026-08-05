@@ -27,6 +27,7 @@ type ComponentProcessorOptions struct {
 	// Global configurations.
 	GlobalVars         map[string]any
 	GlobalSettings     map[string]any
+	GlobalPro          map[string]any
 	GlobalEnv          map[string]any
 	GlobalAuth         map[string]any
 	GlobalSecrets      map[string]any
@@ -60,8 +61,10 @@ type ComponentProcessorOptions struct {
 
 // ComponentProcessorResult contains the processed component data.
 type ComponentProcessorResult struct {
-	ComponentVars         map[string]any
-	ComponentSettings     map[string]any
+	ComponentVars     map[string]any
+	ComponentSettings map[string]any
+	// ComponentPro holds the component-level `pro:` declaration section.
+	ComponentPro          map[string]any
 	ComponentEnv          map[string]any
 	ComponentMetadata     map[string]any
 	ComponentDependencies map[string]any
@@ -79,21 +82,25 @@ type ComponentProcessorResult struct {
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
-	ComponentOverridesEnv      map[string]any
-	ComponentOverridesAuth     map[string]any
-	ComponentOverridesCommand  string
-	BaseComponentName          string
-	BaseComponentVars          map[string]any
-	BaseComponentSettings      map[string]any
-	BaseComponentEnv           map[string]any
-	BaseComponentAuth          map[string]any
-	BaseComponentMetadata      map[string]any
-	BaseComponentDependencies  map[string]any
-	BaseComponentLocals        map[string]any // Base component locals for inheritance.
-	BaseComponentCommand       string
-	BaseComponentProvider      string
-	BaseComponentPaths         any
-	BaseComponentManifests     any
+	// ComponentOverridesPro holds the `pro:` section from the component's `overrides:` block.
+	ComponentOverridesPro     map[string]any
+	ComponentOverridesEnv     map[string]any
+	ComponentOverridesAuth    map[string]any
+	ComponentOverridesCommand string
+	BaseComponentName         string
+	BaseComponentVars         map[string]any
+	BaseComponentSettings     map[string]any
+	// BaseComponentPro holds the `pro:` section inherited from base components.
+	BaseComponentPro          map[string]any
+	BaseComponentEnv          map[string]any
+	BaseComponentAuth         map[string]any
+	BaseComponentMetadata     map[string]any
+	BaseComponentDependencies map[string]any
+	BaseComponentLocals       map[string]any // Base component locals for inheritance.
+	BaseComponentCommand      string
+	BaseComponentProvider     string
+	BaseComponentPaths        any
+	BaseComponentManifests    any
 	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any

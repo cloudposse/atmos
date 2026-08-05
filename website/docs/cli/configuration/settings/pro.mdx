@@ -29,6 +29,15 @@ Atmos Pro provides centralized management capabilities for teams using Atmos at 
 
 ## Configuration
 
+`atmos pro` is a top-level CLI command group, so its connection config lives at the top-level
+`pro:` key in `atmos.yaml` — a sibling of `auth:`, `docs:`, and `ci:`.
+
+<Note>
+`settings.pro` is a **deprecated alias** for the same config. Atmos still reads it, resolving
+each field independently: a field set at the top level always wins; a field only set under
+`settings.pro` still falls back to that value. New configs should use the top-level `pro:` form.
+</Note>
+
 The only required setting is your `workspace_id`. All other settings have sensible defaults and can be left unset.
 
 <Tabs>
@@ -36,9 +45,8 @@ The only required setting is your `workspace_id`. All other settings have sensib
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    workspace_id: "your-workspace-id"
+pro:
+  workspace_id: "your-workspace-id"
 ```
 </File>
 
@@ -49,15 +57,17 @@ Override defaults only if needed. All fields shown below are optional except `wo
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    base_url: "https://app.cloudposse.com"
-    endpoint: "api/v1"
-    workspace_id: "your-workspace-id"
-    max_payload_bytes: 4194304
-    github_oidc:
-      request_url: ""
-      request_token: ""
+pro:
+  base_url: "https://app.cloudposse.com"
+  endpoint: "api/v1"
+  workspace_id: "your-workspace-id"
+  max_payload_bytes: 4194304
+  github_oidc:
+    request_url: ""
+    request_token: ""
+  git_sts:
+    git_config_mode: "env"
+    revoke_on_exit: true
 ```
 </File>
 
@@ -67,28 +77,7 @@ settings:
 ## Configuration Reference
 
 <dl>
-  <dt>`settings.pro.enabled`</dt>
-  <dd>
-    Master switch for Atmos Pro on a component or stack. When `atmos list instances --upload`
-    sends the inventory to Atmos Pro, this value controls whether the instance is tracked as
-    active or shown as disabled.
-
-    Atmos collapses an enabled hierarchy before upload, so an outer disable always wins:
-
-    ```
-    metadata.enabled  >  settings.pro.enabled  >  settings.pro.drift_detection.enabled
-    ```
-
-    Disabling a component with [`metadata.enabled: false`](/stacks/components/component-metadata#enabled)
-    forces `settings.pro.enabled` (and therefore `settings.pro.drift_detection.enabled`) off in the
-    uploaded payload — a disabled component is never dispatched for drift detection or workflow runs,
-    regardless of its `pro` settings.
-
-    - **Type:** `boolean`
-    - **Default:** `true` (when a `settings.pro` block is present)
-  </dd>
-
-  <dt>`settings.pro.base_url`</dt>
+  <dt>`pro.base_url`</dt>
   <dd>
     Base URL for the Atmos Pro API.
 
@@ -97,7 +86,7 @@ settings:
     - **Environment Variable:** `ATMOS_PRO_BASE_URL`
   </dd>
 
-  <dt>`settings.pro.endpoint`</dt>
+  <dt>`pro.endpoint`</dt>
   <dd>
     API endpoint path appended to the base URL.
 
@@ -106,7 +95,7 @@ settings:
     - **Environment Variable:** `ATMOS_PRO_ENDPOINT`
   </dd>
 
-  <dt>`settings.pro.workspace_id`</dt>
+  <dt>`pro.workspace_id`</dt>
   <dd>
     Atmos Pro workspace identifier. Required for authentication. This value is not a secret and is safe to commit to version control.
 
@@ -115,7 +104,7 @@ settings:
     - **Environment Variable:** `ATMOS_PRO_WORKSPACE_ID`
   </dd>
 
-  <dt>`settings.pro.token`</dt>
+  <dt>`pro.token`</dt>
   <dd>
     Bearer token for Atmos Pro API authentication. Atmos Pro does not issue API keys or personal access tokens — the only way to obtain a bearer token is by performing an OIDC token exchange against the Atmos Pro API. This is intended for advanced integrations outside of GitHub Actions.
 
@@ -124,7 +113,7 @@ settings:
     - **Environment Variable:** `ATMOS_PRO_TOKEN`
   </dd>
 
-  <dt>`settings.pro.max_payload_bytes`</dt>
+  <dt>`pro.max_payload_bytes`</dt>
   <dd>
     Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests with batch metadata for server-side reassembly.
 
@@ -132,18 +121,40 @@ settings:
     - **Default:** `4194304` (4 MB)
   </dd>
 
-  <dt>`settings.pro.github_oidc.request_url`</dt>
+  <dt>`pro.github_oidc.request_url`</dt>
   <dd>
     GitHub Actions OIDC token request URL. Automatically set in GitHub Actions via the `ACTIONS_ID_TOKEN_REQUEST_URL` environment variable.
 
     - **Type:** `string`
   </dd>
 
-  <dt>`settings.pro.github_oidc.request_token`</dt>
+  <dt>`pro.github_oidc.request_token`</dt>
   <dd>
     GitHub Actions OIDC request token. Automatically set in GitHub Actions via the `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variable.
 
     - **Type:** `string`
+  </dd>
+
+  <dt>`pro.git_sts.git_config_mode`</dt>
+  <dd>
+    Global default for how the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro) auth integration
+    delivers minted tokens to child `git` processes: `env` (default) injects inline
+    `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` rewrites; `file` writes a `0600` gitconfig and emits an
+    additive `include.path` so token values stay off the environment. Per-integration
+    `git_sts.git_config_mode` in an identity spec overrides this default.
+
+    - **Type:** `string`
+    - **Default:** `env`
+  </dd>
+
+  <dt>`pro.git_sts.revoke_on_exit`</dt>
+  <dd>
+    Global default for whether minted `github/sts` tokens are auto-revoked at command-end in CI.
+    Set `false` to keep credentials alive for a separate CI step. Per-integration
+    `git_sts.revoke_on_exit` in an identity spec overrides this default.
+
+    - **Type:** `boolean`
+    - **Default:** `true`
   </dd>
 </dl>
 
@@ -151,16 +162,16 @@ settings:
 
 <dl>
   <dt>`ATMOS_PRO_BASE_URL`</dt>
-  <dd>Override the Atmos Pro API base URL. Maps to `settings.pro.base_url`.</dd>
+  <dd>Override the Atmos Pro API base URL. Maps to `pro.base_url`.</dd>
 
   <dt>`ATMOS_PRO_ENDPOINT`</dt>
-  <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
+  <dd>Override the API endpoint path. Maps to `pro.endpoint`.</dd>
 
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
-  <dd>Workspace identifier for authentication. Not a secret. Maps to `settings.pro.workspace_id`.</dd>
+  <dd>Workspace identifier for authentication. Not a secret. Maps to `pro.workspace_id`.</dd>
 
   <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `settings.pro.token`.</dd>
+  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `pro.token`.</dd>
 
   <dt>`ATMOS_PRO_RUN_ID`</dt>
   <dd>CI/CD run identifier. Set automatically in CI environments for tracking.</dd>
@@ -174,12 +185,11 @@ For GitHub Actions workflows, use OIDC token exchange for secure, token-less aut
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    workspace_id: "your-workspace-id"
-    github_oidc:
-      request_url: !env ACTIONS_ID_TOKEN_REQUEST_URL
-      request_token: !env ACTIONS_ID_TOKEN_REQUEST_TOKEN
+pro:
+  workspace_id: "your-workspace-id"
+  github_oidc:
+    request_url: !env ACTIONS_ID_TOKEN_REQUEST_URL
+    request_token: !env ACTIONS_ID_TOKEN_REQUEST_TOKEN
 ```
 </File>
 
@@ -215,9 +225,8 @@ outside of GitHub Actions, such as custom CI/CD pipelines that handle OIDC flows
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    token: !env ATMOS_PRO_TOKEN
+pro:
+  token: !env ATMOS_PRO_TOKEN
 ```
 </File>
 
@@ -233,10 +242,17 @@ atmos pro lock vpc -s prod/us-east-1
 ## Event Integration
 
 Atmos Pro reacts to GitHub webhook events on your repositories and dispatches
-workflows on a per-stack, per-event basis. The contract is defined under
-`settings.pro` on each stack (or component): for every event activity you want
-Atmos Pro to handle, declare which workflow file to dispatch and which inputs
-to pass.
+workflows on a per-stack, per-event basis. The contract is defined under the
+top-level `pro:` section on each stack (or component) — a sibling of `vars:`,
+`metadata:`, and `settings:` — for every event activity you want Atmos Pro to
+handle, declare which workflow file to dispatch and which inputs to pass.
+
+<Note>
+`settings.pro` is a **deprecated alias** for this same per-component/stack config. An explicit
+`pro:` block takes whole-block precedence over `settings.pro:` when both are set on the same
+component (they are not merged together field-by-field). New stack configs should use the
+top-level `pro:` form.
+</Note>
 
 The CLI does not interpret these blocks — they are passed through unchanged in
 the payload uploaded by `atmos describe affected --upload` (and `atmos list
@@ -247,20 +263,20 @@ correct SHA.
 ### Supported events
 
 <dl>
-  <dt>`settings.pro.pull_request`</dt>
+  <dt>`pro.pull_request`</dt>
   <dd>Plan and apply workflows for pull-request lifecycle activities (`opened`, `synchronize`, `reopened`, `merged`).</dd>
 
-  <dt>`settings.pro.release`</dt>
+  <dt>`pro.release`</dt>
   <dd>Workflows triggered when a GitHub release is published.</dd>
 
-  <dt>`settings.pro.drift_detection`</dt>
+  <dt>`pro.drift_detection`</dt>
   <dd>Per-stack opt-in for drift detection. Atmos Pro periodically inspects enabled stacks and surfaces drift.</dd>
 
-  <dt>`settings.pro.merge_group`</dt>
+  <dt>`pro.merge_group`</dt>
   <dd>Workflows for GitHub merge-queue checks. New in this release — see [Merge Queue Support](#merge-queue-support).</dd>
 </dl>
 
-### `settings.pro.pull_request`
+### `pro.pull_request`
 
 Configure workflow dispatch for pull-request activities. Each activity maps a
 GitHub PR action to a list of workflows to dispatch. The `merged` activity is
@@ -269,99 +285,96 @@ and is the conventional place to wire your apply workflow.
 
 <File title="stacks/mixins/atmos-pro.yaml">
 ```yaml
-settings:
-  pro:
-    enabled: true
-    pull_request:
-      opened:
-        workflows:
-          atmos-terraform-plan.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
-      synchronize:
-        workflows:
-          atmos-terraform-plan.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
-      reopened:
-        workflows:
-          atmos-terraform-plan.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
-      # `merged` is synthesized from pull_request.closed{merged:true}.
-      merged:
-        workflows:
-          atmos-terraform-apply.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
+pro:
+  enabled: true
+  pull_request:
+    opened:
+      workflows:
+        atmos-terraform-plan.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
+    synchronize:
+      workflows:
+        atmos-terraform-plan.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
+    reopened:
+      workflows:
+        atmos-terraform-plan.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
+    # `merged` is synthesized from pull_request.closed{merged:true}.
+    merged:
+      workflows:
+        atmos-terraform-apply.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
 ```
 </File>
 
 <dl>
-  <dt>`settings.pro.pull_request.opened`</dt>
+  <dt>`pro.pull_request.opened`</dt>
   <dd>Activity fired when a pull request is opened.</dd>
 
-  <dt>`settings.pro.pull_request.synchronize`</dt>
+  <dt>`pro.pull_request.synchronize`</dt>
   <dd>Activity fired when new commits are pushed to a pull request. This is the canonical "plan on every push" trigger and is also the fallback target for merge-queue checks (see [Resolution order](#resolution-order)).</dd>
 
-  <dt>`settings.pro.pull_request.reopened`</dt>
+  <dt>`pro.pull_request.reopened`</dt>
   <dd>Activity fired when a closed pull request is reopened.</dd>
 
-  <dt>`settings.pro.pull_request.merged`</dt>
+  <dt>`pro.pull_request.merged`</dt>
   <dd>Activity fired when a pull request is closed with `merged: true`. This is the conventional place to wire the apply workflow. Apply continues to fire here even when the PR is merged through a merge queue.</dd>
 </dl>
 
-### `settings.pro.release`
+### `pro.release`
 
 Configure workflow dispatch for GitHub release activities.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    enabled: true
-    release:
-      published:
-        workflows:
-          atmos-terraform-apply.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
+pro:
+  enabled: true
+  release:
+    published:
+      workflows:
+        atmos-terraform-apply.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
 ```
 </File>
 
 <dl>
-  <dt>`settings.pro.release.published`</dt>
+  <dt>`pro.release.published`</dt>
   <dd>Activity fired when a GitHub release is published. Typically wired to an apply workflow scoped to a production stack.</dd>
 </dl>
 
-### `settings.pro.drift_detection`
+### `pro.drift_detection`
 
 Per-stack opt-in for Atmos Pro's drift detection. Configure once per stack
 (usually in `_defaults.yaml`) and override per environment as needed.
 
 <File title="stacks/deploy/_defaults.yaml">
 ```yaml
-settings:
-  pro:
+pro:
+  enabled: true
+  drift_detection:
     enabled: true
-    drift_detection:
-      enabled: true
 ```
 </File>
 
 <dl>
-  <dt>`settings.pro.drift_detection.enabled`</dt>
+  <dt>`pro.drift_detection.enabled`</dt>
   <dd>
     Enable Atmos Pro drift detection for this stack.
 
     Effective drift detection also requires the component to be effectively Pro-enabled. An outer
     [`metadata.enabled: false`](/stacks/components/component-metadata#enabled) or
-    `settings.pro.enabled: false` disables drift detection regardless of this value — Atmos
+    `pro.enabled: false` disables drift detection regardless of this value — Atmos
     collapses the hierarchy (`metadata.enabled` &gt; `pro.enabled` &gt; `drift_detection.enabled`)
     before upload so a disabled component is never dispatched for drift.
 
@@ -369,6 +382,16 @@ settings:
     - **Default:** `false`
   </dd>
 </dl>
+
+### CI PR-comment badge
+
+Native CI's `plan`/`apply`/`test` PR comments include a Pro status badge in the same row as the
+result badges, reflecting this same effective enabled state:
+
+- **Green (`PRO-ENABLED`)** — the component is effectively Pro-enabled (`metadata.enabled` and
+  `pro.enabled` both true or defaulted). Links to your [Atmos Pro dashboard](https://atmos-pro.com/dashboard).
+- **Silver (`PRO-DISABLED`)** — the component is not Pro-enabled. Links to
+  [atmos-pro.com](https://atmos-pro.com).
 
 ### Merge Queue Support
 
@@ -386,7 +409,7 @@ Atmos Pro reports check status on GitHub merge-queue synthetic commits the same 
 2. **PR added to the merge queue** → GitHub creates a synthetic merge commit on `gh-readonly-queue/<base>/pr-<N>-<sha>`. Atmos Pro creates a check run on that synthetic SHA and dispatches the workflow resolved from `merge_group` (see below).
 3. **Queue ultimately merges the PR** → GitHub fires `pull_request.closed` with `merged: true` on the originating PR. The existing `pull_request.merged.workflows` (apply) flow runs unchanged. Apply does **not** fire on `merge_group` events.
 
-#### Configure `settings.pro.merge_group`
+#### Configure `pro.merge_group`
 
 To get the right outcome on merge-queue synthetic commits, declare a
 `merge_group` block alongside `pull_request` and `release` and point it at the
@@ -402,30 +425,29 @@ required approvals, etc.):
 
 <File title="stacks/mixins/atmos-pro.yaml">
 ```yaml
-settings:
-  pro:
-    enabled: true
-    pull_request:
-      synchronize:
-        workflows:
-          atmos-terraform-plan.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
-    merge_group:
-      checks_requested:
-        workflows:
-          atmos-terraform-plan.yaml:
-            inputs:
-              component: "{{ .atmos_component }}"
-              stack: "{{ .atmos_stack }}"
-              # Example: stricter inputs in the queue.
-              fail_on_drift: "true"
+pro:
+  enabled: true
+  pull_request:
+    synchronize:
+      workflows:
+        atmos-terraform-plan.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
+  merge_group:
+    checks_requested:
+      workflows:
+        atmos-terraform-plan.yaml:
+          inputs:
+            component: "{{ .atmos_component }}"
+            stack: "{{ .atmos_stack }}"
+            # Example: stricter inputs in the queue.
+            fail_on_drift: "true"
 ```
 </File>
 
 <dl>
-  <dt>`settings.pro.merge_group.checks_requested`</dt>
+  <dt>`pro.merge_group.checks_requested`</dt>
   <dd>
     Activity fired when GitHub requests checks on a merge-queue synthetic
     commit (the only meaningful merge_group activity for Atmos Pro). The
@@ -438,9 +460,9 @@ settings:
 When Atmos Pro receives a merge-queue trigger for a stack, it resolves the
 workflow to dispatch in this order:
 
-1. `settings.pro.merge_group.checks_requested.workflows` if defined — **this
+1. `pro.merge_group.checks_requested.workflows` if defined — **this
    is the recommended path.**
-2. Otherwise, `settings.pro.pull_request.synchronize.workflows` is used as a
+2. Otherwise, `pro.pull_request.synchronize.workflows` is used as a
    backstop so existing customers do not regress when a queue is enabled.
    Because workflow filenames are arbitrary, this backstop can dispatch a
    workflow that is not appropriate for the queue (e.g. an apply step). Treat
@@ -462,8 +484,9 @@ workflow to dispatch in this order:
 #### Migration note
 
 If you are enabling GitHub merge queue on a repository that already uses
-Atmos Pro, the right migration is to add a `settings.pro.merge_group` block
-to every stack mixin that already has `settings.pro.pull_request`. In most
+Atmos Pro, the right migration is to add a `pro.merge_group` block
+(or `settings.pro.merge_group` if the repository is still on the deprecated form)
+to every stack mixin that already has `pull_request`. In most
 cases the queue should dispatch the same plan workflow as
 `pull_request.synchronize` — declare it explicitly so the queue's check
 outcome is deterministic and reviewable from your stack config rather than

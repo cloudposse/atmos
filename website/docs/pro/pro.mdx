@@ -48,9 +48,8 @@ and gives you the coordination layer on top:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    workspace_id: "your-workspace-id"
+pro:
+  workspace_id: "your-workspace-id"
 ```
 </File>
 
@@ -96,9 +95,8 @@ workspace. This value is not a secret and is safe to commit to version control.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  pro:
-    workspace_id: "your-workspace-id"
+pro:
+  workspace_id: "your-workspace-id"
 ```
 </File>
 
@@ -176,16 +174,16 @@ atmos terraform plan vpc -s prod-use1 --upload-status
 
 <dl>
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
-  <dd>Workspace identifier for OIDC authentication. Not a secret. Maps to `settings.pro.workspace_id`.</dd>
+  <dd>Workspace identifier for OIDC authentication. Not a secret. Maps to `pro.workspace_id`.</dd>
 
   <dt>`ATMOS_PRO_BASE_URL`</dt>
-  <dd>Override the Atmos Pro API base URL. Maps to `settings.pro.base_url`.</dd>
+  <dd>Override the Atmos Pro API base URL. Maps to `pro.base_url`.</dd>
 
   <dt>`ATMOS_PRO_ENDPOINT`</dt>
-  <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
+  <dd>Override the API endpoint path. Maps to `pro.endpoint`.</dd>
 
   <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>Internal runtime token from OIDC exchange (advanced/internal). Do not set this manually; configure `settings.pro.workspace_id` and GitHub Actions `id-token: write` instead.</dd>
+  <dd>Internal runtime token from OIDC exchange (advanced/internal). Do not set this manually; configure `pro.workspace_id` and GitHub Actions `id-token: write` instead.</dd>
 </dl>
 
 ## Troubleshooting
@@ -207,6 +205,6 @@ If the upload succeeds authentication but returns a 403:
 
 ## Related
 
-- [Pro Configuration](/cli/configuration/settings/pro) - Full configuration reference for `settings.pro`
+- [Pro Configuration](/cli/configuration/settings/pro) - Full configuration reference for `pro`
 - [Auth](/stacks/auth) - Configure OIDC authentication
 - [Native CI](/ci) - CI/CD integration for GitHub Actions

@@ -185,23 +185,23 @@ func NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken string) *AtmosProAP
 
 // NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
 func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*AtmosProAPIClient, error) {
-	baseURL := atmosConfig.Settings.Pro.BaseURL
+	baseURL := atmosConfig.Pro.BaseURL
 
 	if baseURL == "" {
 		baseURL = cfg.AtmosProDefaultBaseUrl
 	}
 	log.Debug("Using baseURL", "baseURL", baseURL)
 
-	baseAPIEndpoint := atmosConfig.Settings.Pro.Endpoint
+	baseAPIEndpoint := atmosConfig.Pro.Endpoint
 	if baseAPIEndpoint == "" {
 		baseAPIEndpoint = cfg.AtmosProDefaultEndpoint
 	}
 	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
-	maxPayloadBytes := atmosConfig.Settings.Pro.MaxPayloadBytes
+	maxPayloadBytes := atmosConfig.Pro.MaxPayloadBytes
 
 	// First, check if the API key is set via environment variable
-	apiToken := atmosConfig.Settings.Pro.Token
+	apiToken := atmosConfig.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
 		client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
@@ -210,14 +210,14 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
-	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
+	oidcToken, err := getGitHubOIDCToken(atmosConfig.Pro.GithubOIDC)
 	if err != nil {
 		log.Debug("Error while getting GitHub OIDC token.", "error", err)
 		return nil, wrapErr(errUtils.ErrFailedToGetGitHubOIDCToken, err)
 	}
 
 	// Get workspace ID from environment
-	workspaceID := atmosConfig.Settings.Pro.WorkspaceID
+	workspaceID := atmosConfig.Pro.WorkspaceID
 	if workspaceID == "" {
 		return nil, fmt.Errorf("%w: environment variable: %s", errUtils.ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
@@ -264,12 +264,12 @@ func (c *AtmosProAPIClient) RefreshToken() error {
 		return nil
 	}
 
-	oidcToken, err := getGitHubOIDCToken(c.atmosConfig.Settings.Pro.GithubOIDC)
+	oidcToken, err := getGitHubOIDCToken(c.atmosConfig.Pro.GithubOIDC)
 	if err != nil {
 		return wrapErr(errUtils.ErrTokenRefreshFailed, err)
 	}
 
-	workspaceID := c.atmosConfig.Settings.Pro.WorkspaceID
+	workspaceID := c.atmosConfig.Pro.WorkspaceID
 	newToken, err := exchangeOIDCTokenForAtmosToken(c.BaseURL, c.BaseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
 		return wrapErr(errUtils.ErrTokenRefreshFailed, err)

@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-prod-mycomponent)
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-prod-mycomponent)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-prod-mycomponent" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>
@@ -41,3 +41,5 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 > The root module does not declare a variable named "stage".
 > To silence these warnings, use TF_VAR_... environment variables.
 > ```
+
+<sub>__Atmos Pro__ is disabled.</sub>

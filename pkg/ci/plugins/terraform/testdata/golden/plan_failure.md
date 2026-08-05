@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#result-dev-broken)
+[![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#result-dev-broken)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-dev-broken" />:warning: Error summary</summary>
 
 <br/>
@@ -26,3 +26,5 @@ Missing required argument
 
 ```
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

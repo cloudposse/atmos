@@ -16,6 +16,9 @@
 {{- if gt $test.Skip 0 }} [![skipped](https://shields.io/badge/SKIPPED-{{$test.Skip}}-inactive?style=for-the-badge)](#user-content-result-{{$target}}){{- end }}
 {{- else }} [![failed](https://shields.io/badge/TESTS-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
+{{- if .ProEnabled }} [![pro](https://shields.io/badge/PRO-ENABLED-success?style=for-the-badge)](https://atmos-pro.com/dashboard)
+{{- else }} [![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
+{{- end }}
 
 <a id="result-{{$target}}"></a>
 
@@ -84,3 +87,5 @@ atmos terraform test {{.Component}} -s {{.Stack}}
 ```
 
 </details>
+
+<sub>__Atmos Pro__ is {{ if .ProEnabled }}enabled{{ else }}disabled{{ end }}.</sub>

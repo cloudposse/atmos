@@ -69,6 +69,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if src.BaseComponentPro != nil {
+		if dst.BaseComponentPro, err = m.DeepCopyMap(src.BaseComponentPro); err != nil {
+			return err
+		}
+	}
 	if src.BaseComponentEnv != nil {
 		if dst.BaseComponentEnv, err = m.DeepCopyMap(src.BaseComponentEnv); err != nil {
 			return err

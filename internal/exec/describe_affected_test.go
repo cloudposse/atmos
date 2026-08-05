@@ -2476,12 +2476,10 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 	var gotFormat, gotFile string
 	var uploadReq dtos.UploadAffectedStacksRequest
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			Pro: schema.ProSettings{
-				BaseURL:  "http://placeholder.invalid",
-				Endpoint: "api/v1",
-				Token:    "test-token",
-			},
+		Pro: schema.ProSettings{
+			BaseURL:  "http://placeholder.invalid",
+			Endpoint: "api/v1",
+			Token:    "test-token",
 		},
 	}
 
@@ -2496,7 +2494,7 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 		require.NoError(t, err)
 	}))
 	defer server.Close()
-	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Pro.BaseURL = server.URL
 
 	d := describeAffectedExec{
 		atmosConfig: atmosConfig,

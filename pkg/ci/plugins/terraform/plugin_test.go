@@ -80,6 +80,79 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	assert.True(t, ctx.HasChanges())
 }
 
+func TestPlugin_BuildTemplateContext_ProEnabled(t *testing.T) {
+	p := &Plugin{}
+
+	t.Run("top-level pro: section enabled", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev",
+			ComponentSection: map[string]any{
+				"pro": map[string]any{"enabled": true},
+			},
+		}
+		result, err := p.buildTemplateContext(info, nil, "", "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+		assert.True(t, ctx.ProEnabled)
+	})
+
+	t.Run("legacy settings.pro: alias enabled when top-level pro: absent", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:         "vpc",
+			Stack:                    "dev",
+			ComponentSettingsSection: map[string]any{"pro": map[string]any{"enabled": true}},
+		}
+		result, err := p.buildTemplateContext(info, nil, "", "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+		assert.True(t, ctx.ProEnabled)
+	})
+
+	t.Run("top-level pro: wins over legacy settings.pro: when both set", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev",
+			ComponentSection: map[string]any{
+				"pro": map[string]any{"enabled": false},
+			},
+			ComponentSettingsSection: map[string]any{"pro": map[string]any{"enabled": true}},
+		}
+		result, err := p.buildTemplateContext(info, nil, "", "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+		assert.False(t, ctx.ProEnabled, "top-level pro: must win outright")
+	})
+
+	t.Run("metadata.enabled false overrides pro.enabled true", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev",
+			ComponentSection: map[string]any{
+				"pro": map[string]any{"enabled": true},
+			},
+			ComponentMetadataSection: map[string]any{"enabled": false},
+		}
+		result, err := p.buildTemplateContext(info, nil, "", "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+		assert.False(t, ctx.ProEnabled)
+	})
+
+	t.Run("no pro config is disabled", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"}
+		result, err := p.buildTemplateContext(info, nil, "", "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+		assert.False(t, ctx.ProEnabled)
+	})
+}
+
 func TestPlugin_BuildTemplateContext_Test(t *testing.T) {
 	p := &Plugin{}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "local"}

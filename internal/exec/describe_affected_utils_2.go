@@ -54,6 +54,14 @@ func appendToAffected(
 		}
 	}
 
+	if includeSettings {
+		if i, ok2 := (*componentSection)[cfg.ProSectionName]; ok2 {
+			if proSection, ok3 := i.(map[string]any); ok3 {
+				affected.Pro = proSection
+			}
+		}
+	}
+
 	if affected.ComponentType == cfg.TerraformComponentType {
 		varSection := map[string]any{}
 

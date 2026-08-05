@@ -54,6 +54,7 @@ var manifestSections = map[string]sectionScope{
 	"vars":                      {topLevel: true, component: true},
 	"env":                       {topLevel: true, component: true},
 	"settings":                  {topLevel: true, component: true},
+	"pro":                       {topLevel: true, component: true},
 	"locals":                    {topLevel: true, component: true},
 	"hooks":                     {topLevel: true, component: true},
 	"test":                      {component: true},

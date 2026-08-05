@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#create-prod-bucket)
+[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#create-prod-bucket)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
 
 <br/>
@@ -42,3 +42,5 @@ Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 | `secret_key` | *(sensitive)* |
 
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

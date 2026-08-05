@@ -145,22 +145,25 @@ type AtmosConfiguration struct {
 	// SecretsAuth carries the auth-context resolver and effective default identity for cloud-KMS
 	// SOPS providers (sops/aws-kms, sops/gcp-kms, sops/azure-kv). It is transient (never serialized)
 	// and populated alongside the store auth resolver in the `atmos secret` and terraform code paths.
-	SecretsAuth     *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
-	CliConfigPath   string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import          []string                  `yaml:"import" json:"import" mapstructure:"import"`
-	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
-	Compositions    map[string]Composition    `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
-	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
-	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
-	TrackProvenance bool                      `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
-	Toolchain       Toolchain                 `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
-	Git             GitConfig                 `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
-	Devcontainer    map[string]any            `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
-	Profiles        ProfilesConfig            `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
-	Metadata        ConfigMetadata            `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	SecretsAuth   *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
+	CliConfigPath string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import        []string                  `yaml:"import" json:"import" mapstructure:"import"`
+	Docs          Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth          AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	// Pro is the Atmos Pro CLI connection config. Settings.Pro is a deprecated alias
+	// resolved into this field at config-load time (pkg/config/load.go resolveProSettings).
+	Pro             ProSettings            `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
+	Container       ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions    map[string]Composition `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
+	Env             map[string]string      `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps      `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Profiler        profiler.Config        `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain       Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git             GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Devcontainer    map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles        ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
@@ -518,8 +521,8 @@ type AtmosSettings struct {
 	InjectGitlabToken    bool             `yaml:"inject_gitlab_token,omitempty" mapstructure:"inject_gitlab_token"`
 	AtmosGitlabToken     string           `yaml:"atmos_gitlab_token,omitempty" mapstructure:"atmos_gitlab_token"`
 	GitlabToken          string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
-	// Atmos Pro integration settings
-	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
+	// Deprecated: this was moved to top-level Atmos config
+	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro" jsonschema_extras:"deprecated=true,x-atmos-replacement=pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 	// Provision contains global defaults for provisioning.
@@ -1856,13 +1859,17 @@ type Affected struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
-	Deleted              bool                `yaml:"deleted,omitempty" json:"deleted,omitempty" mapstructure:"deleted"`
-	DeletionType         string              `yaml:"deletion_type,omitempty" json:"deletion_type,omitempty" mapstructure:"deletion_type"`
+	// Pro holds the resolved top-level `pro:` section (settings.pro is a deprecated alias).
+	Pro          AtmosSectionMapType `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
+	Deleted      bool                `yaml:"deleted,omitempty" json:"deleted,omitempty" mapstructure:"deleted"`
+	DeletionType string              `yaml:"deletion_type,omitempty" json:"deletion_type,omitempty" mapstructure:"deletion_type"`
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars              AtmosSectionMapType
-	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentVars     AtmosSectionMapType
+	BaseComponentSettings AtmosSectionMapType
+	// BaseComponentPro holds the `pro:` section inherited from base components.
+	BaseComponentPro               AtmosSectionMapType
 	BaseComponentEnv               AtmosSectionMapType
 	BaseComponentAuth              AtmosSectionMapType
 	BaseComponentSecrets           AtmosSectionMapType
@@ -1948,6 +1955,8 @@ type Dependent struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	// Pro holds the resolved top-level `pro:` section (settings.pro is a deprecated alias).
+	Pro AtmosSectionMapType `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 }
 
 // Settings

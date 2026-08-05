@@ -48,14 +48,14 @@ func TestAtmosProNudge(t *testing.T) {
 		{
 			name: "workspace id configured, atmos-pro not added, nudges",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{Pro: schema.ProSettings{WorkspaceID: "ws-123"}},
+				Pro: schema.ProSettings{WorkspaceID: "ws-123"},
 			},
 			wantEmpty: false,
 		},
 		{
 			name: "workspace id configured, atmos-pro already added by default name, no nudge",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{Pro: schema.ProSettings{WorkspaceID: "ws-123"}},
+				Pro: schema.ProSettings{WorkspaceID: "ws-123"},
 				MCP: schema.MCPSettings{Servers: map[string]schema.MCPServerConfig{
 					"atmos-pro": {Type: schema.MCPTransportHTTP, URL: "https://atmos-pro.com/mcp"},
 				}},
@@ -65,7 +65,7 @@ func TestAtmosProNudge(t *testing.T) {
 		{
 			name: "workspace id configured, atmos-pro added under a renamed key, no nudge (matched by URL)",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{Pro: schema.ProSettings{WorkspaceID: "ws-123"}},
+				Pro: schema.ProSettings{WorkspaceID: "ws-123"},
 				MCP: schema.MCPSettings{Servers: map[string]schema.MCPServerConfig{
 					"my-pro-server": {Type: schema.MCPTransportHTTP, URL: "https://atmos-pro.com/mcp"},
 				}},

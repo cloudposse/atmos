@@ -18,6 +18,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	// Initialize base component data with capacity hints.
 	result.BaseComponentVars = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentSettings = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentPro = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentSecrets = make(map[string]any, componentSmallMapCapacity)
@@ -224,6 +225,7 @@ func processInheritedComponent(opts *ComponentProcessorOptions, result *Componen
 func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *ComponentProcessorResult, baseComponentConfig *schema.BaseComponentConfig, componentInheritanceChain *[]string) {
 	result.BaseComponentVars = baseComponentConfig.BaseComponentVars
 	result.BaseComponentSettings = baseComponentConfig.BaseComponentSettings
+	result.BaseComponentPro = baseComponentConfig.BaseComponentPro
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentSecrets = baseComponentConfig.BaseComponentSecrets

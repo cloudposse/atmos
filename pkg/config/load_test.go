@@ -1948,6 +1948,91 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_ProSettingsBackwardCompat(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    schema.ProSettings
+	}{
+		{
+			name: "legacy settings.pro only",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    workspace_id: legacy-ws\n" +
+				"    base_url: https://legacy.example.com\n",
+			want: schema.ProSettings{WorkspaceID: "legacy-ws", BaseURL: "https://legacy.example.com"},
+		},
+		{
+			name: "top-level pro only",
+			content: "base_path: .\n" +
+				"pro:\n" +
+				"  workspace_id: top-ws\n" +
+				"  base_url: https://top.example.com\n",
+			want: schema.ProSettings{WorkspaceID: "top-ws", BaseURL: "https://top.example.com"},
+		},
+		{
+			name: "both set, top-level wins",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    workspace_id: legacy-ws\n" +
+				"    base_url: https://legacy.example.com\n" +
+				"pro:\n" +
+				"  workspace_id: top-ws\n",
+			// base_url is only set on the legacy side, so it still falls back per-field.
+			want: schema.ProSettings{WorkspaceID: "top-ws", BaseURL: "https://legacy.example.com"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := createTestConfig(t, tempDir, tt.content)
+			configInfo := &schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: []string{configPath},
+			}
+			cfg, err := LoadConfig(configInfo)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want.WorkspaceID, cfg.Pro.WorkspaceID)
+			assert.Equal(t, tt.want.BaseURL, cfg.Pro.BaseURL)
+		})
+	}
+}
+
+func TestResolveProSettings(t *testing.T) {
+	t.Run("no legacy settings, top-level untouched", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{Pro: schema.ProSettings{WorkspaceID: "top-ws"}}
+		resolveProSettings(cfg)
+		assert.Equal(t, "top-ws", cfg.Pro.WorkspaceID)
+	})
+
+	t.Run("legacy only, falls back field by field", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
+				WorkspaceID: "legacy-ws",
+				Token:       "legacy-token",
+			}},
+		}
+		resolveProSettings(cfg)
+		assert.Equal(t, "legacy-ws", cfg.Pro.WorkspaceID)
+		assert.Equal(t, "legacy-token", cfg.Pro.Token)
+	})
+
+	t.Run("both set, top-level wins per field", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			Pro: schema.ProSettings{WorkspaceID: "top-ws"},
+			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
+				WorkspaceID: "legacy-ws",
+				Token:       "legacy-token",
+			}},
+		}
+		resolveProSettings(cfg)
+		assert.Equal(t, "top-ws", cfg.Pro.WorkspaceID, "top-level value must not be overwritten by the legacy fallback")
+		assert.Equal(t, "legacy-token", cfg.Pro.Token, "fields unset at top level still fall back to the legacy value")
+	})
+}
+
 func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
 	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS", "false")
 	tempDir := t.TempDir()

@@ -644,6 +644,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
+		"pro":          true,
 		"env":          true,
 		"backend":      true,
 		"metadata":     true,

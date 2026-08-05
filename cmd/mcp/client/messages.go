@@ -24,7 +24,7 @@ func noServersConfiguredMessage(mcpEnabled bool) string {
 // a renamed entry (via --name) doesn't trigger a false nudge. Returns "" when
 // there's nothing to suggest.
 func atmosProNudge(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.Settings.Pro.WorkspaceID == "" {
+	if atmosConfig.Pro.WorkspaceID == "" {
 		return ""
 	}
 	preset, ok := mcpconfig.ResolvePreset(mcpconfig.PresetAtmosPro)

@@ -13,7 +13,9 @@ import (
 //   - stack: Stack identification
 //   - included_in_dependents: Used in filtering logic
 //   - dependents: Nested stack processing (recursively stripped)
-//   - settings.pro: Workflow dispatch configuration
+//   - pro / settings.pro: Workflow dispatch configuration. settings.pro is a deprecated
+//     alias for the top-level pro: section; both are kept so Atmos Pro can apply the same
+//     new-wins-over-legacy precedence server-side (see pro.ResolveSection).
 //   - deleted: Marks components removed in HEAD.
 //   - deletion_type: Whether a component or entire stack was deleted.
 //
@@ -38,6 +40,7 @@ func stripAffected(a schema.Affected) schema.Affected {
 		IncludedInDependents: a.IncludedInDependents,
 		Dependents:           stripDependents(a.Dependents),
 		Settings:             stripSettings(a.Settings),
+		Pro:                  a.Pro,
 		Deleted:              a.Deleted,
 		DeletionType:         a.DeletionType,
 	}
@@ -61,6 +64,7 @@ func stripDependent(d schema.Dependent) schema.Dependent {
 		IncludedInDependents: d.IncludedInDependents,
 		Dependents:           stripDependents(d.Dependents),
 		Settings:             stripSettings(d.Settings),
+		Pro:                  d.Pro,
 	}
 }
 

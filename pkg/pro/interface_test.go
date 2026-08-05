@@ -15,12 +15,10 @@ func TestDefaultClientFactory_NewClient(t *testing.T) {
 	// Create config with Pro settings.
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
-		Settings: schema.AtmosSettings{
-			Pro: schema.ProSettings{
-				BaseURL:  "https://test.example.com",
-				Endpoint: "/api/v1",
-				Token:    "test-token",
-			},
+		Pro: schema.ProSettings{
+			BaseURL:  "https://test.example.com",
+			Endpoint: "/api/v1",
+			Token:    "test-token",
 		},
 	}
 
@@ -39,12 +37,10 @@ func TestDefaultClientFactory_NewClient_MissingToken(t *testing.T) {
 	// Create config without Pro token.
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
-		Settings: schema.AtmosSettings{
-			Pro: schema.ProSettings{
-				BaseURL:  "https://test.example.com",
-				Endpoint: "/api/v1",
-				// Token is empty.
-			},
+		Pro: schema.ProSettings{
+			BaseURL:  "https://test.example.com",
+			Endpoint: "/api/v1",
+			// Token is empty.
 		},
 	}
 

@@ -1,8 +1,11 @@
 DEBU Set logs-level=debug logs-file=/dev/stdout
+DEBU 'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 
 👽 Atmos test on darwin/arm64
 
+DEBU 'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+DEBU 'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Telemetry event enqueued

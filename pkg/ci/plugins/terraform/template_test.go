@@ -415,6 +415,91 @@ func TestTemplateRendering(t *testing.T) {
 				"- aws_instance.deleted",
 			},
 		},
+		// Pro badge scenarios.
+		{
+			name:         "plan with pro enabled shows green badge and enabled footer",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result:        &plugin.OutputResult{ExitCode: 0},
+				},
+				ProEnabled: true,
+			},
+			wantContains: []string{
+				"PRO-ENABLED-success",
+				"https://atmos-pro.com/dashboard",
+				"<sub>__Atmos Pro__ is enabled.</sub>",
+			},
+			wantNotContains: []string{
+				"PRO-DISABLED",
+				"is disabled.",
+			},
+		},
+		{
+			name:         "plan with pro disabled shows silver badge and disabled footer",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result:        &plugin.OutputResult{ExitCode: 0},
+				},
+				ProEnabled: false,
+			},
+			wantContains: []string{
+				"PRO-DISABLED-silver",
+				"https://atmos-pro.com",
+				"<sub>__Atmos Pro__ is disabled.</sub>",
+			},
+			wantNotContains: []string{
+				"PRO-ENABLED",
+				"is enabled.",
+				"/dashboard",
+			},
+		},
+		{
+			name:         "apply with pro enabled shows green badge and enabled footer",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "apply",
+					Result:        &plugin.OutputResult{ExitCode: 0},
+				},
+				ProEnabled: true,
+			},
+			wantContains: []string{
+				"PRO-ENABLED-success",
+				"<sub>__Atmos Pro__ is enabled.</sub>",
+			},
+		},
+		{
+			name:         "test with pro enabled shows green badge and enabled footer",
+			templateName: "test",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "test",
+					Result:        &plugin.OutputResult{ExitCode: 0},
+				},
+				ProEnabled: true,
+				TestResult: &plugin.TerraformTestOutputData{Total: 1, Pass: 1},
+			},
+			wantContains: []string{
+				"PRO-ENABLED-success",
+				"<sub>__Atmos Pro__ is enabled.</sub>",
+			},
+		},
 	}
 
 	fs := defaultTemplates

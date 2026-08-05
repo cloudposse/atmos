@@ -484,6 +484,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 
 	extractEnvMapsFromViper(v, &atmosConfig)
 
+	// Resolve the deprecated `settings.pro` path into the top-level `pro` field.
+	resolveProSettings(&atmosConfig)
+
 	// Fix auth.identities after Viper unmarshal.
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
 	// We need to re-parse identities directly from YAML to preserve dots in keys.
@@ -541,6 +544,46 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 
 	return atmosConfig, nil
+}
+
+// resolveProSettings resolves the deprecated `settings.pro` path into the top-level `pro` field.
+// The top-level field wins field-by-field whenever both are set; the deprecated path is otherwise
+// used as a fallback. Emits a deprecation notice whenever `settings.pro` is present, regardless of
+// which value wins, mirroring the existing 'settings.depends_on' deprecation notice
+// (internal/exec/describe_affected_components.go).
+func resolveProSettings(atmosConfig *schema.AtmosConfiguration) {
+	legacy := atmosConfig.Settings.Pro //nolint:staticcheck // Deliberate read of the deprecated field to implement the fallback itself.
+	if legacy == (schema.ProSettings{}) {
+		return
+	}
+
+	log.Debug("'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro")
+
+	pro := &atmosConfig.Pro
+	if pro.BaseURL == "" {
+		pro.BaseURL = legacy.BaseURL
+	}
+	if pro.Endpoint == "" {
+		pro.Endpoint = legacy.Endpoint
+	}
+	if pro.Token == "" {
+		pro.Token = legacy.Token
+	}
+	if pro.WorkspaceID == "" {
+		pro.WorkspaceID = legacy.WorkspaceID
+	}
+	if pro.GithubOIDC == (schema.GithubOIDCSettings{}) {
+		pro.GithubOIDC = legacy.GithubOIDC
+	}
+	if pro.MaxPayloadBytes == 0 {
+		pro.MaxPayloadBytes = legacy.MaxPayloadBytes
+	}
+	if pro.GitHubHeadRef == "" {
+		pro.GitHubHeadRef = legacy.GitHubHeadRef
+	}
+	if pro.GitSTS == (schema.GitSTSSettings{}) {
+		pro.GitSTS = legacy.GitSTS
+	}
 }
 
 // bridgeVendorUpdaterConfig mirrors atmosConfig.Vendor.Update and atmosConfig.Vendor.CI into the
@@ -645,7 +688,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "describe.provenance", "ATMOS_DESCRIBE_PROVENANCE")
 	bindEnv(v, "describe.component.filter", "ATMOS_DESCRIBE_COMPONENT_FILTER")
 
-	// Atmos Pro settings
+	// Atmos Pro settings.
+	// settings.pro.* is a deprecated alias for the top-level pro.* path (see resolveProSettings);
+	// both are bound so either config-file location keeps working from the same env vars.
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
 	bindEnv(v, "settings.pro.endpoint", AtmosProEndpointEnvVarName)
 	bindEnv(v, "settings.pro.token", AtmosProTokenEnvVarName)
@@ -658,6 +703,17 @@ func setEnv(v *viper.Viper) {
 
 	// GitHub OIDC for Atmos Pro.
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+
+	bindEnv(v, "pro.base_url", AtmosProBaseUrlEnvVarName)
+	bindEnv(v, "pro.endpoint", AtmosProEndpointEnvVarName)
+	bindEnv(v, "pro.token", AtmosProTokenEnvVarName)
+	bindEnv(v, "pro.workspace_id", AtmosProWorkspaceIDEnvVarName)
+	bindEnv(v, "pro.github_run_id", "GITHUB_RUN_ID")
+	bindEnv(v, "pro.atmos_pro_run_id", AtmosProRunIDEnvVarName)
+	bindEnv(v, "pro.github_head_ref", "GITHUB_HEAD_REF")
+	bindEnv(v, "pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	bindEnv(v, "pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 	// Telemetry settings

@@ -102,7 +102,7 @@ Two servers are always available as named shortcuts for `atmos mcp add` — no U
   <dt>`atmos mcp add self`</dt>
   <dd>Adds Atmos's own MCP server (writes an entry that runs `atmos mcp start`) as `mcp.servers.atmos`. Prompts to enable `mcp.enabled` if it's off — the entry won't work at runtime until Atmos can run as an MCP server itself. See [As a Server](#as-a-server) below.</dd>
   <dt>`atmos mcp add atmos-pro`</dt>
-  <dd>Adds the Atmos Pro MCP server (`https://atmos-pro.com/mcp`) as `mcp.servers.atmos-pro`. If Atmos Pro is already configured (`settings.pro.workspace_id`) but this preset hasn't been added, `atmos mcp list`/`status` print a reminder.</dd>
+  <dd>Adds the Atmos Pro MCP server (`https://atmos-pro.com/mcp`) as `mcp.servers.atmos-pro`. If Atmos Pro is already configured (`pro.workspace_id`) but this preset hasn't been added, `atmos mcp list`/`status` print a reminder.</dd>
 </dl>
 
 Running `atmos mcp add` with no argument at all defaults to `atmos mcp add self`.

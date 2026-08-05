@@ -120,6 +120,28 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
+	// Merge pro using deferred merge to handle YAML functions. finalComponentPro is the
+	// top-level `pro:` component section; it is intentionally left un-merged with the
+	// legacy `settings.pro:` block here -- new-vs-legacy precedence is resolved once, at
+	// the typed-decode step (pro.ResolveSection), not during stack-processor merge.
+	finalComponentPro, proCtx, err := m.MergeWithDeferred(
+		mergeConfig,
+		[]map[string]any{
+			opts.GlobalPro,
+			result.BaseComponentPro,
+			result.ComponentPro,
+			result.ComponentOverridesPro,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply deferred merges for pro (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(proCtx, finalComponentPro, mergeConfig, nil); err != nil {
+		return nil, err
+	}
+
 	// Merge env using deferred merge to handle YAML functions.
 	finalComponentEnv, envCtx, err := m.MergeWithDeferred(
 		mergeConfig,
@@ -497,6 +519,12 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Add dependencies if present.
 	if len(finalComponentDependencies) > 0 {
 		comp[cfg.DependenciesSectionName] = finalComponentDependencies
+	}
+
+	// Add the top-level `pro:` section if present. `settings.pro:` (finalSettings["pro"])
+	// remains a deprecated, unmerged alias -- see pro.ResolveSection.
+	if len(finalComponentPro) > 0 {
+		comp[cfg.ProSectionName] = finalComponentPro
 	}
 
 	// Add locals if present (for template processing, not passed to terraform/helmfile).

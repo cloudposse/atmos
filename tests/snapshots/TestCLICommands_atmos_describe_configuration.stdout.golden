@@ -137,6 +137,9 @@ auth:
   realm: <hash>
   providers: {}
   identities: {}
+pro:
+  base_url: https://atmos-pro.com
+  endpoint: api/v1
 container:
   runtime:
     auto_start: true

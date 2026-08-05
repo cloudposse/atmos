@@ -58,6 +58,10 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	}
 	extractEnvMapsFromViper(v, atmosConfig)
 
+	// Resolve the deprecated `settings.pro` path into the top-level `pro` field (same as
+	// the main LoadConfig flow, load.go).
+	resolveProSettings(atmosConfig)
+
 	// Fix auth.identities after Viper unmarshal (same as in main LoadConfig flow).
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
 	if err := fixAuthIdentities(v, atmosConfig); err != nil {

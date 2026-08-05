@@ -146,10 +146,10 @@ auth:
   <dd>Optional trust policy name. Defaults to `default`.</dd>
 
   <dt>`git_config_mode`</dt>
-  <dd>`env` (default) injects inline `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` rewrites; `file` writes a `0600` gitconfig and emits an additive `include.path` so token values stay off the environment. Overrides `settings.pro.git_sts.git_config_mode`.</dd>
+  <dd>`env` (default) injects inline `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` rewrites; `file` writes a `0600` gitconfig and emits an additive `include.path` so token values stay off the environment. Overrides [`pro.git_sts.git_config_mode`](/cli/configuration/settings/pro#configuration-reference).</dd>
 
   <dt>`revoke_on_exit`</dt>
-  <dd>Auto-revoke minted tokens at command-end in CI. Defaults to `true`. Set `false` to keep credentials alive for a separate CI step. Overrides `settings.pro.git_sts.revoke_on_exit`.</dd>
+  <dd>Auto-revoke minted tokens at command-end in CI. Defaults to `true`. Set `false` to keep credentials alive for a separate CI step. Overrides [`pro.git_sts.revoke_on_exit`](/cli/configuration/settings/pro#configuration-reference).</dd>
 
   <dt>`token_env`</dt>
   <dd>

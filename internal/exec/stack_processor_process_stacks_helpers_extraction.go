@@ -51,6 +51,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Extract pro section.
+	if i, ok := opts.ComponentMap[cfg.ProSectionName]; ok {
+		componentPro, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.pro' in the file '%s'", errUtils.ErrInvalidComponentPro, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentPro = componentPro
+	}
+
 	// Extract env section.
 	if i, ok := opts.ComponentMap[cfg.EnvSectionName]; ok {
 		componentEnv, ok := i.(map[string]any)

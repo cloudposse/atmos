@@ -145,7 +145,7 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 	}
 
 	// Capture the global revoke_on_exit default for command-end teardown.
-	revokeOnExitDefault := atmosConfig.Settings.Pro.GitSTS.RevokeOnExit
+	revokeOnExitDefault := atmosConfig.Pro.GitSTS.RevokeOnExit
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.

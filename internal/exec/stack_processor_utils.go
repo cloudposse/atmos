@@ -2305,6 +2305,7 @@ func processBaseComponentConfigInternal(
 
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
+	var baseComponentPro map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
 	var baseComponentSecrets map[string]any
@@ -2441,6 +2442,13 @@ func processBaseComponentConfigInternal(
 			baseComponentSettings, ok = baseComponentSettingsSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w: '%s.settings' in the stack '%s'", errUtils.ErrInvalidSettingsSection, baseComponent, stack)
+			}
+		}
+
+		if baseComponentProSection, baseComponentProSectionExist := baseComponentMap[cfg.ProSectionName]; baseComponentProSectionExist {
+			baseComponentPro, ok = baseComponentProSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.pro' in the stack '%s'", errUtils.ErrInvalidProSection, baseComponent, stack)
 			}
 		}
 
@@ -2655,6 +2663,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
+
+		// Base component `pro`
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentPro, baseComponentPro})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentPro = merged
 
 		// Base component `env`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
