@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -54,9 +55,10 @@ func isBulkVerb(verb string) bool {
 }
 
 // shouldRunBulk reports whether a bulk-capable verb invocation should fan out to
-// multiple components: either `--all` was passed or no component was given.
+// multiple components: `--all`, `--tags`, or `--labels` was passed, or no
+// component was given.
 func shouldRunBulk(verb string, info *schema.ConfigAndStacksInfo) bool {
-	return isBulkVerb(verb) && (info.All || info.ComponentFromArg == "")
+	return isBulkVerb(verb) && (info.All || len(info.Tags) > 0 || len(info.Labels) > 0 || info.ComponentFromArg == "")
 }
 
 // ExecuteBulk resolves the set of target container components and runs the verb
@@ -72,11 +74,11 @@ func ExecuteBulk(ctx context.Context, info *schema.ConfigAndStacksInfo, verb str
 		return fmt.Errorf("%w: %q does not support bulk operation", errUtils.ErrComponentExecutionFailed, verb)
 	}
 
-	// A component argument and --all are mutually exclusive.
-	if info.All && info.ComponentFromArg != "" {
+	// A component argument and --all/--tags/--labels are mutually exclusive.
+	if (info.All || len(info.Tags) > 0 || len(info.Labels) > 0) && info.ComponentFromArg != "" {
 		return errUtils.Build(errUtils.ErrContainerComponentWithAll).
-			WithCausef("component %q given with --all", info.ComponentFromArg).
-			WithHint("Drop the component argument to operate on all components, or drop --all to operate on just that component.").
+			WithCausef("component %q given with --all/--tags/--labels", info.ComponentFromArg).
+			WithHint("Drop the component argument to operate on a selected set of components, or drop --all/--tags/--labels to operate on just that component.").
 			Err()
 	}
 
@@ -114,10 +116,30 @@ func resolveBulkTargets(info *schema.ConfigAndStacksInfo, verb string) ([]instan
 
 	rows := collectContainerInstances(stacksMap) // sorted, abstract excluded.
 
-	if info.All {
-		return orderTargets(rows, verb), nil
+	if info.All || len(info.Tags) > 0 || len(info.Labels) > 0 {
+		return orderTargets(filterByTagsAndLabels(rows, info), verb), nil
 	}
 	return selectTargetsInteractively(rows, info, verb)
+}
+
+// filterByTagsAndLabels narrows rows to those matching info.Tags (any-match)
+// and info.Labels (all-match). A no-op when neither is set.
+func filterByTagsAndLabels(rows []instanceRow, info *schema.ConfigAndStacksInfo) []instanceRow {
+	if len(info.Tags) == 0 && len(info.Labels) == 0 {
+		return rows
+	}
+
+	var out []instanceRow
+	for _, r := range rows {
+		if len(info.Tags) > 0 && !tags.MatchesTags(r.tags, info.Tags, tags.TagModeAny) {
+			continue
+		}
+		if len(info.Labels) > 0 && !tags.MatchesLabels(r.labels, info.Labels) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // selectTargetsInteractively prompts for a stack (unless one was given or only

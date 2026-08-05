@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // On-failure modes for the command engine.
@@ -143,7 +146,7 @@ func validateCtx(ctx *ExecContext) error {
 func makeOutputDir() (tmpDir, outputFile string, err error) {
 	tmpDir, err = os.MkdirTemp("", "atmos-hook-*")
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp dir for hook output: %w", err)
+		return "", "", fmt.Errorf("%w: hook output directory: %w", errUtils.ErrCreateDirectory, err)
 	}
 	return tmpDir, filepath.Join(tmpDir, "output"), nil
 }
@@ -155,6 +158,17 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	stdout io.Writer
+	stderr io.Writer
+	// dir is the component directory the hook runs from. It is deliberately
+	// separate from ATMOS_COMPONENT_PATH so tools that use relative paths also
+	// operate on the same component Terraform uses.
+	dir string
+	// captureStdoutPath, when non-empty, is the file the subprocess's stdout
+	// is redirected into (instead of the terminal). Set for kinds with
+	// CaptureStdout — tools that emit structured output to stdout and have no
+	// file-output flag (tflint). Points at the same file ATMOS_OUTPUT_FILE does.
+	captureStdoutPath string
 }
 
 // prepareSubprocess renders args / env (with $ATMOS_* expansion) and
@@ -186,13 +200,26 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 	// and pass the absolute path.
 	resolved, err := resolveBinaryOnPath(ctx.Hook.Command, ctx.ToolchainPATH)
 	if err != nil {
+		// resolveBinaryOnPath's own error already wraps ErrCommandNotFound (needed so its
+		// direct callers/tests can errors.Is() against it standalone). Build the user-facing
+		// message from scratch here rather than via WithCause(err): that would double the
+		// sentinel's own text into the final message ("command not found: command not found:
+		// <name>"), since err already wraps the same sentinel this Build() call starts from,
+		// and the explanation/hint below already say everything err's text would add.
 		return nil, errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
 			WithExplanationf("Hook command %q is not on PATH", ctx.Hook.Command).
 			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before the hook fires", ctx.Hook.Command).
 			WithContext("hook_kind", ctx.Hook.Kind).
 			WithContext("command", ctx.Hook.Command).
 			Err()
+	}
+
+	captureStdoutPath := ""
+	if ctx.Kind != nil && ctx.Kind.CaptureStdout {
+		// Redirect stdout into the same file ATMOS_OUTPUT_FILE points at, so
+		// the kind's ResultHandler reads it via sarif.DefaultOutputFile — no
+		// difference from a tool that writes the file itself (trivy/checkov).
+		captureStdoutPath = outputFile
 	}
 
 	env := mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv)
@@ -201,20 +228,63 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 	}
 
 	return &subprocessPrep{
-		binary: resolved,
-		args:   args,
-		env:    env,
+		binary:            resolved,
+		args:              args,
+		env:               env,
+		stdout:            ctx.Stdout,
+		stderr:            ctx.Stderr,
+		dir:               existingComponentDir(ctx),
+		captureStdoutPath: captureStdoutPath,
 	}, nil
 }
 
+// existingComponentDir resolves ComponentPath(ctx) but only returns it when
+// the directory actually exists on disk. A component can legitimately have
+// no directory yet — e.g. an early failure before Terraform ever provisions
+// it, which a `when: always` after-hook must still be able to observe (see
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure). Returning "" here leaves
+// cmd.Dir unset in runSubprocess, so the hook subprocess starts from the
+// ambient process working directory instead of refusing to start entirely;
+// $ATMOS_COMPONENT_PATH still reports the resolved (possibly nonexistent)
+// path unconditionally via buildAtmosEnv.
+func existingComponentDir(ctx *ExecContext) string {
+	dir := ComponentPath(ctx)
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return dir
+	}
+	return ""
+}
+
 // runSubprocess executes the prepared command, wiring stdin/stdout/stderr
-// to the host process so the user sees tool output in real time.
+// to the host process so the user sees tool output in real time. When the kind
+// opts into stdout capture (p.captureStdoutPath set), stdout is redirected into
+// that file instead of the terminal — for tools that emit structured output
+// (SARIF) to stdout with no file-output flag. Stderr still streams so the
+// tool's diagnostics/errors remain visible.
 func runSubprocess(p *subprocessPrep) error {
 	cmd := exec.Command(p.binary, p.args...) // #nosec G204 -- intentional: this is the whole point of a hook
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = p.stderr
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
 	cmd.Env = p.env
+	cmd.Dir = p.dir
+
+	if p.captureStdoutPath != "" {
+		f, err := os.Create(p.captureStdoutPath) // #nosec G304 -- engine-controlled temp path (makeOutputDir)
+		if err != nil {
+			return fmt.Errorf("%w: hook stdout capture file: %w", errUtils.ErrCreateFile, err)
+		}
+		defer f.Close()
+		cmd.Stdout = f
+	} else {
+		cmd.Stdout = p.stdout
+		if cmd.Stdout == nil {
+			cmd.Stdout = os.Stdout
+		}
+	}
+
 	return cmd.Run()
 }
 
@@ -264,26 +334,35 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 	return out
 }
 
-// renderTerminal emits the hook's user-facing output: a styled
-// markdown block via ui.MarkdownMessage when there's a summary body or
-// a markdown-formatted artifact. The leading blank line visually
-// separates the rendered block from preceding output (terraform plan,
-// the hook log line, the tool's own stdout). MarkdownMessage's renderer
-// (glamour) trims leading whitespace, so we emit the blank line as a
-// separate UI write rather than relying on a `\n` prefix in the body.
+// renderTerminal emits a styled markdown block for a hook summary or
+// markdown-formatted artifact. When a node writer is supplied, it writes the
+// rendered block through that writer so concurrent hook output stays prefixed
+// and serialized.
 func renderTerminal(ctx *ExecContext, out *Output) {
 	if out == nil {
 		return
 	}
 	if out.Summary != nil && out.Summary.Body != "" {
-		ui.Writeln("")
-		ui.MarkdownMessage(out.Summary.Body)
+		renderTerminalMarkdown(ctx, out.Summary.Body)
 		return
 	}
 	if out.Artifact != nil && ctx.Hook.Format == FormatMarkdown {
-		ui.Writeln("")
-		ui.MarkdownMessage(string(out.Artifact.Body))
+		renderTerminalMarkdown(ctx, string(out.Artifact.Body))
 	}
+}
+
+func renderTerminalMarkdown(ctx *ExecContext, content string) {
+	if ctx == nil || ctx.Stderr == nil || ui.Format == nil {
+		ui.Writeln("")
+		ui.MarkdownMessage(content)
+		return
+	}
+
+	rendered, err := ui.Format.Markdown(content)
+	if err != nil {
+		rendered = content
+	}
+	_, _ = fmt.Fprint(ctx.Stderr, "\n"+rendered)
 }
 
 func startHookLogGroup(ctx *ExecContext) func() {
@@ -564,7 +643,7 @@ func firstSARIFToolName(sarif []byte) string {
 // ciEnabled reports whether CI integration is enabled in config — the master
 // switch all CI reporting outputs (summary/annotations/results) require.
 func ciEnabled(ctx *ExecContext) bool {
-	return ctx != nil && ctx.AtmosConfig != nil && ctx.AtmosConfig.CI.Enabled
+	return ctx != nil && ci.Enabled(ctx.AtmosConfig)
 }
 
 // ciSummaryEnabled reports whether the job step summary should be written.
@@ -580,27 +659,19 @@ func ciSummaryEnabled(ctx *ExecContext) bool {
 // ciAnnotationsEnabled reports whether inline annotations should be emitted.
 // Defaults to true (nil) when ci.enabled.
 func ciAnnotationsEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Annotations.Enabled
-	return e == nil || *e
+	return ctx != nil && ci.AnnotationsEnabled(ctx.AtmosConfig)
 }
 
 // ciResultsEnabled reports whether SARIF should be uploaded to the provider's
 // findings store. Defaults to false (nil) — opt-in, since it has side effects
 // and extra requirements (GitHub Advanced Security, security-events: write).
 func ciResultsEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Results.Enabled
-	return e != nil && *e
+	return ctx != nil && ci.ResultsEnabled(ctx.AtmosConfig)
 }
 
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
 func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]string {
-	componentPath := componentPathFor(ctx)
+	componentPath := ComponentPath(ctx)
 	env := map[string]string{
 		"ATMOS_COMPONENT_PATH": componentPath,
 		"ATMOS_OUTPUT_FILE":    outputFile,
@@ -626,44 +697,94 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	return env
 }
 
-// componentPathFor resolves the on-disk path the tool should scan. It is
-// the SAME directory Terraform/OpenTofu runs in — this is what the user
+// ComponentPath resolves the on-disk path the hook should run in. It is
+// the same directory the component executor runs in — this is what the user
 // expects when they configure a hook against a component, and it keeps
-// scanners aligned with the actual workdir (which may be a provisioned
-// copy, not the in-repo component path) when the workdir feature is
-// enabled.
+// scanners aligned with the actual workdir (which may be a provisioned copy,
+// not the in-repo component path) when the workdir feature is enabled.
 //
 // Resolution order:
 //
 //  1. If the workdir feature resolves an existing directory for this
 //     component, use that.
-//  2. Otherwise fall back to TerraformDirAbsolutePath /
-//     ComponentFolderPrefix / FinalComponent (the legacy in-repo path).
+//  2. Otherwise resolve the configured component-type base path plus
+//     ComponentFolderPrefix and FinalComponent (the in-repo path).
 //  3. As a last resort (mostly tests), the process working directory.
 //
 // Errors from the workdir resolver are non-fatal: hooks should still run
 // even if workdir resolution fails for a reason unrelated to the hook.
-func componentPathFor(ctx *ExecContext) string {
+func ComponentPath(ctx *ExecContext) string {
 	if ctx == nil || ctx.AtmosConfig == nil || ctx.Info == nil {
 		wd, _ := os.Getwd()
 		return wd
 	}
 
-	// Prefer the provisioned workdir if one resolves and exists on disk.
-	if path, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, cfg.TerraformComponentType); err == nil && exists && path != "" {
+	componentType := ctx.Info.ComponentType
+	if componentType == "" {
+		componentType = cfg.TerraformComponentType
+	}
+
+	if path, ok := resolveProvisionedWorkdir(ctx, componentType); ok {
 		return path
 	}
 
-	base := ctx.AtmosConfig.TerraformDirAbsolutePath
-	if base == "" {
-		wd, _ := os.Getwd()
-		return wd
+	if path, ok := resolveInRepoComponentPath(ctx, componentType); ok {
+		return path
 	}
+
+	wd, _ := os.Getwd()
+	return wd
+}
+
+// resolveProvisionedWorkdir prefers the provisioned workdir if one resolves
+// and exists on disk. The workdir resolver currently supports these
+// provisionable component types.
+func resolveProvisionedWorkdir(ctx *ExecContext, componentType string) (string, bool) {
+	switch componentType {
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.AnsibleComponentType:
+		if path, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, componentType); err == nil && exists && path != "" {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// resolveInRepoComponentPath falls back to the configured component-type base
+// path plus ComponentFolderPrefix and FinalComponent (the in-repo path).
+func resolveInRepoComponentPath(ctx *ExecContext, componentType string) (string, bool) {
+	if componentBasePath(ctx.AtmosConfig, componentType) == "" {
+		return "", false
+	}
+
 	finalComponent := ctx.Info.FinalComponent
 	if finalComponent == "" {
 		finalComponent = ctx.Info.ComponentFromArg
 	}
-	return filepath.Join(base, ctx.Info.ComponentFolderPrefix, finalComponent)
+
+	path, err := u.GetComponentPath(ctx.AtmosConfig, componentType, ctx.Info.ComponentFolderPrefix, finalComponent)
+	if err != nil || path == "" {
+		return "", false
+	}
+	return path, true
+}
+
+func componentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) string {
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return atmosConfig.TerraformDirAbsolutePath
+	case cfg.HelmfileComponentType:
+		return atmosConfig.HelmfileDirAbsolutePath
+	case cfg.PackerComponentType:
+		return atmosConfig.PackerDirAbsolutePath
+	case cfg.AnsibleComponentType:
+		return atmosConfig.AnsibleDirAbsolutePath
+	case cfg.KubernetesComponentType:
+		return atmosConfig.KubernetesDirAbsolutePath
+	case cfg.HelmComponentType:
+		return atmosConfig.HelmDirAbsolutePath
+	default:
+		return ""
+	}
 }
 
 // planfileFor returns the planfile path for after-plan events when known.

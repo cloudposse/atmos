@@ -126,10 +126,10 @@ guide's own state can drift out of date.
 Give the user honest options:
 
 1. **Keep using `okta-aws-cli web` standalone** alongside Atmos until native Okta device-flow
-   support ships -- no harm running both during the gap.
+    support ships -- no harm running both during the gap.
 2. **Point them at the public roadmap** if they want to track when this lands.
 3. Do not suggest asking their org to weaken its auth policy just to unblock this migration --
-   that trades a real security control for CLI convenience.
+    that trades a real security control for CLI convenience.
 
 ## Not Yet Supported: m2m / Direct Authentication
 

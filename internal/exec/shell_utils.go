@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -743,11 +744,11 @@ func printShellEnterMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n",
+	ui.Writef("\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
 		identityStyle.Render(identityDisplay))
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n",
+	ui.Writef("%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
@@ -765,7 +766,7 @@ func printShellExitMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
+	ui.Writef("\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
 }

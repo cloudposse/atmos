@@ -50,6 +50,12 @@ type Hook struct {
 	// "fail" (propagate non-zero exit), or "ignore" (swallow).
 	OnFailure string `yaml:"on_failure,omitempty"`
 
+	// Tfmigrate-kind specific fields.
+	Migration     string   `yaml:"migration,omitempty"`
+	Config        string   `yaml:"config,omitempty"`
+	BackendConfig []string `yaml:"backend_config,omitempty"`
+	Mode          string   `yaml:"mode,omitempty"`
+
 	// Store-kind specific (existing, unchanged semantics).
 	Name    string            `yaml:"name,omitempty"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`
@@ -77,6 +83,11 @@ type Hook struct {
 	// Retry wraps the step execution in retry.Do. Same schema as a
 	// workflow step's retry block; interpreted by the bridge, not the step.
 	Retry *schema.RetryConfig `yaml:"retry,omitempty"`
+
+	// stepTemplateInfo is the already-resolved static hook context retained for
+	// step-backed hooks. Their `with:` payload is rendered immediately before
+	// each step so env steps can update the template context for later items.
+	stepTemplateInfo *schema.ConfigAndStacksInfo
 }
 
 // GitCommitSpec is the `commit` block of a git-kind hook. Message supports

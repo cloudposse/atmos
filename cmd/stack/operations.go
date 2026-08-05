@@ -128,10 +128,15 @@ func runStackSet(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType); err != nil {
+	created, err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType)
+	if err != nil {
 		return err
 	}
-	ui.Successf("Updated %s for %s in %s", args[0], flagComponent, tgt.file)
+	if created {
+		ui.Successf("Created `%s` = `%s` for `%s` in `%s`", args[0], args[1], flagComponent, atmosyaml.DisplayPath(tgt.file))
+		return nil
+	}
+	ui.Successf("Updated `%s` for `%s` in `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
 	return nil
 }
 
@@ -140,10 +145,15 @@ func runStackDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath); err != nil {
+	existed, err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath)
+	if err != nil {
 		return err
 	}
-	ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
+	if !existed {
+		ui.Successf("Nothing to delete — `%s` for `%s` is not set in `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
+		return nil
+	}
+	ui.Successf("Deleted `%s` for `%s` from `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
 	return nil
 }
 

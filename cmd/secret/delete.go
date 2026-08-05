@@ -12,7 +12,7 @@ var deleteParser *flags.StandardParser
 
 var deleteCmd = &cobra.Command{
 	Use:     "delete [NAME]",
-	Aliases: []string{"rm"},
+	Aliases: []string{"rm", "unset"},
 	Short:   "Remove a declared secret's value from its backend (or all with --all).",
 	Args:    cobra.MaximumNArgs(1),
 	RunE:    runSecretDelete,

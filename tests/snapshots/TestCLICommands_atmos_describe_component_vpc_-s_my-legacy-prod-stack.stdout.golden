@@ -20,6 +20,7 @@
         "plan": {
           "skip_planfile": false
         },
+        "lint": {},
         "planfiles": {
           "default": ""
         },
@@ -30,7 +31,7 @@
       },
       "helmfile": {
         "base_path": "",
-        "use_eks": true,
+        "use_eks": false,
         "kubeconfig_path": "",
         "helm_aws_profile_pattern": "",
         "cluster_name_pattern": "",
@@ -78,7 +79,9 @@
         "format": "",
         "columns": null
       },
-      "inherit": {}
+      "inherit": {
+        "metadata": true
+      }
     },
     "workflows": {
       "base_path": "",

@@ -15,6 +15,10 @@ const (
 	BeforeTerraformPlan            HookEvent = "before.terraform.plan"
 	BeforeTerraformTest            HookEvent = "before.terraform.test"
 	AfterTerraformTest             HookEvent = "after.terraform.test"
+	BeforeTerraformOutput          HookEvent = "before.terraform.output"
+	AfterTerraformOutput           HookEvent = "after.terraform.output"
+	BeforeTerraformRefresh         HookEvent = "before.terraform.refresh"
+	AfterTerraformRefresh          HookEvent = "after.terraform.refresh"
 	BeforeTerraformDeploy          HookEvent = "before.terraform.deploy"
 	AfterTerraformDeploy           HookEvent = "after.terraform.deploy"
 	AfterTerraformDestroyAggregate HookEvent = "after.terraform.destroy.aggregate"
@@ -54,6 +58,12 @@ const (
 	AfterHelmfileDeploy            HookEvent = "after.helmfile.deploy"
 	BeforeHelmfileDestroy          HookEvent = "before.helmfile.destroy"
 	AfterHelmfileDestroy           HookEvent = "after.helmfile.destroy"
+	// BeforeScaffoldGenerate and AfterScaffoldGenerate fire around atmos
+	// scaffold generate / atmos init, not a component lifecycle operation --
+	// used by scaffold's own hooks: block (see pkg/generator/scaffoldhooks),
+	// which reuses this same Hook vocabulary and MatchesEvent/RunsWhenE.
+	BeforeScaffoldGenerate HookEvent = "before.scaffold.generate"
+	AfterScaffoldGenerate  HookEvent = "after.scaffold.generate"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing command

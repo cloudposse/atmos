@@ -10,6 +10,8 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 // writeLocalComponentVendorConfig writes a component.yaml under <basePath>/<component> whose
@@ -36,13 +38,19 @@ spec:
 func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 	sourceDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
-	componentPath := t.TempDir()
+
+	// componentPath must live under basePath, matching how ReadAndProcessComponentVendorConfigFile
+	// always constructs it (filepath.Join(atmosConfig.BasePath, componentBasePath, component)) - the
+	// vendor lock's target-containment check rejects a target outside the configured project root.
+	basePath := t.TempDir()
+	componentPath := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
 
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{Uri: sourceDir},
 	}
 
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, spec, "vpc", componentPath, false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{BasePath: basePath}, spec, "vpc", componentPath, install.InstallOptions{})
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
@@ -51,9 +59,51 @@ func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
 // TestExecuteComponentVendorInternal_PropagatesBuildError proves an unresolvable spec (missing
 // source URI) fails before executeVendorModel is ever invoked.
 func TestExecuteComponentVendorInternal_PropagatesBuildError(t *testing.T) {
-	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, &schema.VendorComponentSpec{}, "vpc", t.TempDir(), false)
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, &schema.VendorComponentSpec{}, "vpc", t.TempDir(), install.InstallOptions{})
 
 	assert.Error(t, err)
+}
+
+// TestExecuteComponentVendorInternal_RefreshLock_ForcesReDownload proves refreshLock=true bypasses
+// install.FilterPending, forcing an already-materialized component through executeVendorModel
+// again - mirroring internal/exec/vendor_utils.go's ExecuteAtmosVendorInternal, which already used
+// the same DryRun/RefreshLock-skips-FilterPending behavior for the vendor.yaml path. This is the
+// single-"--component"-path companion to
+// TestExecuteVendorPullCommand_Everything_NoVendorFile_RefreshLock_ForcesReDownload
+// (vendor_pull_sweep_test.go), which proves the same behavior through the repo-wide sweep.
+func TestExecuteComponentVendorInternal_RefreshLock_ForcesReDownload(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourceFile := filepath.Join(sourceDir, "main.tf")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("# v1\n"), 0o644))
+
+	basePath := t.TempDir()
+	componentPath := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	targetFile := filepath.Join(componentPath, "main.tf")
+
+	spec := &schema.VendorComponentSpec{Source: schema.VendorComponentSource{Uri: sourceDir}}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+
+	// First pull: materializes and records a lock entry.
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
+	content, err := os.ReadFile(targetFile)
+	require.NoError(t, err)
+	require.Equal(t, "# v1\n", string(content))
+
+	// Mutate the upstream source.
+	require.NoError(t, os.WriteFile(sourceFile, []byte("# v2\n"), 0o644))
+
+	// Second pull without refreshLock: already-materialized target, must be skipped.
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
+	content, err = os.ReadFile(targetFile)
+	require.NoError(t, err)
+	assert.Equal(t, "# v1\n", string(content), "without refreshLock, an already-materialized component must not be re-pulled")
+
+	// Third pull with refreshLock: must bypass the materialization filter and re-pull.
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{RefreshLock: true}))
+	content, err = os.ReadFile(targetFile)
+	require.NoError(t, err)
+	assert.Equal(t, "# v2\n", string(content), "refreshLock must force a re-download even when already materialized")
 }
 
 // TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall proves the batched entry point
@@ -79,7 +129,7 @@ func TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall(t *testing.
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, names, cfg.TerraformComponentType, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, names, cfg.TerraformComponentType, install.InstallOptions{})
 	require.NoError(t, err, "batched pull of multiple component.yaml-declared components must succeed")
 
 	for _, name := range names {
@@ -90,7 +140,7 @@ func TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall(t *testing.
 // TestExecuteComponentVendorPullBatch_EmptyComponents_NoOp proves an empty component list is a
 // pure no-op: no atmosConfig-dependent resolution is even attempted.
 func TestExecuteComponentVendorPullBatch_EmptyComponents_NoOp(t *testing.T) {
-	err := ExecuteComponentVendorPullBatch(&schema.AtmosConfiguration{}, nil, cfg.TerraformComponentType, false)
+	err := ExecuteComponentVendorPullBatch(&schema.AtmosConfiguration{}, nil, cfg.TerraformComponentType, install.InstallOptions{})
 	assert.NoError(t, err)
 }
 
@@ -109,7 +159,7 @@ func TestExecuteComponentVendorPullBatch_PropagatesResolutionError(t *testing.T)
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"does-not-exist"}, cfg.TerraformComponentType, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"does-not-exist"}, cfg.TerraformComponentType, install.InstallOptions{})
 	assert.Error(t, err, "an unresolvable component must fail the batch")
 }
 
@@ -134,18 +184,79 @@ spec: {}
 		},
 	}
 
-	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false)
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `component "vpc"`, "the failing component's name must be identifiable in a multi-component batch")
 }
 
-// TestBuildComponentVendorPackages_ComponentAndMixins proves buildComponentVendorPackages (the
-// helper extracted from ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can
-// build package lists for multiple components without executing each one) returns the same shape
-// ExecuteComponentVendorInternal used to build inline: the component package first, IsComponent
-// true, followed by one entry per mixin with IsMixins true.
-func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
+// TestExecuteComponentVendorPullBatch_AllMaterialized_NoOp proves a batch where every component is
+// already vendored and unchanged filters down to zero packages and returns without error, instead
+// of calling executeVendorModel with an empty list.
+func TestExecuteComponentVendorPullBatch_AllMaterialized_NoOp(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(basePath, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+	dir := writeLocalComponentVendorConfig(t, basePath, "vpc", sourceDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	require.NoError(t, ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{}))
+	assert.FileExists(t, filepath.Join(dir, "main.tf"))
+
+	// Add a new file to the source after the first pull; if the second call re-pulls instead of
+	// skipping the already-materialized component, this file would show up too.
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
+
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(dir, "extra.tf"), "an already-materialized component must be skipped in a batch pull too")
+}
+
+// TestExecuteComponentVendorPullBatch_PropagatesMaterializationCheckError proves the batch entry
+// point surfaces the vendor lock verification error (rather than swallowing it) when the existing
+// vendor.lock.yaml can't be parsed.
+func TestExecuteComponentVendorPullBatch_PropagatesMaterializationCheckError(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(basePath, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+	writeLocalComponentVendorConfig(t, basePath, "vpc", sourceDir)
+
+	// A malformed vendor.lock.yaml makes lockfile.Load fail when checking materialization.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "vendor.lock.yaml"), []byte("not: [valid yaml"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, install.InstallOptions{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verify vendor lock")
+}
+
+// TestBuildComponentVendorPackages_WiresProcessTmpl proves internal/exec wires its own ProcessTmpl
+// (Sprig/gomplate/Atmos template functions) into pkg/vendoring/component.BuildVendorPackages as
+// its TemplateFunc, and that the resulting package list has the same shape
+// ExecuteComponentVendorInternal used to build inline: the component package first (IsMixin
+// false), followed by one entry per mixin (IsMixin true). The pure package-building logic itself
+// (URI templating, mixin resolution, error propagation) is covered directly in
+// pkg/vendoring/component's own tests.
+func TestBuildComponentVendorPackages_WiresProcessTmpl(t *testing.T) {
 	componentPath := t.TempDir()
 
 	// A local mixin file that already exists at the resolved path is skipped by
@@ -153,67 +264,96 @@ func TestBuildComponentVendorPackages_ComponentAndMixins(t *testing.T) {
 	// at a non-existent local file to ensure it produces a package entry.
 	spec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
-			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
+			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version}}",
+			Version: "0.1.0",
 		},
 		Mixins: []schema.VendorComponentMixins{
 			{Uri: "github.com/cloudposse/terraform-null-label.git//exports/context.tf?ref=0.1.0", Filename: "context.tf"},
 		},
 	}
 
-	packages, err := buildComponentVendorPackages(spec, "vpc", componentPath)
+	packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+		VendorComponentSpec: spec,
+		Component:           "vpc",
+		ComponentPath:       componentPath,
+		TemplateFunc:        ProcessTmpl,
+	})
 	require.NoError(t, err)
 	require.Len(t, packages, 2)
 
-	assert.Equal(t, "vpc", packages[0].name)
-	assert.True(t, packages[0].IsComponent)
-	assert.False(t, packages[0].IsMixins)
+	assert.Equal(t, "vpc", packages[0].Name)
+	assert.False(t, packages[0].IsMixin())
+	assert.Contains(t, packages[0].URI(), "ref=0.1.0", "ProcessTmpl must have templated {{.Version}} into the source uri")
 
-	assert.True(t, packages[1].IsMixins)
-	assert.False(t, packages[1].IsComponent)
-	assert.Equal(t, "context.tf", packages[1].mixinFilename)
+	assert.True(t, packages[1].IsMixin())
+	assert.Equal(t, "context.tf", packages[1].MixinFilename())
 }
 
-// TestBuildComponentVendorPackages_MissingUri proves an empty source URI is rejected before any
-// package is built, matching ExecuteComponentVendorInternal's pre-refactor behavior.
-func TestBuildComponentVendorPackages_MissingUri(t *testing.T) {
-	spec := &schema.VendorComponentSpec{}
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
-	assert.Error(t, err)
-	assert.Nil(t, packages)
-}
-
-// TestBuildComponentVendorPackages_InvalidUriTemplate proves a source.uri that fails to parse as
-// a Go template (only attempted when source.version is set) is surfaced rather than silently
-// falling back to the literal, unparsed uri.
-func TestBuildComponentVendorPackages_InvalidUriTemplate(t *testing.T) {
-	spec := &schema.VendorComponentSpec{
-		Source: schema.VendorComponentSource{
-			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version",
-			Version: "0.1.0",
-		},
+// TestFilterMaterializedComponentVendorPackages_PropagatesError proves a package whose
+// componentPath cannot be related back to the project root (the vendor lock's target-containment
+// check) surfaces install.FilterPending's error, rather than silently treating it as pending.
+func TestFilterMaterializedComponentVendorPackages_PropagatesError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	packages := []install.VendorPackage{
+		install.NewComponentVendorPackage(&install.ComponentPackageParams{
+			Name: "vpc", ComponentPath: t.TempDir(), PkgType: install.PkgTypeLocal, URI: t.TempDir(),
+		}),
 	}
 
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
-
-	assert.Error(t, err)
-	assert.Nil(t, packages)
-}
-
-// TestBuildComponentVendorPackages_PropagatesMixinError proves a mixin missing its required uri
-// fails the whole component, matching processComponentMixins' own fail-fast validation.
-func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
-	spec := &schema.VendorComponentSpec{
-		Source: schema.VendorComponentSource{
-			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
-		},
-		Mixins: []schema.VendorComponentMixins{
-			{Filename: "context.tf"}, // Missing Uri.
-		},
-	}
-
-	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+	pending, err := install.FilterPending(atmosConfig, packages, install.InstallOptions{})
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrMissingMixinURI)
-	assert.Nil(t, packages)
+	assert.Nil(t, pending)
+}
+
+// TestExecuteComponentVendorInternal_PropagatesMaterializationCheckError proves
+// ExecuteComponentVendorInternal surfaces the vendor lock verification error (rather than
+// swallowing it or proceeding to install) when the component's path can't be related back to the
+// project's BasePath.
+func TestExecuteComponentVendorInternal_PropagatesMaterializationCheckError(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// componentPath deliberately lives outside atmosConfig.BasePath's tree, so the vendor lock's
+	// target-containment check cannot make it relative to the project root.
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	componentPath := t.TempDir()
+
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{Uri: sourceDir},
+	}
+
+	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vendor lock target")
+}
+
+// TestExecuteComponentVendorInternal_AlreadyMaterialized_SkipsReinstall proves a second call for
+// an unchanged, already-vendored component is a no-op that neither errors nor re-copies from the
+// source. A file is added to the source directory between calls; if the second call re-ran the
+// install (rather than skipping it), that new file would appear in componentPath too.
+func TestExecuteComponentVendorInternal_AlreadyMaterialized_SkipsReinstall(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	basePath := t.TempDir()
+	componentPath := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{Uri: sourceDir},
+	}
+
+	require.NoError(t, ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{}))
+	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
+
+	// Add a new file to the source after the first install. If the second call re-installs
+	// instead of skipping, this file would be copied into componentPath too.
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
+
+	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{})
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(componentPath, "extra.tf"), "an already-materialized component must be skipped, not re-copied from source")
 }

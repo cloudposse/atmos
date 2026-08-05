@@ -17,9 +17,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
-	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -252,7 +251,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	releases = addCurrentVersionIfMissing(releases)
 
 	if len(releases) == 0 {
-		fmt.Fprintln(os.Stderr, "No releases found")
+		ui.Info("No releases found")
 		return nil
 	}
 
@@ -284,7 +283,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, t)
+	ui.Writeln(t.String())
 	return nil
 }
 
@@ -357,51 +356,50 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 //
 //nolint:unparam // error return kept for API consistency with other format functions
 func formatReleaseDetailText(release *github.RepositoryRelease) error {
-	maskedStderr := ioLayer.MaskWriter(os.Stderr)
-	fmt.Fprintf(maskedStderr, "Version: %s\n", release.GetTagName())
-	fmt.Fprintf(maskedStderr, "Name: %s\n", release.GetName())
-	fmt.Fprintf(maskedStderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
+	ui.Writef("Version: %s\n", release.GetTagName())
+	ui.Writef("Name: %s\n", release.GetName())
+	ui.Writef("Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
 
 	if release.GetPrerelease() {
-		fmt.Fprintln(maskedStderr, "Type: Pre-release")
+		ui.Writeln("Type: Pre-release")
 	} else {
-		fmt.Fprintln(maskedStderr, "Type: Stable")
+		ui.Writeln("Type: Stable")
 	}
 
 	if isCurrentVersion(release.GetTagName()) {
-		fmt.Fprintln(maskedStderr, currentVersionStyle.Render("Current: ● Yes (installed)"))
+		ui.Writeln(currentVersionStyle.Render("Current: ● Yes (installed)"))
 	}
 
-	fmt.Fprintf(maskedStderr, "URL: %s\n", release.GetHTMLURL())
-	fmt.Fprintln(maskedStderr)
+	ui.Writef("URL: %s\n", release.GetHTMLURL())
+	ui.Writeln("")
 
 	// Release notes (rendered as markdown).
 	if body := release.GetBody(); body != "" {
-		fmt.Fprintln(maskedStderr, "Release Notes:")
-		fmt.Fprintln(maskedStderr, "─────────────────────────────────────────────────────────────────")
-		u.PrintfMarkdownToTUI("%s", body)
-		fmt.Fprintln(maskedStderr, "─────────────────────────────────────────────────────────────────")
-		fmt.Fprintln(maskedStderr)
+		ui.Writeln("Release Notes:")
+		ui.Writeln("─────────────────────────────────────────────────────────────────")
+		ui.MarkdownMessagef("%s", body)
+		ui.Writeln("─────────────────────────────────────────────────────────────────")
+		ui.Writeln("")
 	}
 
 	// Assets (filtered by current OS and architecture).
 	filteredAssets := filterAssetsByPlatform(release.Assets)
 	if len(filteredAssets) > 0 {
-		fmt.Fprintf(maskedStderr, "\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
+		ui.Writef("\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
 		for _, asset := range filteredAssets {
 			sizeMB := float64(asset.GetSize()) / float64(bytesPerMB)
 			// Style the filename without the size, then show size in muted color.
 			filename := asset.GetName()
 			sizeText := fmt.Sprintf("(%.2f MB)", sizeMB)
 
-			fmt.Fprintf(maskedStderr, "  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
+			ui.Writef("  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
 
 			// Render the URL as a link.
 			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
-			fmt.Fprintf(maskedStderr, "  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
+			ui.Writef("  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
 		}
 	} else if len(release.Assets) > 0 {
-		fmt.Fprintf(maskedStderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		ui.Writef("\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
 
 	return nil

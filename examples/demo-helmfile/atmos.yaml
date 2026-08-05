@@ -1,10 +1,5 @@
 base_path: "./"
 
-schemas:
-  atmos:
-    manifest: "schemas/atmos-manifest.json"
-
-
 templates:
   settings:
     enabled: true
@@ -27,8 +22,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 logs:
   file: "/dev/stderr"
   level: Info
