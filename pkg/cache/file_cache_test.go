@@ -20,6 +20,9 @@ import (
 type mockFileLock struct {
 	withLockErr  error
 	withRLockErr error
+	// rLockContended, when true, makes TryWithRLock simulate contention: it returns
+	// (false, nil) without invoking fn, independent of withRLockErr's error path.
+	rLockContended bool
 }
 
 func (m *mockFileLock) WithLock(fn func() error) error {
@@ -41,6 +44,30 @@ func (m *mockFileLock) WithRLock(fn func() error) error {
 		return m.withRLockErr
 	}
 	return fn()
+}
+
+func (m *mockFileLock) TryWithRLock(fn func() error) (bool, error) {
+	if m.withRLockErr != nil {
+		return false, m.withRLockErr
+	}
+	if m.rLockContended {
+		return false, nil
+	}
+	return true, fn()
+}
+
+func TestMockFileLock_TryWithRLock_Contended(t *testing.T) {
+	lock := &mockFileLock{rLockContended: true}
+
+	executed := false
+	acquired, err := lock.TryWithRLock(func() error {
+		executed = true
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.False(t, acquired)
+	assert.False(t, executed, "fn must not run when contention is simulated")
 }
 
 // newTestCache creates a FileCache for testing with the given temp directory.
