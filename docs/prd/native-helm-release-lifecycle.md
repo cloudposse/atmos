@@ -369,6 +369,7 @@ The following rules apply:
 - A release that fails and is successfully rolled back still returns failure to the scheduler.
 - A rollback or uninstall failure preserves the original release failure and adds the recovery failure.
 - Dependents never run after timeout, failed readiness, failed hooks, failed rollback, or cancellation.
+- Bulk delete traverses the selected graph in reverse topological order so dependents are removed before their dependencies.
 - A future mixed-kind scheduler consumes the same provider result; it must not reinterpret Helm readiness.
 
 ## Timeout Semantics

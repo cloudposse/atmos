@@ -111,6 +111,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 			return releaseActionResult{Operation: releaseOperationInstall}, resolveErr
 		}
 		spec.Lifecycle = lifecycle
+		reportResolvedLifecycle(lifecycle)
 		operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
 		defer cancel()
 		manifest, installErr := installRelease(operationCtx, actx, spec, dryRun)
@@ -123,6 +124,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		return releaseActionResult{Operation: releaseOperationUpgrade}, resolveErr
 	}
 	spec.Lifecycle = lifecycle
+	reportResolvedLifecycle(lifecycle)
 	operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
 	defer cancel()
 	manifest, upgradeErr := upgradeRelease(operationCtx, actx, spec, dryRun)
