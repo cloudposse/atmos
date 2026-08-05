@@ -80,7 +80,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 	}
 	normalizeGlobalConfig(&atmosConfig)
 
-	if info.All || info.Affected {
+	if info.All || info.Affected || len(info.Tags) > 0 || len(info.Labels) > 0 {
 		return executeBulk(ctx, &atmosConfig, &info, operation)
 	}
 

@@ -64,23 +64,23 @@ version and checksum for each tool. It serves the same purpose as `aqua-checksum
 ## Steps
 
 1. **Mirror the registry.** Map Aqua's `type: standard` registry with a `ref:` pin to a
-   `toolchain.registries` entry of `type: aqua`. Point it at
-   `https://github.com/aquaproj/aqua-registry/tree/main/pkgs`. If `aqua.yaml` used a private or
-   custom registry, add it as a second `type: aqua` registry entry. Use a `file://` or GitHub
-   `source` for this entry. Set its `priority` higher than the public registry.
+  `toolchain.registries` entry of `type: aqua`. Point it at
+  `https://github.com/aquaproj/aqua-registry/tree/main/pkgs`. If `aqua.yaml` used a private or
+  custom registry, add it as a second `type: aqua` registry entry. Use a `file://` or GitHub
+  `source` for this entry. Set its `priority` higher than the public registry.
 2. **Convert each plain package.** For a `packages:` entry with no unusual fields, run
-   `atmos toolchain add owner/repo@version`. You can also hand-write the `.tool-versions` line.
-   Both methods produce the same result.
+  `atmos toolchain add owner/repo@version`. You can also hand-write the `.tool-versions` line.
+  Both methods produce the same result.
 3. **Flag nonstandard packages.** For any entry that uses a field or package type from the
-   Functional Gaps table below, do not assume it ports automatically. Follow that row's
-   workaround. Or leave the tool on Aqua temporarily until the team decides how to handle it.
+  Functional Gaps table below, do not assume it ports automatically. Follow that row's
+  workaround. Or leave the tool on Aqua temporarily until the team decides how to handle it.
 4. **Replace `aqua-checksums.json` with `toolchain.verification` and `use_lock_file`.** Atmos
-   verifies packages against checksum and signature metadata published by the registry itself.
-   Set `checksums` and `signatures` to `when_available`, `required`, or `disabled`. Set
-   `use_lock_file: true` to also record resolved versions and checksums in `toolchain.lock.yaml`,
-   for the same reproducibility `aqua-checksums.json` provides.
+  verifies packages against checksum and signature metadata published by the registry itself.
+  Set `checksums` and `signatures` to `when_available`, `required`, or `disabled`. Set
+  `use_lock_file: true` to also record resolved versions and checksums in `toolchain.lock.yaml`,
+  for the same reproducibility `aqua-checksums.json` provides.
 5. **Verify the migration.** Run `atmos toolchain install`, then run `atmos toolchain list`.
-   Confirm the resolved versions match what `aqua list` reported before.
+  Confirm the resolved versions match what `aqua list` reported before.
 
 ## Command Mapping
 

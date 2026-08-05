@@ -143,6 +143,8 @@ Override with the `--ci` flag, `ATMOS_CI`, or `ci.enabled` configuration.
 Terraform commands use native CI for summaries, outputs, checks, comments, and planfile storage.
 Native Helm and Helmfile commands use native CI for job summaries only.
 
+GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/commands/ci/validate) or its [`atmos validate ci`](/cli/commands/validate/usage) alias. The command emits annotations only when `ci.enabled` is true and `ci.annotations.enabled` is not false.
+
 ## Environment Variables
 
 | Variable | Description |

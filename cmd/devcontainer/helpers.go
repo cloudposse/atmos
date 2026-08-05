@@ -17,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // listAvailableDevcontainers returns a sorted list of devcontainer names from the provided AtmosConfiguration.
@@ -110,7 +111,7 @@ func getDevcontainerName(args []string) (string, error) {
 	}
 
 	// Display selected devcontainer to stderr (so it doesn't interfere with stdout).
-	fmt.Fprintf(os.Stderr, "\nSelected devcontainer: %s\n\n", selectedName)
+	ui.Writef("\nSelected devcontainer: %s\n\n", selectedName)
 
 	return selectedName, nil
 }

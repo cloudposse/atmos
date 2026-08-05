@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Development environment: disposable resources, short log retention, and a
+# generous alarm threshold so noisy experimentation doesn't page anyone.
+
+import:
+  - _defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    audit-trail:
+      vars:
+        # Dev audit logs are disposable; let `terraform destroy` empty the bucket.
+        force_destroy: true
+    monitoring:
+      vars:
+        retention_in_days: 7
+        # 1 GiB per 5 minutes — noisy dev logging is expected.
+        alarm_threshold_bytes: 1073741824
+    baseline:
+      vars:
+        parameters:
+          environment: development
+          log-level: debug

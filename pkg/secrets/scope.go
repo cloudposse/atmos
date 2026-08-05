@@ -66,7 +66,7 @@ func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[s
 		return nil, fmt.Errorf("%w: secret %q declares scope %q but its position implies %q",
 			ErrScopeConflict, name, existing, scope)
 	}
-	newSpec := make(map[string]any, len(spec)+1)
+	newSpec := make(map[string]any, len(spec))
 	for sk, sv := range spec {
 		newSpec[sk] = sv
 	}

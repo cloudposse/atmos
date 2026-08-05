@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 )
 
 // rowStyler defines the interface for row data that can be styled.
@@ -79,5 +81,8 @@ func renderTableWithConditionalStyling[T rowStyler](tableView string, rows []T) 
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// The bubbles/table view right-pads every column, including the last, to a fixed
+	// width; trim that trailing padding so plain-text/piped output and snapshots don't
+	// carry invisible trailing whitespace.
+	return atmosansi.TrimLinesRightSpaces(strings.Join(lines, "\n"))
 }

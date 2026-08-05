@@ -10,19 +10,16 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Atmos hooks run automated actions at specific points in a component's
-lifecycle — before/after `terraform plan`, `apply`, `test`, `deploy`, or `init`.
-Built-in kinds cover the common cases (cost analysis, security scanning,
-storing outputs) and the generic `command` kind plugs in any binary you
-need. Tools auto-install through the Atmos toolchain and their output
-renders identically in your terminal and on Atmos Pro.
+Atmos hooks run automated actions around Terraform, Kubernetes, Helm, and Helmfile component
+operations. Built-in kinds cover cost analysis, security scanning, stores, Git, and CI; `kind: step`
+and `kind: steps` make the complete typed step library available at lifecycle events.
 </Intro>
 
 ## Hooks Schema
 
 Each hook has a `kind` that selects an engine and a set of defaults. The
-generic `command` kind runs any binary; named kinds like `infracost` and
-`trivy` ship sane defaults so you don't need to write any wiring.
+generic `command` kind runs any binary; named kinds like `infracost`,
+`trivy`, and `tflint` ship sane defaults so you don't need to write any wiring.
 
 ```yaml
 components:
@@ -55,18 +52,13 @@ each level merges into the final result so you can keep configuration
 
 ## Supported Lifecycle Events
 
-| Event | When it fires |
-|---|---|
-| `before.terraform.init` | Before `atmos terraform init` runs |
-| `after.terraform.init` | After `atmos terraform init` finishes |
-| `before.terraform.plan` | Before `atmos terraform plan` runs (after init has completed) |
-| `after.terraform.plan` | After `atmos terraform plan` finishes |
-| `before.terraform.apply` | Before `atmos terraform apply` runs |
-| `after.terraform.apply` | After `atmos terraform apply` finishes |
-| `before.terraform.test` | Before `atmos terraform test` runs |
-| `after.terraform.test` | After `atmos terraform test` finishes (fires on success and failure) |
-| `before.terraform.deploy` | Alias of `before.terraform.apply` (deploy is apply with `-auto-approve`) |
-| `after.terraform.deploy` | Alias of `after.terraform.apply` |
+| Family | Events |
+| --- | --- |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
+| Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
+| Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
+| Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
+| Scaffold generation | `before.scaffold.generate` and `after.scaffold.generate`. These are declared in `scaffold.yaml`, not stack manifests, and support only `kind: step` and `kind: steps`. |
 
 Hooks with no `events` list fire on every supported event for backward
 compatibility with configs written before event filtering existed. You
@@ -79,6 +71,18 @@ explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
 `before.terraform.plan` / `before.terraform.apply` for those.
 
+## Supported Kinds
+
+Stack hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, `kics`, `step`,
+and `steps`.
+The named kinds below provide purpose-built defaults; `kind: command` is the general binary
+runner. Scaffold hooks reuse the `when:` vocabulary and step engine but reject every kind except
+`step` and `steps` because they do not have stack/component execution context.
+
+The legacy `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download` kinds still parse
+for compatibility but are deprecated no-ops. Use current CI provider bindings rather than adding
+new `ci.*` hook configuration.
+
 ## Built-in Kinds
 
 Each named kind below ships defaults for `command`, `args`, `env`, and
@@ -87,6 +91,113 @@ right thing. Every default is overridable — set the field on your hook
 and your value wins. See [Overriding Kind Defaults](#overriding-kind-defaults)
 for the override rules (notably: `args` and `env` are full replacement,
 not merge).
+
+### `kind: tfmigrate`
+
+Runs [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) before Terraform
+plans, applies, or deploys. The hook delegates to the Atmos command path:
+
+```shell
+atmos terraform migrate plan <component> -s <stack>
+atmos terraform migrate apply <component> -s <stack>
+```
+
+This means Atmos performs its normal Terraform setup before the migration runs:
+
+- Authenticates the component identity.
+- Provisions source and workdir directories.
+- Generates backend and var files.
+- Runs Terraform init.
+- Selects the workspace.
+- Resolves `tfmigrate` from the toolchain or PATH.
+- Sets `TFMIGRATE_EXEC_PATH`.
+
+The hook reuses the identity already resolved for the Terraform command. If the
+command used `--identity aws-prod`, `ATMOS_IDENTITY=aws-prod`, or a component
+default identity, the hook passes that identity to the nested
+`atmos terraform migrate` invocation. The nested command also sets
+`ATMOS_SKIP_HOOKS=*`. This stops the migration hook from recursively
+triggering itself.
+
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      dependencies:
+        tools:
+          tfmigrate: "0.4.x"
+
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
+```
+
+<dl>
+  <dt>`migration`</dt>
+  <dd>Path to a single `tfmigrate` migration file. Omit this field to let `tfmigrate` run history mode.</dd>
+
+  <dt>`config`</dt>
+  <dd>Optional override for the `tfmigrate` config path. Atmos passes this through as `--tfmigrate-config` to the nested `atmos terraform migrate` invocation. When you omit `config`, and `--tfmigrate-config`/`ATMOS_TFMIGRATE_CONFIG` and `TFMIGRATE_CONFIG` are also unset, Atmos uses the component's `.tfmigrate.hcl` file if one exists. Otherwise, Atmos generates a default config that reuses the component's Terraform backend as history storage.</dd>
+
+  <dt>`backend_config`</dt>
+  <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend that `tfmigrate` uses. It is not the `tfmigrate` history backend.</dd>
+
+  <dt>`mode`</dt>
+  <dd>`dynamic` (default), `plan`, or `apply`. Dynamic mode runs `tfmigrate plan` for `before.terraform.plan` and `tfmigrate apply` for `before.terraform.apply` / `before.terraform.deploy`.</dd>
+</dl>
+
+**Requirements:** the `tfmigrate` binary on PATH. Declare it in
+`dependencies.tools`, for example `tfmigrate: "^0.4.5"`. Atmos then installs
+it automatically through the toolchain before the hook runs.
+
+Omit `migration` to enable history mode. History mode needs no `tfmigrate`
+configuration by default. Atmos looks for a config in four places: the hook's
+`config` field, `--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG`,
+`TFMIGRATE_CONFIG`, and a `.tfmigrate.hcl` file in the component. If none of
+these exist, Atmos generates a config that stores history in the component's
+own Terraform backend. For an S3 or GCS backend, Atmos stores history in the
+same bucket, under a key namespaced by stack, component, and workspace. For a
+local backend, Atmos stores history in a local file beside the state:
+
+```yaml
+hooks:
+  state-migration:
+    events:
+      - before.terraform.plan
+      - before.terraform.apply
+    kind: tfmigrate
+    mode: dynamic
+```
+
+To take control, add a `.tfmigrate.hcl` file to the component, set the hook's
+`config` field, or pass `--tfmigrate-config` / `ATMOS_TFMIGRATE_CONFIG` /
+`TFMIGRATE_CONFIG`. For a custom config, Atmos exposes helper variables. Your
+file can then reuse the component's Terraform backend bucket and
+stack-specific history key:
+
+```hcl
+tfmigrate {
+  migration_dir = "./tfmigrate"
+
+  history {
+    storage "s3" {
+      bucket   = env.ATMOS_TFMIGRATE_HISTORY_BUCKET
+      key      = env.ATMOS_TFMIGRATE_HISTORY_KEY
+      region   = env.ATMOS_TFMIGRATE_HISTORY_REGION
+      role_arn = env.ATMOS_TFMIGRATE_HISTORY_ROLE_ARN
+    }
+  }
+}
+```
+
+The history key is `tfmigrate/<stack>/<component>/<workspace>/history.json`.
+This keeps components that share a Terraform backend bucket from colliding.
+Atmos v1 does not persist `tfmigrate` history itself. Rerun-safe automation
+needs durable `tfmigrate` history storage.
 
 ### `kind: infracost`
 
@@ -207,11 +318,57 @@ hooks:
   <dd>Required at runtime. The KICS release tarball does not include the query library, so Atmos toolchain installs provide the binary only. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, supply a trusted KICS query library separately and point `KICS_QUERIES_PATH` at its `assets/queries` directory.</dd>
 </dl>
 
-All three scanner kinds emit SARIF and share a result handler that renders
-findings as a compact markdown table — severity, rule ID (linked to the
-upstream remediation guide when available), short description, and
-`file:line` location. The same markdown body flows to your terminal, the
-Atmos Pro run page, and PR comments.
+### `kind: tflint`
+
+[tflint](https://github.com/terraform-linters/tflint) is an open-source
+Terraform/OpenTofu linter. Where `terraform validate` only proves your config
+parses, tflint enforces **code consistency and conventions** and catches
+**hygiene** problems — unused declarations, deprecated syntax, missing version
+constraints, and invalid provider-specific arguments — so those standards hold
+uniformly across every component instead of relying on reviewers. The `tflint`
+kind runs tflint over the component's sources and feeds the SARIF output
+through Atmos's shared scanner result handler.
+
+Wire it on `before.terraform.init` so a lint failure stops you before any
+init/plan work — a linter should fail fast:
+
+```yaml
+hooks:
+  lint:
+    events: [before.terraform.init]
+    kind: tflint
+```
+
+If your CI job only runs `atmos terraform plan`, `apply`, or `deploy` and does
+not run an explicit `atmos terraform init` step, attach the hook to that command
+instead (for example `before.terraform.plan`) so the lint summary appears in the
+same job.
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`tflint`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`--chdir=$ATMOS_COMPONENT_PATH --format=sarif`.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF on **stdout** — tflint has no file-output flag. The kind opts into stdout capture, so Atmos redirects tflint's stdout into `$ATMOS_OUTPUT_FILE` before parsing (transparent to you; the result is identical to the file-output scanners).</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn` — a lint finding does not block your plan unless you override this. (tflint exits non-zero when it finds issues; the SARIF is still captured and summarized regardless.)</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `tflint` binary on PATH. Declare it in `dependencies.tools` (e.g. `tflint: "0.59.1"`) to have Atmos auto-install through the toolchain. The builtin `terraform` ruleset runs with no configuration; provider rulesets (aws/google/azurerm) require a `.tflint.hcl` plus a one-time `tflint --init` (run it via a separate `kind: command` hook if you need plugins).</dd>
+</dl>
+
+All four SARIF scanner kinds (`trivy`, `checkov`, `kics`, `tflint`) share a
+result handler that renders findings as a compact markdown table — severity,
+rule ID (linked to the upstream remediation guide when available), short
+description, and `file:line` location. The same markdown body flows to your
+terminal, the Atmos Pro run page, and PR comments. In CI it additionally
+becomes a step summary, inline PR annotations (`::error`/`::warning` on the
+diff), and a GitHub Code Scanning upload — all automatic, gated by your `ci.*`
+config.
 
 ### `kind: store`
 
@@ -233,6 +390,22 @@ hooks:
 
 See [Store function reference](#store-function-reference) below for
 configuration details.
+
+Scope the same hook to `after.terraform.output` instead (or in addition) to
+backfill a store from infrastructure that's already deployed — no `apply`
+required. This covers components that were applied before hooks existed, or
+outside Atmos entirely: running `atmos terraform output` reads the current
+state and populates the store the same way an after-apply hook would.
+
+```yaml
+hooks:
+  backfill:
+    events: [after.terraform.output]
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
 
 ### `kind: git`
 
@@ -435,6 +608,22 @@ hooks:
     with: { component: aws, action: down }
 ```
 
+Another common pairing is the [`archive` step type](/workflows/steps/type/archive)
+on `before.terraform.*` events — rebuild a Lambda-style `handler.zip` fresh
+before every plan/apply/destroy, replacing a Terragrunt-style `before_hook`
+shell-out to `zip`:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
 <dl>
   <dt>`type`</dt>
   <dd>The step type to run — any registered workflow/custom-command step type. A typo fails the **preflight** check before Terraform runs.</dd>
@@ -504,6 +693,12 @@ hooks:
 Steps run in list order. A failing step stops the list and the hook's
 `on_failure` policy decides whether the Terraform operation fails, warns, or
 continues. A hook-level `retry` retries the whole ordered list.
+
+An `env` step in the list applies the same two channels as a workflow: values
+always become available to later step payload templates as `{{ .env.NAME }}`;
+they also reach later child processes unless the env step sets `export: false`.
+This state is limited to that one hook invocation (and is reset for every
+retry), so it never changes another hook or the wrapped component operation.
 
 ### Reacting to success or failure
 
@@ -612,7 +807,7 @@ outcome is only meaningful on `after-*` events; `before-*` events always run as
 
 ## Overriding Kind Defaults
 
-Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `store`)
+Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `tflint`, `store`)
 ships defaults for `command`, `args`, `env`, and `on_failure`. Any
 field you set on the hook overrides the kind's default for that field.
 
@@ -901,7 +1096,7 @@ Stores](/stacks/sharing-state/stores).
   <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
 
   <dt>`hooks.<name>.kind`</dt>
-  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, `kics`, or the CI integration hook kinds `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download`. Aliased from legacy `command:` field.</dd>
+  <dd>Which engine runs the hook: `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, or `kics`. Aliased from the legacy `command:` field. The legacy `ci.*` values parse as deprecated no-ops and must not be used for new configuration.</dd>
 
   <dt>`hooks.<name>.type`</dt>
   <dd>For `kind: step`: the [step type](#kind-step-run-a-step-type) to run (e.g. `container`, `http`, `toast`, `log`).</dd>

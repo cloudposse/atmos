@@ -478,16 +478,16 @@ ai:
     # require_confirmation: true    # Default: true (secure by default)
                                      # Set to false to opt-out of prompts
 
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
       - file_read
 
-    restricted_tools:
+    restricted:
       - file_write
       - atmos_terraform_plan
 
-    blocked_tools:
+    blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
 
@@ -1363,10 +1363,10 @@ ai:
 ai:
   # Restrict tool access
   tools:
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
-    blocked_tools:
+    blocked:
       - atmos_terraform_destroy
       - atmos_terraform_apply
 
@@ -1582,16 +1582,16 @@ ai:
     # require_confirmation: true    # Default: true (secure by default)
                                      # Set to false to opt-out of prompts
 
-    allowed_tools:
+    allowed:
       - atmos_describe_*
       - atmos_list_*
       - file_read
 
-    restricted_tools:
+    restricted:
       - file_write
       - atmos_terraform_plan
 
-    blocked_tools:
+    blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
 

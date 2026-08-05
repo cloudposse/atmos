@@ -1,22 +1,41 @@
 ---
 name: atmos-validation
-description: "Policy validation: OPA/Rego policies, JSON Schema, schema manifests, and generic `atmos validate schema` glob-to-JSON-Schema file validation"
+description: "Validate Atmos projects, components, arbitrary JSON Schema inputs, EditorConfig, and GitHub Actions; use affected-file selection and native CI annotations"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
 references:
   - references/json-schema.md
   - references/opa-policies.md
+  - references/project-validation.md
 ---
 
 # Atmos Validation Framework
 
-Use this skill for Atmos validation commands and validation policy configuration: JSON Schema,
-OPA/Rego, EditorConfig validation, Atmos manifest validation, and generic `atmos validate schema`
-checks for arbitrary YAML files.
+Use this skill for every Atmos validation command and validation policy configuration: aggregate
+project validation, configuration and stack schemas, JSON Schema, OPA/Rego, EditorConfig,
+GitHub Actions workflows, affected-file selection, and native CI reporting.
 
 For detailed JSON Schema examples, read [references/json-schema.md](references/json-schema.md).
 For OPA/Rego policy patterns, read [references/opa-policies.md](references/opa-policies.md).
+For project-wide, affected, and CI validation behavior, read
+[references/project-validation.md](references/project-validation.md).
+
+## Start with the Validation Target
+
+| Need | Command |
+|---|---|
+| Run every project validator | `atmos validate` |
+| Validate only changed project inputs | `atmos validate --affected` |
+| Validate `atmos.yaml` | `atmos validate config` or `atmos config validate` |
+| Validate stack manifests | `atmos validate stacks` or `atmos stack validate` |
+| Validate `.editorconfig` rules | `atmos validate editorconfig` |
+| Lint GitHub Actions workflows with actionlint | `atmos ci validate` or `atmos validate ci` |
+| Validate arbitrary files against JSON Schema | `atmos validate schema <key>` |
+| Validate resolved component input | `atmos validate component <component> -s <stack>` |
+
+Start with the narrowest command that matches the change. Use the aggregate command for a
+repository gate because it reports every applicable validator instead of stopping at the first one.
 
 ## Validation Commands
 
@@ -24,6 +43,7 @@ For OPA/Rego policy patterns, read [references/opa-policies.md](references/opa-p
 atmos validate component vpc -s plat-ue2-prod
 atmos validate stacks
 atmos validate schema github-actions
+atmos validate --affected --format rich
 ```
 
 `atmos validate component` validates a component in a stack using `settings.validation` or explicit
@@ -34,6 +54,38 @@ manifest schema compliance.
 
 `atmos validate schema <key>` validates arbitrary files matched by a `schemas.<key>.matches` glob
 against a JSON Schema.
+
+`atmos validate` aggregates configuration, stack, EditorConfig, and GitHub Actions validation when
+those project inputs exist. It is the preferred CI entry point for repository-wide validation.
+
+## Affected Validation and Exclusions
+
+Use `--affected` to select repository inputs changed from the merge base. In GitHub pull requests,
+Atmos reads the PR base; locally, pass `--base <ref>` when the default base is not appropriate.
+
+```shell
+atmos validate --affected --base origin/main --format rich
+atmos config validate --affected
+atmos stack validate --affected
+atmos validate ci --affected
+```
+
+Use repeatable repository-relative glob exclusions to keep deliberately-invalid test fixtures out
+of production validation. `--exclude` works with the aggregate command and the config, stacks,
+schema, and GitHub Actions validators whether they run all inputs or only affected inputs.
+
+```shell
+atmos validate --affected --exclude 'tests/fixtures/**' --format rich
+atmos validate schema github-actions --exclude 'tests/fixtures/**'
+atmos validate ci --exclude 'tests/fixtures/**'
+```
+
+Use slash-separated repository globs. Do not use an exclusion to hide a deployable project path;
+run intentional negative fixtures in a dedicated test or annotation E2E check instead.
+
+`atmos validate editorconfig --exclude` is its established EditorConfig regular-expression flag,
+not the generic repository-glob exclusion. The aggregate command still applies its repository-glob
+`--exclude` before invoking the EditorConfig validator.
 
 ## Base Paths
 
@@ -156,11 +208,27 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
       - uses: actions/checkout@v6
-      - run: atmos validate stacks
+      - run: atmos validate --affected --format rich --exclude 'tests/fixtures/**'
 ```
 
+Enable native CI output in `atmos.yaml` when validation runs in CI:
+
+```yaml
+ci:
+  enabled: true
+  annotations:
+    enabled: true
+```
+
+With native CI enabled, aggregate validation writes an Atmos job summary, including passed,
+skipped, and failed validators. Findings from validators that support source annotations (including
+GitHub Actions/actionlint) emit GitHub Actions workflow commands; a successful validation stays
+visible through the green check and job summary rather than creating success annotations. Use
+`--format rich` for readable CI diagnostics. The actionlint SARIF format is intentionally
+side-effect free, so use it when a separate SARIF uploader owns annotations.
+
 Do not reintroduce deprecated setup actions in new examples. Route broader Native CI workflow
-structure to `atmos-ci`.
+structure, event triggers, permissions, and actionlint annotation E2E tests to `atmos-ci`.
 
 ## Routing
 
@@ -168,6 +236,7 @@ structure to `atmos-ci`.
 |---|---|
 | Detailed JSON Schema patterns | [references/json-schema.md](references/json-schema.md) |
 | Detailed OPA/Rego policy patterns | [references/opa-policies.md](references/opa-policies.md) |
+| Aggregate, affected, exclusions, and native CI behavior | [references/project-validation.md](references/project-validation.md) |
 | Atmos manifest JSON Schema and IDE completion | `atmos-schemas` |
 | Stack manifest structure and imports | `atmos-stacks` |
 | Component configuration and inheritance | `atmos-components` |

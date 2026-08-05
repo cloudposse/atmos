@@ -65,19 +65,19 @@ atmos toolchain install
 ## Steps
 
 1. **Identify which version files exist** in the repo. See the mapping table above. If a file is
-   missing but a version is pinned another way, run `tenv <tool> detect` to find the current
-   resolved version.
+  missing but a version is pinned another way, run `tenv <tool> detect` to find the current
+  resolved version.
 2. **Add one `.tool-versions` line for each tool.** Use the mapping table.
 3. **Add the `toolchain:` block** to `atmos.yaml` if the repo does not already have one. See
-   Before/After above. If OpenTofu is the primary binary for `atmos terraform` commands, add
-   `components.terraform.command: tofu` too.
+  Before/After above. If OpenTofu is the primary binary for `atmos terraform` commands, add
+  `components.terraform.command: tofu` too.
 4. **Verify the setup.** Run `atmos toolchain install`, then run `atmos toolchain list`. Confirm
-   each tool resolves to the expected version.
+  each tool resolves to the expected version.
 5. **Promote versions to `dependencies.tools`** on the specific component or workflow when a
-   version is part of that unit's contract. Use this instead of a repo-wide default. See the
-   "Default Rule" in [atmos-toolchain](../../atmos-toolchain/SKILL.md).
+  version is part of that unit's contract. Use this instead of a repo-wide default. See the
+  "Default Rule" in [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 6. **Remove the version files and uninstall tenv last.** Do this only after the team verifies
-   that `atmos` commands resolve every tool correctly without tenv.
+  that `atmos` commands resolve every tool correctly without tenv.
 
 ## Command Mapping
 

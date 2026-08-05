@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -15,17 +17,22 @@ import (
 func (i *Installer) CreateLatestFile(owner, repo, version string) error {
 	defer perf.Track(nil, "toolchain.WriteSymlink")()
 
-	// Create the latest file path.
 	latestDir := filepath.Join(i.binDir, owner, repo)
+	latestFilePath := filepath.Join(latestDir, "latest")
 	if err := os.MkdirAll(latestDir, defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create latest directory: %w", ErrFileOperation, err)
 	}
-
-	latestFilePath := filepath.Join(latestDir, "latest")
-
-	// Write the version to the latest file.
-	if err := os.WriteFile(latestFilePath, []byte(version), defaultFileWritePermissions); err != nil {
-		return fmt.Errorf("%w: failed to write latest file: %w", ErrFileOperation, err)
+	lock := filelock.New(latestFilePath + ".lock")
+	if err := lock.WithExclusive(context.Background(), func() error {
+		if err := os.MkdirAll(latestDir, defaultMkdirPermissions); err != nil {
+			return fmt.Errorf("%w: failed to create latest directory: %w", ErrFileOperation, err)
+		}
+		if err := os.WriteFile(latestFilePath, []byte(version), defaultFileWritePermissions); err != nil {
+			return fmt.Errorf("%w: failed to write latest file: %w", ErrFileOperation, err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	log.Debug("Created latest file", "path", latestFilePath, "version", version)
@@ -37,17 +44,25 @@ func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
 	defer perf.Track(nil, "toolchain.Installer.ReadLatestFile")()
 
 	latestFilePath := filepath.Join(i.binDir, owner, repo, "latest")
+	if err := os.MkdirAll(filepath.Dir(latestFilePath), defaultMkdirPermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to create latest directory: %w", ErrFileOperation, err)
+	}
 
-	data, err := os.ReadFile(latestFilePath)
+	var version string
+	err := filelock.New(latestFilePath+".lock").WithShared(context.Background(), func() error {
+		data, err := os.ReadFile(latestFilePath)
+		if err != nil {
+			return fmt.Errorf("%w: failed to read latest file: %w", ErrFileOperation, err)
+		}
+		version = strings.TrimSpace(string(data))
+		if version == "" {
+			return fmt.Errorf("%w: latest file is empty", ErrFileOperation)
+		}
+		return nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to read latest file: %w", ErrFileOperation, err)
+		return "", err
 	}
-
-	version := strings.TrimSpace(string(data))
-	if version == "" {
-		return "", fmt.Errorf("%w: latest file is empty", ErrFileOperation)
-	}
-
 	return version, nil
 }
 

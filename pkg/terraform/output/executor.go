@@ -16,7 +16,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // String constants for logging.
@@ -178,13 +177,11 @@ func (e *Executor) GetAllOutputs(
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, err
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return outputs, nil
 }
 
@@ -233,8 +230,7 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -244,12 +240,10 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				ui.ClearLine()
-				ui.Error(message)
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			ui.ClearLine()
-			ui.Success(message)
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -260,8 +254,7 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -273,13 +266,11 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 
@@ -339,8 +330,7 @@ func (e *Executor) GetOutputWithOptions(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -350,12 +340,10 @@ func (e *Executor) GetOutputWithOptions(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				ui.ClearLine()
-				ui.Error(message)
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			ui.ClearLine()
-			ui.Success(message)
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -366,8 +354,7 @@ func (e *Executor) GetOutputWithOptions(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -379,13 +366,11 @@ func (e *Executor) GetOutputWithOptions(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 
@@ -563,6 +548,7 @@ func (e *Executor) execute(
 	if err != nil {
 		return nil, err
 	}
+	pluginCache := configurePluginCache(atmosConfig, config, environMap)
 	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
 	// any PATH overrides from the component's env section.
@@ -584,7 +570,7 @@ func (e *Executor) execute(
 		workspaceMgr := &defaultWorkspaceManager{}
 		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
-		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
+		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache); err != nil {
 			return nil, err
 		}
 

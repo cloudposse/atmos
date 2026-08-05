@@ -353,7 +353,7 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("Version '%s' is not a valid format", version).
-			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
+			WithHint("Version must be a PR number, `pr:NNNN`, `sha:XXXXXXX`, `ref:<name>` (e.g., `ref:main`), or semver (e.g., `1.2.3`)").
 			WithCause(err).
 			WithExitCode(1).
 			Err()

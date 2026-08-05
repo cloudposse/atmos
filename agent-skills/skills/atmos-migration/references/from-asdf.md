@@ -53,22 +53,22 @@ atmos toolchain install
 ## Steps
 
 1. **Leave `.tool-versions` in its current location.** If the file is not at the repo root, set
-   `toolchain.versions_file` (or `ATMOS_TOOL_VERSIONS`) to its path. Do not move the file.
+  `toolchain.versions_file` (or `ATMOS_TOOL_VERSIONS`) to its path. Do not move the file.
 2. **Add a minimal `toolchain:` block to `atmos.yaml`.** Add an `aliases:` entry for each tool
-   whose asdf plugin name does not match an `owner/repo` value in the public Aqua registry. Also
-   add the public Aqua registry itself as a fallback. See Before/After above for an example.
+  whose asdf plugin name does not match an `owner/repo` value in the public Aqua registry. Also
+  add the public Aqua registry itself as a fallback. See Before/After above for an example.
 3. **Verify tool resolution.** Run `atmos toolchain install` to install every tool declared in
-   `.tool-versions`. Then run `atmos toolchain list`. Run `atmos toolchain which terraform` to
-   confirm the resolved binary path.
+  `.tool-versions`. Then run `atmos toolchain list`. Run `atmos toolchain which terraform` to
+  confirm the resolved binary path.
 4. **Move frequently used tools to `dependencies.tools`.** `.tool-versions` is a good default for
-   the whole repository's developer shell. But if a specific component, workflow, or custom
-   command needs a pinned version as part of its contract, declare the tool there instead. See the
-   "Default Rule" and "Where to Declare a Tool" table in
-   [atmos-toolchain](../../atmos-toolchain/SKILL.md). This step is optional. It is not required
-   for the migration to work.
+  the whole repository's developer shell. But if a specific component, workflow, or custom
+  command needs a pinned version as part of its contract, declare the tool there instead. See the
+  "Default Rule" and "Where to Declare a Tool" table in
+  [atmos-toolchain](../../atmos-toolchain/SKILL.md). This step is optional. It is not required
+  for the migration to work.
 5. **Remove the asdf shims last.** First confirm that `atmos <command>` resolves tools correctly
-   without the shims on `PATH`. Uninstall asdf plugins (`asdf plugin remove <name>`) or asdf
-   itself only after the whole team has switched to the Atmos toolchain.
+  without the shims on `PATH`. Uninstall asdf plugins (`asdf plugin remove <name>`) or asdf
+  itself only after the whole team has switched to the Atmos toolchain.
 
 ## Command Mapping
 

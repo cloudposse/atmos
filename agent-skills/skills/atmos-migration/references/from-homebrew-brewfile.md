@@ -65,23 +65,23 @@ mas "Xcode", id: 497799835
 ## Steps
 
 1. **Classify each Brewfile line.** A plain `brew "<formula>"` entry for a standalone CLI tool is
-   a candidate. `cask` entries, `mas` entries, and formulae that pull in a heavy dependency tree
-   or require a source build stay out of scope. Leave these entries in the Brewfile.
+  a candidate. `cask` entries, `mas` entries, and formulae that pull in a heavy dependency tree
+  or require a source build stay out of scope. Leave these entries in the Brewfile.
 2. **Resolve each candidate's GitHub `owner/repo`.** Homebrew formula names often differ from the
-   upstream GitHub repository name. This differs from asdf or aqua. For example, `kubernetes-cli`
-   maps to `kubernetes/kubectl`, and `hashicorp/tap/terraform` maps to `hashicorp/terraform`. You
-   must do this step manually. If the mapping is not obvious, check the formula's `homepage` or
-   `url` field with `brew info <formula>`.
+  upstream GitHub repository name. This differs from asdf or aqua. For example, `kubernetes-cli`
+  maps to `kubernetes/kubectl`, and `hashicorp/tap/terraform` maps to `hashicorp/terraform`. You
+  must do this step manually. If the mapping is not obvious, check the formula's `homepage` or
+  `url` field with `brew info <formula>`.
 3. **Pick a version to pin.** A Brewfile has no native per-project version pinning. `brew bundle`
-   always installs the current version in the tap. Ask the user which version to pin. Or use the
-   currently installed version as a starting point: run `brew list --versions <formula>`.
+  always installs the current version in the tap. Ask the user which version to pin. Or use the
+  currently installed version as a starting point: run `brew list --versions <formula>`.
 4. **Add each tool.** Run `atmos toolchain add owner/repo@version` for each resolved candidate.
 5. **Add the `toolchain:` block to `atmos.yaml`** if the repository does not already have one.
-   See the Before/After section above.
+  See the Before/After section above.
 6. **Verify the result.** Run `atmos toolchain install`, then run `atmos toolchain list`.
 7. **Reduce the Brewfile to the out-of-scope entries only**: casks, `mas` entries, and
-   source-built formulae. Continue to run `brew bundle` for these entries. Do not delete the
-   Brewfile unless every line in it was a migration candidate.
+  source-built formulae. Continue to run `brew bundle` for these entries. Do not delete the
+  Brewfile unless every line in it was a migration candidate.
 
 ## Command Mapping
 

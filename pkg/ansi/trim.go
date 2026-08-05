@@ -74,6 +74,23 @@ func TrimLinesRight(s string) string {
 	return strings.Join(lines, newline)
 }
 
+// TrimLinesRightSpaces trims trailing space characters from each line in a multi-line
+// string, using the ANSI-aware TrimRightSpaces rather than TrimRight. Unlike TrimRight
+// (which heuristically treats a whole trailing foreground-only-styled span as disposable
+// Glamour padding and can delete real styled content, e.g. a bolded table header cell),
+// TrimRightSpaces only ever removes literal trailing space characters and never touches
+// non-space content. Use this for table/column output where every cell — including real
+// text in the last column — may be individually styled.
+func TrimLinesRightSpaces(s string) string {
+	defer perf.Track(nil, "ansi.TrimLinesRightSpaces")()
+
+	lines := strings.Split(s, newline)
+	for i, line := range lines {
+		lines[i] = TrimRightSpaces(line)
+	}
+	return strings.Join(lines, newline)
+}
+
 // trimConsecutiveResets removes consecutive reset codes at the end, keeping at most one.
 // This handles Glamour output like "...\x1b[0m\x1b[0m" -> "...\x1b[0m".
 func trimConsecutiveResets(s string) string {

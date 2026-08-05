@@ -21,20 +21,36 @@ import (
 	"github.com/cloudposse/atmos/tests"
 )
 
-// isRateLimitError checks if an error is a GitHub API rate limit error.
-func isRateLimitError(err error) bool {
+// isGitHubTransientError checks whether a live GitHub API test encountered a
+// condition outside the test's control.
+func isGitHubTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check for our wrapped error type first.
+
 	if errors.Is(err, errUtils.ErrGitHubRateLimitExceeded) {
 		return true
 	}
-	// Fallback to checking error message for GitHub API rate limit errors.
-	// This handles errors from API calls that don't use handleGitHubAPIError.
+
+	var githubError *github.ErrorResponse
+	if errors.As(err, &githubError) && githubError.Response != nil {
+		return githubError.Response.StatusCode >= http.StatusInternalServerError
+	}
+
+	// Fallback for API calls that don't use handleGitHubAPIError.
 	errMsg := err.Error()
 	return strings.Contains(errMsg, "rate limit exceeded") ||
 		strings.Contains(errMsg, "API rate limit")
+}
+
+func TestIsGitHubTransientError(t *testing.T) {
+	assert.True(t, isGitHubTransientError(errUtils.ErrGitHubRateLimitExceeded))
+	assert.True(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusServiceUnavailable},
+	}))
+	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusNotFound},
+	}))
 }
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
@@ -78,8 +94,8 @@ func TestGetLatestRelease(t *testing.T) {
 		repo := "atmos"
 
 		tag, err := GetLatestRelease(owner, repo)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 
 		require.NoError(t, err)
@@ -155,8 +171,8 @@ func TestGetLatestReleaseWithAuthentication(t *testing.T) {
 		repo := "atmos"
 
 		tag, err := GetLatestRelease(owner, repo)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 
 		require.NoError(t, err)
@@ -342,8 +358,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 5)
@@ -367,8 +383,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 10)
@@ -390,8 +406,8 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases1, err := GetReleases(opts1)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 
@@ -404,8 +420,8 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases2, err := GetReleases(opts2)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 
@@ -430,8 +446,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		// Should either be empty or have fewer than requested if offset is near the end.
@@ -449,8 +465,8 @@ func TestGetReleaseByTag(t *testing.T) {
 
 		// Use a known release tag.
 		release, err := GetReleaseByTag("cloudposse", "atmos", "v1.50.0")
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.NotNil(t, release)
@@ -477,8 +493,8 @@ func TestGetLatestReleaseInfo(t *testing.T) {
 		}
 
 		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.NotNil(t, release)

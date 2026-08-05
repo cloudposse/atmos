@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
+import { FaAws } from 'react-icons/fa6';
+import { SiGooglecloud } from 'react-icons/si';
 import { VscAzure } from 'react-icons/vsc';
 import PrimaryCTA from '@site/src/components/PrimaryCTA';
 import DemoVideo from '@site/src/components/landing/DemoVideo';
@@ -55,7 +56,7 @@ function Hero() {
                 className="hero__cloud-logos lp-hero-clouds"
                 aria-label="Multi-cloud: AWS, Azure, GCP"
               >
-                <div className="hero__cloud-logo"><SiAmazonwebservices /></div>
+                <div className="hero__cloud-logo"><FaAws /></div>
                 <div className="hero__cloud-logo"><VscAzure /></div>
                 <div className="hero__cloud-logo"><SiGooglecloud /></div>
               </Link>

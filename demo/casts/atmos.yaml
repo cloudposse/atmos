@@ -1,3 +1,11 @@
+toolchain:
+  aliases:
+    coreutils: uutils/coreutils
+  proxies:
+    ls:
+      tool: coreutils
+      args: [ls, --color=always]
+
 commands:
   - name: casts
     description: Generate published website asciicast demos
@@ -25,6 +33,16 @@ commands:
         name: emulator-aws-fixture
         source: "../../examples/emulator-aws"
         path: "../../.context/cast-fixtures/emulator-aws"
+        reset: true
+      - type: workdir
+        name: backend-provisioning-fixture
+        source: "../../examples/backend-provisioning"
+        path: "../../.context/cast-fixtures/backend-provisioning"
+        reset: true
+      - type: workdir
+        name: hooks-tfmigrate-fixture
+        source: "../../examples/hooks-tfmigrate"
+        path: "../../.context/cast-fixtures/hooks-tfmigrate"
         reset: true
       - type: workdir
         name: quick-start-simple-fixture
@@ -60,6 +78,11 @@ commands:
         name: demo-stacks-fixture
         source: "../../examples/demo-stacks"
         path: "../../.context/cast-fixtures/demo-stacks"
+        reset: true
+      - type: workdir
+        name: weather-reports-fixture
+        source: fixtures/weather
+        path: "../../.context/cast-fixtures/weather"
         reset: true
       - type: workdir
         name: locals-fixture
@@ -280,6 +303,21 @@ commands:
         name: container-component-fixture
         source: "../../examples/container-component"
         path: "../../.context/cast-fixtures/container-component"
+        reset: true
+      - type: workdir
+        name: init-fixture
+        source: "../../examples/init"
+        path: "../../.context/cast-fixtures/init"
+        reset: true
+      - type: workdir
+        name: scaffolding-fixture
+        source: "../../examples/scaffolding"
+        path: "../../.context/cast-fixtures/scaffolding"
+        reset: true
+      - type: workdir
+        name: scaffolds-fixture
+        source: "../../examples/scaffolds"
+        path: "../../.context/cast-fixtures/scaffolds"
         reset: true
       - type: workdir
         name: version-tracker-fixture

@@ -48,18 +48,18 @@ atmos toolchain install
 ## Steps
 
 1. **Read the current pin.** Run `cat .terraform-version` if the file exists. Otherwise, run
-   `tfenv version-name` for the current active version.
+  `tfenv version-name` for the current active version.
 2. **Add it to `.tool-versions`.** Append `terraform <version>`. Create the file if it does not
-   exist.
+  exist.
 3. **Add the `toolchain:` block** to `atmos.yaml` if the repository does not already have one. See
-   Before/After above.
+  Before/After above.
 4. **Verify** the setup. Run `atmos toolchain install`. Then run `atmos toolchain which terraform`.
-   Confirm that `atmos terraform plan <component> -s <stack>` uses the expected version.
+  Confirm that `atmos terraform plan <component> -s <stack>` uses the expected version.
 5. **Promote to `dependencies.tools`** on the specific component. Do this if the version must apply
-   only to that component, not to the whole repository. See the "Default Rule" in
-   [atmos-toolchain](../../atmos-toolchain/SKILL.md).
+  only to that component, not to the whole repository. See the "Default Rule" in
+  [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 6. **Remove `.terraform-version` and uninstall tfenv last.** Do this only after the team verifies
-   that `atmos terraform` commands resolve the correct version without it.
+  that `atmos terraform` commands resolve the correct version without it.
 
 ## Command Mapping
 

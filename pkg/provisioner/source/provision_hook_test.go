@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExtractComponentName(t *testing.T) {
@@ -1453,4 +1456,86 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 	// The guard marker must now be present in componentConfig.
 	_, done := componentConfig[invocationDoneKey]
 	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+}
+
+func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"source": map[string]any{
+			"uri": sourceDir,
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err = AutoProvisionSource(workdir.WithOutputSuppressed(t.Context()), atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err)
+	assert.Empty(t, uiOutput.String())
+}
+
+// TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
+// that a provisioning failure removes the target directory this attempt
+// created. A leftover directory is worse than none: an empty one misleads path
+// resolution (the component "exists" but has no code), and a partially
+// populated one is treated as fully provisioned by needsProvisioning on the
+// next run, silently skipping re-provisioning.
+func TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: tmpDir}
+	componentConfig := map[string]any{
+		"component": "app",
+		"source": map[string]any{
+			// A local source path that doesn't exist forces the download step to fail.
+			"uri": filepath.Join(tmpDir, "does-not-exist-source"),
+		},
+	}
+
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	require.Error(t, err, "provisioning from a nonexistent source must fail")
+
+	assert.NoDirExists(t, filepath.Join(tmpDir, "app"),
+		"a failed provisioning attempt must remove the target directory it created")
+}
+
+// TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir is the
+// negative path for the cleanup above: when the (empty) target directory
+// already existed before the provisioning attempt, a failure must leave it in
+// place — the cleanup only removes what this attempt created.
+func TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetDir := filepath.Join(tmpDir, "app")
+	// Pre-existing but empty, so needsProvisioning still attempts (and fails) a provision.
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: tmpDir}
+	componentConfig := map[string]any{
+		"component": "app",
+		"source": map[string]any{
+			"uri": filepath.Join(tmpDir, "does-not-exist-source"),
+		},
+	}
+
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	require.Error(t, err, "provisioning from a nonexistent source must fail")
+
+	assert.DirExists(t, targetDir,
+		"a failed provisioning attempt must not remove a pre-existing target directory")
 }

@@ -428,13 +428,25 @@ import:
 Components can access outputs from other components using the `remote-state` module or YAML functions:
 
 ```yaml
-# Using YAML function
+# Using YAML functions (state access is the fastest option)
 components:
   terraform:
     eks-cluster:
       vars:
-        vpc_id: !terraform.output vpc vpc_id
-        subnet_ids: !terraform.output vpc private_subnet_ids
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
+```
+
+For a cold `terraform plan --all`, upstream state may not exist yet even though component
+dependencies establish deployment order. Put a provider-valid fallback in the YQ expression; the
+real state value supersedes it after the upstream component deploys:
+
+```yaml
+components:
+  terraform:
+    eks-cluster:
+      vars:
+        vpc_id: !terraform.state vpc '.vpc_id // "vpc-mock"'
 ```
 
 For the Terraform-side approach, use the `remote-state` module:
@@ -450,35 +462,6 @@ module "vpc" {
 ```
 
 This reads the VPC component's Terraform outputs from the same or a different stack.
-
-## Component Versioning Patterns
-
-### Folder-Based Versioning
-
-Maintain multiple versions of a component side by side:
-
-```text
-components/
-  terraform/
-    vpc/
-      v1/
-        main.tf
-      v2/
-        main.tf
-```
-
-```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        name: vpc           # Stable workspace key prefix
-        component: vpc/v2   # Physical version path
-```
-
-### Vendor-Based Versioning
-
-Use `atmos vendor pull` to pin specific upstream versions. See the atmos-vendoring skill for details.
 
 ## Best Practices
 
@@ -496,5 +479,5 @@ atmos describe component vpc -s plat-ue2-prod
 
 ## References
 
-- [references/component-types.md](references/component-types.md) -- Detailed reference on component types, metadata fields, abstract components, inheritance chains
+- [references/component-types.md](references/component-types.md) -- Detailed reference on component types, metadata fields, abstract components, inheritance chains, and versioning
 - [references/examples.md](references/examples.md) -- Concrete configuration examples for VPC, EKS, S3, IAM patterns

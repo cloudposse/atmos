@@ -40,6 +40,8 @@ func NewExecutionContext(atmosConfig *schema.AtmosConfiguration, stack, componen
 
 // WithFile returns a copy of the context with the file path set.
 func (ctx *ExecutionContext) WithFile(file string) *ExecutionContext {
+	defer perf.Track(ctx.AtmosConfig, "function.ExecutionContext.WithFile")()
+
 	newCtx := *ctx
 	newCtx.File = file
 	return &newCtx
@@ -47,6 +49,8 @@ func (ctx *ExecutionContext) WithFile(file string) *ExecutionContext {
 
 // WithBaseDir returns a copy of the context with the base directory set.
 func (ctx *ExecutionContext) WithBaseDir(baseDir string) *ExecutionContext {
+	defer perf.Track(ctx.AtmosConfig, "function.ExecutionContext.WithBaseDir")()
+
 	newCtx := *ctx
 	newCtx.BaseDir = baseDir
 	return &newCtx
@@ -54,6 +58,8 @@ func (ctx *ExecutionContext) WithBaseDir(baseDir string) *ExecutionContext {
 
 // WithStackInfo returns a copy of the context with stack info set.
 func (ctx *ExecutionContext) WithStackInfo(stackInfo *schema.ConfigAndStacksInfo) *ExecutionContext {
+	defer perf.Track(ctx.AtmosConfig, "function.ExecutionContext.WithStackInfo")()
+
 	newCtx := *ctx
 	newCtx.StackInfo = stackInfo
 	return &newCtx
