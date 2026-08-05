@@ -3,12 +3,21 @@ package container
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/network"
+	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestGetString(t *testing.T) {
@@ -423,6 +432,143 @@ RUN echo "test build"
 	}
 
 	require.NoError(t, err, "Build should succeed")
+}
+
+func TestDockerRuntime_EnsureBuilder_Integration(t *testing.T) {
+	// Integration test - creating the same named builder twice must be idempotent
+	// ("existing instance" treated as success), not a hard failure.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	cfg := &DriverConfig{Name: "atmos-test-builder", Provider: "docker-container"}
+
+	err := ensureBuilder(ctx, runtime, cfg)
+	if err != nil {
+		t.Skipf("Docker Buildx not available, skipping: %v", err)
+		return
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "buildx", "rm", cfg.Name).Run()
+	})
+
+	// Second call targets the same name and must not error.
+	err = ensureBuilder(ctx, runtime, cfg)
+	require.NoError(t, err, "second ensureBuilder call should be idempotent")
+}
+
+func TestDockerRuntime_EnsureBuilder_DefaultName(t *testing.T) {
+	// Unit test - verifies the default name is applied without requiring Docker.
+	cfg := &DriverConfig{Provider: "docker-container"}
+	assert.Equal(t, "atmos", effectiveDriverName(cfg))
+}
+
+// TestDockerRuntime_EnsureBuilder_SucceedsWithFakeBuildx exercises ensureBuilder's
+// success path (a `buildx create` invocation that exits zero) without requiring a
+// real Docker daemon, using a fake `docker` executable on PATH.
+func TestDockerRuntime_EnsureBuilder_SucceedsWithFakeBuildx(t *testing.T) {
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: dockerCmd,
+		Mode: testhelpers.FakeContainerRuntimeStep,
+	})
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	runtime := NewDockerRuntime()
+	cfg := &DriverConfig{Name: "atmos-fake-builder", Provider: "docker-container"}
+
+	require.NoError(t, ensureBuilder(context.Background(), runtime, cfg))
+
+	recorded, err := os.ReadFile(argsPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "buildx\tcreate\t--name\tatmos-fake-builder\t--driver\tdocker-container")
+}
+
+func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
+	if os.Getenv("ATMOS_TEST_REGISTRY_CACHE") != "1" {
+		t.Skip("set ATMOS_TEST_REGISTRY_CACHE=1 to run the Docker Buildx registry-cache integration test")
+	}
+	if err := exec.Command("docker", "info").Run(); err != nil {
+		t.Skipf("Docker is unavailable: %v", err)
+	}
+
+	// Rootless/CI daemons can't always run the privileged Ryuk reaper, and its own
+	// image pull is one more Docker-Hub-flakiness surface; this test already
+	// terminates the network and registry explicitly via t.Cleanup, so Ryuk is
+	// unnecessary. Mirrors the same trade-off tests/floci_containers_test.go makes.
+	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+
+	ctx := context.Background()
+	testNetwork, err := network.New(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testNetwork.Remove(ctx) })
+
+	// Pull through Google's public Docker Hub mirror rather than registry-1.docker.io
+	// directly: it's a straight cache of the same images, so behavior is identical,
+	// but it sidesteps Docker Hub's own rate limiting and transient 5xx outages.
+	// isTransientPullError/pullRetryConfig are pkg/container/pull.go's existing
+	// retry policy for exactly this class of registry/network failure.
+	var registry testcontainers.Container
+	require.NoError(t, retry.WithPredicate(ctx, pullRetryConfig(), func() error {
+		var runErr error
+		registry, runErr = testcontainers.Run(
+			ctx, "mirror.gcr.io/library/registry:2",
+			network.WithNetwork([]string{"cache-registry"}, testNetwork),
+			testcontainers.WithExposedPorts("5000/tcp"),
+			testcontainers.WithWaitStrategy(wait.ForListeningPort("5000/tcp").WithStartupTimeout(30*time.Second)),
+		)
+		return runErr
+	}, isTransientPullError))
+	t.Cleanup(func() { _ = registry.Terminate(ctx) })
+
+	contextDir := t.TempDir()
+	dockerfile := filepath.Join(contextDir, "Dockerfile")
+	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM mirror.gcr.io/library/busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
+	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
+	buildkitdConfig := filepath.Join(contextDir, "buildkitd.toml")
+	require.NoError(t, os.WriteFile(buildkitdConfig, []byte(`[registry."cache-registry:5000"]
+  http = true
+  insecure = true
+`), 0o600))
+	// Append a per-invocation timestamp suffix so a stale builder left behind by an
+	// interrupted or overlapping run never collides with this run's builder name.
+	runSuffix := strings.ReplaceAll(t.Name(), "/", "-") + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	firstDriver := &DriverConfig{Name: "atmos-cache-export-" + runSuffix, Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	secondDriver := &DriverConfig{Name: "atmos-cache-import-" + runSuffix, Provider: "docker-container", Opts: map[string]string{"network": testNetwork.Name}}
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "buildx", "rm", firstDriver.Name).Run()
+		_ = exec.Command("docker", "buildx", "rm", secondDriver.Name).Run()
+	})
+
+	runtime := NewDockerRuntime()
+	// The disposable registry intentionally runs without TLS. BuildKit runs inside
+	// the docker-container builder, so configure each builder explicitly rather
+	// than relying on the host Docker daemon's registry settings.
+	for _, driver := range []*DriverConfig{firstDriver, secondDriver} {
+		args := append(buildBuilderCreateArgs(driver), "--buildkitd-config", buildkitdConfig)
+		output, err := exec.Command("docker", args...).CombinedOutput()
+		require.NoError(t, err, "create BuildKit builder for HTTP test registry failed:\n%s", output)
+	}
+	require.NoError(t, runtime.Build(ctx, &BuildConfig{
+		Engine:     "buildx",
+		Dockerfile: dockerfile,
+		Context:    contextDir,
+		Driver:     firstDriver,
+		Cache:      &CacheConfig{To: []map[string]string{{"type": "registry", "ref": cacheRef, "mode": "max"}}},
+	}))
+
+	require.NoError(t, ensureBuilder(ctx, runtime, secondDriver))
+	importArgs := buildBuildArgs(&BuildConfig{
+		Engine:     "buildx",
+		Dockerfile: dockerfile,
+		Context:    contextDir,
+		Driver:     secondDriver,
+		Cache:      &CacheConfig{From: []map[string]string{{"type": "registry", "ref": cacheRef}}},
+	})
+	importArgs = append(importArgs[:2], append([]string{"--progress=plain"}, importArgs[2:]...)...)
+	output, err := exec.Command("docker", importArgs...).CombinedOutput()
+	require.NoError(t, err, "Buildx cache import failed:\n%s", output)
+	assert.Contains(t, string(output), "CACHED", "second build should reuse the exported registry cache")
 }
 
 func TestDockerRuntime_Logs_Integration(t *testing.T) {

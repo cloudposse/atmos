@@ -1,0 +1,145 @@
+---
+title: atmos scaffold validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Validate versioned AtmosScaffoldConfig template manifests before generation.
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Validate a template's `scaffold.yaml` before it reaches a developer or CI. Validation checks the
+versioned manifest contract; generation then validates the answers supplied to that contract.
+</Intro>
+
+<CastPlayer title="atmos scaffold validate --help" src="/casts/screengrabs/atmos-scaffold-validate--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos scaffold validate [path]
+```
+
+```shell
+atmos scaffold validate
+atmos scaffold validate ./scaffolds/terraform-component
+```
+
+## Valid Manifest
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: terraform-component
+  description: Standard Terraform component
+  version: 1.0.0
+spec:
+  fields:
+    - name: component_name
+      label: Component name
+      type: input
+      required: true
+      validation:
+        pattern: "^[a-z0-9-]+$"
+        message: Use lowercase letters, digits, and hyphens.
+    - name: region
+      type: select
+      options: [us-east-1, us-west-2]
+      default: us-east-1
+    - name: environments
+      type: multiselect
+      options: [dev, staging, prod]
+      default: [dev]
+    - name: enable_monitoring
+      type: confirm
+      default: false
+    - name: alert_email
+      type: input
+      when: "answers.enable_monitoring == true"
+  files:
+    - path: monitoring.tf
+      when: "answers.enable_monitoring == true"
+```
+
+The required manifest identity is `apiVersion: atmos/v1`, `kind: AtmosScaffoldConfig`, and
+`metadata.name`. `metadata.description`, `metadata.author`, and `metadata.version` are optional
+metadata. `spec.values`, `spec.source`, and `spec.baseRef` are normally persisted by generation to
+record answers and provenance for updates.
+
+## What Validation Checks
+
+- Manifest identity, YAML shape, field names, supported field types, and field-specific options.
+- The `when:` representation: a predicate/CEL string or list is valid; map-style
+  `{all, any, not}` conditions are rejected for scaffold manifests.
+- Regex syntax in `validation.pattern` and structural constraints in the generated JSON Schema.
+- Conditional file entries and the step-backed hook configuration shape.
+
+`atmos scaffold validate` checks template configuration. `atmos scaffold generate` additionally
+checks concrete answers: required text, select/multiselect options, boolean coercion, and regex
+matches across prompts, defaults, persisted values, and `--set` flags.
+
+## Common Fixes
+
+Use `spec.fields`, not the retired `prompts:` key:
+
+```yaml
+# Invalid
+prompts:
+  - name: component_name
+    type: input
+
+# Valid
+spec:
+  fields:
+    - name: component_name
+      type: input
+```
+
+Declare options as scalar values and use a boolean comparison in CEL:
+
+```yaml
+spec:
+  fields:
+    - name: enabled
+      type: confirm
+    - name: environment
+      type: select
+      options: [dev, prod]
+      when: "answers.enabled == true"
+```
+
+## CI Validation
+
+```yaml title=".github/workflows/validate-scaffolds.yml"
+name: Validate scaffolds
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate templates
+        run: |
+          for manifest in scaffolds/*/scaffold.yaml; do
+            atmos scaffold validate "$(dirname "$manifest")"
+          done
+```
+
+Follow validation with a dry run and representative `--set` values:
+
+```shell
+atmos scaffold validate ./scaffolds/terraform-component
+atmos scaffold generate ./scaffolds/terraform-component ./test-output \
+  --defaults --set component_name=vpc --dry-run --skip-hooks
+```
+
+## Related Commands
+
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate)
+- [Scaffold templates](/cli/commands/scaffold)
+- [Workflow step types](/workflows/steps/type)

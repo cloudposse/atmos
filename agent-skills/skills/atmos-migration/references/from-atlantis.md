@@ -29,12 +29,12 @@ stacks, or Terraform code.
 **Recipe:**
 
 1. Read the [Concept Mapping](#concept-mapping) table. Find which Atlantis behaviors the project
-   uses. Most `atlantis.yaml` files use a small set of these behaviors.
+  uses. Most `atlantis.yaml` files use a small set of these behaviors.
 2. Add the `ci:` block to `atmos.yaml`. Add the GitHub Actions workflows from
-   [atmos-ci](../../atmos-ci/SKILL.md). Do not remove the Atlantis integration yet. Run both
-   systems on real pull requests. Compare the plan output from each system.
+  [atmos-ci](../../atmos-ci/SKILL.md). Do not remove the Atlantis integration yet. Run both
+  systems on real pull requests. Compare the plan output from each system.
 3. Confirm the output from Native CI matches the output from Atlantis. Then, follow the
-   [Checklist to Remove Atlantis](#checklist-to-remove-atlantis).
+  [Checklist to Remove Atlantis](#checklist-to-remove-atlantis).
 
 ## Shape B: The Project Uses Plain Terraform and Atlantis
 
@@ -45,14 +45,14 @@ Native CI.
 **Recipe:**
 
 1. Move the Terraform code to Atmos first. Find the layout of the Terraform code. Follow
-   [from-native-terraform.md](from-native-terraform.md). If the Atlantis projects use
-   `terraform.workspace`, follow [from-terraform-workspaces.md](from-terraform-workspaces.md)
-   instead. Confirm `atmos terraform plan` gives correct output for each former Atlantis project
-   before you change the CI system.
+  [from-native-terraform.md](from-native-terraform.md). If the Atlantis projects use
+  `terraform.workspace`, follow [from-terraform-workspaces.md](from-terraform-workspaces.md)
+  instead. Confirm `atmos terraform plan` gives correct output for each former Atlantis project
+  before you change the CI system.
 2. After you create the components and stacks, treat the CI move as
-   [Shape A](#shape-a-the-project-uses-atmos-now). The project did not use
-   `integrations.atlantis`. Go directly to the Concept Mapping table and the Checklist to Remove
-   Atlantis.
+  [Shape A](#shape-a-the-project-uses-atmos-now). The project did not use
+  `integrations.atlantis`. Go directly to the Concept Mapping table and the Checklist to Remove
+  Atlantis.
 
 Do not do both moves in one step. Complete the move to Atmos. Confirm the output of `atmos
 terraform plan` matches the output of the old `terraform plan` command. Then, start the move to
@@ -79,17 +79,17 @@ This table shows each Atlantis feature and the matching Atmos Native CI feature.
 ## Checklist to Remove Atlantis
 
 1. Add the `ci:` block to `atmos.yaml`. Set `enabled`, `output`, `summary`, `checks`, and
-   `comments`. See [atmos-ci Native CI First](../../atmos-ci/SKILL.md#native-ci-first) for the
-   full schema.
+  `comments`. See [atmos-ci Native CI First](../../atmos-ci/SKILL.md#native-ci-first) for the
+  full schema.
 2. Add two GitHub Actions workflows. Add a pull request workflow that finds the affected matrix
-   and runs a plan. Add a merge or manual workflow that runs a deploy. Use the examples in
-   [atmos-ci references/native-ci.md](../../atmos-ci/references/native-ci.md). Grant only the
-   permissions each enabled `ci.*` feature needs, such as `statuses: write`, `checks: write`, or
-   `pull-requests: write`.
+  and runs a plan. Add a merge or manual workflow that runs a deploy. Use the examples in
+  [atmos-ci references/native-ci.md](../../atmos-ci/references/native-ci.md). Grant only the
+  permissions each enabled `ci.*` feature needs, such as `statuses: write`, `checks: write`, or
+  `pull-requests: write`.
 3. Run both systems on real pull requests. Compare the plan output, the resource counts, and the
-   pass or fail result. Confirm the results match before you continue.
+  pass or fail result. Confirm the results match before you continue.
 4. Remove the `integrations.atlantis` section from `atmos.yaml`. Remove any `settings.atlantis`
-   overrides from the stack config files.
+  overrides from the stack config files.
 
 **Note:** Read the [Known Gaps](#known-gaps) section before you continue. If the team uses
 Atlantis project locks or apply-time pull request comments, make a plan for this gap before you

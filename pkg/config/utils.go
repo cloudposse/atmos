@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	_ "github.com/cloudposse/atmos/pkg/store/providers" // Register the built-in store backends.
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -840,8 +841,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 // GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	contextPrefix := ""
@@ -921,8 +921,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	stackNamePattern string,
 ) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			fmt.Errorf("stack name pattern must be provided")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	var stack string

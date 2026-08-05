@@ -1,9 +1,9 @@
 package devcontainer
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -34,14 +34,14 @@ func (m *Manager) ShowConfig(atmosConfig *schema.AtmosConfiguration, name string
 // printSettings prints runtime settings.
 func printSettings(settings *Settings) {
 	if settings.Runtime != "" {
-		fmt.Printf("Runtime: %s\n\n", settings.Runtime)
+		_ = data.Writef("Runtime: %s\n\n", settings.Runtime)
 	}
 }
 
 // printBasicInfo prints basic devcontainer information.
 func printBasicInfo(config *Config) {
-	fmt.Printf("Name: %s\n", config.Name)
-	fmt.Printf("Image: %s\n", config.Image)
+	_ = data.Writef("Name: %s\n", config.Name)
+	_ = data.Writef("Image: %s\n", config.Image)
 }
 
 // printBuildInfo prints build configuration.
@@ -50,14 +50,14 @@ func printBuildInfo(config *Config) {
 		return
 	}
 
-	fmt.Println("\nBuild:")
-	fmt.Printf("  Dockerfile: %s\n", config.Build.Dockerfile)
-	fmt.Printf("  Context: %s\n", config.Build.Context)
+	_ = data.Writeln("\nBuild:")
+	_ = data.Writef("  Dockerfile: %s\n", config.Build.Dockerfile)
+	_ = data.Writef("  Context: %s\n", config.Build.Context)
 
 	if len(config.Build.Args) > 0 {
-		fmt.Println("  Args:")
+		_ = data.Writeln("  Args:")
 		for k, v := range config.Build.Args {
-			fmt.Printf("    %s: %s\n", k, v)
+			_ = data.Writef("    %s: %s\n", k, v)
 		}
 	}
 }
@@ -65,11 +65,11 @@ func printBuildInfo(config *Config) {
 // printWorkspaceInfo prints workspace configuration.
 func printWorkspaceInfo(config *Config) {
 	if config.WorkspaceFolder != "" {
-		fmt.Printf("\nWorkspace Folder: %s\n", config.WorkspaceFolder)
+		_ = data.Writef("\nWorkspace Folder: %s\n", config.WorkspaceFolder)
 	}
 
 	if config.WorkspaceMount != "" {
-		fmt.Printf("Workspace Mount: %s\n", config.WorkspaceMount)
+		_ = data.Writef("Workspace Mount: %s\n", config.WorkspaceMount)
 	}
 }
 
@@ -79,9 +79,9 @@ func printMounts(config *Config) {
 		return
 	}
 
-	fmt.Println("\nMounts:")
+	_ = data.Writeln("\nMounts:")
 	for _, mount := range config.Mounts {
-		fmt.Printf("  - %s\n", mount)
+		_ = data.Writef("  - %s\n", mount)
 	}
 }
 
@@ -108,12 +108,12 @@ func printPorts(config *Config) {
 		return
 	}
 
-	fmt.Println("\nForward Ports:")
+	_ = data.Writeln("\nForward Ports:")
 	for _, port := range ports {
 		if port.HostPort == port.ContainerPort {
-			fmt.Printf("  - %d\n", port.ContainerPort)
+			_ = data.Writef("  - %d\n", port.ContainerPort)
 		} else {
-			fmt.Printf("  - %d:%d\n", port.HostPort, port.ContainerPort)
+			_ = data.Writef("  - %d:%d\n", port.HostPort, port.ContainerPort)
 		}
 	}
 
@@ -129,9 +129,9 @@ func printEnv(config *Config) {
 		return
 	}
 
-	fmt.Println("\nEnvironment Variables:")
+	_ = data.Writeln("\nEnvironment Variables:")
 	for k, v := range config.ContainerEnv {
-		fmt.Printf("  %s: %s\n", k, v)
+		_ = data.Writef("  %s: %s\n", k, v)
 	}
 }
 
@@ -141,15 +141,15 @@ func printRunArgs(config *Config) {
 		return
 	}
 
-	fmt.Println("\nRun Arguments:")
+	_ = data.Writeln("\nRun Arguments:")
 	for _, arg := range config.RunArgs {
-		fmt.Printf("  - %s\n", arg)
+		_ = data.Writef("  - %s\n", arg)
 	}
 }
 
 // printRemoteUser prints remote user configuration.
 func printRemoteUser(config *Config) {
 	if config.RemoteUser != "" {
-		fmt.Printf("\nRemote User: %s\n", config.RemoteUser)
+		_ = data.Writef("\nRemote User: %s\n", config.RemoteUser)
 	}
 }

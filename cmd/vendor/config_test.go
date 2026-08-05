@@ -70,6 +70,20 @@ func TestVendorConfigSetCmd_RunE(t *testing.T) {
 	assert.Equal(t, "v0.9.0", got)
 }
 
+func TestVendorConfigSetCmd_CreatesNewPath(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+
+	// spec.sources[0].description does not exist yet -- exercises the "created" branch.
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].description", "VPC module"}))
+
+	got, err := atmosyaml.GetFile(file, "spec.sources[0].description")
+	require.NoError(t, err)
+	assert.Equal(t, "VPC module", got)
+}
+
 func TestVendorConfigSetCmd_MissingFile(t *testing.T) {
 	resetCommandFlags(t, vendorConfigSetCmd)
 
@@ -106,6 +120,22 @@ func TestVendorConfigDeleteCmd_RunE(t *testing.T) {
 	_, err := atmosyaml.GetFile(file, "spec.sources[0].targets")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+func TestVendorConfigDeleteCmd_NothingToDelete(t *testing.T) {
+	resetCommandFlags(t, vendorConfigDeleteCmd)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigDeleteCmd.Flags().Set("file", file))
+
+	before, err := os.ReadFile(file)
+	require.NoError(t, err)
+
+	require.NoError(t, vendorConfigDeleteCmd.RunE(vendorConfigDeleteCmd, []string{"spec.sources[0].does_not_exist"}))
+
+	after, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "an absent-path delete must not touch the file")
 }
 
 func TestVendorConfigDeleteCmd_MissingFile(t *testing.T) {
@@ -186,6 +216,44 @@ func TestVendorConfigListCmd_MissingFile(t *testing.T) {
 
 	err := vendorConfigListCmd.RunE(vendorConfigListCmd, nil)
 	require.Error(t, err)
+}
+
+// --- independent per-subcommand flags ------------------------------------------
+
+// TestVendorConfigSubcommands_FlagsIndependent proves each vendor config subcommand's flags
+// (--file, --type, --format, --delimiter) are backed by fully independent per-command
+// StandardParsers, not the shared package-level vars this migrated from: setting one
+// subcommand's flag must not leak into another subcommand's default value, and a flag that only
+// exists on one subcommand must not be registered on the others at all.
+func TestVendorConfigSubcommands_FlagsIndependent(t *testing.T) {
+	resetCommandFlags(t, vendorConfigGetCmd)
+	resetCommandFlags(t, vendorConfigSetCmd)
+	resetCommandFlags(t, vendorConfigDeleteCmd)
+	resetCommandFlags(t, vendorConfigFormatCmd)
+	resetCommandFlags(t, vendorConfigListCmd)
+
+	require.NoError(t, vendorConfigGetCmd.Flags().Set("file", "get-only.yaml"))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", "set-only.yaml"))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("type", atmosyaml.TypeInt))
+	require.NoError(t, vendorConfigListCmd.Flags().Set("format", "json"))
+	require.NoError(t, vendorConfigListCmd.Flags().Set("delimiter", ";"))
+
+	// Each command's own flag holds exactly the value set on it.
+	assert.Equal(t, "get-only.yaml", vendorConfigGetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, "set-only.yaml", vendorConfigSetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, atmosyaml.TypeInt, vendorConfigSetCmd.Flags().Lookup("type").Value.String())
+	assert.Equal(t, "json", vendorConfigListCmd.Flags().Lookup("format").Value.String())
+	assert.Equal(t, ";", vendorConfigListCmd.Flags().Lookup("delimiter").Value.String())
+
+	// Unrelated commands' --file remain at their own untouched defaults.
+	assert.Equal(t, "", vendorConfigDeleteCmd.Flags().Lookup("file").Value.String(), "delete's --file must not pick up get's or set's value")
+	assert.Equal(t, "", vendorConfigFormatCmd.Flags().Lookup("file").Value.String(), "format's --file must not pick up get's or set's value")
+	assert.Equal(t, "", vendorConfigListCmd.Flags().Lookup("file").Value.String(), "list's --file must not pick up get's or set's value")
+
+	// Flags that only exist on one subcommand must not be registered on the others at all.
+	assert.Nil(t, vendorConfigGetCmd.Flags().Lookup("type"), "get must not register set's --type flag")
+	assert.Nil(t, vendorConfigDeleteCmd.Flags().Lookup("format"), "delete must not register list's --format flag")
+	assert.Nil(t, vendorConfigFormatCmd.Flags().Lookup("delimiter"), "format must not register list's --delimiter flag")
 }
 
 // --- buildVendorConfigPathRows error paths ------------------------------------

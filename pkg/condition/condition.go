@@ -43,6 +43,10 @@ type Context struct {
 	Hook      string
 	Event     string
 	Env       map[string]string
+	// Answers carries caller-supplied structured facts (e.g. scaffold prompt
+	// answers) available to CEL expressions as the `answers` map. Unlike Env,
+	// values may be any type (string, bool, list, ...), not just strings.
+	Answers map[string]any
 }
 
 // PredicateFunc evaluates a named condition predicate against runtime facts.
