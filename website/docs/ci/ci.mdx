@@ -88,8 +88,43 @@ Atmos's native CI features rely on the standard GitHub Actions permission scopes
 | PR comments | `pull-requests: write` |
 | Checkout | `contents: read` |
 | OIDC token issuance | `id-token: write` |
+| SBOM workflow artifact upload | `contents: read`; GitHub Actions runtime credentials (see below) |
 
 There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
+
+### SBOM Artifacts
+
+Running `atmos sbom generate --upload` uses the detected native CI provider to retain the generated SBOM with the CI run. In GitHub Actions, this is a workflow artifact, not a Dependency Graph import. GitHub's SBOM REST API can export or request a GitHub-generated SPDX report, but it does not accept an arbitrary submitted SBOM. Add `github-runtime` before the command so Atmos can access the runtime API for Actions artifacts.
+
+```yaml
+- uses: cloudposse/atmos/actions/github-runtime@v1
+  with:
+    mode: env
+- run: atmos sbom generate --format spdx-json --output sbom.spdx.json --upload
+  env:
+    GITHUB_TOKEN: ${{ github.token }}
+```
+
+### Validate Workflows
+
+Lint GitHub Actions workflows directly with Atmos before running infrastructure commands:
+
+```yaml title=".github/workflows/validate.yml"
+- name: Validate workflows
+  run: atmos validate ci
+```
+
+`atmos validate ci` is an alias for [`atmos ci validate`](/cli/commands/ci/validate). With no file arguments it checks every `.yml` and `.yaml` workflow under the current working directory's `.github/workflows`. In GitHub Actions it emits inline annotations when `ci.enabled: true` and annotations are enabled. Use `--format=sarif` to write a SARIF document for an explicit code-scanning upload step.
+
+To lint workflow fixtures or another workflow directory, pass `--workflow-path`. The repository includes an intentionally invalid scenario that is useful for a local smoke test:
+
+```shell
+atmos ci validate --workflow-path tests/fixtures/scenarios/invalid-github-actions-workflows/.github/workflows
+```
+
+The command reports the invalid `branch` key and exits with status 1.
+
+Atmos respects `.github/actionlint.yaml` or `.github/actionlint.yml`, including custom self-hosted runner labels. See [`atmos ci validate`](/cli/commands/ci/validate) for file selection, output formats, and configuration details.
 
 ### Plan on Pull Request
 
@@ -387,6 +422,25 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
       <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci-advanced">Matrix Example</PrimaryCTA>
     </div>
 </ActionCard>
+
+:::warning Concurrency groups aren't a deployment queue
+By default (`concurrency.queue: single`), a GitHub Actions `concurrency` group holds at most two
+runs at a time: one **in progress** and one **pending**. Triggering a third run cancels the
+pending one and takes its place — this eviction happens regardless of `cancel-in-progress`, so
+intermediate triggers can be silently dropped. Setting `cancel-in-progress: true` additionally
+cancels the **in-progress** run itself, which can interrupt a Terraform apply and leave a remote
+state lock that needs manual recovery. Setting `queue: max` instead allows up to 100 pending runs
+before any get canceled, but it is still not a FIFO deployment queue and cannot be combined with
+`cancel-in-progress: true`.
+
+Remote state locking only prevents concurrent writers — it doesn't protect against a partially
+applied change or automatically recover an interrupted run. Inspect the affected resources,
+confirm the previous run has actually stopped, and only then run
+[`atmos terraform force-unlock`](/cli/commands/terraform/force-unlock) before retrying the apply.
+GitHub environments add approval gates and merge queues order merges, but neither guarantees
+deployment *execution* order — reach for an explicit promotion workflow or deployment controller
+when you require that.
+:::
 
 ## Features
 

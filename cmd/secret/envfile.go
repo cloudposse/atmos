@@ -40,7 +40,8 @@ func parseSecretsFile(path, format string) (map[string]string, error) {
 	}
 }
 
-// parseEnvSecrets parses KEY=VALUE lines, ignoring blanks and # comments.
+// parseEnvSecrets parses KEY=VALUE lines, ignoring blanks and # comments. An inline comment starts
+// at an unquoted # preceded by whitespace, so URLs/fragments and quoted values retain their #.
 func parseEnvSecrets(reader io.Reader) (map[string]string, error) {
 	out := make(map[string]string)
 	scanner := bufio.NewScanner(reader)
@@ -53,12 +54,44 @@ func parseEnvSecrets(reader io.Reader) (map[string]string, error) {
 		if !found {
 			continue
 		}
-		out[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"'`)
+		key = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(key), "export "))
+		value = strings.TrimSpace(stripEnvInlineComment(value))
+		out[key] = strings.Trim(value, `"'`)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+//nolint:revive // The state machine is clearer than splitting quote and escape handling across helpers.
+func stripEnvInlineComment(value string) string {
+	var quote rune
+	escaped := false
+	for index, char := range value {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if char == '\\' && quote == '"' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if char == quote {
+				quote = 0
+			}
+			continue
+		}
+		if char == '"' || char == '\'' {
+			quote = char
+			continue
+		}
+		if char == '#' && index > 0 && (value[index-1] == ' ' || value[index-1] == '\t') {
+			return value[:index]
+		}
+	}
+	return value
 }
 
 // parseJSONSecrets parses a flat JSON object of string values.

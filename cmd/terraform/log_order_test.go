@@ -16,6 +16,7 @@ func TestLogOrderFlagRegistered(t *testing.T) {
 		"apply":   applyCmd,
 		"deploy":  deployCmd,
 		"destroy": destroyCmd,
+		"init":    initCmd,
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

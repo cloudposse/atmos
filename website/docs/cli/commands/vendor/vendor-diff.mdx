@@ -19,12 +19,18 @@ new version.
 ## Usage
 
 ```shell
-atmos vendor diff --component <name> [--from <ref>] [--to <ref>] [--diff-file <path>]
+atmos vendor diff --component <name> [--type <type>] [--from <ref>] [--to <ref>] [--diff-file <path>]
 ```
 
 `--from` defaults to the component's current pinned version and `--to` defaults to the
 latest tag. A missing or extra leading `v` is tolerated, so `2.0.0` resolves a `v2.0.0`
 tag and vice versa.
+
+If `--component` isn't declared in `vendor.yaml` — or no `vendor.yaml` exists — Atmos falls
+back to the component's own `component.yaml`/`component.yml` manifest (found under
+`Components.<type>.BasePath/<component>/`), matching
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s existing precedence:
+`vendor.yaml` wins whenever it declares the component.
 
 ## Examples
 
@@ -50,6 +56,8 @@ atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
   <dd>Ending ref. Defaults to the latest tag.</dd>
   <dt>`--diff-file` (string)</dt>
   <dd>Restrict the diff to a single file path within the component.</dd>
+  <dt>`--type` / `-t` (string, default `terraform`)</dt>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`.</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest to read the component's source from (imports are followed).</dd>
 </dl>

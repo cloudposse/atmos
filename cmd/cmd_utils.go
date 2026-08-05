@@ -30,9 +30,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -61,6 +63,9 @@ var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
+
+// equalsSign separates a flag name from its inline value (e.g. `--flag=value`).
+const equalsSign = "="
 
 const (
 	customCommandKeyCommand  = "command"
@@ -100,6 +105,18 @@ func processCustomCommands(
 	commands []schema.Command,
 	parentCommand *cobra.Command,
 ) error {
+	return processCustomCommandsWithWorkingDirectory(&atmosConfig, commands, parentCommand, "")
+}
+
+// processCustomCommandsWithWorkingDirectory registers custom commands recursively.
+// A child command inherits its parent's working_directory unless it explicitly
+// defines one of its own.
+func processCustomCommandsWithWorkingDirectory(
+	atmosConfig *schema.AtmosConfiguration,
+	commands []schema.Command,
+	parentCommand *cobra.Command,
+	parentWorkingDirectory string,
+) error {
 	var command *cobra.Command
 
 	for _, commandCfg := range commands {
@@ -109,6 +126,9 @@ func processCustomCommands(
 		commandConfig, err := cloneCommand(&commandCfg)
 		if err != nil {
 			return err
+		}
+		if commandConfig.WorkingDirectory == "" {
+			commandConfig.WorkingDirectory = parentWorkingDirectory
 		}
 
 		// Check if the parent already has a subcommand with this name (built-in or previously added).
@@ -132,7 +152,7 @@ func processCustomCommands(
 			command = existing
 		} else {
 			// Create new custom command with flag validation.
-			customCommand, err := createCustomCommand(&atmosConfig, commandConfig, parentCommand)
+			customCommand, err := createCustomCommand(atmosConfig, commandConfig, parentCommand)
 			if err != nil {
 				return err
 			}
@@ -140,7 +160,7 @@ func processCustomCommands(
 			command = customCommand
 		}
 
-		err = processCustomCommands(atmosConfig, commandConfig.Commands, command)
+		err = processCustomCommandsWithWorkingDirectory(atmosConfig, commandConfig.Commands, command, commandConfig.WorkingDirectory)
 		if err != nil {
 			return err
 		}
@@ -863,6 +883,19 @@ func executeCustomCommand(
 		}
 	}
 
+	// Resolve the toolchain-augmented PATH from the command's already-resolved
+	// dependencies so a `type: tflint` (or other toolchain-aware) step run from
+	// a custom command sees the same pinned binaries a workflow step would,
+	// instead of silently falling back to whatever is on the ambient PATH.
+	toolchainEnv, err := dependencies.NewEnvironmentFromDeps(&atmosConfig, deps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve toolchain PATH for command '%s'", commandConfig.Name).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
@@ -871,6 +904,7 @@ func executeCustomCommand(
 	})
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
+	configureCustomCommandScannerContext(stepVars, &atmosConfig, toolchainEnv.PATH(), authManager)
 
 	// Freshness checker for steps' `inputs:` (sources/generates/check), shared across all
 	// steps in this command run. See internal/exec/workflow_utils.go's identical wiring.
@@ -1146,6 +1180,12 @@ func executeCustomCommand(
 		// The dispatch is wrapped in a collapsible CI log group (no-op outside
 		// CI / when disabled), labeled with the step name or command. Exec steps
 		// run bare because a successful Unix exec never returns to close a group.
+		var commandResult *stepPkg.StepResult
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return runErr
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1153,25 +1193,30 @@ func executeCustomCommand(
 				// Steps with tty/interactive attach the user's terminal so commands
 				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     commandToRun,
-					Name:        commandName,
-					Dir:         stepWorkDir,
-					Env:         env,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-				}, func() error {
-					if step.Output == string(stepPkg.OutputModeNone) {
+				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+						Command:     commandToRun,
+						Name:        commandName,
+						Dir:         stepWorkDir,
+						Env:         env,
+						TTY:         step.Tty,
+						Interactive: step.Interactive,
+					}, func() error {
+						stdout := ioLayer.MaskWriter(os.Stdout)
+						stderr := ioLayer.MaskWriter(os.Stderr)
+						if step.Output == string(stepPkg.OutputModeNone) {
+							stdout = io.Discard
+							stderr = io.Discard
+						}
 						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
 							Command: commandToRun,
 							Name:    commandName,
 							Dir:     stepWorkDir,
 							EnvVars: env,
-							Stdout:  io.Discard,
-							Stderr:  io.Discard,
+							Stdout:  io.MultiWriter(stdout, stdoutCapture),
+							Stderr:  io.MultiWriter(stderr, stderrCapture),
 						})
-					}
-					return e.ExecuteShell(commandToRun, commandName, stepWorkDir, env, false)
+					})
 				})
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
@@ -1188,7 +1233,29 @@ func executeCustomCommand(
 				if execErr != nil {
 					return execErr
 				}
-				return e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
+				return runCommandStep(func(stdout, stderr io.Writer) error {
+					execOpts := []e.ShellCommandOption{
+						e.WithStdoutCapture(stdout),
+						e.WithStderrCapture(stderr),
+					}
+					if step.Output == string(stepPkg.OutputModeNone) {
+						execOpts = append(execOpts, e.WithProcessStreams(process.Streams{
+							Stdin:  os.Stdin,
+							Stdout: io.Discard,
+							Stderr: io.Discard,
+						}))
+					}
+					return e.ExecuteShellCommand(
+						atmosConfig,
+						execPath,
+						args,
+						stepWorkDir,
+						env,
+						false,
+						"",
+						execOpts...,
+					)
+				})
 			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
 				// Route through the same control-step engine workflows use, so `needs:`,
 				// concurrency, and fail-mode semantics are identical in custom commands.
@@ -1242,9 +1309,13 @@ func executeCustomCommand(
 		}
 		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			if step.Retry != nil {
-				return retry.Do(context.Background(), step.Retry, runStep)
+				if retryErr := retry.Do(context.Background(), step.Retry, runStep); retryErr != nil {
+					return retryErr
+				}
+			} else if runErr := runStep(); runErr != nil {
+				return runErr
 			}
-			return runStep()
+			return stepPkg.StoreCommandResult(stepVars, step.Name, step.Outputs, commandResult)
 		})
 		if err != nil {
 			var silentExit errUtils.ExitCodeError
@@ -1293,6 +1364,35 @@ func stepFreshnessName(name string, index int) string {
 		return name
 	}
 	return fmt.Sprintf("step-%d", index)
+}
+
+func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			StackFromArg:     stack,
+			Stack:            stack,
+		}
+		stackConfig, err := cfg.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := e.ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {
@@ -1503,7 +1603,7 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	u.PrintMessage("")
+	_ = data.Writeln("")
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
@@ -1512,20 +1612,22 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 
 	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
-	u.PrintfMarkdownToTUI("\n")
-
+	var configSection string
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
-		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
+		configSection = fmt.Sprintf(missingConfigDefaultMarkdown, stacksDir)
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
-		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
+		configSection = fmt.Sprintf(missingConfigFoundMarkdown, stacksDir)
 	}
 
-	u.PrintfMarkdownToTUI("\n")
-
-	// Use markdown formatting for consistent output to stderr.
-	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
+	// Render as a single markdown document (not one call per section): the
+	// renderer pads every call with its own leading/trailing blank line, so
+	// multiple calls in sequence compound into extra blank lines between
+	// sections. gettingStartedMarkdown is concatenated as plain text, not
+	// interpolated as a format string, since it may itself contain literal
+	// '%' characters.
+	ui.MarkdownMessage("\n" + configSection + "\n" + gettingStartedMarkdown)
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -1580,7 +1682,102 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
+	return isVersionCommandWithArgs(os.Args)
+}
+
+// isVersionCommandWithArgs checks if the given args represent a version command.
+// This is a testable version of isVersionCommand that accepts args as a parameter.
+// It only recognizes root-level version requests. Once a real command token is
+// reached, any later --version belongs to that command.
+func isVersionCommandWithArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "version" || arg == "--version" {
+			return true
+		}
+		if arg == "--" {
+			return false
+		}
+		skip, consumesValue := isSkippableRootFlag(arg)
+		if !skip {
+			// A real command token (or an unrecognized flag) ends the scan.
+			return false
+		}
+		if consumesValue {
+			i++ // The flag's value is the next arg.
+		}
+	}
+	return false
+}
+
+// isSkippableRootFlag reports whether arg is a root-level flag that should be
+// skipped while scanning for a version request. The consumesValue result is
+// true when the flag takes a separate value argument (i.e. a value flag without
+// an inline `=value`).
+func isSkippableRootFlag(arg string) (skip, consumesValue bool) {
+	if isRootBoolFlag(arg) {
+		return true, false
+	}
+	if isRootValueFlag(arg) {
+		return true, !strings.Contains(arg, equalsSign)
+	}
+	if strings.HasPrefix(arg, "-C") && arg != "-C" {
+		return true, false
+	}
+	return false, false
+}
+
+func isRootBoolFlag(arg string) bool {
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
+	switch flagName {
+	case "--ai",
+		"--force-color",
+		"--force-tty",
+		"--heatmap",
+		"--help",
+		"-h",
+		"--interactive",
+		"--mask",
+		"--no-color",
+		"--profiler-enabled",
+		"--verbose",
+		"-v":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRootValueFlag(arg string) bool {
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
+	switch flagName {
+	case "--base-path",
+		"--chdir",
+		"-C",
+		"--config",
+		"--config-path",
+		"--heatmap-mode",
+		"--identity",
+		"--logs-file",
+		"--logs-level",
+		"--pager",
+		"--profile",
+		"--profile-file",
+		"--profile-type",
+		"--profiler-host",
+		"--profiler-port",
+		"--redirect-stderr",
+		"--settings-list-merge-strategy",
+		"--skill",
+		"--use-version":
+		return true
+	default:
+		return false
+	}
 }
 
 // isHelpRequestedInArgs reports whether this invocation is a help request.
@@ -1634,6 +1831,22 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 		showErrorExampleFromMarkdown(cmd, args[0])
 	}
 	errUtils.Exit(1)
+}
+
+// showArgCountErrorAndExit renders a wrong-number/format-of-arguments error
+// using Cobra's own Args validator message (e.g. "accepts 1 arg(s), received
+// 2"), instead of the "Unknown command" message showErrorExampleFromMarkdown
+// always produces. Only called for leaf commands with no subcommands, where a
+// validation failure can only mean the arguments themselves are wrong --
+// never an unrecognized subcommand name. Some validators (e.g. cobra.NoArgs)
+// already embed the command path in their own message, so it's only
+// prepended here when the message doesn't already mention it.
+func showArgCountErrorAndExit(cmd *cobra.Command, argErr error) {
+	msg := argErr.Error()
+	if !strings.Contains(msg, cmd.CommandPath()) {
+		msg = fmt.Sprintf("`%s` %s", cmd.CommandPath(), msg)
+	}
+	showUsageExample(cmd, msg+"\n")
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {

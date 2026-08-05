@@ -83,6 +83,10 @@ type Flags struct {
 	// this invocation. Controls how lists are merged in Atmos stack manifests
 	// (replace, append, merge).
 	SettingsListMergeStrategy string
+
+	// Edition pins defaults to a date-anchored edition for this invocation
+	// (--edition, "YYYY", "YYYY-MM", or "YYYY-MM-DD"). See pkg/edition.
+	Edition string
 }
 
 // NewFlags creates a Flags with default values.

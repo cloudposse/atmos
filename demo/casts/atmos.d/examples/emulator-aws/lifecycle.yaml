@@ -12,7 +12,7 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         output: none
         command: |
-          atmos --logs-level=Off emulator down aws -s dev || true
+          atmos --logs-level=Off emulator down aws -s local || true
           atmos --logs-level=Off terraform reset || true
       - type: cast
         name: lifecycle
@@ -30,16 +30,16 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: "# start a local `AWS` emulator, declared as a component in the dev stack"
+            text: "# start a local `AWS` emulator, declared in the local stack"
           - type: simulate
-            text: &emulator_up_cmd atmos emulator up aws -s dev --ephemeral
+            text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
           - type: shell
             name: emulator-up
             duration: 450ms
             interval: 750ms
             command: *emulator_up_cmd
           - type: simulate
-            text: &emulator_ps_cmd atmos emulator ps aws -s dev
+            text: &emulator_ps_cmd atmos emulator ps -s local
           - type: shell
             name: emulator-ps
             duration: 450ms
@@ -64,7 +64,7 @@ commands:
           - type: simulate
             text: "# tear it down when you're done"
           - type: simulate
-            text: &emulator_down_cmd atmos emulator down aws -s dev
+            text: &emulator_down_cmd atmos emulator down aws -s local
           - type: shell
             name: emulator-down
             when: always
@@ -85,7 +85,7 @@ commands:
               "floci/floci:1.5.23",
               text,
           )
-          text = re.sub(r"(?<=atmos-dev-emulator-aws\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
+          text = re.sub(r"(?<=atmos-local-emulator-aws\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
           path.write_text(text)
           import os, sys
           sys.path.insert(0, os.getcwd())
@@ -116,7 +116,8 @@ commands:
               "# run real terraform against it, no `AWS` account needed",
               "emulator aws is up",
               "emulator aws is up at http://127.0.0.1:",
-              "aws\tatmos-dev-emulator-aws\tfloci/floci:1.5.23\trunning",
+              "local/aws",
+              "floci/floci:1.5.23",
               "running",
               "Apply complete!",
               "stage =",

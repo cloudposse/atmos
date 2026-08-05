@@ -13,20 +13,24 @@ import (
 func TestStartManagedTerraformCache_ExternalCacheIsNoop(t *testing.T) {
 	// An externally managed cache (e.g. the mirror's shared proxy) is reused, so the
 	// per-component startup is a no-op.
-	setup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
+	setup, cleanup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
 		TerraformCacheExternal: true,
 	})
 	require.NoError(t, err)
 	assert.Nil(t, setup)
+	require.NotNil(t, cleanup)
+	cleanup()
 }
 
 func TestStartManagedTerraformCache_DisabledIsNoop(t *testing.T) {
 	// With no cache configured, tfcache.Start returns nil and the helper does nothing.
 	info := &schema.ConfigAndStacksInfo{}
-	setup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, info)
+	setup, cleanup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, info)
 	require.NoError(t, err)
 	assert.Nil(t, setup)
 	assert.Nil(t, info.TerraformCache)
+	require.NotNil(t, cleanup)
+	cleanup()
 }
 
 func TestStartManagedTerraformCache_EnabledStartsProxy(t *testing.T) {
@@ -37,7 +41,7 @@ func TestStartManagedTerraformCache_EnabledStartsProxy(t *testing.T) {
 	}
 	info := &schema.ConfigAndStacksInfo{}
 
-	setup, err := startManagedTerraformCache(atmosConfig, info)
+	setup, cleanup, err := startManagedTerraformCache(atmosConfig, info)
 	if err != nil {
 		// macOS/Windows: the fresh loopback cert is not yet OS-trusted, so VerifyTrust
 		// rejects it and the proxy is closed. On Linux/BSD the happy path below runs
@@ -49,5 +53,5 @@ func TestStartManagedTerraformCache_EnabledStartsProxy(t *testing.T) {
 
 	require.NotNil(t, setup)
 	assert.Same(t, setup, info.TerraformCache)
-	t.Cleanup(func() { _ = setup.Close(t.Context()) })
+	t.Cleanup(cleanup)
 }

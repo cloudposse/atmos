@@ -251,6 +251,7 @@ func TestTasks_UnmarshalYAML_InvalidStructuredDecode(t *testing.T) {
 
 func TestTask_ToWorkflowStep(t *testing.T) {
 	maxAttempts := 3
+	export := false
 	task := Task{
 		Name:             "test-task",
 		Command:          "echo hello",
@@ -269,6 +270,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 			MaxAttempts: &maxAttempts,
 		},
 		Timeout: 30 * time.Second,
+		Export:  &export,
 	}
 
 	step := task.ToWorkflowStep()
@@ -290,11 +292,13 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, forgiven, "Continue must survive Task -> WorkflowStep conversion")
 	assert.Equal(t, task.Retry, step.Retry)
+	assert.Same(t, task.Export, step.Export)
 	// Note: Timeout is not in WorkflowStep.
 }
 
 func TestTaskFromWorkflowStep(t *testing.T) {
 	maxAttempts := 5
+	export := false
 	step := WorkflowStep{
 		Name:             "workflow-step",
 		Command:          "terraform apply",
@@ -312,6 +316,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
+		Export: &export,
 	}
 
 	task := TaskFromWorkflowStep(&step)
@@ -333,6 +338,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, forgiven, "Continue must survive WorkflowStep -> Task conversion")
 	assert.Equal(t, step.Retry, task.Retry)
+	assert.Same(t, step.Export, task.Export)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }
 

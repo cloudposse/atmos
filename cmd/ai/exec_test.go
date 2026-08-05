@@ -410,6 +410,54 @@ ai:
 	})
 }
 
+// TestExecCommand_NoStacksYet verifies exec can start in a brand-new project that has
+// no stack manifests at all (no stacks/ directory). It must not fail with a
+// stack-discovery error such as "failed to find import" -- stack graph tools load
+// stack manifests lazily, so config init must succeed regardless of stacks.
+func TestExecCommand_NoStacksYet(t *testing.T) {
+	tmpDir := t.TempDir()
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := `
+base_path: "` + filepath.ToSlash(tmpDir) + `"
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+ai:
+  enabled: true
+  default_provider: invalid_provider
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	testCmd := &cobra.Command{
+		Use:  "exec",
+		Args: cobra.MaximumNArgs(1),
+	}
+	testCmd.Flags().StringP("format", "f", "text", "Output format")
+	testCmd.Flags().StringP("output", "o", "", "Output file")
+	testCmd.Flags().Bool("no-tools", false, "Disable tools")
+	testCmd.Flags().Bool("context", false, "Include context")
+	testCmd.Flags().StringP("provider", "p", "", "Provider")
+	testCmd.Flags().StringP("session", "s", "", "Session")
+	testCmd.Flags().StringSlice("include", nil, "Include patterns")
+	testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+	testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+	err := execCmd.RunE(testCmd, []string{"test prompt"})
+	require.Error(t, err)
+	// Fails later (invalid provider), never at stack discovery.
+	assert.NotContains(t, err.Error(), "failed to find import")
+	assert.NotContains(t, err.Error(), "no stack manifests found")
+}
+
 func TestExecCommand_Examples(t *testing.T) {
 	t.Run("long description contains examples", func(t *testing.T) {
 		assert.Contains(t, execCmd.Long, "atmos ai exec")

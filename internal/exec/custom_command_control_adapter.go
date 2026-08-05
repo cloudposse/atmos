@@ -46,7 +46,9 @@ func ExecuteCustomCommandControlStep(ctx context.Context, control *CustomCommand
 		CommandLineStack:    control.CommandLineStack,
 		CommandLineIdentity: control.CommandIdentity,
 		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
-			return prepareStepEnvironment(baseEnv, identity, stepName, control.AuthManager, workflowEnv, stepEnv)
+			// Custom-command parallel/matrix children have no `type: env` persistent-env
+			// concept (that's a sequential-workflow-only feature) -- pass nil.
+			return prepareStepEnvironment(baseEnv, identity, stepName, control.AuthManager, workflowEnv, nil, stepEnv)
 		},
 		RunCommand: func(request *workflow.ControlCommandRequest) error {
 			return ExecuteShellCommand(

@@ -16,10 +16,13 @@ import (
 func validateBuildAction(step *schema.WorkflowStep) error {
 	build := effectiveBuildStep(step)
 	if !isValidContainerRuntime(build.Provider) {
-		return invalidContainerField(step, "build.provider", build.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "build.provider", build.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerBuildEngine(build.Engine) {
 		return invalidContainerField(step, "build.engine", build.Engine, "Build engine must be `buildx` or empty for the runtime default")
+	}
+	if (build.Driver != nil || build.Cache != nil) && build.Engine != containerBuildEngineBuildx && build.Bake == nil {
+		return invalidContainerField(step, "build.engine", build.Engine, "Buildx driver and cache configuration require `engine: buildx`")
 	}
 	if (build.Engine == containerBuildEngineBuildx || build.Bake != nil) && build.Provider != string(container.TypeDocker) {
 		return invalidContainerField(step, "build.provider", build.Provider, "Docker Buildx and Bake require `provider: docker` in V1; Podman uses the native `podman build` path")
@@ -115,6 +118,14 @@ func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Var
 	if err != nil {
 		return nil, err
 	}
+	driver, err := resolveBuildDriver(vars, build.Driver, step.Name)
+	if err != nil {
+		return nil, err
+	}
+	cache, err := resolveBuildCache(vars, build.Cache)
+	if err != nil {
+		return nil, err
+	}
 	return &container.BuildConfig{
 		Dockerfile: dockerfile,
 		Context:    contextDir,
@@ -125,7 +136,58 @@ func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Var
 		NoCache:    build.NoCache,
 		Pull:       build.Pull,
 		Bake:       bake,
+		Driver:     driver,
+		Cache:      cache,
 	}, nil
+}
+
+func resolveBuildDriver(vars *Variables, driver *schema.ContainerDriverConfig, stepName string) (*container.DriverConfig, error) {
+	if driver == nil {
+		return nil, nil
+	}
+	name, err := resolveOptional(vars, driver.Name, "build.driver.name", stepName)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := resolveOptional(vars, driver.Provider, "build.driver.provider", stepName)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := vars.ResolveEnvMap(driver.Opts)
+	if err != nil {
+		return nil, err
+	}
+	return &container.DriverConfig{Name: name, Provider: provider, Opts: opts}, nil
+}
+
+func resolveBuildCache(vars *Variables, cache *schema.ContainerCacheConfig) (*container.CacheConfig, error) {
+	if cache == nil {
+		return nil, nil
+	}
+	from, err := resolveBuildCacheEntries(vars, cache.From)
+	if err != nil {
+		return nil, err
+	}
+	to, err := resolveBuildCacheEntries(vars, cache.To)
+	if err != nil {
+		return nil, err
+	}
+	return &container.CacheConfig{From: from, To: to}, nil
+}
+
+func resolveBuildCacheEntries(vars *Variables, entries []map[string]string) ([]map[string]string, error) {
+	if entries == nil {
+		return nil, nil
+	}
+	resolved := make([]map[string]string, 0, len(entries))
+	for _, entry := range entries {
+		attrs, err := vars.ResolveEnvMap(entry)
+		if err != nil {
+			return nil, err
+		}
+		resolved = append(resolved, attrs)
+	}
+	return resolved, nil
 }
 
 func resolveBuildBake(vars *Variables, bake *schema.ContainerBuildBakeStep, stepName string) (*container.BakeConfig, error) {

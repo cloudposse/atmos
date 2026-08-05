@@ -371,6 +371,32 @@ func TestRunStackSet_ExplicitFile(t *testing.T) {
 	assert.Equal(t, "us-west-2", got)
 }
 
+func TestRunStackSet_ExplicitFile_CreatesNewPath(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeString
+
+	// vars.az does not exist yet -- exercises the "created" branch.
+	require.NoError(t, runStackSet([]string{"vars.az", "a"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.az")
+	require.NoError(t, err)
+	assert.Equal(t, "a", got)
+}
+
 func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)

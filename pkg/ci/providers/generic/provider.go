@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -157,7 +158,7 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 
 	// No output file configured - log the output.
 	// log.Debug("CI output", "key", key, "value", value)
-	fmt.Fprintln(os.Stderr, fmt.Sprintf("%s=%s", key, value))
+	ui.Writef("%s=%s\n", key, value)
 	return nil
 }
 
@@ -179,7 +180,7 @@ func (w *OutputWriter) WriteSummary(content string) error {
 
 	// No summary file configured - write to stderr.
 	// This makes the summary visible in local testing.
-	fmt.Fprintln(os.Stderr, content)
+	ui.Writef("%s\n", content)
 	return nil
 }
 

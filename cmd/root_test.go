@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -74,6 +76,18 @@ func TestNoColorLog(t *testing.T) {
 			t.Logf("Command output: %s", output)
 		}
 	})
+}
+
+func TestSyncGlobalFlagsToViperIncludesEdition(t *testing.T) {
+	previous := viper.GetString(editionFlagName)
+	t.Cleanup(func() { viper.Set(editionFlagName, previous) })
+
+	command := &cobra.Command{Use: "atmos"}
+	command.Flags().String(editionFlagName, "", "Edition pin")
+	require.NoError(t, command.Flags().Set(editionFlagName, "2025-09"))
+
+	syncGlobalFlagsToViper(command)
+	assert.Equal(t, "2025-09", viper.GetString(editionFlagName))
 }
 
 func TestInitFunction(t *testing.T) {
@@ -223,57 +237,83 @@ func TestInvocationGroupLabel(t *testing.T) {
 	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
 }
 
-func TestArgsRequestNoArgGitClone(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{
-			name: "no arg git clone",
-			args: []string{"git", "clone"},
-			want: true,
-		},
-		{
-			name: "global profile flag is ignored for bootstrap detection",
-			args: []string{"--profile", "github", "git", "clone", "--depth", "1", "--filter=blob:none"},
-			want: true,
-		},
-		{
-			name: "positional repository is not CI bootstrap",
-			args: []string{"git", "clone", "repo"},
-			want: false,
-		},
-		{
-			name: "native git args imply explicit clone",
-			args: []string{"git", "clone", "--", "--no-tags"},
-			want: false,
-		},
-		{
-			name: "all flag is not CI bootstrap",
-			args: []string{"git", "clone", "--all"},
-			want: false,
-		},
-	}
+// newBootstrapCloneCmd builds a command tree mirroring cmd/git's real
+// gitCmd -> cloneCmd parent/name relationship (root -> git -> clone), with
+// the same --ci/--all bool flags the real clone command registers. This is
+// enough for gitcmd.CICloneBootstrapRequested's name/parent check to match,
+// without importing cmd/git's unexported command singletons.
+func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []string) {
+	t.Helper()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, argsRequestNoArgGitClone(tt.args))
-		})
-	}
+	root := &cobra.Command{Use: "atmos"}
+	git := &cobra.Command{Use: "git"}
+	clone := &cobra.Command{Use: "clone"}
+	clone.Flags().Bool("ci", false, "")
+	clone.Flags().Bool("all", false, "")
+	root.AddCommand(git)
+	git.AddCommand(clone)
+
+	require.NoError(t, clone.ParseFlags(rawArgs))
+	return clone, clone.Flags().Args()
 }
 
-func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
-	origArgs := os.Args
-	t.Cleanup(func() { os.Args = origArgs })
-	os.Args = []string{"atmos", "--profile", "github", "git", "clone"}
+// saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
+// applyCIGitCloneBootstrap writes to) and restores it after the test, since
+// it is shared global state across this package's tests.
+func saveRestoreAtmosConfig(t *testing.T) {
+	t.Helper()
+	original := atmosConfig
+	t.Cleanup(func() { atmosConfig = original })
+}
+
+func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+	// Pin ATMOS_CI: resolveCICloneMode falls back to reading this env var when
+	// --ci isn't set, so an ambient ATMOS_CI=false in the developer/CI
+	// environment would otherwise make this test flaky (mirrors the guard in
+	// cmd/git/bootstrap_test.go).
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.True(t, applied)
+	assert.True(t, tmpConfig.CI.Enabled)
+	assert.True(t, atmosConfig.CI.Enabled,
+		"the package-level atmosConfig must be enabled too: it's what cmd/git's RunE actually reads")
+}
+
+func TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut(t *testing.T) {
+	saveRestoreAtmosConfig(t)
 	t.Setenv("GITHUB_ACTIONS", "true")
 
-	cfg := &schema.AtmosConfiguration{}
-	err := handleConfigInitError(assert.AnError, cfg)
+	cmd, args := newBootstrapCloneCmd(t, []string{"--ci=false"})
+	tmpConfig := &schema.AtmosConfiguration{}
 
-	assert.NoError(t, err)
-	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.False(t, applied)
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
+}
+
+func TestApplyCIGitCloneBootstrap_NoCIProviderDetected(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "false")
+	// Pin ATMOS_CI for determinism: ci.Detect() short-circuits before it's read
+	// here, but pinning avoids any ambient-value surprises if that ordering
+	// ever changes.
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	assert.False(t, applyCIGitCloneBootstrap(cmd, args, tmpConfig))
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
 }
 
 func TestPreprocessArgs_NoArgs(t *testing.T) {
@@ -584,11 +624,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -608,9 +646,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Set ATMOS_PAGER=false to explicitly disable the pager.
 		t.Setenv("ATMOS_PAGER", "false")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		// This is required because Execute() needs to initialize atmosConfig from environment variables.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should be disabled via ATMOS_PAGER=false, so no TTY error should occur.
@@ -628,11 +665,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -654,8 +689,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// The pager should detect no TTY and fall back to direct output.
 		t.Setenv("ATMOS_PAGER", "true")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should detect the lack of TTY and fall back to printing directly.
@@ -965,14 +1000,17 @@ func TestParseChdirFromArgs(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "multiple --chdir flags (first wins)",
+			// Last-flag-wins matches Cobra's own normal-path parsing of this same
+			// flag (both go through pflag) — the old hand-rolled scanner was
+			// actually the inconsistent one here, returning on first match.
+			name:     "multiple --chdir flags (last wins, matching Cobra's own flag parsing)",
 			args:     []string{"atmos", "--chdir=/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
-			name:     "mixed -C and --chdir (first wins)",
+			name:     "mixed -C and --chdir (last wins)",
 			args:     []string{"atmos", "-C/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
 			name:     "--chdir with tilde",
@@ -1085,20 +1123,12 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args.
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}
 
-			if len(tt.args) > 0 {
-				os.Args = tt.args
-			}
-
 			// Should not panic.
-			setupColorProfileFromEnv()
+			setupColorProfileFromEnvWithArgs(tt.args)
 		})
 	}
 }

@@ -18,11 +18,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -266,6 +268,64 @@ func TestUsageErrorHelpersExit(t *testing.T) {
 		_ = showFlagUsageAndExit(known, errors.New("unknown flag: --bad"))
 	})
 	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		showArgCountErrorAndExit(known, errors.New("accepts 1 arg(s), received 2"))
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
+// TestShowArgCountErrorAndExit_MessageContent locks in the fix for a
+// misleading-error regression: a leaf command (no subcommands) whose Args
+// validator fails on argument count (e.g. `atmos config delete a b` against
+// cobra.ExactArgs(1)) must report the actual "wrong argument count" cause,
+// never "Unknown command <first-arg>" -- the first arg is often a perfectly
+// valid value, just accompanied by too many/few others.
+func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+	errUtils.OsExit = func(int) {
+		panic("exit")
+	}
+
+	deleteCmd := &cobra.Command{
+		Use:  "delete",
+		Args: cobra.ExactArgs(1),
+	}
+	parent := &cobra.Command{Use: "config"}
+	parent.AddCommand(deleteCmd)
+
+	argErr := deleteCmd.Args(deleteCmd, []string{"mcp.enabled", "true"})
+	require.Error(t, argErr)
+
+	oldStderr := os.Stderr
+	r, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	assert.Panics(t, func() {
+		showArgCountErrorAndExit(deleteCmd, argErr)
+	})
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, err := io.Copy(&output, r)
+	require.NoError(t, err)
+
+	// Strip ANSI since CI-enabled color rendering can wrap this message across
+	// separate escape-coded spans, splitting the plain substring below.
+	got := atmosansi.Strip(output.String())
+	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
+	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
 
 func TestHandlePathResolutionError(t *testing.T) {
@@ -308,6 +368,8 @@ func TestVersionManagementCommandClassification(t *testing.T) {
 }
 
 func TestEnableHeatmapIfRequested(t *testing.T) {
+	ensureIOInitialized(t)
+
 	oldArgs := os.Args
 	t.Cleanup(func() {
 		os.Args = oldArgs
@@ -369,8 +431,63 @@ func TestIsVersionCommand(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "global flag before version subcommand",
+			args:     []string{"--verbose", "version"},
+			expected: true,
+		},
+		{
+			name:     "global flag before --version flag",
+			args:     []string{"--verbose", "--version"},
+			expected: true,
+		},
+		{
+			name:     "global string flag before version subcommand",
+			args:     []string{"--config", "atmos.yaml", "version"},
+			expected: true,
+		},
+		{
+			name:     "global string flag equals form before version subcommand",
+			args:     []string{"--config=atmos.yaml", "version"},
+			expected: true,
+		},
+		{
+			name:     "global shorthand value flag before version subcommand",
+			args:     []string{"-C", "examples/demo-stacks", "version"},
+			expected: true,
+		},
+		{
+			name:     "global shorthand attached value before version subcommand",
+			args:     []string{"-Cexamples/demo-stacks", "version"},
+			expected: true,
+		},
+		{
+			name:     "global bool flag equals form before --version flag",
+			args:     []string{"--interactive=false", "--version"},
+			expected: true,
+		},
+		{
+			name:     "custom command owns version flag",
+			args:     []string{"install", "--version", "1.2.3"},
+			expected: false,
+		},
+		{
+			name:     "terraform command owns version flag",
+			args:     []string{"terraform", "plan", "--version"},
+			expected: false,
+		},
+		{
+			name:     "scaffold command owns version flag",
+			args:     []string{"scaffold", "generate", "--version"},
+			expected: false,
+		},
+		{
 			name:     "not version command",
 			args:     []string{"help"},
+			expected: false,
+		},
+		{
+			name:     "subcommand with flags but no version token",
+			args:     []string{"terraform", "plan", "--stack", "dev"},
 			expected: false,
 		},
 		{
@@ -416,6 +533,8 @@ func skipIfHelmfileNotInstalled(t *testing.T) {
 
 // TestPrintMessageForMissingAtmosConfig tests the printMessageForMissingAtmosConfig function.
 func TestPrintMessageForMissingAtmosConfig(t *testing.T) {
+	ensureIOInitialized(t)
+
 	tests := []struct {
 		name        string
 		atmosConfig schema.AtmosConfiguration
@@ -2242,6 +2361,7 @@ func TestProcessCustomCommands(t *testing.T) {
 
 func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T) {
 	_ = NewTestKit(t)
+	ensureIOInitialized(t)
 
 	restore := ci.SwapRegistryForTest()
 	t.Cleanup(restore)
@@ -2643,4 +2763,24 @@ func TestAppendComponentEnvVars_CommandEnvOverrides(t *testing.T) {
 
 	assert.Contains(t, env, "SHARED=from-command")
 	assert.NotContains(t, env, "SHARED=from-component")
+}
+
+// TestConfigureCustomCommandScannerContext_SetsToolchainPATH guards against a
+// regression where a `type: tflint` (or other toolchain-aware) step run from
+// a custom command silently lost the toolchain-resolved PATH that the
+// equivalent workflow step path (configureStepScannerContext) sets, falling
+// back to whatever tflint happens to be on the ambient PATH.
+func TestConfigureCustomCommandScannerContext_SetsToolchainPATH(t *testing.T) {
+	vars := stepPkg.NewStepExecutor().Variables()
+	toolchainPath := filepath.Join("opt", "toolchain", "bin")
+
+	configureCustomCommandScannerContext(vars, &schema.AtmosConfiguration{}, toolchainPath, nil)
+
+	assert.Equal(t, toolchainPath, vars.ToolchainPATH)
+}
+
+func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
+	assert.NotPanics(t, func() {
+		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
+	})
 }

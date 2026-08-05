@@ -183,7 +183,11 @@ Prefer specific tools over generic ones:
 - Use search_files for searching
 - Only use execute_atmos_command for commands that don't have a dedicated tool
 
-Always use tools when needed rather than describing what you would do.`
+Always use tools when needed rather than describing what you would do.
+
+If atmos_list_stacks returns zero stacks, this is a new Atmos project that doesn't have any
+stacks written yet. Treat this as an opportunity, not an error: proactively offer to help the
+user create their first stack and component rather than just reporting that none exist.`
 
 // executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
 func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *formatter.ExecutionResult) {

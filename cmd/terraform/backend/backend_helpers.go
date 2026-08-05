@@ -6,16 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/global"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -124,36 +118,6 @@ func ResetDependencies() {
 	prov = &defaultProvisioner{}
 }
 
-// CommonOptions contains the standard flags shared by all backend commands.
-type CommonOptions struct {
-	global.Flags
-	Stack    string
-	Identity string
-}
-
-// ParseCommonFlags parses common flags (stack, identity) using StandardParser with Viper precedence.
-func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*CommonOptions, error) {
-	v := viper.GetViper()
-	if err := parser.BindFlagsToViper(cmd, v); err != nil {
-		return nil, err
-	}
-
-	opts := &CommonOptions{
-		Flags:    flags.ParseGlobalFlags(cmd, v),
-		Stack:    v.GetString("stack"),
-		Identity: v.GetString("identity"),
-	}
-
-	if opts.Stack == "" {
-		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
-	}
-
-	return opts, nil
-}
-
 // InitConfigAndAuth initializes Atmos configuration and optional authentication.
 // Returns atmosConfig, authContext, and error.
 // It loads component configuration, merges component-level auth with global auth,
@@ -187,8 +151,13 @@ func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfigur
 		return nil, nil, fmt.Errorf("failed to merge component auth: %w", err)
 	}
 
-	// Create AuthManager with merged config (auto-selects component's default identity if present).
-	authManager, err := auth.CreateAndAuthenticateManager(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
+	// Create AuthManager with merged config (auto-selects component's default identity if
+	// present). Use the stack-aware variant: stack-scoped identities (e.g. kind: aws/emulator)
+	// need SetStack called before authentication so their PostAuthenticate hook can resolve a
+	// live endpoint (e.g. the emulator container started for this specific stack) into
+	// AuthContext.AWS. Without the stack, that resolution silently no-ops and callers fall back
+	// to the standard AWS SDK credential chain instead of the emulator/local sandbox.
+	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig, stack)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -217,22 +186,6 @@ func CreateDescribeComponentFunc(authManager auth.AuthManager) func(string, stri
 			AuthManager:          authManager,
 		})
 	}
-}
-
-// ExecuteProvisionCommand is the shared RunE implementation for create and update commands.
-// Both operations are idempotent - they provision or update the backend to match the desired state.
-func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.StandardParser, perfLabel string) error {
-	defer perf.Track(atmosConfigPtr, perfLabel)()
-
-	component := args[0]
-
-	// Parse common flags.
-	opts, err := ParseCommonFlags(cmd, parser)
-	if err != nil {
-		return err
-	}
-
-	return executeProvisionCommandWithValues(component, opts.Stack, opts.Identity)
 }
 
 // executeProvisionCommandWithValues is the internal implementation that accepts already-parsed values.
