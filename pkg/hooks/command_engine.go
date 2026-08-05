@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -157,6 +158,8 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	stdout io.Writer
+	stderr io.Writer
 	// dir is the component directory the hook runs from. It is deliberately
 	// separate from ATMOS_COMPONENT_PATH so tools that use relative paths also
 	// operate on the same component Terraform uses.
@@ -228,6 +231,8 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 		binary:            resolved,
 		args:              args,
 		env:               env,
+		stdout:            ctx.Stdout,
+		stderr:            ctx.Stderr,
 		dir:               existingComponentDir(ctx),
 		captureStdoutPath: captureStdoutPath,
 	}, nil
@@ -259,7 +264,10 @@ func existingComponentDir(ctx *ExecContext) string {
 func runSubprocess(p *subprocessPrep) error {
 	cmd := exec.Command(p.binary, p.args...) // #nosec G204 -- intentional: this is the whole point of a hook
 	cmd.Stdin = os.Stdin
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = p.stderr
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
 	cmd.Env = p.env
 	cmd.Dir = p.dir
 
@@ -271,7 +279,10 @@ func runSubprocess(p *subprocessPrep) error {
 		defer f.Close()
 		cmd.Stdout = f
 	} else {
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = p.stdout
+		if cmd.Stdout == nil {
+			cmd.Stdout = os.Stdout
+		}
 	}
 
 	return cmd.Run()
@@ -323,26 +334,35 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 	return out
 }
 
-// renderTerminal emits the hook's user-facing output: a styled
-// markdown block via ui.MarkdownMessage when there's a summary body or
-// a markdown-formatted artifact. The leading blank line visually
-// separates the rendered block from preceding output (terraform plan,
-// the hook log line, the tool's own stdout). MarkdownMessage's renderer
-// (glamour) trims leading whitespace, so we emit the blank line as a
-// separate UI write rather than relying on a `\n` prefix in the body.
+// renderTerminal emits a styled markdown block for a hook summary or
+// markdown-formatted artifact. When a node writer is supplied, it writes the
+// rendered block through that writer so concurrent hook output stays prefixed
+// and serialized.
 func renderTerminal(ctx *ExecContext, out *Output) {
 	if out == nil {
 		return
 	}
 	if out.Summary != nil && out.Summary.Body != "" {
-		ui.Writeln("")
-		ui.MarkdownMessage(out.Summary.Body)
+		renderTerminalMarkdown(ctx, out.Summary.Body)
 		return
 	}
 	if out.Artifact != nil && ctx.Hook.Format == FormatMarkdown {
-		ui.Writeln("")
-		ui.MarkdownMessage(string(out.Artifact.Body))
+		renderTerminalMarkdown(ctx, string(out.Artifact.Body))
 	}
+}
+
+func renderTerminalMarkdown(ctx *ExecContext, content string) {
+	if ctx == nil || ctx.Stderr == nil || ui.Format == nil {
+		ui.Writeln("")
+		ui.MarkdownMessage(content)
+		return
+	}
+
+	rendered, err := ui.Format.Markdown(content)
+	if err != nil {
+		rendered = content
+	}
+	_, _ = fmt.Fprint(ctx.Stderr, "\n"+rendered)
 }
 
 func startHookLogGroup(ctx *ExecContext) func() {
