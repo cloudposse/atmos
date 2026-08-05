@@ -1,6 +1,6 @@
 # PRD: DAG-Based Concurrent Execution
 
-**Status:** Mostly Shipped — Phases 1–3 (foundation packages, `pkg/scheduler/` + Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and `--affected`/`--query` routing consolidation onto the scheduler) are implemented (`pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, `internal/exec/terraform_query.go`). Phase 4 (per-type concurrency limits, critical-path scheduling, TUI progress display, resumability) remains open.
+**Status:** Mostly shipped. Atmos implements Phases 1–3 — foundation packages, the `pkg/scheduler/` Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and the `--affected`/`--query` routing consolidation onto the scheduler — in `pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, and `internal/exec/terraform_query.go`. Phase 4 (per-type concurrency limits, critical-path scheduling, a TUI progress display, and resumability) remains open.
 **Version:** 2.0
 **Last Updated:** 2026-07-11
 **Author:** Erik Osterman
@@ -70,10 +70,10 @@ Terragrunt originally organized units into "run groups" — sets of units at the
 Two problems drove the change:
 
 1. **The "slowest unit" problem.** From the RFC:
-   > *"There is wasted time in a run, as groups execute when they have no dependent groups they are waiting on. A group dependent on another group will only start running when the slowest Unit in the dependency completes."*
+    > *"There is wasted time in a run, as groups execute when they have no dependent groups they are waiting on. A group dependent on another group will only start running when the slowest Unit in the dependency completes."*
 
 2. **Failure blast radius.** From the RFC:
-   > *"Individual Units failing during runs can cause entire groups, and dependent groups to fail, ultimately meaning that individual failing Units can cause widespread failure for a Stack."*
+    > *"Individual Units failing during runs can cause entire groups, and dependent groups to fail, ultimately meaning that individual failing Units can cause widespread failure for a Stack."*
 
 The RFC includes timing diagrams proving that the worst case for runner pool equals the best case for level-based — it can never be slower, only faster.
 
@@ -162,8 +162,8 @@ The industry standard is **modified Kahn's algorithm with a ready queue and work
 2. Seed ready queue with all zero-in-degree nodes (roots)
 3. Workers pull from ready queue (bounded by --max-concurrency)
 4. On node completion:
-   a. Atomically decrement in-degree of all dependents
-   b. Any dependent reaching in-degree 0 enters the ready queue
+    a. Atomically decrement in-degree of all dependents
+    b. Any dependent reaching in-degree 0 enters the ready queue
 5. Repeat until queue empty + all workers idle, OR error
 ```
 
@@ -194,11 +194,8 @@ The real difference shows with **asymmetric diamonds** where branches have diffe
 ### Diamond Dependencies (Fan-Out/Fan-In)
 
 ```
-    A
-   / \
-  B   C
-   \ /
-    D
+A -> B -> D
+A -> C -> D
 ```
 
 Handled naturally by in-degree counting:
@@ -649,13 +646,13 @@ Stream injection is a prerequisite for the scheduler, not a future optimization.
 1. **`prefixedWriter`** — follows the exact same `maskedWriter` pattern in `pkg/io/streams.go` (lines 97-124). Wraps an `io.Writer` and prepends a configurable prefix (e.g., `[vpc/tenant1-ue2-dev]`) to each line of output. Line-prefixed output is a general I/O concern reusable beyond scheduling.
 
 2. **`NewOutput()`** — factory that composes an execution-scoped output pipeline:
-   ```go
-   func NewOutput(opts OutputOptions) Output
-   ```
-   Each output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
-   - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
-   - `prefixedWriter` → labels each line with the configured prefix
-   - `io.MultiWriter` → fans out the composed writer to terminal, file, and capture sinks
+    ```go
+    func NewOutput(opts OutputOptions) Output
+    ```
+    Each output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
+    - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
+    - `prefixedWriter` → labels each line with the configured prefix
+    - `io.MultiWriter` → fans out the composed writer to terminal, file, and capture sinks
 
 **Note on `maskedWriter` vs `dynamicMaskedWriter`:** The `dynamicMaskedWriter` pattern (line 129 of `streams.go`) resolves writers at write time via `getWriter func() io.Writer`. This is needed for the global singletons but NOT for per-node streams — each node has fixed writers. Use the simpler `maskedWriter` directly.
 

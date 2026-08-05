@@ -1,6 +1,6 @@
 # PRD: Generate Section in Atmos Stack Config
 
-**Status:** 🟢 Shipped — `cmd/terraform/generate/files.go`, `atmos terraform generate files`, and `auto_generate_files` are implemented and documented at `website/docs/stacks/generate.mdx`.
+**Status:** Shipped. Atmos implements this feature in `cmd/terraform/generate/files.go` and the `atmos terraform generate files` command, and documents `auto_generate_files` at `website/docs/stacks/generate.mdx`.
 
 ## Overview
 
@@ -433,10 +433,10 @@ func init() {
 1. **No CommandProvider needed**: Unlike top-level commands, subcommands register directly with their parent via `GenerateCmd.AddCommand(filesCmd)` in `init()`
 
 2. **Update GenerateCmd help text**: Add "files" to the list in `cmd/terraform/generate/generate.go`:
-   ```go
-   Long: `...
-   - 'files' to generate files from the generate section for an Atmos component.`,
-   ```
+    ```go
+    Long: `...
+    - 'files' to generate files from the generate section for an Atmos component.`,
+    ```
 
 3. **Pattern follows existing commands**: See `cmd/terraform/generate/varfiles.go` as the reference implementation
 
@@ -543,12 +543,12 @@ File generation is implemented as a built-in feature rather than user-configurab
 2. **Command tests** in `cmd/terraform/generate/files/files_test.go`
 3. **Integration tests** in `tests/` with fixtures in `tests/test-cases/generate-files/`
 4. **Test cases:**
-   - Single file generation (JSON, YAML, HCL, string)
-   - Multi-level merge behavior
-   - Template variable substitution
-   - Auto-generation trigger
-   - Dry-run mode
-   - Error cases
+    - Single file generation (JSON, YAML, HCL, string)
+    - Multi-level merge behavior
+    - Template variable substitution
+    - Auto-generation trigger
+    - Dry-run mode
+    - Error cases
 
 ## Documentation
 
