@@ -47,9 +47,11 @@ func CICloneBootstrapRequested(cmd *cobra.Command, args []string) bool {
 	return mode != ciCloneModeDisabled
 }
 
-// CIGitCloneModeRequestedFromEnv reports whether a detected CI provider plus
-// ATMOS_CI together request CI checkout mode, without any Cobra command
-// context (no --ci flag lookup, since none is resolved yet).
+// CIGitCloneBootstrapRequestedFromRawArgs reports the same no-argument CI
+// git-clone bootstrap condition as CICloneBootstrapRequested, but checked
+// against raw, unparsed arguments instead of an already Cobra-resolved
+// command, where rawArgs is the clone-specific arguments only, with the
+// leading "atmos git clone" tokens already stripped by the caller.
 //
 // Execute() in cmd/root.go runs an initial cfg.InitCliConfig before Cobra
 // ever parses the invoked command (see that function's config-init-error
@@ -58,15 +60,33 @@ func CICloneBootstrapRequested(cmd *cobra.Command, args []string) bool {
 // before CICloneBootstrapRequested/applyCIGitCloneBootstrap ever run -- even
 // for the CI bootstrap clone, which runs in an empty workspace where no
 // atmos.yaml or profile can exist yet. This lets that earlier handler
-// recognize the same "would this be CI checkout mode" signal from the
-// environment alone, deferring to resolveCICloneMode for the ATMOS_CI/CI
-// provider precedence so the two callers can't drift.
-func CIGitCloneModeRequestedFromEnv() bool {
-	if ci.Detect() == nil {
+// recognize the same bootstrap shape.
+//
+// This parses rawArgs against a throwaway command carrying the real clone
+// flag set (a fresh newCloneParser() instance, never the shared package-level
+// cloneParser singleton, to avoid disturbing its registered *cobra.Command)
+// so flags that take a value, such as --depth and --branch, are correctly
+// distinguished from a positional repo name/URI via real pflag parsing,
+// instead of guessing from a "-"-prefix heuristic that a space-separated
+// flag value such as the "0" in `--depth 0` would misread as a positional
+// argument and wrongly disqualify the bootstrap. It also honors an explicit
+// --ci/--ci=false on rawArgs, which a purely environment-based check could
+// not see.
+func CIGitCloneBootstrapRequestedFromRawArgs(rawArgs []string) bool {
+	root := &cobra.Command{Use: "atmos"}
+	git := &cobra.Command{Use: gitCmd.Name()}
+	clone := &cobra.Command{Use: cloneCmd.Name()}
+	newCloneParser().RegisterFlags(clone)
+	root.AddCommand(git)
+	git.AddCommand(clone)
+
+	if err := clone.ParseFlags(rawArgs); err != nil {
+		// Malformed flags: match CICloneBootstrapRequested's existing
+		// philosophy (resolveCICloneMode) of deferring the actual error to
+		// the command's own RunE rather than reporting it here.
 		return false
 	}
-	mode, _ := resolveCICloneMode(nil)
-	return mode != ciCloneModeDisabled
+	return CICloneBootstrapRequested(clone, clone.Flags().Args())
 }
 
 // isCloneCommand reports whether cmd is the `atmos git clone` leaf, checked

@@ -750,6 +750,14 @@ func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			// The exact reported reproduction: a space-separated value flag
+			// (--depth 0) must not be misread as a positional repo argument.
+			name:      "bootstrap clone with --ci --depth 0 tolerates profile not found",
+			args:      []string{"atmos", "git", "clone", "--ci", "--depth", "0"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
 			name:      "explicit repo argument is not the bootstrap case",
 			args:      []string{"atmos", "git", "clone", "flux-deploy"},
 			ciEnabled: true,

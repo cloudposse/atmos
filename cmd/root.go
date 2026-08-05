@@ -1669,13 +1669,12 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 // resolved the command, but checked directly against raw args before Cobra
 // has parsed anything (see handleConfigInitErrorWithArgs's caller).
 //
-// This is intentionally permissive about flags it can't fully validate
-// without Cobra (e.g. an unrecognized flag's arity): the authoritative
-// CI-mode decision is still made later via applyCIGitCloneBootstrap once cmd
-// is fully resolved. This only decides whether the earlier, pre-Cobra
-// handler should let execution continue far enough to reach that check,
-// rather than aborting on a config/profile error that's expected to be
-// unresolvable in a fresh CI bootstrap workspace.
+// After isolating the clone-specific arguments (stripping "atmos [rootflags]
+// git clone"), this defers to gitcmd.CIGitCloneBootstrapRequestedFromRawArgs,
+// which parses them against the real clone flag set so value-taking flags,
+// such as --depth 0 or --branch main, are correctly distinguished from a
+// positional repo name/URI, rather than guessing from a "-"-prefix
+// heuristic.
 func isCIGitCloneBootstrapArgs(args []string) bool {
 	if len(args) < 1 {
 		return false
@@ -1684,15 +1683,7 @@ func isCIGitCloneBootstrapArgs(args []string) bool {
 	if !ok || !matchesLeadingTokens(rest, "git", "clone") {
 		return false
 	}
-	for _, arg := range rest[2:] {
-		// A bare token is a positional repo name/URI; "--all" bulk-clones
-		// every configured repository; "--" signals a hand-crafted native-arg
-		// invocation. None of these is the zero-argument bootstrap case.
-		if arg == "--" || arg == "--all" || !strings.HasPrefix(arg, "-") {
-			return false
-		}
-	}
-	return gitcmd.CIGitCloneModeRequestedFromEnv()
+	return gitcmd.CIGitCloneBootstrapRequestedFromRawArgs(rest[2:])
 }
 
 // configCommandToken is the "config" argument/subcommand token shared by all
