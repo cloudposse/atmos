@@ -179,7 +179,7 @@ func runWithHooks(
 		if err != nil {
 			return err
 		}
-		emitLifecycleWarnings(spec.Lifecycle.Warnings)
+		reportResolvedLifecycle(spec.Lifecycle)
 	}
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
@@ -249,6 +249,27 @@ func emitLifecycleWarnings(warnings []lifecycleWarning) {
 	for _, warning := range warnings {
 		ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
 	}
+}
+
+func reportResolvedLifecycle(resolution releaseLifecycleResolution) {
+	emitLifecycleWarnings(resolution.Warnings)
+	reason := "configured"
+	for _, warning := range resolution.Warnings {
+		if warning.Code == warningWaitDerived {
+			reason = warning.Message
+			break
+		}
+	}
+	policy := resolution.Policy
+	log.Debug("Resolved Helm release lifecycle",
+		"operation", policy.Operation,
+		"wait_strategy", policy.WaitStrategy,
+		"wait_strategy_reason", reason,
+		"wait_jobs", policy.WaitForJobs,
+		"on_failure", policy.OnFailure,
+		"timeout", policy.Timeout,
+		"timeout_field", resolution.TimeoutField,
+	)
 }
 
 // runTemplate renders the chart and writes the manifests per the render options.

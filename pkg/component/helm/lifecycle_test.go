@@ -111,6 +111,48 @@ func TestResolveReleaseLifecycleDerivedWaitStrategy(t *testing.T) {
 	}
 }
 
+func TestResolveReleaseLifecycleWithFlagsReportsDerivedWaitStrategy(t *testing.T) {
+	input, err := decodeReleasePolicy(map[string]any{
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmWaitSectionName: map[string]any{
+				cfg.HelmWaitStrategySectionName: "hookOnly",
+			},
+			cfg.HelmUpgradeSectionName: map[string]any{
+				cfg.HelmOnFailureSectionName: "rollback",
+				cfg.HelmWaitSectionName: map[string]any{
+					cfg.HelmWaitJobsSectionName: true,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resolution, err := resolveReleaseLifecycleWithFlags(input, releaseOperationUpgrade, nil)
+	require.NoError(t, err)
+	assert.Equal(t, kube.StatusWatcherStrategy, resolution.Policy.WaitStrategy)
+	assert.True(t, resolution.Policy.WaitForJobs)
+	assert.True(t, hasLifecycleWarning(resolution.Warnings, warningWaitDerived))
+}
+
+func TestResolveReleaseLifecycleWithFlagsCanDisableDerivedWaitStrategy(t *testing.T) {
+	input, err := decodeReleasePolicy(map[string]any{
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitStrategySectionName: "hookOnly"},
+			cfg.HelmUpgradeSectionName: map[string]any{
+				cfg.HelmOnFailureSectionName: "rollback",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resolution, err := resolveReleaseLifecycleWithFlags(input, releaseOperationUpgrade, map[string]any{
+		cfg.HelmOnFailureSectionName: "keep",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, kube.HookOnlyStrategy, resolution.Policy.WaitStrategy)
+	assert.False(t, hasLifecycleWarning(resolution.Warnings, warningWaitDerived))
+}
+
 func TestResolveReleaseLifecycleWithFlagsHighestPrecedence(t *testing.T) {
 	input, err := decodeReleasePolicy(map[string]any{
 		cfg.HelmReleaseSectionName: map[string]any{

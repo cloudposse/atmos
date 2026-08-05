@@ -325,6 +325,21 @@ func decodeDeletePolicy(releaseMap map[string]any) (deletePolicyInput, error) {
 }
 
 func resolveReleaseLifecycle(input releasePolicyInput, operation string, emitMigrationWarning bool) (releaseLifecycleResolution, error) {
+	resolution, err := resolveReleaseLifecycleBase(input, operation, emitMigrationWarning)
+	if err != nil {
+		return releaseLifecycleResolution{}, err
+	}
+	if err := validateAndDeriveLifecycle(&resolution); err != nil {
+		return releaseLifecycleResolution{}, err
+	}
+	return resolution, nil
+}
+
+// resolveReleaseLifecycleBase applies configuration precedence without deriving
+// cross-field values. Callers that overlay CLI flags must do so before the
+// single validateAndDeriveLifecycle pass, otherwise a derived watcher strategy
+// loses both its source hookOnly value and the explanation for the promotion.
+func resolveReleaseLifecycleBase(input releasePolicyInput, operation string, emitMigrationWarning bool) (releaseLifecycleResolution, error) {
 	resolution := releaseLifecycleResolution{
 		Policy:       defaultReleasePolicy(operation),
 		TimeoutField: "built-in default",
@@ -358,9 +373,6 @@ func resolveReleaseLifecycle(input releasePolicyInput, operation string, emitMig
 			Field:   "release." + operation + ".timeout",
 			Message: "helm release timeout is omitted; this release preserves 0s, but the default will become 5m in the next minor release",
 		})
-	}
-	if err := validateAndDeriveLifecycle(&resolution); err != nil {
-		return releaseLifecycleResolution{}, err
 	}
 	return resolution, nil
 }
@@ -448,7 +460,7 @@ func validateAndDeriveLifecycle(resolution *releaseLifecycleResolution) error {
 // resolveReleaseLifecycleWithFlags resolves configuration for the selected
 // action, then overlays only explicitly supplied CLI values at highest priority.
 func resolveReleaseLifecycleWithFlags(input releasePolicyInput, operation string, flags map[string]any) (releaseLifecycleResolution, error) {
-	resolution, err := resolveReleaseLifecycle(input, operation, true)
+	resolution, err := resolveReleaseLifecycleBase(input, operation, true)
 	if err != nil {
 		return releaseLifecycleResolution{}, err
 	}
@@ -502,7 +514,6 @@ func resolveReleaseLifecycleWithFlags(input releasePolicyInput, operation string
 		resolution.Policy.CleanupOnFailure = value
 	}
 
-	resolution.Warnings = removeLifecycleWarning(resolution.Warnings, warningWaitDerived)
 	if err := validateAndDeriveLifecycle(&resolution); err != nil {
 		return releaseLifecycleResolution{}, err
 	}

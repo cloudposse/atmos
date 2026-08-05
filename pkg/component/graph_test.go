@@ -164,6 +164,23 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	}
 }
 
+func TestExecuteGraphRunsDeleteInReverseDependencyOrder(t *testing.T) {
+	provider := &graphTestProvider{}
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "delete",
+		ReverseOrder:  true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 4)
+	assertLessCallIndex(t, provider.calls, "api", "dev", "base", "dev")
+	assertLessCallIndex(t, provider.calls, "worker", "dev", "base", "prod")
+}
+
 func TestExecuteGraphNodeDoesNotRedispatchBulkSelection(t *testing.T) {
 	provider := &graphTestProvider{}
 	info := &schema.ConfigAndStacksInfo{

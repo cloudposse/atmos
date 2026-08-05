@@ -58,6 +58,7 @@ func executeBulk(
 		SubCommand:    command,
 		Flags:         ctx.Flags,
 		Selection:     selection,
+		ReverseOrder:  operation == OperationDelete,
 	})
 	if collector != nil {
 		runHelmAggregateCIHook(ctx, atmosConfig, info, collector.resultSet(), graphErr)

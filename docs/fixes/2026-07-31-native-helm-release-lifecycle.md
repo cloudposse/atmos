@@ -9,6 +9,11 @@ state. Caller cancellation propagates through direct and dependency-ordered
 execution into install and upgrade actions and into delete wait and hook phases;
 Helm 4 does not expose a context-aware uninstall request.
 
+Atmos reports the selected action and effective release policy before the Helm
+action begins, including any `hookOnly` to `watcher` promotion required by
+failure recovery. Bulk delete uses reverse dependency order so dependents are
+removed before the releases they consume.
+
 ## Migration notes
 
 - An omitted `release.timeout` remains `0s` (unbounded) for one minor release and emits a
