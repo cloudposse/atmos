@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExtractComponentName(t *testing.T) {
@@ -1453,6 +1456,39 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 	// The guard marker must now be present in componentConfig.
 	_, done := componentConfig[invocationDoneKey]
 	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+}
+
+func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"source": map[string]any{
+			"uri": sourceDir,
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err = AutoProvisionSource(workdir.WithOutputSuppressed(t.Context()), atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err)
+	assert.Empty(t, uiOutput.String())
 }
 
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
