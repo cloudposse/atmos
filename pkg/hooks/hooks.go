@@ -3,6 +3,7 @@ package hooks
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -60,6 +61,8 @@ type Hooks struct {
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
+	stdout        io.Writer
+	stderr        io.Writer
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
@@ -253,6 +256,8 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		HookName:      name,
 		Outcome:       ctx.outcome,
 		ToolchainPATH: h.toolchainPATH,
+		Stdout:        h.stdout,
+		Stderr:        h.stderr,
 	}
 	return runHookLogGroup(ctx.atmosConfig, ci.DimensionPhase, hookLogGroupLabel(name, ctx.event), func() error {
 		_, err := kind.Engine.Run(execCtx)
@@ -965,6 +970,11 @@ type RunPerComponentHooksOptions struct {
 	// Outcome is the lifecycle outcome (success/failure) used to filter `when:`
 	// and expose status to hook engines. Zero value defaults to success.
 	Outcome Outcome
+
+	// Stdout and Stderr receive hook subprocess output. Nil preserves the
+	// process streams used by single-component execution.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // RunPerComponentHooks resolves and runs one component's user-defined hooks
@@ -991,6 +1001,8 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	}
 
 	hooksForComponent.SetOutcome(opts.Outcome)
+	hooksForComponent.stdout = opts.Stdout
+	hooksForComponent.stderr = opts.Stderr
 	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
