@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -195,6 +196,9 @@ stacks:
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
 	t.Cleanup(data.Reset)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	origArgs := os.Args
 	t.Cleanup(func() { os.Args = origArgs })

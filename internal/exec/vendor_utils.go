@@ -140,7 +140,9 @@ func getVendorDirToUse(atmosConfig *schema.AtmosConfiguration) string {
 	if atmosConfig.VendorDirAbsolutePath != "" {
 		return atmosConfig.VendorDirAbsolutePath
 	}
-	return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+	// u.JoinPath (unlike filepath.Join) returns an already-absolute Vendor.BasePath as-is
+	// instead of nesting it under BasePath.
+	return u.JoinPath(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
 }
 
 // Helper function to resolve the vendor config file path.
@@ -241,7 +243,9 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 
-	logInitialMessage(params.vendorConfigFileName, params.tags)
+	// displayPath keeps the log message short and machine-independent; params.vendorConfigFileName
+	// itself stays untouched (and possibly absolute) for the actual file/source resolution below.
+	logInitialMessage(displayPath(params.vendorConfigFileName), params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
 	}

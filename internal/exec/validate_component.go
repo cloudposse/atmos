@@ -39,7 +39,9 @@ func getWorkflowsDirToUse(atmosConfig *schema.AtmosConfiguration) string {
 	if atmosConfig.WorkflowsDirAbsolutePath != "" {
 		return atmosConfig.WorkflowsDirAbsolutePath
 	}
-	return filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+	// u.JoinPath (unlike filepath.Join) returns an already-absolute Workflows.BasePath as-is
+	// instead of nesting it under BasePath.
+	return u.JoinPath(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
 }
 
 // enableProvenanceForRichOutput sets atmosConfig.TrackProvenance when the

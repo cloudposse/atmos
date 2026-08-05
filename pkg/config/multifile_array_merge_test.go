@@ -249,7 +249,7 @@ components:
 	assert.NotEmpty(t, atmosConfig.StackConfigFilesAbsolutePaths)
 }
 
-// TestLoadConfigFromCLIArgs_ProfileAppliedOnTopOfConfigFlag reproduces a related bug found
+// TestInitCliConfig_ProfileAppliedOnTopOfConfigFlag reproduces a related bug found
 // during the #2867/#2868 audit: loadConfigFromCLIArgs (the --config/--config-path path)
 // returns immediately after merging the CLI-selected files, without ever reaching
 // LoadConfig's profile-loading block. This means --config and --profile currently cannot be
@@ -260,7 +260,10 @@ func TestInitCliConfig_ProfileAppliedOnTopOfConfigFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 	t.Setenv("TEST_GIT_ROOT", tempDir)
-	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+	if orig, ok := os.LookupEnv("ATMOS_PROFILE"); ok {
+		require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+		t.Cleanup(func() { require.NoError(t, os.Setenv("ATMOS_PROFILE", orig)) })
+	}
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)

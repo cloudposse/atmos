@@ -4,4 +4,4 @@
 
 **Error:** workflow file not found
 
-The workflow manifest file /absolute/path/to/repo/tests/fixtures/scenarios/workflows/stacks/workflows/dne.yaml does not exist
+The workflow manifest file stacks/workflows/dne.yaml does not exist

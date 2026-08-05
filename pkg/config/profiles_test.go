@@ -74,6 +74,61 @@ func TestDiscoverProfileLocations(t *testing.T) {
 	}
 }
 
+// TestDiscoverProfileLocations_MultipleConfigDirs guards against a bug found during the
+// #2867/#2868 audit: connectPaths (load_config_args.go) joins multiple --config/--config-path
+// contributors into "dirA;dirB;", and discoverProfileLocations previously treated that joined
+// string as a single directory, producing a nonexistent path like "dirA;dirB;/.atmos/profiles"
+// and silently finding no profiles whenever --config selected more than one file.
+func TestDiscoverProfileLocations_MultipleConfigDirs(t *testing.T) {
+	dirA := filepath.Join(string(filepath.Separator), "test", "dirA")
+	dirB := filepath.Join(string(filepath.Separator), "test", "dirB")
+	atmosConfig := schema.AtmosConfiguration{
+		CliConfigPath: dirA + ";" + dirB + ";",
+	}
+
+	locations, err := discoverProfileLocations(&atmosConfig)
+	require.NoError(t, err)
+
+	var projectHidden, project []string
+	for _, loc := range locations {
+		switch loc.Type {
+		case "project-hidden":
+			projectHidden = append(projectHidden, loc.Path)
+		case "project":
+			project = append(project, loc.Path)
+		}
+	}
+
+	assert.ElementsMatch(t, []string{
+		filepath.Join(dirA, ".atmos", "profiles"),
+		filepath.Join(dirB, ".atmos", "profiles"),
+	}, projectHidden)
+	assert.ElementsMatch(t, []string{
+		filepath.Join(dirA, "profiles"),
+		filepath.Join(dirB, "profiles"),
+	}, project)
+}
+
+// TestSplitCliConfigPath covers splitCliConfigPath directly, including the empty-input
+// fallback that preserves prior single-directory (cwd-relative) behavior.
+func TestSplitCliConfigPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{name: "empty", input: "", expected: []string{""}},
+		{name: "single", input: "/test/config", expected: []string{"/test/config"}},
+		{name: "multiple", input: "/test/dirA;/test/dirB;", expected: []string{"/test/dirA", "/test/dirB"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, splitCliConfigPath(tt.input))
+		})
+	}
+}
+
 // TestFindProfileDirectory tests profile directory lookup across locations.
 func TestFindProfileDirectory(t *testing.T) {
 	// Create temporary test directories.
