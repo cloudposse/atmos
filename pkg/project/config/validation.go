@@ -106,6 +106,64 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 	return nil
 }
 
+// answersPrefix is the required prefix for a dynamic matrix axis source, a
+// root reference into the answers map -- see validateFileMatrix.
+const answersPrefix = "answers."
+
+// validateFileMatrix statically validates each spec.files[] entry's matrix
+// configuration: target is required when matrix is set, and every axis is
+// either a non-empty literal list or an `answers.`-prefixed dot-path string.
+// All checkable without real answers (a dynamic axis's resolved values can
+// only be checked once answers are known, at generation time). Note that
+// manifest.Load performs no JSON Schema validation of its own, so this is
+// the real enforcement path for atmos scaffold generate -- atmos scaffold
+// validate additionally checks the JSON Schema, but generate does not
+// consult it.
+func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Files {
+		file := &scaffoldConfig.Spec.Files[i]
+		if len(file.Matrix) == 0 {
+			continue
+		}
+		if file.Target == "" {
+			return fmt.Errorf("%w: file %q", errUtils.ErrScaffoldMatrixTargetRequired, file.Path)
+		}
+		for axis, value := range file.Matrix {
+			if err := validateMatrixAxisValue(file.Path, axis, value); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateMatrixAxisValue validates one matrix axis's declared value: a
+// non-empty literal list, a string that references a top-level answer via
+// the same `answers.<path>` root reference When's CEL expressions read, or a
+// Go-template expression (e.g. `{{ keys answers.environments }}`) computing
+// the list from nested/structured answer data. A template expression's
+// actual rendered result can only be checked once real answers are known, at
+// generation time -- this only confirms the string looks like one.
+func validateMatrixAxisValue(filePath, axis string, value any) error {
+	switch v := value.(type) {
+	case string:
+		if !strings.HasPrefix(v, answersPrefix) && !strings.Contains(v, "{{") {
+			return fmt.Errorf("%w: file %q axis %q: %q is neither a template expression nor does it start with %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, v, answersPrefix)
+		}
+	case []string:
+		if len(v) == 0 {
+			return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
+		}
+	case []any:
+		if len(v) == 0 {
+			return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
+		}
+	default:
+		return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
+	}
+	return nil
+}
+
 func isTextFieldType(fieldType string) bool {
 	switch fieldType {
 	case "input", "text", "string":
@@ -219,34 +277,60 @@ func isBooleanFieldType(fieldType string) bool {
 	}
 }
 
+// multiSelectSetDelimiter splits a --set value for a multiselect field into
+// its selected options -- see CoerceFieldValueTypes.
+const multiSelectSetDelimiter = ","
+
 // CoerceFieldValueTypes converts string values for boolean-typed fields
-// (confirm/bool/boolean) to native Go bools, in place. --set (and other
-// external string sources) always supplies raw strings; without this, a
+// (confirm/bool/boolean) to native Go bools, and for multiselect fields to
+// a []string of selected options, in place. --set (and other external
+// string sources) always supplies raw strings; without this, a boolean
 // value like "false" stays the truthy non-empty string "false" for both Go
 // template interpolation and When condition evaluation (e.g. `answers.x ==
-// true` never matches a string). Values that aren't strings (YAML defaults,
-// or bools already returned by an interactive confirm prompt) are left
-// untouched. Invalid external boolean values return an error rather than
-// silently changing the result of a conditional expression.
+// true` never matches a string), and a multiselect value stays an
+// unsplit string a matrix axis or `for` range can't iterate. Values that
+// aren't strings (YAML defaults, or values already typed by an interactive
+// prompt) are left untouched. Invalid external boolean values return an
+// error rather than silently changing the result of a conditional
+// expression.
 func CoerceFieldValueTypes(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) error {
 	defer perf.Track(nil, "config.CoerceFieldValueTypes")()
 
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
-		if !isBooleanFieldType(field.Type) {
-			continue
-		}
 		raw, ok := values[field.Name].(string)
 		if !ok {
 			continue
 		}
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			return fmt.Errorf("%w: %w for field %q: %q", errUtils.ErrGeneratorValidation, errInvalidBooleanFieldValue, field.Name, raw)
+		switch {
+		case isBooleanFieldType(field.Type):
+			parsed, err := strconv.ParseBool(raw)
+			if err != nil {
+				return fmt.Errorf("%w: %w for field %q: %q", errUtils.ErrGeneratorValidation, errInvalidBooleanFieldValue, field.Name, raw)
+			}
+			values[field.Name] = parsed
+		case field.Type == "multiselect":
+			values[field.Name] = splitMultiSelectValue(raw)
 		}
-		values[field.Name] = parsed
 	}
 	return nil
+}
+
+// splitMultiSelectValue splits a --set multiselect value ("dev,staging") into
+// its trimmed options. An empty (or whitespace-only) value yields an empty,
+// non-nil slice -- distinct from the field never being set at all -- so a
+// matrix axis or when: sourced from it sees zero selections, not one blank
+// one.
+func splitMultiSelectValue(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{}
+	}
+	parts := strings.Split(raw, multiSelectSetDelimiter)
+	values := make([]string, len(parts))
+	for i, part := range parts {
+		values[i] = strings.TrimSpace(part)
+	}
+	return values
 }
 
 // validateInteractiveTextValue validates a text field's value as entered

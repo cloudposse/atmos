@@ -102,42 +102,16 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 		"Config":              userValues, // Access config values via .Config.Foobar
 	}
 
-	// Create gomplate data context
-	d := data.Data{}
-	ctx := context.TODO()
-
-	// Build template function map by merging Gomplate, Sprig, and custom functions.
-	// Order matters for collisions - later additions override earlier ones.
-	//
-	// Function precedence (later wins):
-	//   1. Gomplate functions (added first)
-	//   2. Sprig functions (override Gomplate on collisions)
-	//   3. Custom functions (highest priority)
-	//
-	// Notable collisions where Sprig overrides Gomplate:
-	//   - env, dict, join, split, toJson, fromJson, toYaml, fromYaml
-	//   - base, dir, ext, trim, upper, lower, rand, uuid
-	//
-	// To use Gomplate's version explicitly, use namespaced variants:
-	//   - coll.Dict, conv.ToJSON, data.YAML, base64.Encode, etc.
-	funcs := template.FuncMap{}
-
-	// Add gomplate functions (base layer).
-	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
-	for k, v := range gomplateFuncs {
-		funcs[k] = v
+	// A matrix entry's resolved combination travels through userValues under
+	// the reserved MatrixKey (see pkg/generator/ui's file-generation loop) so
+	// it can be exposed here as "matrix" -- letting both a file's target:
+	// and its own content read .matrix.<axis>, matching the namespace the
+	// workflow matrix step's own {{ .matrix.<axis> }} uses.
+	if row, ok := userValues[MatrixKey].(map[string]string); ok {
+		templateData["matrix"] = row
 	}
 
-	// Add sprig functions (overrides gomplate on collisions).
-	sprigFuncs := sprig.FuncMap()
-	for k, v := range sprigFuncs {
-		funcs[k] = v
-	}
-
-	// Add custom functions
-	funcs["config"] = func(key string) interface{} {
-		return userValues[key]
-	}
+	funcs := buildTemplateFuncMap(userValues)
 
 	// Parse and execute template with custom delimiters
 	tmpl, err := template.New("init").Delims(delimiters[0], delimiters[1]).Funcs(funcs).Parse(content)
@@ -169,6 +143,52 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	}
 
 	return result.String(), nil
+}
+
+// buildTemplateFuncMap merges Gomplate, Sprig, and custom functions into the
+// FuncMap every scaffold template render (file content, paths, and matrix
+// axis expressions) shares. Order matters for collisions - later additions
+// override earlier ones.
+//
+// Function precedence (later wins):
+//  1. Gomplate functions (added first)
+//  2. Sprig functions (override Gomplate on collisions)
+//  3. Custom functions (highest priority)
+//
+// Notable collisions where Sprig overrides Gomplate:
+//   - env, dict, join, split, toJson, fromJson, toYaml, fromYaml
+//   - base, dir, ext, trim, upper, lower, rand, uuid
+//
+// To use Gomplate's version explicitly, use namespaced variants:
+//   - coll.Dict, conv.ToJSON, data.YAML, base64.Encode, etc.
+//
+// keys overrides Sprig's own (unsorted, no nested-key support) variant --
+// see keysFunc in funcs.go.
+func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
+	d := data.Data{}
+	ctx := context.TODO()
+
+	funcs := template.FuncMap{}
+
+	// Add gomplate functions (base layer).
+	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
+	for k, v := range gomplateFuncs {
+		funcs[k] = v
+	}
+
+	// Add sprig functions (overrides gomplate on collisions).
+	sprigFuncs := sprig.FuncMap()
+	for k, v := range sprigFuncs {
+		funcs[k] = v
+	}
+
+	// Add custom functions.
+	funcs["config"] = func(key string) interface{} {
+		return userValues[key]
+	}
+	funcs["keys"] = keysFunc
+
+	return funcs
 }
 
 // ProcessFile processes a file with templating support, handling path rendering,

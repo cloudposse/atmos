@@ -44,7 +44,30 @@ spec:
       default: "1.536.0"
       when: "answers.enable_vendoring == true"
 
-  # vendor.yaml is only generated when vendoring is enabled; skip it otherwise.
+    - name: environments
+      label: Extra environment stacks (optional)
+      description: >-
+        One stacks/<env>.yaml file is generated per selected environment, via
+        spec.files[].matrix. Leave unselected to generate none.
+      type: multiselect
+      options:
+        - dev
+        - staging
+        - prod
+      default: []
+
   files:
+    # vendor.yaml is only generated when vendoring is enabled; skip it otherwise.
     - path: vendor.yaml
       when: "answers.enable_vendoring == true"
+
+    # environment.yaml is a single discovered template file; matrix expands it
+    # into one generated file per selected environment (e.g. selecting
+    # dev and staging -> stacks/dev.yaml, stacks/staging.yaml). Leaving
+    # `environments` unselected (the default) resolves the axis to zero
+    # values, so zero files are generated here -- matrix mirrors when:'s
+    # existing silent-skip semantics rather than erroring.
+    - path: environment.yaml
+      target: "stacks/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments

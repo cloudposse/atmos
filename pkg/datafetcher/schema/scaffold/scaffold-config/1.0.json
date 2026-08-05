@@ -143,13 +143,21 @@
           "items": {
             "additionalProperties": false,
             "properties": {
+              "matrix": {
+                "description": "Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings or a dot-path string into answers.*",
+                "type": "object"
+              },
               "path": {
                 "description": "File path as discovered in the template's file tree",
                 "type": "string"
               },
+              "target": {
+                "description": "Output path template overriding Path; required when matrix is set; optional otherwise",
+                "type": "string"
+              },
               "when": {
                 "additionalProperties": false,
-                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file is generated",
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated",
                 "oneOf": [
                   {
                     "type": "string"

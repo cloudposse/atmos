@@ -279,3 +279,73 @@ func TestLoadScaffoldConfigRejectsInvalidFieldValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantErr  error
+		contains string
+	}{
+		{
+			name: "matrix without target",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      matrix:\n        region: [us-east-1]\n",
+			wantErr:  errUtils.ErrScaffoldMatrixTargetRequired,
+			contains: "deploy.yaml",
+		},
+		{
+			name: "empty literal axis",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: []\n",
+			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			contains: "region",
+		},
+		{
+			name: "dynamic axis missing answers prefix",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: regions\n",
+			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			contains: "region",
+		},
+		{
+			name: "axis of unsupported type",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: 5\n",
+			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			contains: "region",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadScaffoldConfigFromContent(tt.content)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.wantErr), err)
+			assert.ErrorContains(t, err, tt.contains)
+		})
+	}
+}
+
+func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        environment: [dev, staging, production]\n        region: answers.regions\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml", scaffoldConfig.Spec.Files[0].Target)
+}
+
+func TestLoadScaffoldConfigAcceptsTemplateExpressionAxis(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        environment: '{{ keys answers.environments }}'\n" +
+		"        region: '{{ keys answers.environments \"regions\" }}'\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "{{ keys answers.environments }}", scaffoldConfig.Spec.Files[0].Matrix["environment"])
+}

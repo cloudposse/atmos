@@ -48,13 +48,16 @@ and `pkg/generator/` for the source of truth on current behavior.
   step engine (`pkg/runner/step`) workflows/custom commands use. Only
   `kind: step`/`kind: steps` are supported today. `--skip-hooks` (mirroring
   `terraform`'s flag) bypasses hooks for a run.
+- `spec.files[].matrix:` — dynamic file generation over the Cartesian product
+  of one or more axes, reusing the workflow `matrix:` step's own
+  `map[axis][]values` shape, with `spec.files[].when:` (evaluated once per
+  resolved combination via a `matrix` CEL variable) pruning combinations that
+  don't apply. The resolved combination is available as `.matrix.<axis>` in
+  `target:`, in `when:`, and in the file's own content — see "Dynamic File
+  Generation (`matrix`)" below.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
-- 🚧 `spec.files[].matrix:` — dynamic file generation over an unbounded/unknown
-  answer set (static per-file `when:`, above, covers a fixed/enumerable option
-  set). Proposed design below, not yet implemented or reviewed/approved — see
-  "Dynamic File Generation (`matrix`)" for the current proposal.
 - ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
   threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 
@@ -427,27 +430,26 @@ supports the same `when:` mechanism to gate whether a specific auto-discovered f
 generated. Compound conditions use CEL's `&&`/`||`/`!` (the `{all:/any:/not:}` map form
 pkg/condition also parses is not accepted by the scaffold JSON Schema).
 
-### Dynamic File Generation (`matrix`) — Proposal
+### Dynamic File Generation (`matrix`)
 
-**Status**: Proposed design, not yet implemented or approved (🚧, see the status
-summary at the top of this document). One possible shape for closing the gap tracked
-in "Future Enhancements" below — a starting point for discussion, not a committed
-plan. It reuses the exact axis shape the workflow `matrix:` step already has
-(`pkg/schema.WorkflowStep.Matrix`, see the `atmos-workflows` skill /
-`website/docs/workflows/workflows/workflow/steps/type/matrix.mdx`), so template
-authors reuse a shape they already know, and CEL `when:` stays the only place any
-filtering logic lives.
+**Status**: Implemented and shipped. It reuses the exact axis shape the workflow
+`matrix:` step already has (`pkg/schema.WorkflowStep.Matrix`, see the
+`atmos-workflows` skill / `website/docs/workflows/workflows/workflow/steps/type/matrix.mdx`),
+so template authors reuse a shape they already know, and CEL `when:` stays the only
+place any filtering logic lives. See `pkg/generator/engine/matrix.go` and
+`pkg/generator/ui/ui.go`'s `processFileEntry` for the source of truth on current
+behavior.
 
-`spec.files[].when:` only gates a *statically discovered, fixed-count* file — it can
-skip a file, never multiply one. The only list-producing prompt type, `multiselect`,
-requires a static, template-author-declared `options:` list, so there's no way to say
-"one file per item the user selected." This proposal introduces a declarative
-`matrix:` to close that gap.
+`spec.files[].when:` alone only gates a *statically discovered, fixed-count* file —
+it can skip a file, never multiply one. The only list-producing prompt type,
+`multiselect`, requires a static, template-author-declared `options:` list, so there
+was no way to say "one file per item the user selected." The declarative `matrix:`
+below closes that gap.
 
-**Proposed shape**: everything stays under the existing `spec.files[]` overlay, no new
-top-level `spec` key. `path:` keeps meaning exactly what it means today (the file's
-on-disk discovered path); two new, optional keys change what happens once an entry is
-matched:
+**Shape**: everything stays under the existing `spec.files[]` overlay, no new
+top-level `spec` key. `path:` keeps meaning exactly what it means elsewhere (the
+file's on-disk discovered path); two new, optional keys change what happens once an
+entry is matched:
 
 - **`target:`** — a Go-template string overriding the rendered output path. Without
   `matrix:`, it's optional and rendered once, exactly like `path:` is rendered
@@ -458,12 +460,19 @@ matched:
 - **`matrix:`** — a map of axis name to a list of values, the same shape the workflow
   `matrix:` step already uses. Declaring more than one axis produces their full
   Cartesian product, expanded in a sorted, deterministic order per axis — the same
-  behavior the workflow step's own expansion has. Each axis's list of values is
-  either a literal YAML list, author-declared directly in `scaffold.yaml` (e.g.
-  `region: [us-east-1, us-west-2]`), or a dot-path into `answers.*` referencing an
-  already list-shaped answer (e.g. `environment: answers.environments`, where
-  `environments` is a `multiselect` field, or a structured value supplied through
-  `--set` or a template-declared preset).
+  behavior the workflow step's own expansion has. Each axis's list of values is one
+  of:
+  - a literal YAML list, author-declared directly in `scaffold.yaml` (e.g.
+    `region: [us-east-1, us-west-2]`);
+  - a dot-path into `answers.*` referencing an already list-shaped answer (e.g.
+    `environment: answers.environments`, where `environments` is a `multiselect`
+    field, or a structured value supplied through `--set` or a template-declared
+    preset);
+  - a Go-template expression (any string containing `{{`) computing the list from
+    nested/structured answer data, rendered with the same Gomplate/Sprig/custom
+    FuncMap scaffold templates already use, plus `answers` exposed as the
+    expression's only variable (e.g. `environment: '{{ keys answers.environments }}'`
+    — see "Computed Axes" below).
 
   Invalid combinations (an axis pairing that doesn't apply, e.g. a region a given
   environment doesn't use) are pruned the same way a single file is skipped today —
@@ -477,9 +486,10 @@ matched:
   single file gets a `matrix` variable alongside the existing `answers` one,
   referenced unprefixed the same way `answers.<field>` is (e.g.
   `when: "matrix.region in answers.regions_by_env[matrix.environment]"`).
-  Concretely, this means adding `matrix` to `conditionCELEnv()`/`condition.Context`
-  (`pkg/condition/cel.go`) the same way `answers` was added for scaffold — no
-  CEL-visible `matrix` fact exists in the engine today.
+  `matrix` was added to `conditionCELEnv()`/`condition.Context`
+  (`pkg/condition/cel.go`) the same way `answers` was added for scaffold; it
+  defaults to an empty map outside a matrix context (e.g. in a plain
+  `spec.fields[].when:`), the same way `answers` defaults to empty.
 - **The file's own content** — the template body being rendered receives
   `.matrix.<axis>` on the same root data map as `.Config.*`/`answers.*`, so a
   generated file can read and branch on its own combination's values, not just be
@@ -514,6 +524,58 @@ spec:
       when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
+**Computed axes**: when an axis's values aren't already list-shaped anywhere in
+`answers` — e.g. `answers.environments` is itself a map of environment name to a
+struct that includes its own `regions` map, as it would be for a nested/structured
+field rather than a flat `multiselect` — a Go-template expression computes the list
+instead. `keys` is the function this depends on: `keys(m)` returns `m`'s top-level
+keys, sorted; `keys(m, "nestedKey")` collects `nestedKey`'s own keys from every one
+of `m`'s values, flattening and deduplicating across all of them. It's registered
+alongside Gomplate and Sprig's functions in the same scaffold template FuncMap
+(overriding Sprig's own unsorted, non-flattening `keys`), so any other Sprig/Gomplate
+function is available to an axis expression too:
+
+```yaml
+spec:
+  files:
+    - path: templates/deploy.yaml
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: '{{ keys answers.environments }}'
+        region: '{{ keys answers.environments "regions" }}'
+      when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+Given
+
+```yaml
+environments:
+  dev:
+    regions:
+      us-east-1: {}
+  staging:
+    regions:
+      us-east-1: {}
+  production:
+    regions:
+      us-east-1: {}
+      us-west-2: {}
+```
+
+`environment` resolves to `[dev, production, staging]` and `region` to
+`[us-east-1, us-west-2]` (every region used by any environment) — the full
+Cartesian product is then pruned by `when:` to the three environments' actual
+region pairings, exactly as the literal-list example above does.
+
+An axis expression is rendered once per `ExpandMatrix` call, with `answers`
+registered as a zero-argument template function rather than a data field — Go's
+template grammar only chains `.field` access off of `.` or a `$var`, never off a
+bare identifier, but it does chain off a bare identifier's function-call result,
+which is what lets `answers.environments` parse as "call `answers()`, then select
+`.environments`." The expression's rendered text is then parsed back into a list:
+tolerant of Go's default `%v` slice formatting (`[a b c]`, what `keys` renders as)
+as well as a plain whitespace-separated list without brackets.
+
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so
   regenerating the same answers produces the same file set, in the same order,
@@ -529,19 +591,31 @@ spec:
   per combination, e.g. forgetting to reference one of its axes, would trip this
   immediately.)
 
-**Validation**: checkable at load time, without needing real answers, so
-`atmos scaffold validate` would catch these before `generate` ever runs: `target:`
-is required whenever `matrix:` is set; every axis needs a non-empty name and a
-non-empty value list (mirroring `validateControlMatrix`'s checks on the workflow
-step).
+**Validation**: checked at load time, without needing real answers, so
+`atmos scaffold validate` catches these before `generate` ever runs (see
+`validateFileMatrix` in `pkg/project/config/validation.go`): `target:` is required
+whenever `matrix:` is set; a literal axis value must be a non-empty list; a string
+axis value must either start with the `answers.` prefix or contain `{{` (a template
+expression); any other shape is rejected. Whether a dynamic axis's resolved value is
+actually list-shaped, or a template expression renders and parses successfully, can
+only be checked once real answers are available, at generation time (`ExpandMatrix`
+in `pkg/generator/engine/matrix.go`).
 
-**Open questions / non-goals for a first cut**:
-- Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
-  via a `splitList`-style Sprig/Gomplate function applied ahead of the matrix) is
-  not part of this draft — axis sources here are already list-shaped.
+**Non-goals**:
 - No directory-level `matrix` (stamping a whole per-combination subtree from one
-  entry). The `path`/`target` split this proposal is built around should generalize
-  to that later, but isn't part of the first cut.
+  entry). The `path`/`target` split this design is built around should generalize to
+  that, but it isn't implemented.
+
+Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
+`{{ splitList "," answers.environment_csv }}`) and deriving one axis's values from
+nested/structured answer data (e.g. `{{ keys answers.environments "regions" }}`,
+computing the full set of regions used across every environment) were both
+originally scoped as non-goals, but fall out of the general computed-axis mechanism
+above for free — any Sprig/Gomplate function is available to an axis expression,
+not just `keys`. `--set` values for a `multiselect` field are still comma-split
+automatically (`CoerceFieldValueTypes` in `pkg/project/config/validation.go`), so a
+multiselect-sourced axis keeps working non-interactively without needing a template
+expression at all.
 - No changes to field types or the interactive prompt form.
 
 ### Update Flow (with 3-Way Merge)
@@ -961,8 +1035,8 @@ Location: `website/docs/cli/commands/scaffold.mdx`
   (`spec.fields[].when:`, see "Template Structure" above)
 - ✅ **Shipped**: regex validation (`spec.fields[].validation.pattern`/`message`)
 - Dynamic default values (computed from other inputs) — still future
-- 🚧 `spec.files[].matrix:` — proposed, not yet implemented; see "Dynamic File
-  Generation (`matrix`)" above for the current design proposal
+- ✅ **Shipped**: dynamic file generation over a Cartesian product of axes
+  (`spec.files[].matrix:`, see "Dynamic File Generation (`matrix`)" above)
 
 ### IDE Integration
 

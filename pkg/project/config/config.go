@@ -151,19 +151,43 @@ func DecodeHooks(raw map[string]any) (map[string]hooks.Hook, error) {
 }
 
 // FileSpec optionally gates whether an auto-discovered template file is
-// generated, based on the collected field answers.
+// generated, based on the collected field answers, and can expand a single
+// discovered file into multiple generated files via Matrix.
 type FileSpec struct {
 	// Path is the file's path as discovered in the template's file tree
 	// (matched against the file's original, pre-template-rendering path).
 	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree"`
 	// When gates generation of this file. Evaluated against the collected
-	// answers (as the `answers` CEL variable); a false result skips the
-	// file entirely. Empty always generates the file. Schema-restricted to
-	// a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
+	// answers (as the `answers` CEL variable) and, when Matrix is set, once
+	// per resolved combination (as the `matrix` CEL variable) to prune
+	// combinations that don't apply; a false result skips the file (or that
+	// combination) entirely. Empty always generates the file. Schema-restricted
+	// to a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
 	// map form is deliberately excluded here (see the comment on
 	// FieldDefinition.When for why) even though pkg/condition itself parses
 	// it; use CEL's &&/||/! instead.
-	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file is generated,oneof_type=string;array"`
+	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated,oneof_type=string;array"`
+	// Matrix declares axes to expand this file into one generated file per
+	// resolved combination -- the Cartesian product of every axis's values,
+	// the same map[axis][]values shape the workflow `matrix:` step uses. Each
+	// axis's value is either a literal list of strings, author-declared
+	// directly here (e.g. region: [us-east-1, us-west-2]), or a single string
+	// dot-path into answers.* referencing an already list-shaped answer (e.g.
+	// environment: answers.environments, where environments is a multiselect
+	// field or a structured value supplied through --set or a
+	// template-declared preset). Requires Target, since Path alone cannot
+	// serve as the output path for more than one generated file. See
+	// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)".
+	Matrix map[string]any `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings or a dot-path string into answers.*"`
+	// Target overrides the rendered output path for this file. Without
+	// Matrix it is optional and rendered once, exactly like Path is rendered
+	// today, letting authors keep Path a plain on-disk name while
+	// controlling dynamic output naming from a normal YAML string instead
+	// of embedding template syntax in a physical filename. With Matrix it is
+	// required and rendered once per resolved combination, with that
+	// combination available on the template root as .matrix.<axis> in both
+	// Target and the file's own content.
+	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
 }
 
 // FieldValidation constrains the allowed values for a FieldDefinition.
