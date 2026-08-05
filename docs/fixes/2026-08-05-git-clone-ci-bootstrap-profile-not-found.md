@@ -31,38 +31,51 @@ executed.
 
 ## Changes
 
-- `cmd/git/bootstrap.go`: added `CIGitCloneModeRequestedFromEnv()`, an
-  exported helper that reports whether a detected CI provider plus
-  `ATMOS_CI` request CI checkout mode, without needing a resolved Cobra
-  command. It defers to the existing `resolveCICloneMode` so the
-  Cobra-aware and pre-Cobra code paths can't drift on ATMOS_CI/CI-provider
-  precedence.
-- `cmd/root.go`: added `isCIGitCloneBootstrapArgs(args)`, an `os.Args`-based
-  equivalent of `gitcmd.CICloneBootstrapRequested` (checked before Cobra has
-  parsed anything), and wired it into `handleConfigInitErrorWithArgs` as a
-  new tolerance branch alongside the existing version/help/config-validation
-  branches.
+- `cmd/root.go`: added `isCIGitCloneBootstrapArgs(args)`, which isolates the
+  clone-specific arguments from raw `os.Args` (stripping leading root flags
+  and the `atmos git clone` tokens) and wires the result into
+  `handleConfigInitErrorWithArgs` as a new tolerance branch alongside the
+  existing version/help/config-validation branches.
+- `cmd/git/bootstrap.go`: added `CIGitCloneBootstrapRequestedFromRawArgs`,
+  which parses those clone-specific arguments against a throwaway
+  `*cobra.Command` carrying the real clone flag set (a fresh
+  `newCloneParser()` instance, never the shared package-level `cloneParser`
+  singleton, to avoid disturbing its registered command) via real `pflag`
+  parsing, then defers to the existing `CICloneBootstrapRequested`.
+- Iteration note: a first version of this fix used a hand-rolled
+  `"-"`-prefix heuristic (and a separate `CIGitCloneModeRequestedFromEnv`
+  env-only helper) instead of real flag parsing. Dogfooding against the
+  exact reported reproduction (`atmos git clone --ci --depth 0`) caught that
+  the heuristic misread the space-separated value `0` of `--depth` as a
+  positional repo argument and wrongly fell back to the "profile not found"
+  error. Replacing the heuristic with real `pflag` parsing (this fix's final
+  form) fixes that and, as a side benefit, also lets an explicit
+  `--ci`/`--ci=false` in the raw args be honored before Cobra resolves the
+  command.
 
 ## Validation
 
-- New regression test `TestHandleConfigInitError_CIGitCloneBootstrap`
-  (`cmd/root_helpers_test.go`) — confirmed it fails against the pre-fix code
-  (`ErrProfileNotFound` returned instead of tolerated) and passes post-fix,
-  with negative cases (explicit repo argument, `--all`, no CI provider
-  detected) confirming the new branch doesn't over-tolerate.
+- New regression tests: `TestHandleConfigInitError_CIGitCloneBootstrap`
+  (`cmd/root_helpers_test.go`, including the exact `--ci --depth 0`
+  reproduction) and `TestCIGitCloneBootstrapRequestedFromRawArgs`
+  (`cmd/git/bootstrap_test.go`, covering space- and equals-form value flags,
+  `--branch`, positional args, `--all`, no-CI-provider, and malformed flag
+  values) — confirmed both fail against the pre-fix code and pass post-fix.
 - `go build ./...`, `go vet ./cmd/...`, `gofmt` — clean.
-- `go test ./cmd/... ./cmd/git/...` (targeted: `TestHandleConfigInitError*`,
-  `TestApplyCIGitCloneBootstrap*`, `TestIsBuiltinConfigValidationCommand`,
-  `TestCICloneBootstrapRequested*`) and full `go test ./cmd/` — all pass.
+- Full `go test ./cmd/ ./cmd/git/...` — all pass.
 - `./custom-gcl run` via the repo's pre-commit hook — pass (had to build
   `./custom-gcl` first via `atmos lint custom-gcl`; it wasn't prebuilt in
   this worktree).
-- Manual reproduction against a built binary in an empty directory:
-  `ATMOS_PROFILE=github ATMOS_CI=true GITHUB_ACTIONS=true GITHUB_REPOSITORY=acme/repo atmos git clone`
-  no longer prints `**Error:** profile not found`; it logs the missing
-  profile as a warning and proceeds into the real clone logic (which then
+- Manual reproduction against built binaries in an empty directory, for both
+  `atmos git clone` (bare) and the exact reported
+  `atmos git clone --ci --depth 0` with
+  `ATMOS_PROFILE=github ATMOS_CI=true GITHUB_ACTIONS=true GITHUB_REPOSITORY=acme/repo`:
+  neither prints `**Error:** profile not found`; both log the missing
+  profile as a warning and proceed into the real clone logic (which then
   fails only because `acme/repo` doesn't exist — expected for the synthetic
-  repo used in this check).
+  repo used in this check). Also confirmed the disqualifying cases
+  (positional repo argument, `--all`) still correctly show the profile
+  error.
 
 ## Follow-ups
 
