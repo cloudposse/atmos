@@ -244,6 +244,23 @@ func ValidateArgsOrNil(cmd *cobra.Command, args []string) error {
 	return cmd.Args(cmd, args)
 }
 
+// viperKeyAnnotation stores a WithViperKey override directly on the Cobra
+// pflag.Flag itself, so code that later encounters the same flag only as a
+// *pflag.Flag (e.g. another command's BindFlagsToViper binding it as an
+// inherited/persistent flag, with no access back to the registering
+// parser's registry) can still resolve its intended Viper key instead of
+// silently falling back to the bare flag name.
+const viperKeyAnnotation = "atmos.viperKey"
+
+// viperKeyForPFlag returns a flag's WithViperKey override if one was
+// recorded via viperKeyAnnotation, otherwise its bare Cobra flag name.
+func viperKeyForPFlag(flag *pflag.Flag) string {
+	if values, ok := flag.Annotations[viperKeyAnnotation]; ok && len(values) > 0 && values[0] != "" {
+		return values[0]
+	}
+	return flag.Name
+}
+
 // registerFlagToSet is a helper that registers a single flag to a pflag.FlagSet.
 // This eliminates duplication between registerFlag and registerPersistentFlag.
 // The markRequired function allows callers to specify how to mark required flags
@@ -265,6 +282,15 @@ func (p *StandardFlagParser) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag
 	default:
 		// Unknown flag type - skip.
 		// In production, this could log a warning.
+	}
+
+	if override, ok := p.viperKeys[flag.GetName()]; ok && override != "" {
+		if cobraFlag := flagSet.Lookup(flag.GetName()); cobraFlag != nil {
+			if cobraFlag.Annotations == nil {
+				cobraFlag.Annotations = map[string][]string{}
+			}
+			cobraFlag.Annotations[viperKeyAnnotation] = []string{override}
+		}
 	}
 }
 
@@ -566,9 +592,13 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 			return
 		}
 
-		// Bind inherited flag to Viper using its name as the key.
+		// Bind inherited flag to Viper using its name as the key, unless the
+		// registering parser pinned it to an explicit Viper key (see
+		// WithViperKey / viperKeyAnnotation) to avoid shadowing an unrelated
+		// dotted namespace that shares its bare name (e.g. the global --cast
+		// flag vs. "cast.record.*"/"cast.recording.*").
 		// Errors are ignored to match the behavior of the main loop above.
-		_ = v.BindPFlag(flag.Name, flag)
+		_ = v.BindPFlag(viperKeyForPFlag(flag), flag)
 	})
 
 	return nil
