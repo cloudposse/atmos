@@ -630,6 +630,7 @@ func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
 		wantAffected bool
 	}{
 		{name: "relative list", valuesFiles: []any{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "typed relative list", valuesFiles: []string{valuesRef}, changedFile: valuesFile, wantAffected: true},
 		{name: "scalar", valuesFiles: valuesRef, changedFile: valuesFile, wantAffected: true},
 		{name: "absolute", valuesFiles: []any{valuesFile}, changedFile: valuesFile, wantAffected: true},
 		{name: "unrelated", valuesFiles: []string{valuesRef}, changedFile: filepath.Join(tempDir, "config", "helm", "other-values.yaml")},
