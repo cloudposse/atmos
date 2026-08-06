@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +54,7 @@ func AddEntry(atmosConfig *schema.AtmosConfiguration, track, name string, entry 
 	if _, err := existingEntryPath(content, track, name); err == nil {
 		return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryExists, name, track, file)
 	}
-	document, err := json.Marshal(entryDocument(entry))
+	document, err := marshalJSONNoEscape(entryDocument(entry))
 	if err != nil {
 		return "", err
 	}
@@ -160,11 +161,31 @@ func setEntryField(content []byte, path string, value any) ([]byte, error) {
 	if stringValue, ok := value.(string); ok {
 		return atmosyaml.Set(content, path, stringValue)
 	}
-	raw, err := json.Marshal(value)
+	raw, err := marshalJSONNoEscape(value)
 	if err != nil {
 		return nil, err
 	}
 	return atmosyaml.SetRaw(content, path, string(raw))
+}
+
+// marshalJSONNoEscape marshals v to JSON without HTML-escaping "<", ">", and
+// "&". The stdlib json.Marshal always escapes those characters (its
+// SetEscapeHTML default is true), which corrupts version constraints such as
+// ">=1.7.0" or "~>1.7.0" once the JSON text is spliced into a YAML document
+// via the yq-based writer in pkg/yaml: yq's expression lexer does not decode
+// Unicode escapes, so the literal `>` sequence ends up written into
+// atmos.yaml instead of the intended ">" character.
+func marshalJSONNoEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	// json.NewEncoder.Encode always appends a trailing newline; json.Marshal
+	// does not, and callers here pass the result straight into SetRaw as a
+	// single-line YAML right-hand side.
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // readEditableConfig resolves and reads the atmos.yaml file CRUD edits target.

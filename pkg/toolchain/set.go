@@ -340,9 +340,11 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 	}
 
-	// Add the tool with the selected version.
+	// Set the tool's default version. Always replace (not append) so `set`
+	// matches its documented purpose and never produces a multi-version
+	// .tool-versions line that leaves a stale version as the default.
 	filePath := GetToolVersionsFilePath()
-	err = AddToolToVersions(filePath, spec.key, version)
+	err = AddToolToVersionsAsDefault(filePath, spec.key, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}

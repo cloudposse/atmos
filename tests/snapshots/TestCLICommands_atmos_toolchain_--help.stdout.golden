@@ -29,6 +29,7 @@ BUILT-IN COMMANDS
       search              Search for tools (alias to 'registry search')
       set                 Set default version for a tool
       uninstall           Uninstall a tool or all tools from .tool-versions
+      update              Update tools to their newest available version
       which               Show path to installed tool binary
 
 FLAGS

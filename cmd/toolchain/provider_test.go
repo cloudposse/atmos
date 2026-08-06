@@ -27,7 +27,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "add",
 			commandName:       "add",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&AddCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
@@ -35,7 +35,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "clean",
 			commandName:       "clean",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&CleanCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
@@ -43,7 +43,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "exec",
 			commandName:       "exec",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&ExecCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
@@ -75,7 +75,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "list",
 			commandName:       "list",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&ListCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
@@ -126,6 +126,14 @@ func TestCommandProviderImplementations(t *testing.T) {
 			expectFlagsParser: false,
 			getFlagsBuilder:   func() flags.Builder { return (&WhichCommandProvider{}).GetFlagsBuilder() },
 		},
+		{
+			name:              "UpdateCommandProvider",
+			providerName:      "update",
+			commandName:       "update",
+			group:             "Toolchain Commands",
+			expectFlagsParser: true,
+			getFlagsBuilder:   func() flags.Builder { return (&UpdateCommandProvider{}).GetFlagsBuilder() },
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,8 +167,8 @@ func TestAddCommandProvider(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
 	})
 
-	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
-		assert.Nil(t, provider.GetFlagsBuilder())
+	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
+		assert.NotNil(t, provider.GetFlagsBuilder())
 	})
 
 	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
@@ -175,13 +183,13 @@ func TestAddCommandProvider(t *testing.T) {
 // TestCleanCommandProvider tests CleanCommandProvider implementation.
 func TestCleanCommandProvider(t *testing.T) {
 	provider := &CleanCommandProvider{}
-	testBasicCommandProvider(t, provider, "clean", "clean")
+	testCommandProviderWithFlags(t, provider, "clean", "clean", cleanParser)
 }
 
 // TestExecCommandProvider tests ExecCommandProvider implementation.
 func TestExecCommandProvider(t *testing.T) {
 	provider := &ExecCommandProvider{}
-	testBasicCommandProvider(t, provider, "exec", "exec")
+	testCommandProviderWithFlags(t, provider, "exec", "exec", execParser)
 }
 
 // testBasicCommandProvider is a helper to test basic command provider implementations without flags.
@@ -330,7 +338,7 @@ func testCommandProviderWithFlags(t *testing.T, provider interface{}, expectedNa
 // TestListCommandProvider tests ListCommandProvider implementation.
 func TestListCommandProvider(t *testing.T) {
 	provider := &ListCommandProvider{}
-	testBasicCommandProvider(t, provider, "list", "list")
+	testCommandProviderWithFlags(t, provider, "list", "list", listParser)
 }
 
 // TestRemoveCommandProvider tests RemoveCommandProvider implementation.

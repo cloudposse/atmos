@@ -1,0 +1,101 @@
+---
+title: atmos toolchain update
+sidebar_label: update
+sidebar_class_name: command
+id: update
+description: Update tools to their newest available version.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Update one or more tools to their newest available version, without leaving your `.tool-versions` file in a broken or ambiguous state. This is the command to reach for when you know a tool should move forward — `add`/`install` intentionally never bump an already-configured version on their own.
+</Intro>
+
+<CastPlayer title="atmos toolchain update --help" src="/casts/screengrabs/atmos-toolchain-update--help.cast" static chrome />
+
+## Usage
+
+Execute the `toolchain update` command like this:
+
+```shell
+atmos toolchain update
+```
+
+## How Updates Are Resolved
+
+`update` looks at each tool's current pin in `.tool-versions` and decides what,
+if anything, to do:
+
+- **Pinned to `latest`** — re-resolved to the newest version and reinstalled.
+- **Pinned to an exact version** (for example `1.9.8` or a tool-specific tag
+  like `jq-1.7.1`) — replaced with the newest available version from the
+  registry and reinstalled, if a newer one exists. Already-current tools are
+  reported as up to date and left untouched.
+- **Pinned to `pr:NNNN`, `sha:xxxxxxx`, or `ref:<name>`** — skipped. These are
+  immutable-by-design pins; updating them automatically would defeat their
+  purpose. Use [`atmos toolchain add`](/cli/commands/toolchain/add) to change
+  one explicitly.
+
+`update` always replaces the tool's default version rather than appending —
+unlike plain `add`, it never leaves a tool pinned to two versions at once.
+
+For range/constraint-based pinning (`^1.2.0`, `~>1.0.0`, `>=1.0.0`) instead of
+exact-version tracking, see
+[`dependencies.tools`](/cli/commands/toolchain/usage) in a stack manifest, or
+[`atmos version track`](/cli/commands/version/track) — `.tool-versions` is
+intentionally exact-version-only.
+
+## Examples
+
+```shell
+# Update every tool in .tool-versions
+atmos toolchain update
+
+# Update specific tools
+atmos toolchain update terraform
+atmos toolchain update terraform kubectl
+
+# Preview what would change without installing anything
+atmos toolchain update --dry-run
+
+# Limit this batch to two concurrent updates
+atmos toolchain update --max-concurrency 2
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool...` <em>(optional)</em></dt>
+    <dd>
+        One or more tools to update. Each tool can be a short name (alias) or full `owner/repo` format.
+        If omitted, updates every tool configured in `.tool-versions`.
+
+        Examples: `terraform`, `hashicorp/terraform`, `kubectl`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Report what would change without installing anything or modifying `.tool-versions`.
+    </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of tools to update concurrently. The default is `4`.
+        Use a positive integer; values lower than `1` are rejected. Resolved
+        the same way as [`install`'s `--max-concurrency`](/cli/commands/toolchain/install#parallel-install-configuration):
+        `--max-concurrency`, `ATMOS_TOOLCHAIN_MAX_CONCURRENCY`, `toolchain.max_concurrency`, then `4`.
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos toolchain add`](/cli/commands/toolchain/add) - Add a tool or change its pinned version explicitly
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools from `.tool-versions`
+- [`atmos toolchain get`](/cli/commands/toolchain/get) - Browse available versions before updating
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools and their versions

@@ -1741,6 +1741,40 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 	assert.Contains(t, string(content), "1.11.4")
 }
 
+// TestSetToolVersion_ReplacesExistingDefault reproduces a bug where `set` only
+// appended the new version instead of replacing the existing default — silently
+// contradicting its own documented purpose ("Set default version for a tool")
+// and leaving the OLD version as the resolved default for which/exec/env/path.
+func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+		},
+	}
+
+	// Tool already pinned to an older version.
+	err = AddToolToVersions(tmpFile.Name(), "hashicorp/terraform", "1.5.7")
+	require.NoError(t, err)
+
+	// `set` a newer version.
+	err = SetToolVersion("hashicorp/terraform", "1.11.4", 3)
+	assert.NoError(t, err)
+
+	toolVersions, err := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, err)
+	versions := toolVersions.Tools["hashicorp/terraform"]
+	require.NotEmpty(t, versions, "hashicorp/terraform should still be configured")
+	assert.Equal(t, "1.11.4", versions[0], "set should replace the default (first) version, not append")
+}
+
 // TestSetToolVersion_WithInvalidTool tests SetToolVersion with an invalid tool name.
 func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 	// Create a temporary tool-versions file

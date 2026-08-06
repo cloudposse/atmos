@@ -1,14 +1,17 @@
 package toolchain
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestListCommand_WithInstalledTools(t *testing.T) {
@@ -902,4 +905,108 @@ func TestFindAliasForTool_NoMatch(t *testing.T) {
 	alias := findAliasForTool("hashicorp", "terraform")
 
 	assert.Empty(t, alias, "Should return empty when no matching alias")
+}
+
+// setUpListToolsFixture writes a .tool-versions file with one installed tool (terraform) and
+// one pending tool (kubectl), returning the atmos config for RunListWithOptions to use.
+func setUpListToolsFixture(t *testing.T) *schema.AtmosConfiguration {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	toolsDir := filepath.Join(tempDir, ".tools")
+
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.11.4"}, // Installed below.
+			"kubectl":   {"1.28.0"}, // Left pending (never installed).
+		},
+	}
+	require.NoError(t, SaveToolVersions(toolVersionsFile, toolVersions))
+
+	terraformPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.11.4")
+	require.NoError(t, os.MkdirAll(terraformPath, defaultMkdirPermissions))
+	require.NoError(t, os.WriteFile(filepath.Join(terraformPath, "terraform"), []byte("mock terraform binary"), 0o755))
+
+	// NewInstaller() derives binDir from GetInstallPath() ("InstallPath" + "/bin"), not from the
+	// "ToolsDir" config field, so InstallPath must be set here for the binary above to resolve.
+	return &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsFile,
+			InstallPath:  toolsDir,
+		},
+	}
+}
+
+func TestRunListWithOptions_InvalidFormatRejected(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	err := RunListWithOptions("xml", false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRunListWithOptions_MutuallyExclusiveFiltersRejected(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	err := RunListWithOptions("table", true, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+func TestRunListWithOptions_InstalledOnlyFilter(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	stdout := captureDataOutput(t)
+	err := RunListWithOptions("json", true, false)
+	require.NoError(t, err)
+
+	var got ListToolsOutput
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	require.Len(t, got.Tools, 1)
+	assert.Equal(t, "1.11.4", got.Tools[0].Version, "installed-only should keep the installed terraform row")
+	assert.True(t, got.Tools[0].Installed)
+}
+
+func TestRunListWithOptions_PendingOnlyFilter(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	stdout := captureDataOutput(t)
+	err := RunListWithOptions("json", false, true)
+	require.NoError(t, err)
+
+	var got ListToolsOutput
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	require.Len(t, got.Tools, 1)
+	assert.Equal(t, "1.28.0", got.Tools[0].Version, "pending-only should keep the not-yet-installed kubectl row")
+	assert.False(t, got.Tools[0].Installed)
+}
+
+func TestRunListWithOptions_NoFilterReturnsAll(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	stdout := captureDataOutput(t)
+	err := RunListWithOptions("json", false, false)
+	require.NoError(t, err)
+
+	var got ListToolsOutput
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	require.Len(t, got.Tools, 2)
+}
+
+func TestRunListWithOptions_FormatPlain(t *testing.T) {
+	SetAtmosConfig(setUpListToolsFixture(t))
+
+	stdout := captureDataOutput(t)
+	err := RunListWithOptions("plain", true, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "hashicorp/terraform@1.11.4\n", stdout.String())
+}
+
+func TestRunListWithOptions_DefaultsMatchRunList(t *testing.T) {
+	// RunList is kept for backward compatibility and must behave like the table-format,
+	// unfiltered case of RunListWithOptions.
+	SetAtmosConfig(setUpListToolsFixture(t))
+	assert.NoError(t, RunList())
 }

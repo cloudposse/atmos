@@ -364,6 +364,16 @@ commands:
 Use exact versions for reproducible CI, SemVer ranges for managed upgrade windows, and `latest`
 only for non-production workflows where drift is acceptable.
 
+> **SemVer ranges only work here (and via `atmos version track`).** The `~> 1.10.0` / `^2.0.0` style
+> ranges above are resolved by the separate `dependencies.tools` subsystem at terraform/helmfile/packer
+> exec time — they are **not** accepted by the `atmos toolchain add/install/set` CLI commands in
+> "Key Commands" below (those take exact versions, `latest`, `pr:`, `sha:`, or `ref:` only; a range
+> like `atmos toolchain add terraform@"~>1.0"` fails). They also don't work in `.tool-versions`, which
+> is intentionally exact-version-only — it's an asdf-compatible format, and asdf itself has no range
+> support (see [asdf-vm/asdf#1392](https://github.com/asdf-vm/asdf/issues/1392)). If you're looking for
+> "how do I pin a range," use `dependencies.tools` in stack YAML or `atmos version track`, not the
+> `toolchain` CLI commands.
+
 In Atmos CI, prefer `dependencies.tools` over GitHub setup actions such as
 `hashicorp/setup-terraform` or `opentofu/setup-opentofu`. Setup actions install a runner-level binary,
 while Atmos tool dependencies travel with the stack, component, workflow, or command that requires
@@ -481,9 +491,12 @@ toolchain:
 
 ## Unsupported Aqua Features
 
-These Aqua features are intentionally not supported to keep Atmos focused:
+These Aqua features are intentionally not supported to keep Atmos focused. Note that `github_content`
+and `github_archive` package types **are** supported (see `atmos toolchain registry` docs) — only the
+following are missing:
 
-- `github_content`, `github_archive`, `go_build`, `cargo` package types
+- `go_install`, `go_build_install`, `cargo` package types (use `github_release` or `http` for
+  pre-built binaries instead)
 - `version_filter`, `version_expr` version manipulation
 - `import` (use multiple registries instead)
 - `command_aliases` (use `toolchain.aliases` in atmos.yaml)

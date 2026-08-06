@@ -273,8 +273,8 @@ func TestAddCommandProvider_AllMethods(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
 	})
 
-	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
-		assert.Nil(t, provider.GetFlagsBuilder())
+	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
+		assert.NotNil(t, provider.GetFlagsBuilder())
 	})
 
 	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {

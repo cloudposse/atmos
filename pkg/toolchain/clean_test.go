@@ -10,7 +10,10 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -393,4 +396,140 @@ func verifyCleanTestDirectories(t *testing.T, tt cleanTestCase, toolsDir, cacheD
 	if _, err := os.Stat(tempCacheDir); !os.IsNotExist(err) {
 		t.Errorf("tempCacheDir %s should be deleted", tempCacheDir)
 	}
+}
+
+// setUpRunCleanFixture creates toolsDir/cacheDir/tempCacheDir, each with one file, for RunClean tests.
+func setUpRunCleanFixture(t *testing.T) (toolsDir, cacheDir, tempCacheDir string) {
+	t.Helper()
+
+	base := t.TempDir()
+	toolsDir = filepath.Join(base, "tools")
+	cacheDir = filepath.Join(base, "cache")
+	tempCacheDir = filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{"terraform"}, []string{})
+	createCleanTestDir(t, cacheDir, []string{"download.tar.gz"}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{"extract.tmp"}, []string{})
+	return toolsDir, cacheDir, tempCacheDir
+}
+
+// assertDirUnchanged asserts that dir still exists and still contains exactly the given entries.
+func assertDirUnchanged(t *testing.T, dir string, wantEntries []string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err, "directory %s should still exist", dir)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.ElementsMatch(t, wantEntries, names, "directory %s contents should be unchanged", dir)
+}
+
+func TestRunClean_DryRun_DeletesNothing(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	var output string
+	require.NotPanics(t, func() {
+		output = captureCleanTestOutput(t, func() {
+			err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true})
+			require.NoError(t, err)
+		})
+	})
+
+	// Nothing should have been deleted.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+
+	assert.Contains(t, output, "Would delete")
+	assert.Contains(t, output, toolsDir)
+	assert.Contains(t, output, cacheDir)
+	assert.Contains(t, output, tempCacheDir)
+}
+
+func TestRunClean_DryRun_CacheOnly_SkipsToolsDir(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	output := captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true, CacheOnly: true})
+		require.NoError(t, err)
+	})
+
+	// Nothing deleted, and the tools dir isn't even mentioned since --cache-only skips it.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+	assert.NotContains(t, output, toolsDir)
+	assert.Contains(t, output, cacheDir)
+}
+
+func TestRunClean_CacheOnly_LeavesInstalledToolsIntact(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{CacheOnly: true, Force: true})
+		require.NoError(t, err)
+	})
+
+	// Tools dir must survive --cache-only; cache dirs must be gone.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	_, err := os.Stat(cacheDir)
+	assert.True(t, os.IsNotExist(err), "cacheDir should be deleted")
+	_, err = os.Stat(tempCacheDir)
+	assert.True(t, os.IsNotExist(err), "tempCacheDir should be deleted")
+}
+
+func TestRunClean_Force_DeletesEverything(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{Force: true})
+		require.NoError(t, err)
+	})
+
+	for _, dir := range []string{toolsDir, cacheDir, tempCacheDir} {
+		_, err := os.Stat(dir)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", dir)
+	}
+}
+
+// TestRunClean_NonInteractive_RequiresForce verifies that, without --force and without a TTY,
+// RunClean refuses to delete anything and reports ErrToolchainCleanRequiresConfirmation
+// instead of silently proceeding or hanging on a prompt. It forces the non-interactive branch
+// via the isTTYForStdoutFunc seam rather than depending on whether the test runner itself has a
+// TTY attached (which varies: none in CI, but a real /dev/tty when run manually in a terminal —
+// and the real huh prompt requires an actual /dev/tty it can open, which isn't available here).
+func TestRunClean_NonInteractive_RequiresForce(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	originalIsTTY := isTTYForStdoutFunc
+	isTTYForStdoutFunc = func() bool { return false }
+	t.Cleanup(func() { isTTYForStdoutFunc = originalIsTTY })
+
+	var err error
+	captureCleanTestOutput(t, func() {
+		err = RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolchainCleanRequiresConfirmation)
+
+	// Nothing should have been deleted.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+}
+
+func TestRunClean_DryRun_NonExistentDirs(t *testing.T) {
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "missing-tools")
+	cacheDir := filepath.Join(base, "missing-cache")
+	tempCacheDir := filepath.Join(base, "missing-temp-cache")
+
+	output := captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true})
+		require.NoError(t, err)
+	})
+
+	assert.Contains(t, output, "does not exist")
 }
