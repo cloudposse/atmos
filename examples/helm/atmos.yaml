@@ -42,14 +42,16 @@ commands:
       - atmos validate stacks
       # Dependency acquisition is explicit: the opt-in flag fetches the missing
       # file:// library and updates the local chart before the first render.
-      - atmos helm template demo -s dev --dependency-update --output=/tmp/atmos-helm-template.yaml
       # Template output includes weighted hooks and leaves Helm `tpl` expressions
       # in values for the chart to evaluate with its native .Values context.
       - command: >-
-          test "$(grep -c '^  name: demo-hook-order$' /tmp/atmos-helm-template.yaml)" -eq 2 &&
-          grep -q 'helm.sh/hook-weight: "-2"' /tmp/atmos-helm-template.yaml &&
-          grep -q 'helm.sh/hook-weight: "-1"' /tmp/atmos-helm-template.yaml &&
-          grep -q 'rendered: from-stack' /tmp/atmos-helm-template.yaml
+          artifact=$(mktemp ./atmos-helm-template.XXXXXX.yaml);
+          trap 'rm -f "$artifact"' EXIT;
+          atmos helm template demo -s dev --dependency-update --output="$artifact" &&
+          test "$(grep -c '^  name: demo-hook-order$' "$artifact")" -eq 2 &&
+          grep -q 'helm.sh/hook-weight: "-2"' "$artifact" &&
+          grep -q 'helm.sh/hook-weight: "-1"' "$artifact" &&
+          grep -q 'rendered: from-stack' "$artifact"
       - command: atmos emulator up kubernetes -s dev
         retry:
           max_attempts: 2

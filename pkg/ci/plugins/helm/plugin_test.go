@@ -264,8 +264,9 @@ func TestTemplateRendering(t *testing.T) {
 				"history":            map[string]any{"max": 10},
 			},
 			contains: []string{
-				"Helm Apply Summary", "bitnami/nginx", "Deployment", "Release lifecycle",
-				"| Wait strategy | `watcher` |",
+				"Helm Apply Summary", "bitnami/nginx", "Deployment", "\n### Release lifecycle\n",
+				"\n| Operation | `upgrade` |\n",
+				"\n| Wait strategy | `watcher` |\n",
 				"| Timeout | `30m0s` |",
 				"| Chart hooks enabled | `true` |",
 				"| Wait for Jobs | `true` |",
@@ -286,8 +287,8 @@ func TestTemplateRendering(t *testing.T) {
 				"crds":        "create",
 			},
 			contains: []string{
-				"Helm Apply Summary", "Release lifecycle",
-				"| Operation | `install` |",
+				"Helm Apply Summary", "\n### Release lifecycle\n",
+				"\n| Operation | `install` |\n",
 				"| Wait strategy | `hookOnly` |",
 				"| Timeout | `5m0s` |",
 				"| Chart hooks enabled | `true` |",
@@ -305,7 +306,8 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			contains: []string{
 				"Helm Apply Summary",
-				"| Applied | `false` |",
+				"\n### Release lifecycle\n",
+				"\n| Applied | `false` |\n",
 				"| Target kind | `git` |",
 				"| Reason | `external_target` |",
 			},
@@ -321,8 +323,8 @@ func TestTemplateRendering(t *testing.T) {
 				"chart_hooks": false,
 			},
 			contains: []string{
-				"Helm Delete Summary", "Release lifecycle",
-				"| Operation | `delete` |",
+				"Helm Delete Summary", "\n### Release lifecycle\n",
+				"\n| Operation | `delete` |\n",
 				"| Wait strategy | `legacy` |",
 				"| Timeout | `10m0s` |",
 				"| Chart hooks enabled | `false` |",
@@ -336,7 +338,8 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			contains: []string{
 				"Helm Delete Summary",
-				"| Deleted | `false` |",
+				"\n### Release lifecycle\n",
+				"\n| Deleted | `false` |\n",
 				"| Target kind | `git` |",
 				"| Reason | `external_target` |",
 			},

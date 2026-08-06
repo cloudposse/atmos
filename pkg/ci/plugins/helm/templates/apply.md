@@ -14,11 +14,11 @@
 | Objects | `{{ .ObjectCount }}` |
 | Manifest bytes | `{{ .ManifestBytes }}` |
 
-{{- with .Lifecycle }}
+{{ with .Lifecycle }}
 
 ### Release lifecycle
 
-{{- if eq (index . "reason") "external_target" }}
+{{ if eq (index . "reason") "external_target" }}
 
 | Field | Value |
 | --- | --- |
@@ -26,7 +26,7 @@
 | Target kind | `{{ index . "target_kind" }}` |
 | Reason | `external_target` |
 
-{{- else }}
+{{ else }}
 
 | Field | Value |
 | --- | --- |
@@ -37,20 +37,20 @@
 | Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
 | On failure | `{{ index . "on_failure" }}` |
 
-{{- if eq (index . "operation") "install" }}
+{{ if eq (index . "operation") "install" }}
 | Install CRDs | `{{ index . "crds" }}` |
 
-{{- end }}
+{{ end }}
 
-{{- if eq (index . "operation") "upgrade" }}
+{{ if eq (index . "operation") "upgrade" }}
 | Cleanup on failure | `{{ index . "cleanup_on_failure" }}` |
 | Maximum history | `{{ index (index . "history") "max" }}` |
 
-{{- end }}
+{{ end }}
 
-{{- end }}
+{{ end }}
 
-{{- end }}
+{{ end }}
 
 To reproduce locally:
 

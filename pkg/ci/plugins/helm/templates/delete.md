@@ -10,11 +10,11 @@
 | Release | `{{ .ReleaseName }}` |
 | Namespace | `{{ .Namespace }}` |
 
-{{- with .Lifecycle }}
+{{ with .Lifecycle }}
 
 ### Release lifecycle
 
-{{- if eq (index . "reason") "external_target" }}
+{{ if eq (index . "reason") "external_target" }}
 
 | Field | Value |
 | --- | --- |
@@ -22,7 +22,7 @@
 | Target kind | `{{ index . "target_kind" }}` |
 | Reason | `external_target` |
 
-{{- else }}
+{{ else }}
 
 | Field | Value |
 | --- | --- |
@@ -31,9 +31,9 @@
 | Timeout | `{{ index . "timeout" }}` |
 | Chart hooks enabled | `{{ index . "chart_hooks" }}` |
 
-{{- end }}
+{{ end }}
 
-{{- end }}
+{{ end }}
 
 To reproduce locally:
 
