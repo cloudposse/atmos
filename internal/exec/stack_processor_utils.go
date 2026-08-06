@@ -2789,7 +2789,7 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentManifests = mergedAny
 
-		// Base component `validate`
+		// Base component `validate`.
 		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.ValidateSectionName, baseComponentConfig.BaseComponentValidate, baseComponentValidate)
 		if err != nil {
 			return err

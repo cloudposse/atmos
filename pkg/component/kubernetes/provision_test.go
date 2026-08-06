@@ -141,6 +141,8 @@ func TestDeliverApplyPrintsSuccessConfirmation(t *testing.T) {
 
 	assert.Contains(t, uiOutput.String(), "deployment-repo",
 		"a successful external-target delivery must print a human-facing confirmation naming the target")
+	assert.Contains(t, uiOutput.String(), "delivered 1 Kubernetes object(s)",
+		"a successful external-target delivery must report the object count")
 }
 
 func TestDeliverApplyUnknownTargetErrors(t *testing.T) {

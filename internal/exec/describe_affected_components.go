@@ -604,9 +604,13 @@ func addKubernetesSectionAffected(
 	for _, section := range sections {
 		value, ok := (*componentSection)[section.section]
 		if !ok {
-			continue
-		}
-		if isSectionValueEqual(locator, value, section.section) {
+			// validate is presence-sensitive: removing it locally (reverting to the
+			// enabled default) while the remote stack still has it explicitly set is
+			// itself a behavior change and must be detected, not silently skipped.
+			if section.section != cfg.ValidateSectionName || !locator.sectionPresent(section.section) {
+				continue
+			}
+		} else if isSectionValueEqual(locator, value, section.section) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,

@@ -30,6 +30,12 @@ const (
 	filePerm = 0o600
 )
 
+// newProvider resolves the git.Provider implementation for a resolved repository's
+// provider name. It is a package-level var (not a direct atmosgit.NewProvider call at
+// each use site) so tests can install a deterministic double via setTestProvider,
+// without touching the real git registry or invoking the git binary.
+var newProvider = atmosgit.NewProvider
+
 func init() {
 	target.Register(target.KindGit, &gitProvisioner{})
 }
@@ -96,7 +102,7 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 		return err
 	}
 
-	provider, err := atmosgit.NewProvider(resolved.Provider)
+	provider, err := newProvider(resolved.Provider)
 	if err != nil {
 		return err
 	}
@@ -142,7 +148,7 @@ func (g *gitProvisioner) Fetch(ctx context.Context, in *target.FetchInput) (targ
 		return target.ProvisionArtifact{}, err
 	}
 
-	provider, err := atmosgit.NewProvider(resolved.Provider)
+	provider, err := newProvider(resolved.Provider)
 	if err != nil {
 		return target.ProvisionArtifact{}, err
 	}

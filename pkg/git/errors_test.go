@@ -11,10 +11,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// stubBaseProvider implements Provider but deliberately has no SwapStderr method, so
+// embedding it never promotes one. Both stubSwappableProvider and
+// stubNonSwappableProvider embed it; only stubSwappableProvider adds SwapStderr itself,
+// keeping the two test doubles genuinely distinct for Go's method-set purposes -- an
+// embedded SwapStderr would be promoted to any struct embedding it, silently making a
+// "non-swappable" double swappable.
+type stubBaseProvider struct{}
+
+func (s *stubBaseProvider) Init(context.Context, *InitOptions) error   { return nil }
+func (s *stubBaseProvider) Clone(context.Context, *CloneOptions) error { return nil }
+func (s *stubBaseProvider) Pull(context.Context, *PullOptions) error   { return nil }
+func (s *stubBaseProvider) Push(context.Context, *PushOptions) error   { return nil }
+func (s *stubBaseProvider) Status(context.Context, *StatusOptions) (*StatusResult, error) {
+	return &StatusResult{}, nil
+}
+
+func (s *stubBaseProvider) Diff(context.Context, *DiffOptions) (*DiffResult, error) {
+	return &DiffResult{}, nil
+}
+
+func (s *stubBaseProvider) Commit(context.Context, *CommitOptions) (*CommitResult, error) {
+	return &CommitResult{}, nil
+}
+
 // stubSwappableProvider is a minimal Provider that also implements
 // StderrSwapper, so tests can assert CaptureStderr routes writes through the
 // swapped writer.
 type stubSwappableProvider struct {
+	stubBaseProvider
 	writeOnSwap string
 }
 
@@ -25,25 +50,9 @@ func (s *stubSwappableProvider) SwapStderr(w io.Writer) func() {
 	return func() {}
 }
 
-func (s *stubSwappableProvider) Init(context.Context, *InitOptions) error   { return nil }
-func (s *stubSwappableProvider) Clone(context.Context, *CloneOptions) error { return nil }
-func (s *stubSwappableProvider) Pull(context.Context, *PullOptions) error   { return nil }
-func (s *stubSwappableProvider) Push(context.Context, *PushOptions) error   { return nil }
-func (s *stubSwappableProvider) Status(context.Context, *StatusOptions) (*StatusResult, error) {
-	return &StatusResult{}, nil
-}
-
-func (s *stubSwappableProvider) Diff(context.Context, *DiffOptions) (*DiffResult, error) {
-	return &DiffResult{}, nil
-}
-
-func (s *stubSwappableProvider) Commit(context.Context, *CommitOptions) (*CommitResult, error) {
-	return &CommitResult{}, nil
-}
-
 // stubNonSwappableProvider implements Provider but not StderrSwapper, mirroring
 // test doubles elsewhere in the codebase that don't need stderr capture.
-type stubNonSwappableProvider struct{ stubSwappableProvider }
+type stubNonSwappableProvider struct{ stubBaseProvider }
 
 func TestCaptureStderr_SwappableProvider(t *testing.T) {
 	provider := &stubSwappableProvider{writeOnSwap: "fatal: something went wrong\n"}
@@ -57,7 +66,13 @@ func TestCaptureStderr_SwappableProvider(t *testing.T) {
 }
 
 func TestCaptureStderr_NonSwappableProviderRunsUnmodified(t *testing.T) {
-	var nonSwappable Provider = &struct{ stubNonSwappableProvider }{}
+	var nonSwappable Provider = &stubNonSwappableProvider{}
+
+	// Guard the test double itself: embedding stubBaseProvider must never promote a
+	// SwapStderr method onto stubNonSwappableProvider, or this test would silently
+	// exercise the swappable path instead of the fallback it claims to cover.
+	_, isSwapper := nonSwappable.(StderrSwapper)
+	require.False(t, isSwapper, "stubNonSwappableProvider must not implement StderrSwapper")
 
 	ran := false
 	stderr, err := CaptureStderr(nonSwappable, func() error {

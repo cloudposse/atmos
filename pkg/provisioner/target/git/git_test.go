@@ -3,6 +3,8 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -480,30 +482,67 @@ func TestDeliverIntegrationCommitError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGitDirtyUnmanagedFiles)
 }
 
+// stubCloneFailureProvider is a deterministic atmosgit.Provider double whose Clone always
+// fails with a representative git error and whose SwapStderr writes representative stderr
+// into the caller-supplied writer. It reproduces exactly what a real git clone against a
+// branch with no commits yet produces (a missing remote branch), without invoking the git
+// binary or touching the filesystem/network.
+type stubCloneFailureProvider struct{}
+
+func (s *stubCloneFailureProvider) Init(context.Context, *atmosgit.InitOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) Clone(context.Context, *atmosgit.CloneOptions) error {
+	return fmt.Errorf("%w: git clone (exit 128)", errUtils.ErrGitCommandExited)
+}
+
+func (s *stubCloneFailureProvider) Pull(context.Context, *atmosgit.PullOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) Status(context.Context, *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
+	return &atmosgit.StatusResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Diff(context.Context, *atmosgit.DiffOptions) (*atmosgit.DiffResult, error) {
+	return &atmosgit.DiffResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Commit(context.Context, *atmosgit.CommitOptions) (*atmosgit.CommitResult, error) {
+	return &atmosgit.CommitResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Push(context.Context, *atmosgit.PushOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) SwapStderr(w io.Writer) func() {
+	_, _ = w.Write([]byte("fatal: Remote branch main not found in upstream origin\n"))
+	return func() {}
+}
+
+// setTestProvider overrides the package-level newProvider hook for the duration of a
+// test, always returning p regardless of the requested provider name. The caller is
+// responsible for restoring it (e.g. via t.Cleanup).
+func setTestProvider(p atmosgit.Provider) func() {
+	prev := newProvider
+	newProvider = func(string) (atmosgit.Provider, error) { return p, nil }
+	return func() { newProvider = prev }
+}
+
 // TestDeliverIntegrationCloneErrorSurfacesStderrAndHint reproduces the
 // first-time-GitOps-bootstrap failure mode: a deployment repository that
 // exists but has no commits on the configured branch yet (a brand-new,
 // empty repo). Before this fix, Deliver returned only "git clone (exit 128)"
 // with no indication of the real cause. It must now surface git's own stderr
-// output (naming the missing remote branch) and an actionable hint.
+// output (naming the missing remote branch) and an actionable hint. Uses a
+// deterministic provider double (no git binary, no filesystem/network) so
+// this regression test can never be silently skipped.
 func TestDeliverIntegrationCloneErrorSurfacesStderrAndHint(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git binary not available")
-	}
-	isolatedGitEnv(t)
-
-	root := t.TempDir()
-	bare := filepath.Join(root, "empty.git")
-	gitCmd(t, "", "init", "--bare", bare)
-	gitCmd(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+	t.Cleanup(setTestProvider(&stubCloneFailureProvider{}))
 
 	atmosConfig := &schema.AtmosConfiguration{
 		Git: schema.GitConfig{
 			Repositories: map[string]schema.GitRepository{
 				"deployments": {
-					URI:     bare,
+					URI:     "https://example.invalid/deployments.git",
 					Branch:  "main",
-					Workdir: filepath.Join(root, "workdir"),
+					Workdir: t.TempDir(),
 				},
 			},
 		},
