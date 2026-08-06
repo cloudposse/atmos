@@ -23,6 +23,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+const gitConfigExtensionsSection = "extensions"
+
 // scpLikeURLPattern matches scp-style SSH Git URLs: `[user@]host:path`.
 // Example: `git@gitlab.example.com:group/sub/repo.git`
 //
@@ -30,8 +32,7 @@ import (
 // filesystem paths like `dir:file`.
 var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
 
-// GitURLParts holds the host, owner, and repository name resolved from a
-// remote Git URL by ParseGenericGitURL/ParseRepoURL.
+// GitURLParts holds the host, owner, and repository name parsed from a Git remote URL.
 type GitURLParts struct {
 	Host  string
 	Owner string
@@ -181,12 +182,12 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 
 // ParseRepoURL resolves host, owner, and repo name from a remote URL.
 //
-// Kubescape/go-git-url ships hardcoded support for github.com, gitlab.com,
-// and azure DevOps. Self-hosted instances (GitHub Enterprise Server, GitLab
-// self-managed, Bitbucket Server, etc.) fall back to ParseGenericGitURL,
-// which handles the URL shapes Git itself supports. If both parsers fail,
-// the canonical error is returned so genuinely-malformed URLs still
-// propagate as before.
+// The kubescape/go-git-url package ships hardcoded support for github.com,
+// gitlab.com, and azure DevOps. Self-hosted instances (GitHub Enterprise
+// Server, GitLab self-managed, Bitbucket Server, etc.) fall back to
+// ParseGenericGitURL, which handles the URL shapes Git itself supports. If
+// both parsers fail, the canonical error is returned so genuinely-malformed
+// URLs still propagate as before.
 func ParseRepoURL(repoUrl string) (GitURLParts, error) {
 	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
 		return GitURLParts{Host: gitURL.GetHostName(), Owner: gitURL.GetOwnerName(), Name: gitURL.GetRepoName()}, nil
@@ -246,12 +247,12 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrLocalRepoFetch, err)
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get HEAD reference: %s", errUtils.ErrHeadLookup, err)
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %w", errUtils.ErrHeadLookup, err)
 	}
 
 	return ref.Hash().String(), nil
@@ -377,23 +378,23 @@ func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Reposi
 		return nil, originalErr
 	}
 
-	repoRoot, gitDir, commonDir, err := gitRepositoryPaths(path)
+	paths, err := gitRepositoryPaths(path)
 	if err != nil {
 		return nil, errors.Join(err, originalErr)
 	}
 
-	dotGitFs := osfs.New(gitDir)
+	dotGitFs := osfs.New(paths.gitDir)
 	repositoryFs := dotGitFs
-	if commonDir != "" && commonDir != gitDir {
-		repositoryFs = dotgit.NewRepositoryFilesystem(dotGitFs, osfs.New(commonDir))
+	if paths.commonDir != "" && paths.commonDir != paths.gitDir {
+		repositoryFs = dotgit.NewRepositoryFilesystem(dotGitFs, osfs.New(paths.commonDir))
 	}
 
 	storer := filesystem.NewStorage(repositoryFs, cache.NewObjectLRUDefault())
-	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(repoRoot))
+	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(paths.repoRoot))
 }
 
 // isUnsupportedWorktreeConfigError reports go-git failures caused by worktreeConfig.
-// go-git does not expose typed errors for unsupported extension failures, so
+// Go-git does not expose typed errors for unsupported extension failures, so
 // this checks for the repositoryformatversion and worktreeconfig fragments.
 func isUnsupportedWorktreeConfigError(err error) bool {
 	if err == nil {
@@ -405,11 +406,11 @@ func isUnsupportedWorktreeConfigError(err error) bool {
 
 // removeWorktreeConfigExtension removes the worktreeConfig extension from config.
 func removeWorktreeConfigExtension(cfg *config.Config) {
-	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection(gitConfigExtensionsSection) {
 		return
 	}
 
-	section := cfg.Raw.Section("extensions")
+	section := cfg.Raw.Section(gitConfigExtensionsSection)
 	keys := make([]string, 0, len(section.Options))
 	for _, opt := range section.Options {
 		if strings.EqualFold(opt.Key, "worktreeConfig") {
@@ -450,11 +451,11 @@ func hasWorktreeConfigExtension(cfg *config.Config) bool {
 }
 
 func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
-	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection(gitConfigExtensionsSection) {
 		return "", false
 	}
 
-	section := cfg.Raw.Section("extensions")
+	section := cfg.Raw.Section(gitConfigExtensionsSection)
 	for _, opt := range section.Options {
 		if strings.EqualFold(opt.Key, "worktreeConfig") {
 			return opt.Value, true
@@ -463,24 +464,27 @@ func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
 	return "", false
 }
 
+type repositoryPaths struct {
+	repoRoot  string
+	gitDir    string
+	commonDir string
+}
+
 // gitRepositoryPaths returns the repository root, git dir, and common dir for path.
-func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err error) {
+func gitRepositoryPaths(path string) (repositoryPaths, error) {
 	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandExited, err)
+			return repositoryPaths{}, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitCommandExited, err)
 		}
-		return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)
+		return repositoryPaths{}, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitCommandFailed, err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(string(out)), "\r\n", "\n"), "\n")
 	if len(lines) != 3 {
-		return "", "", "", fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
+		return repositoryPaths{}, fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
 	}
 
-	repoRoot = filepath.Clean(lines[0])
-	gitDir = filepath.Clean(lines[1])
-	commonDir = filepath.Clean(lines[2])
-	return repoRoot, gitDir, commonDir, nil
+	return repositoryPaths{repoRoot: filepath.Clean(lines[0]), gitDir: filepath.Clean(lines[1]), commonDir: filepath.Clean(lines[2])}, nil
 }

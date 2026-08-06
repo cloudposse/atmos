@@ -586,6 +586,34 @@ func TestExecuteDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 		"includeEmptyStacks=true should return at least as many stacks as false")
 }
 
+// TestExecuteDescribeStacksWithAuthDisabledAndMocks exercises the auth-disabled +
+// mocks-enabled variant used by affected Terraform plan execution when
+// --use-mocks is selected (see terraform_affected.go). It is a thin
+// pass-through to executeDescribeStacks, so this proves the wiring (auth
+// disabled, mocks enabled, secrets resolved) reaches a real describe pass
+// rather than only being exercised through gomonkey patches elsewhere.
+func TestExecuteDescribeStacksWithAuthDisabledAndMocks(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	stacks, err := ExecuteDescribeStacksWithAuthDisabledAndMocks(
+		&atmosConfig,
+		"", nil, nil, nil, false, false, false,
+		false, // includeEmptyStacks.
+		nil,   // skip.
+		nil,   // authManager.
+		true,  // authDisabled.
+		true,  // useMocks.
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, stacks, "describe should still resolve the fixture's stacks with auth disabled")
+}
+
 // TestExecuteDescribeStacks_FindStacksMapError exercises the FindStacksMap error branch
 // in ExecuteDescribeStacks (lines 134-136) by using an atmos.yaml that points to a
 // stacks directory containing a syntactically invalid YAML file.

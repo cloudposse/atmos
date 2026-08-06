@@ -7,17 +7,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/tests"
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~6 seconds due to network I/O).
+	// Skip long tests in short mode (this test takes ~6 seconds due to network I/O)
 	tests.SkipIfShort(t)
 
-	// Initialize the CLI configuration.
+	// Initialize the CLI configuration
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
@@ -25,21 +26,21 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentType := "terraform"
 
-	// Helper function to ensure all paths are absolute.
+	// Helper function to ensure all paths are absolute
 	ensureAbsPath := func(path string) string {
 		absPath, err := filepath.Abs(path)
 		assert.Nil(t, err)
 		return absPath
 	}
 
-	// Test 'infra/vpc-flow-logs-bucket' component.
+	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := vendor.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = vendor.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, install.InstallOptions{})
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder.
@@ -54,18 +55,19 @@ func TestVendorComponentPullCommand(t *testing.T) {
 		assert.FileExists(t, filepath.Join(componentPath, file))
 	}
 
-	// Test 'infra/account-map' component.
+	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = vendor.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = vendor.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, install.InstallOptions{})
 	assert.Nil(t, err)
 
-	// Additional files to check.
-	filesToCheck = append(filesToCheck,
+	// Additional files to check
+	filesToCheck = append(
+		filesToCheck,
 		"dynamic-roles.tf", "README.md", "remote-state.tf",
 		"modules/iam-roles/context.tf", "modules/iam-roles/main.tf",
 		"modules/iam-roles/outputs.tf", "modules/iam-roles/variables.tf",
@@ -77,7 +79,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 		assert.FileExists(t, filepath.Join(componentPath, file))
 	}
 
-	// Delete the files and folders.
+	// Delete the files and folders
 	for _, file := range filesToCheck {
 		err := os.Remove(filepath.Join(componentPath, file))
 		if err != nil && !os.IsNotExist(err) {

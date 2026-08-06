@@ -270,7 +270,7 @@ func TestGetAffectedComponents(t *testing.T) {
 			patch := tt.mockFunc()
 			defer patch.Reset()
 
-			result, err := getAffectedComponents(tt.args)
+			result, err := GetAffectedComponents(tt.args)
 
 			// Check if gomonkey mocking is working.
 			if tt.expectedError && err == nil {
@@ -341,8 +341,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents to return empty list.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents to return empty list.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{}, nil
 					})
@@ -366,8 +366,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				// Mock getAffectedComponents.
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				// Mock GetAffectedComponents.
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod", IncludedInDependents: false},
@@ -396,7 +396,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			skipIfMocked:  true,
 		},
 		{
-			name: "error from getAffectedComponents",
+			name: "error from GetAffectedComponents",
 			args: &DescribeAffectedCmdArgs{
 				CLIConfig: &schema.AtmosConfiguration{},
 				RepoPath:  "/invalid/path",
@@ -408,7 +408,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return nil, errors.New("failed to get affected components")
 					})
@@ -432,7 +432,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 			mockFunc: func() []*gomonkey.Patches {
 				patches := []*gomonkey.Patches{}
 
-				p1 := gomonkey.ApplyFunc(getAffectedComponents,
+				p1 := gomonkey.ApplyFunc(GetAffectedComponents,
 					func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "prod"},
@@ -525,6 +525,72 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = getAffectedComponents(args)
+		_, _ = GetAffectedComponents(args)
 	}
+}
+
+// TestAffectedTerraformSelection verifies the selection carries the parsed
+// --include-dependents depth from info: a zero DependentDepth means unlimited
+// in dependency.Filter encoding, so omitting it silently erased a user-supplied
+// depth bound on the --affected path (the closure spec keeps the most
+// permissive depth when merging selection and info).
+func TestAffectedTerraformSelection(t *testing.T) {
+	affected := []schema.Affected{{Component: "vpc", Stack: "dev"}}
+
+	tests := []struct {
+		name                  string
+		argsIncludeDependents bool
+		infoIncludeDependents int
+		wantInclude           bool
+		wantDepth             int
+	}{
+		{
+			name:                  "flag off",
+			argsIncludeDependents: false,
+			infoIncludeDependents: 0,
+			wantInclude:           false,
+			wantDepth:             0,
+		},
+		{
+			name:                  "bare flag is unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: -1,
+			wantInclude:           true,
+			wantDepth:             0,
+		},
+		{
+			name:                  "numeric depth is carried through, not erased to unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: 2,
+			wantInclude:           true,
+			wantDepth:             2,
+		},
+		{
+			name:                  "programmatically forced dependents without flag depth stay unlimited",
+			argsIncludeDependents: true,
+			infoIncludeDependents: 0,
+			wantInclude:           true,
+			wantDepth:             0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			args := &DescribeAffectedCmdArgs{IncludeDependents: tc.argsIncludeDependents}
+			info := &schema.ConfigAndStacksInfo{IncludeDependents: tc.infoIncludeDependents}
+
+			selection := affectedTerraformSelection(affected, args, info)
+
+			assert.Equal(t, []string{"vpc-dev"}, selection.NodeIDs)
+			assert.Equal(t, tc.wantInclude, selection.IncludeDependents)
+			assert.Equal(t, tc.wantDepth, selection.DependentDepth)
+		})
+	}
+
+	t.Run("nil info leaves depth unlimited", func(t *testing.T) {
+		args := &DescribeAffectedCmdArgs{IncludeDependents: true}
+		selection := affectedTerraformSelection(affected, args, nil)
+		assert.True(t, selection.IncludeDependents)
+		assert.Equal(t, 0, selection.DependentDepth)
+	})
 }

@@ -18,7 +18,10 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `name_pattern` | `name_template` or explicit stack `name` |
 | `settings.depends_on` | `dependencies.components` |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
+| `cloudposse/github-action-atmos-component-updater` | `atmos vendor update --pull-request` with native GitHub PR publishing |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
+| `apt-get install docker.io` in an Atmos container job | Remove it: the official Atmos image already ships with `docker.io` |
+| GitHub Actions `concurrency` around jobs or workflows that invoke `atmos` | An explicit promotion workflow or deployment controller — environments and merge queues are approval/merge-order controls, not deployment-order guarantees; a concurrency group evicts its pending run regardless of `cancel-in-progress` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
@@ -33,7 +36,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 ## Process
 
 1. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
-   `atmos validate stacks`.
+  `atmos validate stacks`.
 2. Replace one class of legacy pattern at a time.
 3. Preserve resolved stack output unless the modernization intentionally changes behavior.
 4. Validate with `atmos describe component <component> -s <stack>` before changing CI.
@@ -87,8 +90,22 @@ jobs:
       - run: atmos terraform plan vpc -s prod
 ```
 
+The official Atmos image includes `docker.io`, so do not add an `apt-get install docker.io` step
+to containerized Atmos jobs. Docker-backed commands use the runner-provided Docker daemon/socket.
+
 Use `atmos describe affected --format=matrix` for PR matrices and `atmos list instances
 --format=matrix` for full estate operations.
+
+## Component Updater Migration
+
+Replace the legacy Component Updater action with checkout plus `atmos vendor update --pull-request`.
+Keep update selection under `vendor.update` (including named groups) and PR/summary policy under
+`vendor.ci`. Grant only `contents: write`, `pull-requests: write`, and `issues: write` where
+needed. Atmos writes a native GitHub step summary for every vendor update; it links to any created
+or reused PR. Do not use third-party actions for update, commit, push, or PR creation. For exact
+configuration and staged migration, use the vendoring
+[component-updater reference](../atmos-vendoring/references/component-updater.md) and migration
+[from-component-updater reference](../atmos-migration/references/from-component-updater.md).
 
 ## Drift Direction
 

@@ -315,6 +315,15 @@ func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, exclude
 		return err
 	}
 
+	// atmosConfig.Validate.EditorConfig.Exclude (atmos.yaml) always applies,
+	// regardless of entry point. The standalone `atmos validate editorconfig`
+	// command already passes it in explicitly; the aggregate `atmos validate
+	// --affected` path (cmd/validate_all.go's buildEditorConfigValidationTask)
+	// only passes the CLI-level --exclude flags, so without this merge
+	// atmos.yaml's excludes are silently dropped for every path except the
+	// standalone command.
+	excludes = append(append([]string{}, excludes...), atmosConfig.Validate.EditorConfig.Exclude...)
+
 	config := *currentConfig
 	log.Debug(config.String())
 	log.Debug("Excluding", "regex", config.GetExcludesAsRegularExpression())

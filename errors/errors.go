@@ -23,9 +23,6 @@ const (
 )
 
 var (
-	// Vendor errors.
-	ErrVendoringNotConfigured = errors.New("vendoring is not configured")
-
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
@@ -99,7 +96,7 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' (or the deprecated 'stacks.name_pattern') needs to be specified in 'atmos.yaml'")
 	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
@@ -147,8 +144,10 @@ var (
 	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
-	ErrAuthConsole            = errors.New("auth console operation failed")
-	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	// ErrWebflowRequiresAWSUser indicates --webflow was used without a direct aws/user identity.
+	ErrWebflowRequiresAWSUser = errors.New("--webflow requires an aws/user identity")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
@@ -177,8 +176,9 @@ var (
 	ErrPlanfileStorageNotConfigured = errors.New("planfile verification was requested but planfile storage is not configured")
 
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query`, `--components`, `--tags` and `--labels`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
+	ErrClosureFlagsRequireMultiComponent                     = errors.New("the `--include-dependencies` and `--include-dependents` flags expand a multi-component selection and require one of `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, or `--affected`")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
@@ -206,6 +206,12 @@ var (
 	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
+
+	// Terraform lint errors.
+	ErrTerraformLint             = errors.New("terraform lint failed")
+	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")
+	ErrTerraformLintAffected     = errors.New("failed to determine affected terraform lint targets")
+	ErrBuildTerraformLintTargets = errors.New("failed to build terraform lint targets")
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
@@ -275,6 +281,7 @@ var (
 	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
 	ErrGitFileNotFound             = errors.New("file not found in git reference")
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
+	ErrGitWorktreePruneIncomplete  = errors.New("git worktree prune completed but worktree path still exists")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
 	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
@@ -326,6 +333,12 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// ErrForbiddenSelectorFunction enforces the selector purity contract:
+	// metadata.tags/metadata.labels drive scoping decisions before evaluation,
+	// so by design they may not contain constructs that require authentication
+	// or process execution (e.g. !terraform.state, !store, !exec, atmos.Component).
+	ErrForbiddenSelectorFunction = errors.New("forbidden function in labels/tags selector")
+
 	// Dependency management errors.
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
 	ErrDependencyResolution = errors.New("dependency resolution failed")
@@ -337,28 +350,29 @@ var (
 	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
 
 	// Toolchain errors.
-	ErrToolNotFound                 = errors.New("tool not found")
-	ErrInvalidToolSpec              = errors.New("invalid tool specification")
-	ErrToolAlreadyInstalled         = errors.New("tool already installed")
-	ErrDownloadFailed               = errors.New("download failed")
-	ErrDownloadRetryable            = errors.New("retryable download error")
-	ErrSignatureRetryable           = errors.New("retryable signature verification error")
-	ErrExtractionFailed             = errors.New("extraction failed")
-	ErrChecksumMismatch             = errors.New("checksum mismatch")
-	ErrNoVersionsInstalled          = errors.New("no versions installed")
-	ErrLatestFileNotFound           = errors.New("latest version file not found")
-	ErrRegistryNotReachable         = errors.New("registry not reachable")
-	ErrToolNotInRegistry            = errors.New("tool not in registry")
-	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
-	ErrAliasNotFound                = errors.New("alias not found")
-	ErrBinaryNotExecutable          = errors.New("binary not executable")
-	ErrBinaryNotFound               = errors.New("binary not found")
-	ErrLockfileVersionMismatch      = errors.New("lockfile version mismatch")
-	ErrNoAssetTemplate              = errors.New("no asset template defined")
-	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
-	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
-	ErrNoToolsConfigured            = errors.New("no tools configured")
-	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
+	ErrToolNotFound                    = errors.New("tool not found")
+	ErrInvalidToolSpec                 = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled            = errors.New("tool already installed")
+	ErrDownloadFailed                  = errors.New("download failed")
+	ErrDownloadRetryable               = errors.New("retryable download error")
+	ErrSignatureRetryable              = errors.New("retryable signature verification error")
+	ErrExtractionFailed                = errors.New("extraction failed")
+	ErrChecksumMismatch                = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled             = errors.New("no versions installed")
+	ErrLatestFileNotFound              = errors.New("latest version file not found")
+	ErrRegistryNotReachable            = errors.New("registry not reachable")
+	ErrToolNotInRegistry               = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported        = errors.New("tool does not support this platform")
+	ErrAliasNotFound                   = errors.New("alias not found")
+	ErrBinaryNotExecutable             = errors.New("binary not executable")
+	ErrBinaryNotFound                  = errors.New("binary not found")
+	ErrLockfileVersionMismatch         = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate                 = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid            = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation       = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured               = errors.New("no tools configured")
+	ErrUnsupportedVersionConstraint    = errors.New("unsupported version constraint format")
+	ErrToolchainPlainFormatWithAllFlag = errors.New("--format=plain can't be used with --all")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
@@ -399,17 +413,18 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent        = errors.New("component is required")
-	ErrNoStacksToSelect        = errors.New("no stacks are configured to choose from")
-	ErrNoComponentsToSelect    = errors.New("no components are configured to choose from")
-	ErrLoadSelectionOptions    = errors.New("failed to load options for interactive selection")
-	ErrMissingComponentType    = errors.New("component type is required")
-	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
-	ErrInvalidArguments        = errors.New("invalid arguments")
-	ErrUnknownSubcommand       = errors.New("unknown subcommand")
-	ErrInvalidComponent        = errors.New("invalid component")
+	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent         = errors.New("component is required")
+	ErrNoStacksToSelect         = errors.New("no stacks are configured to choose from")
+	ErrNoComponentsToSelect     = errors.New("no components are configured to choose from")
+	ErrLoadSelectionOptions     = errors.New("failed to load options for interactive selection")
+	ErrMissingComponentType     = errors.New("component type is required")
+	ErrRequiredFlagNotProvided  = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty        = errors.New("required flag cannot be empty")
+	ErrInvalidArguments         = errors.New("invalid arguments")
+	ErrUnknownSubcommand        = errors.New("unknown subcommand")
+	ErrInvalidComponent         = errors.New("invalid component")
+	ErrDuplicateComponentConfig = errors.New("duplicate component configuration")
 	// ErrInvalidStack indicates the user provided an identifier that doesn't match
 	// the stack's canonical name (e.g., using filename when explicit name is set).
 	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
@@ -466,6 +481,8 @@ var (
 	ErrInvalidComponentRequiredProviders          = errors.New("invalid component required_providers section")
 	ErrInvalidComponentRequiredVersion            = errors.New("invalid component required_version attribute")
 	ErrInvalidComponentHooks                      = errors.New("invalid component hooks section")
+	ErrUnknownHookKind                            = errors.New("unknown hook kind")
+	ErrInvalidHookOnFailure                       = errors.New("invalid hook on_failure value")
 	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
 	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
@@ -615,6 +632,8 @@ var (
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
 	ErrInvalidComponentsSection         = errors.New("invalid components section")
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
+	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
+	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
@@ -644,6 +663,7 @@ var (
 	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
+	ErrUnresolvedComputedTerraformVar     = errors.New("terraform variable contains an unresolved computed value")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
@@ -779,6 +799,8 @@ var (
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
 	ErrArchiveStepInvalidAction      = errors.New("invalid action for archive step")
 	ErrArchiveStepInvalidSource      = errors.New("archive step source must be a string path")
+	ErrStoreStepInvalidAction        = errors.New("invalid action for store step")
+	ErrStoreStepWriteFailed          = errors.New("store step failed to write value")
 	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
 	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
@@ -846,8 +868,10 @@ var (
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
+	ErrCloseFile           = errors.New("failed to close file")
 	ErrStatFile            = errors.New("failed to stat file")
 	ErrRemoveDirectory     = errors.New("failed to remove directory")
 	ErrSetPermissions      = errors.New("failed to set permissions")
@@ -1517,6 +1541,26 @@ var (
 
 // Vendor update/diff errors.
 var (
+	// ErrComponentUpdaterConfig indicates invalid component updater configuration.
+	ErrComponentUpdaterConfig = errors.New("invalid component updater configuration")
+	// ErrComponentUpdaterDirtyWorktree indicates a publisher's Git worktree has uncommitted changes.
+	ErrComponentUpdaterDirtyWorktree = errors.New("component updater requires a clean Git worktree")
+	// ErrPullRequestPublisherUnavailable indicates the selected forge integration is not registered.
+	ErrPullRequestPublisherUnavailable = errors.New("pull request publisher is unavailable")
+	// ErrGitHubAuthorization indicates an authentication or permission failure from the GitHub API.
+	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
+	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
+	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
+	ErrGitFetchFailed = errors.New("git fetch failed")
+	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
+	ErrGitCheckoutFailed = errors.New("git checkout failed")
+	// ErrGitLocalBranchDiverged indicates a local feature branch has commits absent from both
+	// the remote feature branch and the base branch.
+	ErrGitLocalBranchDiverged = errors.New("local branch has unpushed commits")
+	// ErrGitDefaultBranchResolution indicates the remote's default branch could not be resolved.
+	ErrGitDefaultBranchResolution = errors.New("remote default branch resolution failed")
+
 	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
 	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
 	// ErrNoVersionsAvailable indicates no versions were found for a source.
@@ -1525,6 +1569,11 @@ var (
 	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
 	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
 	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVersionRangeConflictsWithConstraints indicates a source declared both a semver-range
+	// version: and a constraints.version ceiling. These are mutually exclusive. constraints.version's
+	// entire purpose is to bound what `atmos vendor update` can bump an *exact* pin to; that purpose
+	// no longer applies once version: is itself already a range.
+	ErrVersionRangeConflictsWithConstraints = errors.New("version: is a semver range; constraints.version is also set. These are mutually exclusive; remove one")
 	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
 	ErrVendorSourceNotFound = errors.New("vendor source not found")
 	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
@@ -1543,6 +1592,8 @@ var (
 	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
 	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
 	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
+	// ErrComponentDirNotFound indicates a component's resolved base directory does not exist.
+	ErrComponentDirNotFound = errors.New("component directory does not exist")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

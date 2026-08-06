@@ -1,6 +1,11 @@
 commands:
   - name: casts generate screengrabs cli
     description: Regenerate the CLI docs screengrab casts from the manifest
+    flags:
+      - name: filter
+        shorthand: f
+        description: "Only regenerate manifest commands whose text contains this substring; omit to regenerate all"
+        default: ""
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
@@ -96,6 +101,7 @@ commands:
           atmos describe component --help
           atmos describe config --help
           atmos describe dependents --help
+          atmos describe edition --help
           atmos describe stacks --help
           atmos describe workflows --help
           atmos docs --help
@@ -118,6 +124,7 @@ commands:
           atmos list --help
           atmos list components --help
           atmos list dependencies --help
+          atmos list editions --help
           atmos list metadata --help
           atmos list settings --help
           atmos list stacks --help
@@ -154,6 +161,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help
@@ -285,6 +293,11 @@ commands:
           atmos secret set --help
           atmos secret shell --help
           atmos secret validate --help
+          atmos store --help
+          atmos store delete --help
+          atmos store get --help
+          atmos store list --help
+          atmos store set --help
           atmos terraform cache --help
           atmos terraform cache delete --help
           atmos terraform cache list --help
@@ -353,6 +366,13 @@ commands:
           })
 
           commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
+          FILTER = {{ .Flags.filter | quote }}
+          if FILTER:
+              matched = [c for c in commands if FILTER in c]
+              if not matched:
+                  raise SystemExit(f"no screengrab commands match --filter={FILTER!r}")
+              print(f"Filtering to {len(matched)}/{len(commands)} command(s) matching {FILTER!r}")
+              commands = matched
           OUT.mkdir(parents=True, exist_ok=True)
           with tempfile.TemporaryDirectory() as tmpdir:
               for index, command in enumerate(commands, 1):
@@ -475,6 +495,7 @@ commands:
           atmos describe component --help
           atmos describe config --help
           atmos describe dependents --help
+          atmos describe edition --help
           atmos describe stacks --help
           atmos describe workflows --help
           atmos docs --help
@@ -497,6 +518,7 @@ commands:
           atmos list --help
           atmos list components --help
           atmos list dependencies --help
+          atmos list editions --help
           atmos list metadata --help
           atmos list settings --help
           atmos list stacks --help
@@ -533,6 +555,7 @@ commands:
           atmos terraform graph --help
           atmos terraform import --help
           atmos terraform init --help
+          atmos terraform lint --help
           atmos terraform login --help
           atmos terraform logout --help
           atmos terraform metadata --help
@@ -664,6 +687,11 @@ commands:
           atmos secret set --help
           atmos secret shell --help
           atmos secret validate --help
+          atmos store --help
+          atmos store delete --help
+          atmos store get --help
+          atmos store list --help
+          atmos store set --help
           atmos terraform cache --help
           atmos terraform cache delete --help
           atmos terraform cache list --help

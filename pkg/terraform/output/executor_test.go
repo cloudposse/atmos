@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Helper function to create minimal valid sections.
@@ -341,6 +343,39 @@ func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
 	withoutPassVars := run(false)
 	_, ok := withoutPassVars["TF_VAR_aks_version"]
 	assert.False(t, ok, "pass_vars=false must not forward vars as TF_VAR_*")
+}
+
+// TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache verifies the
+// full internal-output path receives the same default cache environment as an
+// `atmos terraform` command. This is the regression for provider copies being
+// written to each !terraform.output workdir in CI.
+func TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	var capturedEnv map[string]string
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		capturedEnv = env
+		return nil
+	}).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(
+		func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
+	))
+	pluginCacheDir := filepath.Join(t.TempDir(), "plugin-cache")
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.PluginCache = true
+	atmosConfig.Components.Terraform.PluginCacheDir = pluginCacheDir
+
+	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", validSections(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pluginCacheDir, capturedEnv["TF_PLUGIN_CACHE_DIR"])
+	assert.Equal(t, "true", capturedEnv["TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"])
 }
 
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
@@ -1053,6 +1088,13 @@ func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
 
 	// Should be a no-op function.
 	stopFunc()
+}
+
+func TestOutputLookupHiddenWhenSpinnersSuppressed(t *testing.T) {
+	restore := SuppressSpinners()
+	t.Cleanup(restore)
+
+	require.False(t, outputLookupVisible())
 }
 
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.
@@ -2075,6 +2117,49 @@ func TestEnsureWorkdirProvisioned_CallsProvisionerWhenEnabled(t *testing.T) {
 
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
 	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_SuppressesProvisioningOutputWhenSpinnersSuppressed(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	t.Cleanup(ResetWorkdirProvisionCache)
+
+	tempDir := t.TempDir()
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	restoreSpinners := SuppressSpinners()
+	t.Cleanup(restoreSpinners)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	sections := jitSections()
+	sections["component"] = "vpc"
+
+	err = NewExecutor(nil).ensureWorkdirProvisioned(
+		context.Background(),
+		atmosConfig,
+		sections,
+		nil,
+		"vpc",
+		"dev",
+		&ComponentConfig{AutoProvisionWorkdirForOutputs: true},
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, sections[provWorkdir.WorkdirPathKey])
+	assert.Empty(t, uiOutput.String())
 }
 
 func TestEnsureWorkdirProvisioned_SkipsWhenWorkdirDisabled(t *testing.T) {

@@ -1779,7 +1779,9 @@
         "docs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Docs"
+              "$ref": "#/$defs/Docs",
+              "deprecated": true,
+              "x-atmos-replacement": "docs"
             },
             {
               "type": "null"
@@ -3854,7 +3856,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Deprecated indicates if this configuration should no longer be used."
+          "description": "Deprecated: this configuration should no longer be used."
         }
       },
       "type": "object",
@@ -4182,6 +4184,34 @@
             }
           ],
           "description": "ErrorMode is the project-wide default for the `describe` commands' (`describe stacks`,\n`describe affected`, `describe dependents`) `--error-mode` flag: how to handle a\nrecoverable per-value YAML function error (e.g. a Terraform backend that has not been\nprovisioned yet). Values: \"strict\", \"warn\" (default), \"silent\". An explicit --error-mode\nflag or ATMOS_DESCRIBE_ERROR_MODE env var overrides this."
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Provenance is the project-wide default for `describe component --provenance`:\nannotate the component configuration with the stack file each value came from.\nEnabled by default (journaled in pkg/edition); an explicit --provenance flag\nor ATMOS_DESCRIBE_PROVENANCE env var overrides this."
+        },
+        "component": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DescribeComponentSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Component configures `describe component` output."
         }
       },
       "type": "object",
@@ -4220,6 +4250,23 @@
       "type": "object",
       "description": "DescribeAffected contains configuration for the `atmos describe affected` command."
     },
+    "DescribeComponentSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Filter selects the output scope: \"schema\" (default; only the sections a\nstack manifest can define — vars, settings, env, backend, metadata, and\nfriends) or \"full\" (every internal field Atmos computes during\nprocessing). Journaled in pkg/edition; ATMOS_DESCRIBE_COMPONENT_FILTER\noverrides."
+        }
+      },
+      "type": "object",
+      "description": "DescribeComponentSettings configures `describe component` output."
+    },
     "DescribeSettings": {
       "properties": {
         "include_empty": {
@@ -4234,6 +4281,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "eager_evaluation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "EagerEvaluation disables the early-skip scope optimization for `--tags`/`--labels`\nbulk Terraform selection and `list dependencies`: when true, every stack is fully\nevaluated (templates, YAML functions, auth) before filtering, matching pre-optimization\nbehavior. Use as a rollback if a repo has templated metadata.tags/metadata.labels that\nthe lightweight scope pass cannot safely resolve. See\ndocs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md."
         }
       },
       "type": "object",
@@ -4286,7 +4347,9 @@
         "max-width": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.max-width"
             },
             {
               "type": "null"
@@ -4300,7 +4363,9 @@
         "pagination": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.pagination"
             },
             {
               "type": "null"
@@ -5545,7 +5610,9 @@
         "helm_aws_profile_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "--identity"
             },
             {
               "type": "null"
@@ -5556,7 +5623,9 @@
         "cluster_name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "components.helmfile.cluster_name_template"
             },
             {
               "type": "null"
@@ -5651,6 +5720,26 @@
         }
       },
       "type": "object"
+    },
+    "HelpSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Filter renders a focused bare `--help` (local flags only, no GLOBAL FLAGS\nsection, with a `--help=all` hint). Enabled by default (journaled in\npkg/edition); disable to restore the full pre-filter help output."
+        }
+      },
+      "type": "object",
+      "description": "HelpSettings controls how `--help` output is rendered."
     },
     "Identity": {
       "properties": {
@@ -7819,7 +7908,9 @@
         "provider_type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "driver"
             },
             {
               "type": "null"
@@ -8801,7 +8892,9 @@
         "name_pattern": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "stacks.name_template"
             },
             {
               "type": "null"
@@ -8946,7 +9039,8 @@
       "type": "object"
     },
     "StoreRegistry": {
-      "type": "object"
+      "type": "object",
+      "description": "StoreRegistry is a map of store name to a live store implementation."
     },
     "SyntaxHighlighting": {
       "properties": {
@@ -9818,6 +9912,33 @@
           ],
           "description": "Environment variables (supports templates)."
         },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "vars": {
           "anyOf": [
             {
@@ -9841,6 +9962,20 @@
             }
           ],
           "description": "Env step type fields."
+        },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
         },
         "code": {
           "anyOf": [
@@ -10911,7 +11046,9 @@
         "no_color": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "settings.terminal.color (invert the value)"
             },
             {
               "type": "null"
@@ -10994,6 +11131,19 @@
             },
             {
               "type": "null"
+            }
+          ]
+        },
+        "help": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HelpSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
           ]
         }
@@ -11149,6 +11299,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "lint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformLint"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lint configures the built-in `atmos terraform lint` command.\nA configured config path is used when a component does not provide its own\n.tflint.hcl file."
         },
         "planfiles": {
           "anyOf": [
@@ -11600,6 +11764,33 @@
         }
       },
       "type": "object"
+    },
+    "TerraformLint": {
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ErrorMode is the project-wide default for `atmos terraform lint`'s `--error-mode` flag:\nhow to handle a recoverable per-value YAML function error (e.g. a Terraform backend that\nhas not been provisioned yet) or a component-specific auth failure encountered while\ndiscovering lint targets. Values: \"strict\", \"warn\" (default), \"silent\". An explicit\n--error-mode flag or ATMOS_TERRAFORM_LINT_ERROR_MODE env var overrides this."
+        }
+      },
+      "type": "object",
+      "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
     },
     "TerraformPlan": {
       "properties": {
@@ -12086,6 +12277,17 @@
           ],
           "description": "Path to vendor configuration file or directory containing vendor files.\nIf a directory is specified, all .yaml files in the directory will be processed in lexicographical order."
         },
+        "lock_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "LockFile is the committed vendor materialization lock. Relative paths are\nresolved from the Atmos base path. It defaults to vendor.lock.yaml."
+        },
         "list": {
           "anyOf": [
             {
@@ -12113,9 +12315,417 @@
             }
           ],
           "description": "Retry configuration for vendor operations (global default)."
+        },
+        "update": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Update configures selection and execution policy for `atmos vendor update`."
+        },
+        "ci": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorCIConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "CI configures optional CI-only publishing and reporting for vendor updates."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorLockConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift."
         }
       },
       "type": "object"
+    },
+    "VendorCIConfig": {
+      "properties": {
+        "pull_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorPullRequestConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorSummaryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorCIConfig configures provider-backed publishing for vendor updates."
+    },
+    "VendorLockConfig": {
+      "properties": {
+        "enforcement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Enforcement is \"warn\" (the default when omitted), \"silent\", or \"strict\".\n  - \"silent\": re-fetch the drifted package with no reporting.\n  - \"warn\": re-fetch the drifted package and print one warning per package naming why it\n    drifted.\n  - \"strict\": refuse to run (before any fetch/copy/write) when a drifted package is found and\n    `--refresh-lock` was not explicitly passed, naming every drifted package and its reason."
+        }
+      },
+      "type": "object",
+      "description": "VendorLockConfig configures how `atmos vendor pull` reacts when a package's on-disk state no\nlonger matches its vendor.lock.yaml receipt."
+    },
+    "VendorPullRequestConfig": {
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "base_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "branch_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "reviewers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "assignees": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorPullRequestConfig configures pull request publishing for vendor CI."
+    },
+    "VendorSummaryConfig": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled defaults to true when omitted. The command treats false as an\nexplicit opt-out only when the summary map is present in configuration."
+        }
+      },
+      "type": "object",
+      "description": "VendorSummaryConfig configures CI summary output for vendor updates."
+    },
+    "VendorUpdateBatchingConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"scope\" (the only supported value today - one branch/PR for the whole update run).\nPer-component batching (one isolated branch/PR per updated component) is a deferred future\nfeature; see docs/prd/vendor-lock.md's Known Limitations."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateBatchingConfig configures the batching strategy for vendor updates."
+    },
+    "VendorUpdateConfig": {
+      "properties": {
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateExecutionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateBatchingConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "groups": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VendorUpdateGroupConfig"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateConfig configures the local part of component updates. Publishing\nconfiguration intentionally lives under VendorCIConfig so normal updates stay\nindependent of a CI provider."
+    },
+    "VendorUpdateExecutionConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"current\" (the default) or \"worktree\"."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateExecutionConfig configures the execution mode for vendor updates."
+    },
+    "VendorUpdateGroupConfig": {
+      "properties": {
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateGroupConfig selects components for a named vendor update group."
     },
     "Version": {
       "properties": {
@@ -13001,7 +13611,9 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "kind"
             },
             {
               "type": "null"
@@ -14177,6 +14789,33 @@
           ],
           "description": "Environment variables (supports templates)."
         },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "vars": {
           "anyOf": [
             {
@@ -14200,6 +14839,20 @@
             }
           ],
           "description": "Env step type fields."
+        },
+        "export": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Whether env-step values reach later child processes (default true)."
         },
         "code": {
           "anyOf": [
@@ -14962,6 +15615,17 @@
           "type": "null"
         }
       ]
+    },
+    "edition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Date anchor (\"YYYY\", \"YYYY-MM\", or \"YYYY-MM-DD\") that pins defaults to how they stood on that date."
     },
     "cast": {
       "anyOf": [

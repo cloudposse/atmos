@@ -38,13 +38,11 @@ const (
 	logKeyTemplate = "template"
 )
 
-// GetSprigFuncMap returns a cached copy of the sprig function map.
+// getSprigFuncMap returns a cached copy of the sprig function map.
 // Sprig function maps are expensive to create (173MB+ allocations) and immutable,
 // so we cache and reuse them across template operations.
 // This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
-func GetSprigFuncMap() template.FuncMap {
-	defer perf.Track(nil, "exec.GetSprigFuncMap")()
-
+func getSprigFuncMap() template.FuncMap {
 	sprigFuncMapCacheOnce.Do(func() {
 		sprigFuncMapCache = sprig.FuncMap()
 	})
@@ -69,7 +67,7 @@ func ProcessTmpl(
 	if cfg == nil {
 		cfg = &schema.AtmosConfiguration{}
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), GetSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -312,7 +310,7 @@ func ProcessTmplWithDatasources(
 
 		// Sprig functions
 		if atmosConfig.Templates.Settings.Sprig.Enabled {
-			funcs = lo.Assign(funcs, GetSprigFuncMap())
+			funcs = lo.Assign(funcs, getSprigFuncMap())
 		}
 
 		// Atmos functions

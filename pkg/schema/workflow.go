@@ -362,8 +362,15 @@ type WorkflowStep struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
-	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+	Vars   map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`       // Variables to set for env step type.
+	Export *bool             `yaml:"export,omitempty" json:"export,omitempty" mapstructure:"export"` // Whether env-step values reach later child processes (default true).
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
@@ -472,6 +479,8 @@ type WorkflowStep struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	type plain WorkflowStep
 	// Decode into a zero-value temp first so a reused receiver does not retain
@@ -493,6 +502,7 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		color:     &step.Background,
 		forList:   &step.For,
 		steps:     &step.Steps,
+		generic:   &step.With,
 		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
 	})
 }
@@ -519,6 +529,7 @@ type stepPolyTargets struct {
 	color     *string
 	forList   *[]string
 	steps     *[]WorkflowStep
+	generic   *map[string]any
 	container containerActionTargets
 }
 
@@ -552,7 +563,25 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *
 	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
 		return err
 	}
-	return decodeContainerWith(nodes.with, action, t.container)
+	return decodeStepWith(nodes.with, stepType, action, t)
+}
+
+func decodeStepWith(node *yaml.Node, stepType, action string, t *stepPolyTargets) error {
+	if node == nil {
+		return nil
+	}
+	if strings.TrimSpace(stepType) == "container" || strings.TrimSpace(action) != "" {
+		return decodeContainerWith(node, action, t.container)
+	}
+	if t.generic == nil {
+		return nil
+	}
+	out := make(map[string]any)
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*t.generic = out
+	return nil
 }
 
 func decodeWorkflowStepList(node *yaml.Node, out *[]WorkflowStep) error {

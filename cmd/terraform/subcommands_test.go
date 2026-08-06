@@ -93,6 +93,25 @@ func TestSubcommandFlagSetup(t *testing.T) {
 	}
 }
 
+func TestMigrateCommandTreeRegistered(t *testing.T) {
+	migrateCmd, _, err := terraformCmd.Find([]string{"migrate"})
+	require.NoError(t, err)
+	require.NotNil(t, migrateCmd)
+	assert.Equal(t, "migrate", migrateCmd.Use)
+	assert.Equal(t, "true", migrateCmd.Annotations["experimental"], "migrate must be marked experimental")
+
+	for _, args := range [][]string{
+		{"migrate", "plan"},
+		{"migrate", "apply"},
+		{"migrate", "list"},
+	} {
+		cmd, _, findErr := terraformCmd.Find(args)
+		require.NoError(t, findErr)
+		require.NotNil(t, cmd)
+		assert.Equal(t, args[len(args)-1], cmd.Name())
+	}
+}
+
 // TestSubcommandParserSetup verifies that parsers are properly configured.
 func TestSubcommandParserSetup(t *testing.T) {
 	for _, tc := range getSubcommandTestCases() {

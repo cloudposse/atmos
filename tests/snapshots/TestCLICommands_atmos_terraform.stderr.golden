@@ -21,9 +21,11 @@ Valid subcommands are:
   • help
   • import
   • init
+  • lint
   • login
   • logout
   • metadata
+  • migrate
   • modules
   • output
   • plan

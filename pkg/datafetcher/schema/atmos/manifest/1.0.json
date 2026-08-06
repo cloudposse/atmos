@@ -38,6 +38,9 @@
     "locals": {
       "$ref": "#/definitions/locals"
     },
+    "metadata": {
+      "$ref": "#/definitions/global_metadata"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -440,6 +443,20 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -543,6 +560,11 @@
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
+            },
             "provision": {
               "$ref": "#/definitions/provision"
             },
@@ -586,6 +608,12 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -1119,6 +1147,12 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -1780,7 +1814,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component, not inherited by derived components",
+                  "description": "Custom configuration per component. Inherited from base components via metadata.inherits when stacks.inherit.metadata is enabled (the default); component-local values override inherited ones.",
                   "additionalProperties": true,
                   "title": "custom"
                 }
@@ -1809,6 +1843,63 @@
         }
       ]
     },
+    "global_metadata": {
+      "title": "metadata",
+      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence — component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering components (atmos list components --tags)."
+            },
+            "custom": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "description": "Custom configuration, deep-merged into every component's own metadata.custom as a stack-wide default; a component's metadata.inherits chain and its own local metadata.custom both override this.",
+                  "additionalProperties": true,
+                  "title": "custom"
+                }
+              ]
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Flag to enable or disable components stack-wide by default"
+            },
+            "locked": {
+              "type": "boolean",
+              "description": "Flag to lock components stack-wide by default"
+            },
+            "terraform_workspace_pattern": {
+              "type": "string",
+              "description": "Default Terraform workspace pattern applied stack-wide"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
     "settings": {
       "title": "settings",
       "description": "Settings section",
@@ -1825,7 +1916,9 @@
               "$ref": "#/definitions/validation"
             },
             "depends_on": {
-              "$ref": "#/definitions/depends_on"
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "spacelift": {
               "$ref": "#/definitions/spacelift"
@@ -2586,6 +2679,13 @@
         "command": {
           "type": "string"
         },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command/scanner step arguments (supports templates)."
+        },
         "prompt": {
           "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
           "oneOf": [
@@ -2990,6 +3090,10 @@
           },
           "description": "Variables to set for the env step type."
         },
+        "export": {
+          "type": "boolean",
+          "description": "Whether env-step values reach later child processes (default true)."
+        },
         "code": {
           "type": "integer",
           "description": "Exit code for the exit step type."
@@ -3091,12 +3195,12 @@
         },
         "action": {
           "type": "string",
-          "description": "Container verb for the container step type: build, push, run, or inspect."
+          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; write for type: store."
         },
         "with": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Container action parameters (GitHub-Actions uses/with style), decoded according to `action`."
+          "description": "Type-specific step parameters (GitHub-Actions uses/with style), decoded according to `action` where applicable (e.g. store, key, value, stack, component for type: store)."
         },
         "runtime_auto_start": {
           "type": "boolean",
@@ -3339,6 +3443,8 @@
                       "checkov",
                       "kics",
                       "trivy",
+                      "tflint",
+                      "tfmigrate",
                       "git",
                       "step",
                       "steps",
@@ -3435,6 +3541,31 @@
                   },
                   "push": {
                     "type": "boolean"
+                  },
+                  "migration": {
+                    "type": "string",
+                    "description": "Path to a tfmigrate migration file for kind: tfmigrate hooks."
+                  },
+                  "config": {
+                    "type": "string",
+                    "description": "Optional tfmigrate config path override for kind: tfmigrate hooks. When omitted, tfmigrate uses its own config discovery."
+                  },
+                  "backend_config": {
+                    "type": "array",
+                    "description": "Backend config entries passed to tfmigrate.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "tfmigrate hook mode. dynamic maps the Terraform lifecycle event to plan or apply.",
+                    "enum": [
+                      "dynamic",
+                      "plan",
+                      "apply"
+                    ],
+                    "default": "dynamic"
                   }
                 },
                 "additionalProperties": true
@@ -3848,9 +3979,7 @@
               "description": "User-defined tags for categorizing and filtering identities (atmos auth list/login --tags)."
             }
           },
-          "required": [
-            "kind"
-          ]
+          "required": []
         }
       ]
     },

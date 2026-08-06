@@ -199,6 +199,8 @@ func ExecuteDescribeDependents(
 			ProcessYamlFunctions: args.ProcessYamlFunctions,
 			Skip:                 args.Skip,
 			AuthManager:          args.AuthManager,
+			AuthDisabled:         args.AuthDisabled,
+			ErrorOptions:         args.ErrOptions,
 		})
 		if err != nil {
 			return nil, err
@@ -513,6 +515,21 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 				}
 				return deps, settingsSection, dependencySourceSettingsDependsOn
 			}
+		}
+	}
+
+	// Older component manifests placed the same legacy dependency mapping directly
+	// on the component. Keep it functional after accepting it in the schema.
+	if directDependsOn, ok := componentMap["depends_on"]; ok {
+		var settings schema.Settings
+		if err := mapstructure.Decode(map[string]any{"depends_on": directDependsOn}, &settings); err == nil && len(settings.DependsOn) > 0 {
+			log.Debug("component depends_on is deprecated, use dependencies.components instead")
+			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
+			for key := range settings.DependsOn {
+				ctx := settings.DependsOn[key]
+				deps = append(deps, contextToComponentDependency(&ctx))
+			}
+			return deps, settingsSection, dependencySourceSettingsDependsOn
 		}
 	}
 

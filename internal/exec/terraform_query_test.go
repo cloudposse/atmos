@@ -21,7 +21,7 @@ import (
 func TestCreateQueryAuthManager(t *testing.T) {
 	tests := []struct {
 		name             string
-		factory          func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error)
+		setupMock        func(ctrl *gomock.Controller, m *MockAuthManagerQueryFactory)
 		expectErr        bool
 		expectSentinel   error
 		expectNilMgr     bool
@@ -30,16 +30,16 @@ func TestCreateQueryAuthManager(t *testing.T) {
 	}{
 		{
 			name: "no auth configured returns nil manager",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, nil
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 			},
 			expectNilMgr:     true,
 			expectInfoStored: false,
 		},
 		{
 			name: "nonexistent identity returns wrapped error",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, errUtils.ErrAuthNotConfigured
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrAuthNotConfigured)
 			},
 			expectErr:        true,
 			expectSentinel:   errUtils.ErrAuthNotConfigured,
@@ -48,17 +48,16 @@ func TestCreateQueryAuthManager(t *testing.T) {
 		},
 		{
 			name: "non-nil manager is stored in info",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				ctrl := gomock.NewController(t)
-				return types.NewMockAuthManager(ctrl), nil
+			setupMock: func(ctrl *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(types.NewMockAuthManager(ctrl), nil)
 			},
 			expectNilMgr:     false,
 			expectInfoStored: true,
 		},
 		{
 			name: "ErrUserAborted calls Exit with SIGINT code",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, errUtils.ErrUserAborted
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrUserAborted)
 			},
 			expectExit: true,
 		},
@@ -67,8 +66,11 @@ func TestCreateQueryAuthManager(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Inject test factory.
+			ctrl := gomock.NewController(t)
+			mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+			tt.setupMock(ctrl, mockFactory)
 			original := authManagerFactory
-			authManagerFactory = tt.factory
+			authManagerFactory = mockFactory
 			defer func() { authManagerFactory = original }()
 
 			// Mock os.Exit to capture exit calls.

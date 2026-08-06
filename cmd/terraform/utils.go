@@ -8,7 +8,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +24,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -30,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -40,6 +44,9 @@ const ciHookFailedMsg = "CI hook execution failed"
 
 // logKeyComponent is the structured-log key for a component name.
 const logKeyComponent = "component"
+
+// logKeyStack is the structured-log key for a stack name.
+const logKeyStack = "stack"
 
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
@@ -248,8 +255,6 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if err != nil {
 		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
-	injectHookStoreAuthResolver(&atmosConfig, &info)
-
 	// Resolve path-based component arguments before getting hooks. GetHooks calls
 	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
@@ -258,7 +263,71 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 		}
 	}
 
+	// InitCliConfig processes stack configuration on its private copy of info.
+	// Hooks need that resolved information too: in particular, FinalComponent
+	// and ComponentFolderPrefix must reflect metadata.component before engines
+	// derive a component working directory. Keep template and YAML-function
+	// processing disabled here because hook discovery runs before auth.
+	//
+	// Multi-component invocations (--all/--affected/--components/--query/--tags/
+	// --labels) fire the global before/after hook with no single component
+	// resolved yet — ProcessStacks requires ComponentFromArg and would reject
+	// that with "component is required". Per-component hooks inside the
+	// component walker call GetHooks/RunAll directly with an already-resolved
+	// component, so they are unaffected by skipping this step here.
+	//
+	// Best-effort: a resolution failure here (missing/invalid stack, unknown
+	// component — cases prepareHookContext never used to validate before this
+	// resolution step existed) must not become the command's user-facing error.
+	// GetHooks (called next, in runUserHooks) already tolerates an empty Stack
+	// or an unresolved component by returning no hooks, so PreRunE proceeds
+	// with the original, unresolved info and RunE's own validation — not this
+	// hook-prep step — produces the correct, authoritative error and message.
+	if info.ComponentFromArg != "" {
+		authManager, _ := info.AuthManager.(auth.AuthManager)
+		if resolved, procErr := e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager); procErr != nil {
+			log.Debug("hook context: failed to resolve component metadata; hooks will use the unresolved component/stack", "error", procErr)
+		} else {
+			info = resolved
+		}
+	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
+
 	return hookContext{info: info, atmosConfig: atmosConfig}, nil
+}
+
+// componentSourceProvisionTimeout bounds JIT source provisioning triggered from
+// hook context preparation, matching ExecuteTerraform's own provisioning timeout.
+const componentSourceProvisionTimeout = 5 * time.Minute
+
+// ensureComponentSourceProvisioned JIT-provisions the component's `source:`
+// (if configured) so lifecycle hooks observe the same resolved, populated
+// directory Terraform itself will use. No-op for components with no `source:`
+// (component.ProvisionAndResolveComponentPath short-circuits on that) and for
+// components that are already provisioned and not TTL-expired. Errors are
+// logged, not returned: hooks should still attempt to run (and the actual
+// Terraform command will surface the same provisioning error authoritatively)
+// rather than aborting hook discovery over a problem unrelated to any hook.
+//
+// Only called when the component actually has hooks configured (see
+// runUserHooks): every terraform subcommand already provisions its own
+// component independently in RunE (ExecuteTerraform), so calling this
+// unconditionally for every invocation would race a second, independent
+// provisioning attempt against that one — observed to intermittently wipe
+// or fail to (re)populate the directory for components with no hooks at all,
+// which have nothing to gain from provisioning this early.
+func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	fallbackPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		log.Debug("hook source provisioning: failed to resolve fallback component path", "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
+	defer cancel()
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
+	}
 }
 
 // runUserHooks runs user-defined hooks from stack configuration for the given
@@ -272,8 +341,31 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 	if hooks == nil || !hooks.HasHooks() {
 		return nil
 	}
+	// A `before.terraform.*` hook (other than before.terraform.init, which is
+	// the provisioner's own hook) is a "run before Terraform" event, not a
+	// "run before the component's source is provisioned" event. Ensure a
+	// configured JIT `source:` is provisioned before firing hooks for this
+	// component, so ComponentPath (env var and hook subprocess cwd) points at
+	// a real, populated directory instead of one that would not exist until
+	// Terraform's own execution provisions it moments later.
+	//
+	// `init` is excluded: before.terraform.init IS the provisioner's own
+	// lifecycle event (see pkg/provisioner/source's HookEventBeforeTerraformInit
+	// registration) — pre-provisioning here would fire it after provisioning
+	// already happened, inverting the one event whose whole point is to run
+	// before the source exists.
+	if hctx.info.ComponentFromArg != "" && cmd_.Name() != "init" {
+		ensureComponentSourceProvisioned(&hctx.atmosConfig, &hctx.info)
+	}
 	hooks.SetOutcome(outcome)
-	log.Info("Running hooks", "event", event, "status", outcome.Status)
+	// The outcome status describes the terraform operation, not the hooks. On
+	// before-events the operation has not run yet, so logging "status=success"
+	// there reads as a hook result and misleads when a hook then fails.
+	if strings.HasPrefix(string(event), "before.") {
+		log.Info("Running hooks", "event", event)
+	} else {
+		log.Info("Running hooks", "event", event, "status", outcome.Status)
+	}
 	return hooks.RunAll(event, &hctx.atmosConfig, &hctx.info, cmd_, args)
 }
 
@@ -420,7 +512,12 @@ type terraformNodeHooks struct {
 }
 
 // Before implements schema.ComponentNodeHooks.
-func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+func (n *terraformNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+// BeforeWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
 	injectLastAuthContext(info)
@@ -434,11 +531,16 @@ func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndSta
 	// identity-aware store hooks (for example, after-apply output publishing)
 	// do not fall back to ambient credentials.
 	injectHookStoreAuthResolver(&atmosConfig, info)
-	return n.runUserHooksForNode(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess})
+	return n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers)
 }
 
 // After implements schema.ComponentNodeHooks.
-func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+func (n *terraformNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+// AfterWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.After")()
 
 	injectLastAuthContext(info)
@@ -455,7 +557,7 @@ func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStac
 	if execErr != nil {
 		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
 	}
-	hookErr := n.runUserHooksForNode(&atmosConfig, info, n.afterEvent, outcome)
+	hookErr := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
 
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNode(&atmosConfig, info, output, execErr)
@@ -483,6 +585,10 @@ func injectLastAuthContext(info *schema.ConfigAndStacksInfo) {
 // verbatim: RunAll already resolves each hook's on_failure mode internally
 // (applyOnFailure) — a non-nil return specifically means on_failure: fail.
 func (n *terraformNodeHooks) runUserHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome) error {
+	return n.runUserHooksForNodeWithWriters(atmosConfig, info, event, outcome, schema.ComponentNodeHookWriters{})
+}
+
+func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome, writers schema.ComponentNodeHookWriters) error {
 	if event == "" {
 		return nil
 	}
@@ -493,6 +599,8 @@ func (n *terraformNodeHooks) runUserHooksForNode(atmosConfig *schema.AtmosConfig
 		Cmd:         n.cmd,
 		Args:        n.args,
 		Outcome:     outcome,
+		Stdout:      writers.Stdout,
+		Stderr:      writers.Stderr,
 	})
 }
 
@@ -531,6 +639,10 @@ func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool)
 		return h.BeforeTerraformApply, h.AfterTerraformApply, true
 	case "deploy":
 		return h.BeforeTerraformDeploy, h.AfterTerraformDeploy, true
+	case "output":
+		return h.BeforeTerraformOutput, h.AfterTerraformOutput, true
+	case "refresh":
+		return h.BeforeTerraformRefresh, h.AfterTerraformRefresh, true
 	default:
 		return "", "", false
 	}
@@ -721,8 +833,7 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
 // isMultiComponentExecution reports whether the parsed command targets more than one component.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0 ||
-		(info.Stack != "" && info.ComponentFromArg == "")
+	return shared.IsMultiComponentExecution(info)
 }
 
 // executeSingleComponent executes terraform for a single component.
@@ -810,57 +921,7 @@ func parseTerraformRunOptions(cmd *cobra.Command, parsers ...*flags.StandardPars
 
 // applyOptionsToInfo transfers parsed options to the info struct.
 func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
-	info.ProcessTemplates = opts.ProcessTemplates
-	info.ProcessFunctions = opts.ProcessFunctions
-	info.UseMocks = opts.UseMocks
-	info.Skip = opts.Skip
-	info.Components = opts.Components
-	info.Tags = opts.Tags
-	info.Labels = opts.Labels
-	info.DryRun = opts.DryRun
-	info.SkipInit = opts.SkipInit
-	info.UploadStatus = opts.UploadStatus
-	info.All = opts.All
-	info.Affected = opts.Affected
-	info.Query = opts.Query
-	info.MaxConcurrency = opts.MaxConcurrency
-	info.TerraformFailureMode = opts.FailureMode
-	info.FailFast = opts.FailureMode == terraformFailureModeFailFast
-	info.KeepGoing = opts.FailureMode == terraformFailureModeKeepGoing
-	info.TerraformLogOrder = opts.LogOrder
-	info.TerraformPlanHide = opts.PlanHide
-	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
-	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
-
-	// Caller-injected terraform pass-through flags (e.g. `-json` for `terraform
-	// test` in CI). Appended to AdditionalArgsAndFlags so they reach the terraform
-	// command directly without going through Cobra positional-arg parsing.
-	if len(opts.AppendArgs) > 0 {
-		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, opts.AppendArgs...)
-	}
-
-	// Backend execution flags (only apply if set via CLI).
-	if opts.AutoGenerateBackendFile != "" {
-		info.AutoGenerateBackendFile = opts.AutoGenerateBackendFile
-	}
-	if opts.InitRunReconfigure != "" {
-		info.InitRunReconfigure = opts.InitRunReconfigure
-	}
-	if opts.InitPassVars {
-		info.InitPassVars = "true"
-	}
-
-	// Plan/Apply/Deploy specific flags.
-	if opts.PlanFile != "" {
-		info.PlanFile = opts.PlanFile
-		info.UseTerraformPlan = true
-	}
-	if opts.PlanSkipPlanfile {
-		info.PlanSkipPlanfile = "true"
-	}
-	if opts.DeployRunInit {
-		info.DeployRunInit = "true"
-	}
+	shared.ApplyRunOptions(info, opts)
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -1071,7 +1132,7 @@ func handleUnconfiguredPlanfileStorage(atmosConfig *schema.AtmosConfiguration, i
 
 	if v := atmosConfig.Components.Terraform.Planfiles.Verify; v == schema.PlanfileVerifyFail || v == schema.PlanfileVerifyWarn {
 		log.Warn("components.terraform.planfiles.verify is set but planfile storage is not configured; skipping planfile verification",
-			logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+			logKeyComponent, info.ComponentFromArg, logKeyStack, info.Stack)
 	}
 	return nil
 }
@@ -1088,7 +1149,7 @@ func handleMissingStoredPlan(atmosConfig *schema.AtmosConfiguration, info *schem
 	}
 
 	log.Warn("No stored planfile found to verify; applying a fresh plan without verification",
-		logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+		logKeyComponent, info.ComponentFromArg, logKeyStack, info.Stack)
 	return nil
 }
 
@@ -1102,7 +1163,7 @@ func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.
 
 // hasMultiComponentFlags checks if any multi-component flags are set.
 func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || info.Affected || len(info.Components) > 0 || info.Query != "" || len(info.Tags) > 0 || len(info.Labels) > 0
+	return shared.HasMultiComponentFlags(info)
 }
 
 // hasNonAffectedMultiFlags checks if multi-component flags (excluding --affected) are set.
@@ -1110,87 +1171,27 @@ func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
 // narrow the affected set (`--affected --tags production`), rather than being an alternative
 // selection mechanism that conflicts with it.
 func hasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != ""
+	return shared.HasNonAffectedMultiFlags(info)
 }
 
 // hasSingleComponentFlags checks if single-component flags are set.
 func hasSingleComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.PlanFile != "" || info.UseTerraformPlan
+	return shared.HasSingleComponentFlags(info)
 }
 
 // checkTerraformFlags checks the usage of the Single-Component and Multi-Component flags.
 func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
-	// Check Multi-Component flags.
-	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags.
-	if info.ComponentFromArg != "" && hasMultiComponentFlags(info) {
-		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
-	}
-	// 2. `--affected` is not allowed with the other Multi-Component flags.
-	if info.Affected && hasNonAffectedMultiFlags(info) {
-		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
-	}
-
-	// Single-Component and Multi-Component flags are not allowed together.
-	if hasSingleComponentFlags(info) && hasMultiComponentFlags(info) {
-		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
-	}
-
-	return nil
+	return shared.CheckTerraformFlags(info)
 }
 
 // handleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
-	// Initialize CLI config to get auth configuration.
-	// Use false to skip stack processing - only auth config is needed.
-	atmosConfig, err := cfg.InitCliConfig(*info, false)
-	if err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
-	}
-
-	// Check if auth is configured. If not, we can't select an identity.
-	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
-		// User explicitly requested identity selection (--identity or --identity=)
-		// but no authentication is configured. This is an error.
-		return fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable)
-	}
-
-	// Create auth manager to enable identity selection.
-	// Use auth.CreateAndAuthenticateManager directly to avoid import cycle.
-	authManager, err := auth.CreateAndAuthenticateManager(
-		cfg.IdentityFlagSelectValue,
-		&atmosConfig.Auth,
-		cfg.IdentityFlagSelectValue,
-	)
-	if err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
-	}
-
-	// Get default identity with forced interactive selection.
-	// GetDefaultIdentity() handles TTY and CI detection via isInteractive().
-	selectedIdentity, err := authManager.GetDefaultIdentity(true)
-	if err != nil {
-		// Check if user explicitly aborted (Ctrl+C, ESC, etc.).
-		if errors.Is(err, errUtils.ErrUserAborted) {
-			log.Debug("User aborted identity selection, exiting with SIGINT code")
-			return errUtils.WithExitCode(err, errUtils.ExitCodeSIGINT)
-		}
-		return fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err)
-	}
-
-	info.Identity = selectedIdentity
-	return nil
+	return shared.HandleInteractiveIdentitySelection(info)
 }
 
 // resolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.
 func resolveAndPromptForArgs(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
-	// Resolve path-based component arguments (e.g., ".", "./vpc", absolute paths).
-	if info.NeedsPathResolution && info.ComponentFromArg != "" {
-		if err := resolveComponentPath(info, cfg.TerraformComponentType); err != nil {
-			return err
-		}
-	}
-	// Handle interactive component/stack selection (skipped for multi-component ops).
-	return handleInteractiveComponentStackSelection(info, cmd)
+	return shared.ResolveAndPromptForArgs(info, cmd)
 }
 
 // handleInteractiveComponentStackSelection prompts for missing component and stack
@@ -1217,7 +1218,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
 		component, err := promptForComponent(cmd, info.Stack)
-		if err = handlePromptError(err, "component"); err != nil {
+		if err = handlePromptError(err, logKeyComponent); err != nil {
 			return err
 		}
 		info.ComponentFromArg = component
@@ -1226,7 +1227,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	// Prompt for stack if missing.
 	if info.Stack == "" {
 		stack, err := promptForStack(cmd, info.ComponentFromArg)
-		if err = handlePromptError(err, "stack"); err != nil {
+		if err = handlePromptError(err, logKeyStack); err != nil {
 			return err
 		}
 		info.Stack = stack

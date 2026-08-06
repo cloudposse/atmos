@@ -1265,6 +1265,8 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 		false, // processYamlFunctions.
 		false, nil, nil,
 	)
+	var warnings []DegradationWarning
+	p.withDegradation(func(w DegradationWarning) { warnings = append(warnings, w) })
 
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "vpc",
@@ -1281,6 +1283,44 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	assert.Empty(t, warnings, "error mode only degrades YAML-function lookup failures, never Go template errors")
+}
+
+func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}},
+		},
+		"", nil, nil, nil,
+		true, // processTemplates.
+		true, // processYamlFunctions.
+		false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		"vars": map[string]any{},
+		"sources": map[string]any{
+			"stale_parent_value": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+		},
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	stack, ok := p.finalStacksMap["test.yaml"].(map[string]any)
+	require.True(t, ok)
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok)
+	componentType, ok := components[cfg.TerraformSectionName].(map[string]any)
+	require.True(t, ok)
+	component, ok := componentType["vpc"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, componentSection["sources"], component["sources"])
 }
 
 // ---------------------------------------------------------------------------

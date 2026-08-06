@@ -7,6 +7,9 @@ on:
     # The branches below must be a subset of the branches above
     branches: ["main"]
     types: [opened, labeled, unlabeled, synchronize]
+  # Code scanning and required checks must run on merge-queue commits too.
+  merge_group:
+    types: [checks_requested]
   schedule:
     # runs on 19:17 every Tuesday
     - cron: "27 19 * * 2"
@@ -78,7 +81,9 @@ jobs:
       - extras=s3-cache
       - private=false
 
-    if: github.event_name == 'pull_request'
+    # golangci-lint-action supports merge_group with fetch-depth: 0 below,
+    # using the merge group's base revision to limit findings to new issues.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     permissions:
       # Required: allow read access to the content for analysis.
       contents: read
@@ -164,9 +169,9 @@ jobs:
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
-          # The action's config verification fetches a remote JSON schema and
-          # has failed transiently on runner network timeouts. The subsequent
-          # lint command still parses and validates the configuration.
+          # The action's config verification downloads a remote JSON schema and
+          # can fail transiently. The subsequent lint command still parses and
+          # validates the configuration, so skip the duplicate network preflight.
           verify: false
           only-new-issues: true
           args: >
