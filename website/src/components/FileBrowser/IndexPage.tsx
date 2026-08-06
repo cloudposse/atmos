@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
+import CopyMarkdownButton from './CopyMarkdownButton';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -40,7 +41,7 @@ interface IndexPageProps {
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
-  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode } = optionsData;
+  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode, enableCopyMarkdown } = optionsData;
   const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;
   const cardCta = cardCtaLabel || 'Open';
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -77,6 +78,15 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
       key={example.name}
       className={styles.exampleCard}
     >
+      {enableCopyMarkdown && (
+        <CopyMarkdownButton
+          directory={example.root}
+          title={example.title || example.name}
+          description={example.description}
+          iconOnly
+          className={styles.exampleCardCopyButton}
+        />
+      )}
       <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
         <div className={styles.exampleCardHeader}>
           <div className={styles.exampleCardIcon}>

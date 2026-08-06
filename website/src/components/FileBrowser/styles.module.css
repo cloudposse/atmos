@@ -169,6 +169,7 @@
 
 /* Example Card */
 .exampleCard {
+  position: relative;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -182,6 +183,25 @@
   display: flex;
   flex-direction: column;
   transition: all 0.2s ease;
+}
+
+/* "Copy as Markdown" icon button in a card's corner (enableCopyMarkdown
+   option) - hidden until the card is hovered/focused, so it doesn't compete
+   with the title at rest. Sits outside the card's <Link>s so a click never
+   triggers navigation (see CopyMarkdownButton's stopPropagation). */
+.exampleCardCopyButton {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.exampleCard:hover .exampleCardCopyButton,
+.exampleCard:focus-within .exampleCardCopyButton,
+.exampleCardCopyButton:focus-visible {
+  opacity: 1;
 }
 
 .exampleCard:hover {
@@ -242,6 +262,16 @@
   font-weight: 600;
   margin: 0;
   color: var(--ifm-heading-color);
+}
+
+/* Skill titles rendered as `/name` (titleAsCode option) keep the monospace
+   font but drop Infima's default inline-code background chip/border. */
+.exampleCardTitle code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .exampleCardDescription {
@@ -396,6 +426,16 @@
   font-weight: 600;
   color: var(--ifm-heading-color);
   text-decoration: none;
+}
+
+/* Skill titles rendered as `/name` (titleAsCode option) keep the monospace
+   font but drop Infima's default inline-code background chip/border. */
+.sidebarExampleLink code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .sidebarExampleLink:hover {
@@ -742,6 +782,33 @@
 
 .copyMarkdownIcon {
   font-size: 1rem;
+}
+
+/* Icon-only variant (CopyMarkdownButton's iconOnly prop) - a compact circular
+   button for tight spaces like a card corner. */
+.copyMarkdownIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease;
+}
+
+.copyMarkdownIconButton:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-primary);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownIconButton {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 /* README Section */

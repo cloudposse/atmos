@@ -15,6 +15,9 @@ interface CopyMarkdownButtonProps {
   title?: string;
   description?: string;
   label?: string;
+  /** Renders as an icon-only control (no visible label) for tight spaces like a card corner. */
+  iconOnly?: boolean;
+  className?: string;
 }
 
 export default function CopyMarkdownButton({
@@ -22,10 +25,17 @@ export default function CopyMarkdownButton({
   title,
   description,
   label = 'Copy as Markdown',
+  iconOnly = false,
+  className,
 }: CopyMarkdownButtonProps): JSX.Element {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const handleCopy = async (event: React.MouseEvent) => {
+    // Cards this button sits on may be clickable themselves - never let the
+    // click fall through to a parent link/card navigation.
+    event.preventDefault();
+    event.stopPropagation();
+
     const heading = title ? `# ${title}\n\n${description ? `${description}\n\n` : ''}` : '';
     const markdown = heading + collectMarkdownContext(directory);
 
@@ -38,10 +48,21 @@ export default function CopyMarkdownButton({
     }
   };
 
+  const buttonClassName = [
+    iconOnly ? styles.copyMarkdownIconButton : styles.copyMarkdownButton,
+    className,
+  ].filter(Boolean).join(' ');
+
   return (
-    <button type="button" className={styles.copyMarkdownButton} onClick={handleCopy}>
+    <button
+      type="button"
+      className={buttonClassName}
+      onClick={handleCopy}
+      aria-label={copied ? 'Copied!' : label}
+      title={iconOnly ? (copied ? 'Copied!' : label) : undefined}
+    >
       <FontAwesomeIcon icon={copied ? faCheck : faCopy} className={styles.copyMarkdownIcon} />
-      <span>{copied ? 'Copied!' : label}</span>
+      {!iconOnly && <span>{copied ? 'Copied!' : label}</span>}
     </button>
   );
 }
