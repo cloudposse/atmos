@@ -180,7 +180,14 @@ jobs:
           - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 75
+    # windows-latest's steps individually stay within their own budgets (the
+    # "Acceptance tests" step has a 60m budget below) but their sum leaves the
+    # job-level timeout almost no slack - a run that hit exactly 75.0 minutes
+    # was force-cancelled by this ceiling with every step, including the full
+    # go test suite, already completed successfully in the logs. Same
+    # variance documented on the "Acceptance tests" step's own timeout below;
+    # give the job-level ceiling real headroom too.
+    timeout-minutes: 90
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
