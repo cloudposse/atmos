@@ -36,33 +36,33 @@ kubectl = "1.28.0"
 **Recipe:**
 
 1. Check for a `.tool-versions` file. If mise already reads this file, do not change it. If mise
-   does not use this file, create it. Add one line for each tool in `[tools]`.
+    does not use this file, create it. Add one line for each tool in `[tools]`.
 2. Find each tool in the Atmos toolchain. Run `atmos toolchain search <name>`. If the tool is in
-   the Aqua registry, and the mise short name differs from the Aqua `owner/repo` name, add an
-   alias in `toolchain.aliases`. If the tool is not in the Aqua registry, add an inline registry
-   entry.
+    the Aqua registry, and the mise short name differs from the Aqua `owner/repo` name, add an
+    alias in `toolchain.aliases`. If the tool is not in the Aqua registry, add an inline registry
+    entry.
 3. Add the `toolchain:` block to `atmos.yaml`:
-   ```yaml
-   toolchain:
-     versions_file: .tool-versions
-     aliases:
-       terraform: hashicorp/terraform
-       jq: jqlang/jq
-       kubectl: kubernetes/kubectl
-     registries:
-       - name: aqua
-         type: aqua
-         source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
-         priority: 10
-   ```
-   ```text
-   # .tool-versions
-   terraform 1.10.3
-   jq 1.7.1
-   kubectl 1.28.0
-   ```
+    ```yaml
+    toolchain:
+      versions_file: .tool-versions
+      aliases:
+        terraform: hashicorp/terraform
+        jq: jqlang/jq
+        kubectl: kubernetes/kubectl
+      registries:
+        - name: aqua
+          type: aqua
+          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          priority: 10
+    ```
+    ```text
+    # .tool-versions
+    terraform 1.10.3
+    jq 1.7.1
+    kubectl 1.28.0
+    ```
 4. Check the migration. Run `atmos toolchain install`, then `atmos toolchain list`, then
-   `atmos toolchain which <tool>` for each tool. Confirm each version matches what mise reported.
+    `atmos toolchain which <tool>` for each tool. Confirm each version matches what mise reported.
 
 ## Shape B: Tool Versions Plus Tasks and Env
 
@@ -100,48 +100,48 @@ experimental = true
 **Recipe:**
 
 1. Migrate `[env]`. A mise env var maps to a stack `env:` block or a command `env:` block.
-   ```yaml
-   # atmos.yaml or stacks/_defaults.yaml -- env for the whole project
-   env:
-     AWS_REGION: us-east-1
-   ```
-   ```yaml
-   # stacks/prod.yaml -- env for one environment
-   env:
-     AWS_PROFILE: prod
-   ```
-   A mise profile, for example `[env.production]`, maps to an Atmos stack. Each stack already
-   has its own `env:` block. You do not need a separate profile feature. If only one command
-   needs an env var, add the var to that command's own `env:` block instead of the global one.
+    ```yaml
+    # atmos.yaml or stacks/_defaults.yaml -- env for the whole project
+    env:
+      AWS_REGION: us-east-1
+    ```
+    ```yaml
+    # stacks/prod.yaml -- env for one environment
+    env:
+      AWS_PROFILE: prod
+    ```
+    A mise profile, for example `[env.production]`, maps to an Atmos stack. Each stack already
+    has its own `env:` block. You do not need a separate profile feature. If only one command
+    needs an env var, add the var to that command's own `env:` block instead of the global one.
 
-   Precedence order, from lowest to highest: the system environment, then the global `env:` block
-   in `atmos.yaml`, then the `env:` block in a stack file (stack root, then component type, then
-   component). A command's own `env:` block is different. It is a list of key-value pairs, and it
-   applies only when that command runs. It is not part of the order above. See the
-   [atmos-settings](../../atmos-settings/SKILL.md) skill for full detail.
+    Precedence order, from lowest to highest: the system environment, then the global `env:` block
+    in `atmos.yaml`, then the `env:` block in a stack file (stack root, then component type, then
+    component). A command's own `env:` block is different. It is a list of key-value pairs, and it
+    applies only when that command runs. It is not part of the order above. See the
+    [atmos-settings](../../atmos-settings/SKILL.md) skill for full detail.
 2. Migrate `[tasks]`. A simple mise task maps to an Atmos custom command.
-   ```yaml
-   # atmos.yaml
-   commands:
-     - name: fmt
-       description: Format Terraform code
-       steps:
-         - terraform fmt -recursive
+    ```yaml
+    # atmos.yaml
+    commands:
+      - name: fmt
+        description: Format Terraform code
+        steps:
+          - terraform fmt -recursive
 
-     - name: deploy
-       description: Deploy the app
-       steps:
-         - atmos fmt
-         - terraform apply -auto-approve
-   ```
-   mise `depends` has no direct equivalent inside one custom command. For a simple, linear
-   dependency, add a step that runs the other command, as shown above. For a task graph with
-   parallel steps or conditions, use an Atmos workflow instead. A workflow supports `depends_on`
-   and `when:`. See the [atmos-workflows](../../atmos-workflows/SKILL.md) skill. Tasks in a
-   `mise-tasks/` directory have no direct mapping. Convert each script to a step in a custom
-   command.
+      - name: deploy
+        description: Deploy the app
+        steps:
+          - atmos fmt
+          - terraform apply -auto-approve
+    ```
+    mise `depends` has no direct equivalent inside one custom command. For a simple, linear
+    dependency, add a step that runs the other command, as shown above. For a task graph with
+    parallel steps or conditions, use an Atmos workflow instead. A workflow supports `depends_on`
+    and `when:`. See the [atmos-workflows](../../atmos-workflows/SKILL.md) skill. Tasks in a
+    `mise-tasks/` directory have no direct mapping. Convert each script to a step in a custom
+    command.
 3. Drop `[settings]`. `[settings].experimental` has no equivalent. Most other `[settings]`
-   entries have no equivalent either. See "Common Gotchas" below.
+    entries have no equivalent either. See "Common Gotchas" below.
 4. Check the migration the same way as Shape A.
 
 ## CLI Command Mapping

@@ -46,35 +46,35 @@ packages:
 **Recipe:**
 
 1. Add the `toolchain:` block to `atmos.yaml`. A `registries:` entry with `type: standard` maps
-   to a `toolchain.registries[]` entry with `type: aqua`. Omit `source` to use the public
-   registry.
-   ```yaml
-   toolchain:
-     versions_file: .tool-versions
-     registries:
-       - name: aqua
-         type: aqua
-         priority: 10
-   ```
+    to a `toolchain.registries[]` entry with `type: aqua`. Omit `source` to use the public
+    registry.
+    ```yaml
+    toolchain:
+      versions_file: .tool-versions
+      registries:
+        - name: aqua
+          type: aqua
+          priority: 10
+    ```
 2. Convert each `packages:` entry to a `.tool-versions` line. The common `name: owner/repo@version`
-   form splits into a short tool name and a version:
-   ```text
-   # .tool-versions
-   terraform 1.10.3
-   jq 1.7.1
-   kubectl 1.28.0
-   ```
-   If the short name in `.tool-versions` does not match the Aqua `owner/repo` name, add an alias:
-   ```yaml
-   toolchain:
-     aliases:
-       terraform: hashicorp/terraform
-       jq: jqlang/jq
-       kubectl: kubernetes/kubectl
-   ```
+    form splits into a short tool name and a version:
+    ```text
+    # .tool-versions
+    terraform 1.10.3
+    jq 1.7.1
+    kubectl 1.28.0
+    ```
+    If the short name in `.tool-versions` does not match the Aqua `owner/repo` name, add an alias:
+    ```yaml
+    toolchain:
+      aliases:
+        terraform: hashicorp/terraform
+        jq: jqlang/jq
+        kubectl: kubernetes/kubectl
+    ```
 3. Check the migration. Run `atmos toolchain install`, then `atmos toolchain list`, then
-   `atmos toolchain which <tool>` for each tool. Confirm each version matches what Aqua CLI
-   reported.
+    `atmos toolchain which <tool>` for each tool. Confirm each version matches what Aqua CLI
+    reported.
 
 ## Shape B: Custom Registry, Checksums, or Policy
 
@@ -111,30 +111,30 @@ policies:
 **Recipe:**
 
 1. Add the custom registry as a second `toolchain.registries[]` entry. Use `source` for the
-   registry location, and `ref` to pin a version. Atmos accepts `ref` only when `source` is a
-   `github.com` URL.
-   ```yaml
-   toolchain:
-     registries:
-       - name: internal
-         type: aqua
-         source: https://github.com/myorg/my-registry/tree/main
-         priority: 100
-       - name: aqua
-         type: aqua
-         priority: 10
-   ```
+    registry location, and `ref` to pin a version. Atmos accepts `ref` only when `source` is a
+    `github.com` URL.
+    ```yaml
+    toolchain:
+      registries:
+        - name: internal
+          type: aqua
+          source: https://github.com/myorg/my-registry/tree/main
+          priority: 100
+        - name: aqua
+          type: aqua
+          priority: 10
+    ```
 2. Replace the `checksum:` block with `toolchain.verification`:
-   ```yaml
-   toolchain:
-     verification:
-       checksums: required
-       signatures: when_available
-       verifier_install: auto
-   ```
+    ```yaml
+    toolchain:
+      verification:
+        checksums: required
+        signatures: when_available
+        verifier_install: auto
+    ```
 3. Drop `aqua-policy.yaml`. Atmos has no trust or policy step. See "Common Gotchas" below.
 4. Do not migrate `aqua-checksums.json`. Atmos manages its own lockfile,
-   `toolchain.lock.yaml`, and writes it automatically. No manual step is needed.
+    `toolchain.lock.yaml`, and writes it automatically. No manual step is needed.
 5. Check the migration the same way as Shape A.
 
 ## CLI Command Mapping
