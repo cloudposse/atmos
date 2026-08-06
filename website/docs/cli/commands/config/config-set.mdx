@@ -43,7 +43,7 @@ atmos config set vars.replicas 5
 
 # String value (the fallback when neither the schema nor an existing value
 # has an answer -- Atmos warns here since "true" looks non-string).
-atmos config set vars.environment production
+atmos config set vars.debug_enabled true
 
 # Explicit --type overrides inference.
 atmos config set --type=string logs.level Debug

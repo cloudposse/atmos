@@ -331,6 +331,34 @@ func TestConfigSetCommand_AutoFallsBackToStringForNewKey(t *testing.T) {
 	assert.Contains(t, string(content), `replicas: "5"`)
 }
 
+// TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull is a regression
+// test: GetType now correctly reports (TypeNull, true) for an explicit YAML
+// null (see pkg/yaml.TestGetType_ExplicitNull), but --type=auto must not
+// treat that as "the inferred type", since buildRHS's TypeNull case always
+// writes the literal `null` and would silently discard the value being set.
+// A path whose existing value is null must fall back to the same
+// unresolved/string-fallback behavior as a brand-new key.
+func TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("settings:\n  replicas: null\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
+}
+
 func TestConfigSetCommand_InvalidType(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")

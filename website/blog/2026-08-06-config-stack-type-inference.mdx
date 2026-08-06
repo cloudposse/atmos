@@ -40,10 +40,11 @@ whichever stack manifest happened to import it.
 
 ```shell
 # vars.replicas is already 1 (an int) in the manifest -- auto keeps it an int.
-atmos stack set vars.replicas 5
+atmos stack set vars.replicas 5 -s plat-ue2-prod -c vpc
 
-# Nothing to infer from yet -- Atmos warns and stores a string, so you know to be explicit.
-atmos stack set vars.new_flag true --type=bool
+# vars.new_flag is a brand-new key with nothing to infer from -- Atmos warns that
+# "true" looks like a bool, and stores it as a string until you pass --type.
+atmos stack set vars.new_flag true -s plat-ue2-prod -c vpc
 
 # Works even when the value is only defined in an imported catalog file.
 atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc

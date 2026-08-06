@@ -2,7 +2,6 @@ package errors
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -186,10 +185,6 @@ func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuil
 	return b.WithCause(fmt.Errorf(format, args...))
 }
 
-// backtickSpanPattern matches a backtick-delimited code span within a hint
-// string (e.g. "`--config <file>`").
-var backtickSpanPattern = regexp.MustCompile("`[^`]*`")
-
 // escapeHintAngleBrackets HTML-entity-encodes literal < and > in hint text
 // OUTSIDE backtick code spans. Hints are rendered as Markdown (see
 // errors/formatter.go), and a raw placeholder like "<file>" is otherwise
@@ -209,13 +204,75 @@ func escapeHintAngleBrackets(hint string) string {
 
 	var b strings.Builder
 	last := 0
-	for _, loc := range backtickSpanPattern.FindAllStringIndex(hint, -1) {
-		b.WriteString(escapeAngleBrackets(hint[last:loc[0]]))
-		b.WriteString(hint[loc[0]:loc[1]])
-		last = loc[1]
+	for _, span := range codeSpanRanges(hint) {
+		b.WriteString(escapeAngleBrackets(hint[last:span[0]]))
+		b.WriteString(hint[span[0]:span[1]])
+		last = span[1]
 	}
 	b.WriteString(escapeAngleBrackets(hint[last:]))
 	return b.String()
+}
+
+// codeSpanRanges finds CommonMark-style backtick code spans in s and returns
+// their [start, end) byte ranges (backticks included). Per the CommonMark
+// spec, a code span is delimited by a run of N backticks and closes at the
+// *next* run of exactly N backticks -- a run of a different length is not a
+// valid closing delimiter and is treated as literal content inside the span.
+// This is what lets a two-backtick-delimited span contain a single literal
+// backtick in its content. If an opening run never finds a matching closing
+// run, it is not a code span at all and its backticks are left as literal
+// text; scanning resumes right after that (non-delimiting) run rather than
+// from within it.
+func codeSpanRanges(s string) [][2]int {
+	var spans [][2]int
+	i := 0
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		start := i
+		i = skipBackticks(s, i)
+		openLen := i - start
+
+		closeEnd, found := findClosingBacktickRun(s, i, openLen)
+		if !found {
+			// No matching closing run anywhere in the rest of the string --
+			// this run of backticks isn't a code span delimiter.
+			continue
+		}
+		spans = append(spans, [2]int{start, closeEnd})
+		i = closeEnd
+	}
+	return spans
+}
+
+// skipBackticks returns the index just past the run of consecutive backticks
+// starting at i.
+func skipBackticks(s string, i int) int {
+	for i < len(s) && s[i] == '`' {
+		i++
+	}
+	return i
+}
+
+// findClosingBacktickRun scans s starting at i for the next run of backticks
+// whose length equals openLen, skipping over runs of any other length. It
+// returns the matching run's end offset, or found=false if none exists
+// before the end of s.
+func findClosingBacktickRun(s string, i, openLen int) (end int, found bool) {
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		runStart := i
+		i = skipBackticks(s, i)
+		if i-runStart == openLen {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 func escapeAngleBrackets(s string) string {

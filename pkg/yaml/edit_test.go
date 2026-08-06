@@ -172,6 +172,37 @@ func TestGetType_NotFound(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// TestGetType_ExplicitNull is a regression test: an explicit YAML null is a
+// real, present value -- distinct from a missing path -- so GetType must
+// report (TypeNull, true) for it rather than folding it into the same
+// ok=false result used for "nothing to infer from".
+func TestGetType_ExplicitNull(t *testing.T) {
+	content := []byte("vars:\n  explicit_null: null\n  region: us-east-1\n")
+
+	typ, ok := GetType(content, "vars.explicit_null")
+	assert.True(t, ok)
+	assert.Equal(t, TypeNull, typ)
+}
+
+// TestGetType_MissingNestedPath covers a path whose ancestor segment doesn't
+// exist at all (as opposed to a leaf segment that's explicitly null),
+// exercising the has()-on-null-parent short-circuit in
+// pathIsExplicitlyPresent.
+func TestGetType_MissingNestedPath(t *testing.T) {
+	content := []byte("vars:\n  region: us-east-1\n")
+
+	_, ok := GetType(content, "vars.deeply.nested.missing")
+	assert.False(t, ok)
+}
+
+// TestGetType_ArrayIndexOutOfBounds covers an array-index path segment past
+// the end of the array, another shape of "missing" that pathIsExplicitlyPresent
+// must not confuse with an explicit null.
+func TestGetType_ArrayIndexOutOfBounds(t *testing.T) {
+	_, ok := GetType([]byte(fixtureWithComments), "sources[5].component")
+	assert.False(t, ok)
+}
+
 func TestDelete(t *testing.T) {
 	out, err := Delete([]byte(fixtureWithComments), "vars.enabled")
 	require.NoError(t, err)

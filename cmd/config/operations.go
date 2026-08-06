@@ -81,6 +81,14 @@ already at that path, otherwise string. Pass --type explicitly to override.`,
 // used as a bare default (as opposed to a genuinely inferred string) -- most
 // commonly a free-form path like vars holding a value for the first time. An
 // explicit (non-auto) --type is always returned unchanged, with resolved true.
+//
+// An existing value of TypeNull is deliberately not treated as a resolved
+// inference: buildRHS's TypeNull case always writes the literal `null`,
+// ignoring the value argument, which makes sense for an explicit
+// `--type=null` but would silently discard the new value the caller is
+// setting if auto-inference forced it here. So a null-typed existing value
+// falls through to the same unresolved/string-fallback path as "nothing to
+// infer from".
 func effectiveValueType(file, dotPath string) (valType string, resolved bool) {
 	if valueType != atmosyaml.TypeAuto {
 		return valueType, true
@@ -88,7 +96,7 @@ func effectiveValueType(file, dotPath string) (valType string, resolved bool) {
 	if inferred, ok := cfg.InferValueType(dotPath); ok {
 		return inferred, true
 	}
-	if inferred, ok := atmosyaml.GetFileType(file, dotPath); ok {
+	if inferred, ok := atmosyaml.GetFileType(file, dotPath); ok && inferred != atmosyaml.TypeNull {
 		return inferred, true
 	}
 	return atmosyaml.TypeString, false

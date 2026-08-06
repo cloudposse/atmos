@@ -462,6 +462,38 @@ func TestRunStackSet_ExplicitFile_AutoFallsBackToStringForNewKey(t *testing.T) {
 	assert.Contains(t, string(raw), `replicas: "5"`)
 }
 
+// TestRunStackSet_ExplicitFile_AutoWithExistingNull_DoesNotForceNull is a
+// regression test: GetType now correctly reports (TypeNull, true) for an
+// explicit YAML null (see pkg/yaml.TestGetType_ExplicitNull), but --type=auto
+// must not treat that as "the inferred type", since buildRHS's TypeNull case
+// always writes the literal `null` and would silently discard the value
+// being set. A path whose existing value is null must fall back to the same
+// unresolved/string-fallback behavior as a brand-new key.
+func TestRunStackSet_ExplicitFile_AutoWithExistingNull_DoesNotForceNull(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        replicas: null
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
+}
+
 func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)

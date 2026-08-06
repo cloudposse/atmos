@@ -38,8 +38,10 @@ const (
 
 // looksNonStringPattern matches raw CLI values that read as a bool or a
 // number -- the shape a user would plausibly intend as something other than
-// a literal string.
-var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|-?[0-9]+(?:\.[0-9]+)?)$`)
+// a literal string. The numeric branch covers signed integers/decimals
+// (leading- or trailing-dot forms like ".5" and "5.") and scientific
+// notation (e.g. "1e3"), matching the shapes YAML itself parses as !!float.
+var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)$`)
 
 // LooksNonString reports whether raw looks like it was meant to be a bool or
 // number (e.g. "true", "42", "3.14") rather than a literal string. Callers use

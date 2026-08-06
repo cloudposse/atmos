@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
@@ -199,8 +200,9 @@ func Get(content []byte, path string) (string, error) {
 // GetType reads the YAML tag of the value already at path and maps it to a
 // SetFileWithType type name (TypeBool, TypeInt, TypeFloat, TypeString, or
 // TypeNull). Returns ok=false when the path doesn't currently resolve to a
-// value (missing, or an unaddressable structural node), which callers treat
-// as "nothing to infer from".
+// value at all (missing, or an unaddressable structural node), which callers
+// treat as "nothing to infer from". An explicit YAML null is a real, present
+// value -- it returns (TypeNull, true), not ok=false.
 func GetType(content []byte, path string) (string, bool) {
 	defer perf.Track(nil, "yaml.GetType")()
 
@@ -209,8 +211,11 @@ func GetType(content []byte, path string) (string, bool) {
 		return "", false
 	}
 	// Confirm the path resolves to a real, present value before trusting its
-	// tag -- Get() already disambiguates "missing" from "explicit null".
-	if _, err := Get(content, path); err != nil {
+	// tag. Unlike Get() -- which intentionally collapses "missing" and
+	// "explicit null" to the same not-found result for its own read
+	// semantics -- GetType must tell them apart, since only the former means
+	// "nothing to infer from".
+	if !pathIsExplicitlyPresent(content, path) {
 		return "", false
 	}
 	tag, err := evaluate(content, "("+yqPath+") | tag")
@@ -224,9 +229,53 @@ func GetType(content []byte, path string) (string, bool) {
 		return TypeInt, true
 	case "!!float":
 		return TypeFloat, true
+	case "!!null":
+		return TypeNull, true
 	default:
 		return TypeString, true
 	}
+}
+
+// pathIsExplicitlyPresent reports whether path resolves to a value that
+// genuinely exists in content, correctly distinguishing an explicit YAML
+// null from a missing key/index. It checks has() on the immediate parent for
+// the path's final segment: has() on a null parent (the case when an
+// ancestor segment is itself missing, e.g. "a.b.c" when "a" doesn't exist)
+// safely returns false rather than erroring, so no recursive presence check
+// up the chain is needed.
+//
+// Raw yq expressions (paths starting with ".", the DotPathToYqPath
+// passthrough for power users) can't be decomposed into segments this way,
+// so presence for those falls back to Get's collapsed missing/null check.
+func pathIsExplicitlyPresent(content []byte, path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if strings.HasPrefix(trimmed, ".") {
+		_, err := Get(content, path)
+		return err == nil
+	}
+
+	segments, err := splitDotPath(trimmed)
+	if err != nil {
+		return false
+	}
+	last := segments[len(segments)-1]
+	parentExpr := yqPathFromSegments(segments[:len(segments)-1])
+
+	expr := "(" + parentExpr + ") | has(" + hasKeyArg(last) + ")"
+	result, err := evaluate(content, expr)
+	if err != nil {
+		return false
+	}
+	return strings.TrimRight(result, trailingNewline) == "true"
+}
+
+// hasKeyArg renders a path segment as the argument to yq's has(): a bare
+// integer for array indices, a quoted string for map keys.
+func hasKeyArg(seg pathSegment) string {
+	if seg.isIndex {
+		return strconv.Itoa(seg.index)
+	}
+	return encodeStringValue(seg.key)
 }
 
 // GetFileType is the file-based form of GetType.

@@ -194,6 +194,9 @@ func TestEscapeHintAngleBrackets(t *testing.T) {
 	}{
 		{"plain placeholder", "pass --config <file>.", "pass --config &lt;file&gt;."},
 		{"backtick-protected placeholder untouched", "`--file <manifest>`", "`--file <manifest>`"},
+		{"double-backtick code span untouched", "``--file <manifest>``", "``--file <manifest>``"},
+		{"double-backtick span with embedded single backtick", "``code with a ` backtick <x>``", "``code with a ` backtick <x>``"},
+		{"unmatched double backtick has no closing run, treated literally", "``<a>", "``&lt;a&gt;"},
 		{"mixed bare and backtick-protected", "<a> and `<b>` and <c>", "&lt;a&gt; and `<b>` and &lt;c&gt;"},
 		{"no angle brackets", "nothing to escape here", "nothing to escape here"},
 		{"EXAMPLE prefix left untouched", "EXAMPLE:<raw>", "EXAMPLE:<raw>"},
