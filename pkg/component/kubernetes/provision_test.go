@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -11,8 +12,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestAuthManagerForReturnsNilWhenNoManager(t *testing.T) {
@@ -97,6 +100,47 @@ func TestDeliverApplyRoutesToExternalTarget(t *testing.T) {
 	}
 	assert.Contains(t, combined, "kind: Namespace")
 	assert.Contains(t, combined, "kind: Service")
+}
+
+// TestDeliverApplyPrintsSuccessConfirmation guards against a successful
+// git/external-target delivery silently producing no output: before this
+// fix, a user running `apply --target <git-target>` against a healthy
+// repository saw nothing at all on success, unlike cluster apply and
+// `validate`. A successful delivery must print a human-facing confirmation.
+func TestDeliverApplyPrintsSuccessConfirmation(t *testing.T) {
+	const kind = "test-capture-kind-success-message"
+	target.Register(kind, &captureProvisioner{})
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "argocd",
+		Stack:            "dev",
+		ComponentSection: map[string]any{
+			"provision": map[string]any{
+				"targets": map[string]any{
+					"deployment-repo": map[string]any{
+						"kind": kind,
+						"path": "clusters/dev/argocd",
+					},
+				},
+			},
+		},
+	}
+	flags := map[string]any{"target": "deployment-repo"}
+	objects := []*unstructured.Unstructured{newObject("Namespace", "atmos-demo")}
+
+	_, err = deliverApply(&schema.AtmosConfiguration{}, info, flags, objects)
+	require.NoError(t, err)
+
+	assert.Contains(t, uiOutput.String(), "deployment-repo",
+		"a successful external-target delivery must print a human-facing confirmation naming the target")
 }
 
 func TestDeliverApplyUnknownTargetErrors(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -116,7 +117,7 @@ func isKustomizeConfigObject(obj *unstructured.Unstructured) bool {
 // structural checks; it does not affect --server, which validates against the
 // live cluster's own API rather than Atmos's offline opinion.
 func resolveComponentValidateEnabled(componentSection map[string]any) bool {
-	if v, ok := componentSection["validate"].(bool); ok {
+	if v, ok := componentSection[cfg.ValidateSectionName].(bool); ok {
 		return v
 	}
 	return true

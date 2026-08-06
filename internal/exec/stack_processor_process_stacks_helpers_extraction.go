@@ -290,6 +290,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			result.ComponentManifests = i
 		}
 
+		if i, ok := opts.ComponentMap[cfg.ValidateSectionName]; ok {
+			result.ComponentValidate = i
+		}
+
 		if i, ok := opts.ComponentMap[cfg.RenderSectionName]; ok {
 			componentRender, ok := i.(map[string]any)
 			if !ok {

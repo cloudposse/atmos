@@ -590,6 +590,7 @@ func addKubernetesSectionAffected(
 		{sectionNamePaths, affectedReasonStackPaths},
 		{sectionNameManifests, affectedReasonStackManifests},
 		{sectionNameRender, affectedReasonStackRender},
+		{cfg.ValidateSectionName, fmt.Sprintf("stack.%s", cfg.ValidateSectionName)},
 	}...)
 	sections = appendSectionChecks(sections, resolveComponentSectionChecks(atmosConfig)...)
 

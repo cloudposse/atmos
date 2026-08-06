@@ -735,6 +735,48 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		assert.Equal(t, "global-wd", provision["workdir"])
 		assert.Equal(t, "5m", provision["timeout"])
 	})
+
+	t.Run("validate-component-instance-false-overrides-base-true", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		res.ComponentValidate = false
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, false, comp[cfg.ValidateSectionName],
+			"an explicit component-instance validate:false must override a base-component validate:true")
+	})
+
+	t.Run("validate-base-true-flows-through-when-component-unset", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, true, comp[cfg.ValidateSectionName],
+			"base-component validate:true must flow through when the component instance sets nothing")
+	})
+
+	t.Run("validate-unset-everywhere-is-absent-from-comp", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		_, ok := comp[cfg.ValidateSectionName]
+		assert.False(t, ok, "validate must be absent (not defaulted to any value) when unset at every layer")
+	})
 }
 
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by

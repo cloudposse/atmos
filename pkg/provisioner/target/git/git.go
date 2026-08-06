@@ -234,39 +234,64 @@ func walkManagedDir(root string) (map[string][]byte, error) {
 
 // reconcile clones the repository if absent, otherwise fetches and fast-forwards.
 func reconcile(ctx context.Context, s *repoSession) error {
-	return s.provider.Clone(ctx, &atmosgit.CloneOptions{
-		RepoContext:  s.rc,
-		URI:          s.resolved.URI,
-		Depth:        s.resolved.Clone.Depth,
-		Filter:       s.resolved.Clone.Filter,
-		SingleBranch: s.resolved.Clone.SingleBranch,
-		Submodules:   s.resolved.Clone.Submodules,
+	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
+		return s.provider.Clone(ctx, &atmosgit.CloneOptions{
+			RepoContext:  s.rc,
+			URI:          s.resolved.URI,
+			Depth:        s.resolved.Clone.Depth,
+			Filter:       s.resolved.Clone.Filter,
+			SingleBranch: s.resolved.Clone.SingleBranch,
+			Submodules:   s.resolved.Clone.Submodules,
+		})
 	})
+	return atmosgit.WrapOperationError(
+		"clone/reconcile Git repository",
+		s.rc.Workdir,
+		stderr,
+		err,
+		"Confirm the configured branch exists and has commits, and that the resolved identity has read access.",
+	)
 }
 
 // commitAndPush stages the managed path, commits any changes, and pushes when a
 // commit was created.
 func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact) error {
-	result, err := s.provider.Commit(ctx, &atmosgit.CommitOptions{
-		RepoContext: s.rc,
-		Message:     cfg.CommitMessage,
-		Paths:       []string{cfg.Path},
-		Signing:     signingMode(cfg, s.resolved),
-		Author:      s.resolved.Author,
-		Trailers:    trailers(artifact),
+	var result atmosgit.CommitResult
+	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
+		res, commitErr := s.provider.Commit(ctx, &atmosgit.CommitOptions{
+			RepoContext: s.rc,
+			Message:     cfg.CommitMessage,
+			Paths:       []string{cfg.Path},
+			Signing:     signingMode(cfg, s.resolved),
+			Author:      s.resolved.Author,
+			Trailers:    trailers(artifact),
+		})
+		if res != nil {
+			result = *res
+		}
+		return commitErr
 	})
 	if err != nil {
-		return err
+		return atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
 	}
 	if !result.Committed {
 		// Nothing changed in the managed path; a no-op is a clean success.
 		return nil
 	}
 
-	return s.provider.Push(ctx, &atmosgit.PushOptions{
-		RepoContext: s.rc,
-		Retries:     s.resolved.PushRetries,
+	stderr, err = atmosgit.CaptureStderr(s.provider, func() error {
+		return s.provider.Push(ctx, &atmosgit.PushOptions{
+			RepoContext: s.rc,
+			Retries:     s.resolved.PushRetries,
+		})
 	})
+	return atmosgit.WrapOperationError(
+		"push Git repository",
+		s.rc.Workdir,
+		stderr,
+		err,
+		"Run 'atmos git status' and 'atmos git pull' on the configured repository before retrying.",
+	)
 }
 
 // writeArtifact replaces the managed path <workdir>/<path> with the artifact

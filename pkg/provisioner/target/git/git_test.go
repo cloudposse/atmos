@@ -8,8 +8,10 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
+	cockroacherrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -476,6 +478,61 @@ func TestDeliverIntegrationCommitError(t *testing.T) {
 	err := g.Deliver(context.Background(), in)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitDirtyUnmanagedFiles)
+}
+
+// TestDeliverIntegrationCloneErrorSurfacesStderrAndHint reproduces the
+// first-time-GitOps-bootstrap failure mode: a deployment repository that
+// exists but has no commits on the configured branch yet (a brand-new,
+// empty repo). Before this fix, Deliver returned only "git clone (exit 128)"
+// with no indication of the real cause. It must now surface git's own stderr
+// output (naming the missing remote branch) and an actionable hint.
+func TestDeliverIntegrationCloneErrorSurfacesStderrAndHint(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not available")
+	}
+	isolatedGitEnv(t)
+
+	root := t.TempDir()
+	bare := filepath.Join(root, "empty.git")
+	gitCmd(t, "", "init", "--bare", bare)
+	gitCmd(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:     bare,
+					Branch:  "main",
+					Workdir: filepath.Join(root, "workdir"),
+				},
+			},
+		},
+	}
+	in := &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev/argocd",
+			"commit":     map[string]any{"message": "Render argocd", "signing": "never"},
+		},
+		Artifact: target.ProvisionArtifact{
+			Kind:   target.ArtifactKindKubernetesManifests,
+			Format: target.FormatYAML,
+			Files:  map[string][]byte{"namespace.yaml": []byte("apiVersion: v1\nkind: Namespace\n")},
+		},
+	}
+
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), in)
+	require.Error(t, err)
+
+	details := strings.Join(cockroacherrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "Remote branch", "the real git stderr must be surfaced, not just an exit code")
+
+	hints := strings.Join(cockroacherrors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "Confirm the configured branch exists and has commits",
+		"an actionable hint must be attached")
 }
 
 func TestDeliverIntegrationPublishesToRepo(t *testing.T) {
