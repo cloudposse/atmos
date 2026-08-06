@@ -1234,18 +1234,24 @@ func TestGetVendorDirToUse(t *testing.T) {
 // case is already covered by TestGetVendorDirToUse above).
 func TestResolveVendorConfigFilePath_CheckGlobalConfig(t *testing.T) {
 	t.Run("absolute Vendor.BasePath returned as-is", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{BasePath: "/abs/vendor"}}
+		// filepath.IsAbs uses platform semantics -- a hardcoded "/abs/vendor" string literal is
+		// absolute on POSIX but NOT on Windows (which needs a drive letter or UNC path), so this
+		// must use an OS-native absolute path (t.TempDir() already returns one) to actually
+		// exercise the intended branch on every platform.
+		absVendorDir := filepath.Join(t.TempDir(), "vendor")
+		atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{BasePath: absVendorDir}}
 		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
-		assert.Equal(t, "/abs/vendor", got)
+		assert.Equal(t, absVendorDir, got)
 	})
 
 	t.Run("relative Vendor.BasePath resolves via getVendorDirToUse", func(t *testing.T) {
+		precomputed := filepath.Join(t.TempDir(), "precomputed-vendor")
 		atmosConfig := &schema.AtmosConfiguration{
-			VendorDirAbsolutePath: "/precomputed/vendor",
+			VendorDirAbsolutePath: precomputed,
 			Vendor:                schema.Vendor{BasePath: "./vendor.yaml"},
 		}
 		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
-		assert.Equal(t, "/precomputed/vendor", got)
+		assert.Equal(t, precomputed, got)
 	})
 }
 

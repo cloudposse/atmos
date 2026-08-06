@@ -20,14 +20,19 @@ repository's default branch (`gh repo view --json defaultBranchRef -q .defaultBr
 tracking branch (`@{u}`) as the base — for a normal feature branch that tracks
 `origin/<same-branch-name>`, diffing against its own upstream produces an empty or near-empty
 diff, not the PR's actual changes, once the branch has been pushed. Then inspect the FULL set of
-changes relative to that base: `git diff <base>...HEAD --stat` for committed history, plus
-`git status --porcelain` and `git diff HEAD` for any staged, unstaged, or untracked changes not
-yet committed — a field test run before the day's work is committed must still see it. Derive the
-test target from all of that — the CLI command(s), flag(s), config option(s), or subsystem the
-changed files implement — and state explicitly what you inferred and why before proceeding to
-Phase 1. Only fall back to asking the user if there's truly nothing changed (clean worktree, base
-equals HEAD) or the changes span multiple unrelated features with no coherent single target (ask
-which one to focus on, don't silently pick one).
+changes relative to that base — content, not just a file-list summary: `git diff <base>...HEAD`
+(the full patch, not `--stat`, since `--stat` only shows file names and line counts, not what
+those lines actually do) for committed history; `git diff HEAD` for any staged/unstaged changes
+to tracked files not yet committed; and `git ls-files --others --exclude-standard` to enumerate
+untracked files — `git status --porcelain` lists their paths too but never their content, and
+neither `git diff HEAD` nor a `--stat` summary includes untracked files at all, so a brand-new
+implementation file can otherwise go completely unread. Read the actual content of every
+untracked file this turns up, the same as any diff hunk. Derive the test target from all of
+that — the CLI command(s), flag(s), config option(s), or subsystem the changed files implement —
+and state explicitly what you inferred and why before proceeding to Phase 1. Only fall back to
+asking the user if there's truly nothing changed (clean worktree, base equals HEAD, no untracked
+files) or the changes span multiple unrelated features with no coherent single target (ask which
+one to focus on, don't silently pick one).
 
 Goal: catch "vibe-coded slop" — behavior that looks fine in code review but breaks or misleads a
 real user — not to re-run what automated tests already cover. Anticipate plausible user
@@ -55,9 +60,11 @@ diff each accounts for.
   of existing logic lives during its ongoing migration, so a branch touching files there must
   still be read, not skipped. Check both `cmd/<command>/` (thin call site) and whichever
   `pkg/`/`internal/exec/` package(s) it delegates to for the real logic and error paths. When
-  defaulting from a branch diff, read the diff itself first (not just the post-change files) —
-  the diff shows what changed *from*, which is where a regression or half-finished edge case
-  would show up.
+  defaulting from a branch diff, read the full diff content itself first (not just the post-change
+  files, and not just a `--stat` summary) — the diff shows what changed *from*, which is where a
+  regression or half-finished edge case would show up. Include untracked files
+  (`git ls-files --others --exclude-standard`) in this reading pass too — they never appear in any
+  diff at all.
 - **Docs and skills** — every relevant page under `website/docs/cli/commands/`, the matching
   `.claude/skills/atmos-*` skill(s) for the subsystem, and any README describing the feature. Note
   anything phrased with confidence you haven't independently confirmed against the code — docs and
