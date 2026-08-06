@@ -134,6 +134,11 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 
 func TestFindGlobalSetContext(t *testing.T) {
 	sharedSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
+	componentReferenceSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{
+		"store":     "example-secrets",
+		"scope":     "global",
+		"reference": "op://shared/{{ .atmos_component }}/password",
+	})
 	tests := []struct {
 		name              string
 		entries           []scopeEntry
@@ -189,6 +194,15 @@ func TestFindGlobalSetContext(t *testing.T) {
 					ComponentType: "helm",
 					Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-b", "scope": "global"}),
 				},
+			},
+			scope:       secretScope{Stack: "dev"},
+			expectedErr: errUtils.ErrRequiredFlagNotProvided,
+		},
+		{
+			name: "identical component-dependent references require component",
+			entries: []scopeEntry{
+				{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: componentReferenceSection},
+				{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: componentReferenceSection},
 			},
 			scope:       secretScope{Stack: "dev"},
 			expectedErr: errUtils.ErrRequiredFlagNotProvided,
