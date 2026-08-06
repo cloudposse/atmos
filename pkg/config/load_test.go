@@ -2008,6 +2008,12 @@ func TestLoadConfig_ProSettingsBackwardCompat(t *testing.T) {
 // `settings.pro` deprecation notice unconditionally -- even for a config that never touched
 // `settings.pro` at all. Defaults must land on the top-level `pro.*` struct only.
 func TestLoadConfig_ProDefaultsDoNotLeakIntoLegacySettings(t *testing.T) {
+	// GitHubHeadRef binds to the real GITHUB_HEAD_REF env var (pkg/config/load.go), which
+	// GitHub Actions sets on every pull_request-triggered run. Left alone, that makes
+	// Settings.Pro non-zero in CI even though this test's fixture never touches settings.pro,
+	// failing the exact-zero-value assertion below only in CI, never locally.
+	t.Setenv("GITHUB_HEAD_REF", "")
+
 	tempDir := t.TempDir()
 	configPath := createTestConfig(t, tempDir, "base_path: .\n")
 	configInfo := &schema.ConfigAndStacksInfo{

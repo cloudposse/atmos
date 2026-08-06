@@ -19,7 +19,6 @@ TRCE Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests
 TRCE No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
 TRCE No .atmos.d directory found path=/mock-home/.atmos.d
 TRCE Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
-DEBU 'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
 TRCE Preserved case-sensitive map keys paths="[env templates.settings.env auth.identities]" files_processed=1
 TRCE Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false

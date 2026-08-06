@@ -3,7 +3,6 @@
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
- DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
  DEBU  Loading toolchain registries from atmos.yaml registryCount=0
  DEBU  Successfully loaded configured registry from atmos.yaml
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d

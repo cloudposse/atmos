@@ -756,6 +756,16 @@ func TestMain(m *testing.M) {
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
 
+	// GitHub Actions sets this to the PR's head branch name on pull_request
+	// triggers. pkg/config binds it into Settings.Pro.GitHubHeadRef/Pro.GitHubHeadRef
+	// (used by pkg/pro/commit.go, not for display -- both fields are
+	// yaml:"-"/json:"-"). Left set, it makes the otherwise-zero-valued
+	// Settings.Pro struct non-empty, which flips `describe config`'s golden
+	// snapshots from omitting the deprecated `settings.pro` block entirely to
+	// rendering it as `pro: {}` -- passing locally (unset) and failing in CI
+	// (set) for reasons unrelated to the code under test.
+	os.Unsetenv("GITHUB_HEAD_REF")
+
 	// Ensure this test-only variable used by the "env-step-template-only"
 	// workflow fixture starts unset. That test asserts the variable is absent
 	// from a subprocess's environment when an env step sets export: false; a
