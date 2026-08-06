@@ -103,6 +103,96 @@ func TestRunSecretSet_GlobalScopeWithoutComponent(t *testing.T) {
 	assert.Equal(t, "v1", svc.setCalls[0].value)
 }
 
+func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.scopes = map[string]secrets.Scope{"SHARED_TOKEN": secrets.ScopeGlobal}
+	installService(t, svc, nil)
+	overrideEnumerateScopes(t, []scopeEntry{
+		{
+			Stack:         "dev",
+			Component:     "example-service",
+			ComponentType: "helm",
+			Section: secretDeclarationSection("SHARED_TOKEN", map[string]any{
+				"store": "example-secrets",
+				"scope": "global",
+			}),
+		},
+	}, nil)
+
+	err := runSecretSubcommand(t, "set", "SHARED_TOKEN=v1", "--stack", "dev", "--type", "helm")
+	require.NoError(t, err)
+	require.Len(t, svc.setCalls, 1)
+}
+
+func TestFindGlobalSetContext(t *testing.T) {
+	t.Run("enumeration error", func(t *testing.T) {
+		sentinel := errors.New("stack enumeration failed")
+		overrideEnumerateScopes(t, nil, sentinel)
+
+		_, _, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
+		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	})
+
+	t.Run("no matching declaration", func(t *testing.T) {
+		overrideEnumerateScopes(t, []scopeEntry{
+			{
+				Stack:         "prod",
+				Component:     "other-stack-service",
+				ComponentType: "helm",
+				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+			},
+			{
+				Stack:         "dev",
+				Component:     "other-type-service",
+				ComponentType: "terraform",
+				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+			},
+			{
+				Stack:         "dev",
+				Component:     "example-service",
+				ComponentType: "helm",
+				Section:       secretDeclarationSection("OTHER_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+			},
+		}, nil)
+
+		_, _, err := findGlobalSetContext(secretScope{Stack: "dev", ComponentType: "helm"}, "SHARED_TOKEN")
+		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	})
+
+	t.Run("inconsistent declarations", func(t *testing.T) {
+		overrideEnumerateScopes(t, []scopeEntry{
+			{
+				Stack:         "dev",
+				Component:     "example-service-a",
+				ComponentType: "helm",
+				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-a", "scope": "global"}),
+			},
+			{
+				Stack:         "dev",
+				Component:     "example-service-b",
+				ComponentType: "helm",
+				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-b", "scope": "global"}),
+			},
+		}, nil)
+
+		_, _, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
+		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	})
+
+	t.Run("identical declarations select first component", func(t *testing.T) {
+		section := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
+		overrideEnumerateScopes(t, []scopeEntry{
+			{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: section},
+			{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: section},
+		}, nil)
+
+		component, componentType, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
+		require.NoError(t, err)
+		assert.Equal(t, "example-service-a", component)
+		assert.Equal(t, "helm", componentType)
+	})
+}
+
 func TestRunSecretSet_NonGlobalScopeStillRequiresComponent(t *testing.T) {
 	svc := newFakeSecretService()
 	installService(t, svc, nil)
@@ -162,6 +252,15 @@ func TestRunSecretSet_EmptyName(t *testing.T) {
 
 	// "=v1" cuts to an empty name.
 	err := runSecretSubcommand(t, "set", "=v1", "--stack", "dev", "--component", "api")
+	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	assert.Empty(t, svc.setCalls)
+}
+
+func TestRunSecretSet_EmptyNameWithoutComponent(t *testing.T) {
+	svc := newFakeSecretService()
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "set", "=v1", "--stack", "dev")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 	assert.Empty(t, svc.setCalls)
 }

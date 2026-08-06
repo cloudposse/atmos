@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,50 @@ func TestKeychainStore_SetGetStructuredValue(t *testing.T) {
 	got, err := s.Get("dev", "vpc", "cfg")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"a": "1", "b": "2"}, got)
+}
+
+func TestKeychainStore_GetRaw(t *testing.T) {
+	t.Run("string value is unquoted", func(t *testing.T) {
+		s := newTestKeychainStore(t)
+		require.NoError(t, s.Set("dev", "example-service", "token", "example-token"))
+
+		rawStore, ok := s.(store.RawStore)
+		require.True(t, ok)
+		got, err := rawStore.GetRaw("dev", "example-service", "token")
+		require.NoError(t, err)
+		assert.Equal(t, "example-token", got)
+	})
+
+	t.Run("structured value remains JSON", func(t *testing.T) {
+		s := newTestKeychainStore(t)
+		require.NoError(t, s.Set("dev", "example-service", "config", map[string]any{"enabled": true}))
+
+		got, err := s.(store.RawStore).GetRaw("dev", "example-service", "config")
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"enabled":true}`, got)
+	})
+
+	t.Run("empty key is rejected", func(t *testing.T) {
+		s := newTestKeychainStore(t)
+		_, err := s.(store.RawStore).GetRaw("dev", "example-service", "")
+		assert.ErrorIs(t, err, store.ErrEmptyKey)
+	})
+
+	t.Run("missing value is classified", func(t *testing.T) {
+		s := newTestKeychainStore(t)
+		_, err := s.(store.RawStore).GetRaw("dev", "example-service", "missing")
+		assert.ErrorIs(t, err, store.ErrKeychainNotFound)
+	})
+
+	t.Run("backend read error is classified", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		kr := keyring.NewMockKeyring(ctrl)
+		kr.EXPECT().Get("atmos/dev/example-service/token").Return("", errors.New("backend unavailable"))
+		s := &KeychainStore{kr: kr, prefix: "atmos", stackDelimiter: "-"}
+
+		_, err := s.GetRaw("dev", "example-service", "token")
+		assert.ErrorIs(t, err, store.ErrKeychainRead)
+	})
 }
 
 func TestKeychainStore_GetMissing(t *testing.T) {
