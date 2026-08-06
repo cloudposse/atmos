@@ -39,6 +39,7 @@
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
       "Bash(go clean:*)",
+      "Bash(gofmt:*)",
       "Bash(git add -A:*)",
       "Bash(git add --all:*)",
       "Bash(git add .:*)",
