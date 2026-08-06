@@ -195,6 +195,7 @@
   right: 1rem;
   z-index: 1;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
 }
 
@@ -202,6 +203,7 @@
 .exampleCard:focus-within .exampleCardCopyButton,
 .exampleCardCopyButton:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .exampleCard:hover {
