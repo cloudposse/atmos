@@ -448,7 +448,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// implicit init so post-init provisioners can complete and persist provider
 	// locks for workdir and vendored components.
 	if err == nil && info.SubCommand == subcommandInit {
-		dispatchAfterInitFn(atmosConfig, info, componentPath)
+		dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
 	}
 
 	exitCode := resolveExitCode(err)

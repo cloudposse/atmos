@@ -375,12 +375,49 @@ func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
 		suppressed:  &suppressed,
 	})
 
-	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"})
-	ctx.Stdout = io.Discard
+	tests := []struct {
+		name       string
+		context    *ExecContext
+		run        func(*ExecContext) (*Output, error)
+		setWriter  func(*ExecContext)
+		suppressed bool
+	}{
+		{
+			name:       "step stdout",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stdout = io.Discard },
+			suppressed: true,
+		},
+		{
+			name: "steps stderr",
+			context: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-suppression-capture-test"},
+			}}),
+			run:        stepsEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stderr = io.Discard },
+			suppressed: true,
+		},
+		{
+			name:       "step without writers",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			suppressed: false,
+		},
+	}
 
-	_, err := stepEngine{}.Run(ctx)
-	require.NoError(t, err)
-	assert.True(t, suppressed)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suppressed = false
+			if tt.setWriter != nil {
+				tt.setWriter(tt.context)
+			}
+
+			_, err := tt.run(tt.context)
+			require.NoError(t, err)
+			assert.Equal(t, tt.suppressed, suppressed)
+		})
+	}
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
