@@ -91,6 +91,17 @@ func WithProcessContext(ctx context.Context) ShellCommandOption {
 	}
 }
 
+func shellCommandContext(opts ...ShellCommandOption) context.Context {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.ctx == nil {
+		return context.Background()
+	}
+	return cfg.ctx
+}
+
 // WithEnvironment provides a pre-sanitized process environment for subprocess execution.
 // When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
 // Pass nil to fall back to the default os.Environ() behavior.

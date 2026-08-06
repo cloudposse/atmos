@@ -89,8 +89,9 @@ func buildInitSubcommandArgs(
 	allArgsAndFlags []string,
 	varFile string,
 	componentPath *string,
+	opts ...ShellCommandOption,
 ) ([]string, error) {
-	newPath, provErr := prepareInitExecution(atmosConfig, info, *componentPath)
+	newPath, provErr := prepareInitExecution(shellCommandContext(opts...), atmosConfig, info, *componentPath)
 	if provErr != nil {
 		return nil, provErr
 	}
@@ -135,6 +136,7 @@ func buildTerraformCommandArgs(
 	info *schema.ConfigAndStacksInfo,
 	varFile, planFile string,
 	componentPath *string,
+	opts ...ShellCommandOption,
 ) (allArgsAndFlags []string, uploadStatusFlag bool, err error) {
 	allArgsAndFlags = strings.Fields(info.SubCommand)
 
@@ -157,7 +159,7 @@ func buildTerraformCommandArgs(
 		allArgsAndFlags = buildApplySubcommandArgs(info, allArgsAndFlags, varFile)
 
 	case subcommandInit:
-		allArgsAndFlags, err = buildInitSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, componentPath)
+		allArgsAndFlags, err = buildInitSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, componentPath, opts...)
 		if err != nil {
 			return nil, false, err
 		}

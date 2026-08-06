@@ -45,6 +45,7 @@ type componentExecContext struct {
 // OPA/JSON-schema validation, auth pre-hook, config file generation, and env assembly.
 // Extracting this reduces ExecuteTerraform's cyclomatic complexity by ~10 decision points.
 func prepareComponentExecution(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
@@ -53,7 +54,7 @@ func prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := resolveAndProvisionComponentPath(atmosConfig, info)
+	componentPath, err := resolveAndProvisionComponentPath(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func executeCommandPipeline(
 	logTerraformContext(info, execCtx.workingDir)
 	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
-	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
+	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath, opts...)
 	if err != nil {
 		return err
 	}

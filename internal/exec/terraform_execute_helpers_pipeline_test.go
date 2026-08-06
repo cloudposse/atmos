@@ -84,7 +84,7 @@ func TestPrepareComponentExecution_NoComponentPath_ReturnsError(t *testing.T) {
 	// BasePath is empty → GetComponentPath returns an error.
 	info := schema.ConfigAndStacksInfo{}
 
-	_, err := prepareComponentExecution(&atmosConfig, &info, false)
+	_, err := prepareComponentExecution(t.Context(), &atmosConfig, &info, false)
 	// An empty BasePath causes checkTerraformConfig to return an error.
 	require.Error(t, err)
 }

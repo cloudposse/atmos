@@ -17,6 +17,23 @@ type StepExecutor struct {
 	atmosConfig *schema.AtmosConfiguration
 }
 
+type outputSuppressedContextKey struct{}
+
+// WithOutputSuppressed disables transient step UI for this context.
+func WithOutputSuppressed(ctx context.Context) context.Context {
+	defer perf.Track(nil, "step.WithOutputSuppressed")()
+
+	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+}
+
+// OutputSuppressed reports whether transient step UI is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "step.OutputSuppressed")()
+
+	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
+	return ok
+}
+
 // NewStepExecutor creates a new step executor.
 func NewStepExecutor() *StepExecutor {
 	defer perf.Track(nil, "step.NewStepExecutor")()
