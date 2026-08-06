@@ -43,6 +43,7 @@ func TestCopyAtmosRefreshTokensInto(t *testing.T) {
 		atmosCache    []byte // nil = no cache file written
 		azCache       map[string]interface{}
 		expectCopied  int
+		expectDest    map[string]interface{} // nil = length check only
 	}{
 		{
 			name:          "matching entry is copied",
@@ -53,6 +54,18 @@ func TestCopyAtmosRefreshTokensInto(t *testing.T) {
 			}),
 			azCache:      map[string]interface{}{},
 			expectCopied: 1,
+			expectDest:   map[string]interface{}{"rt-key": rtEntry(accountID)},
+		},
+		{
+			name:          "matching entry in a non-default realm is copied",
+			realm:         "custom-realm",
+			homeAccountID: accountID,
+			atmosCache: marshal(t, map[string]interface{}{
+				"RefreshToken": map[string]interface{}{"rt-key": rtEntry(accountID)},
+			}),
+			azCache:      map[string]interface{}{},
+			expectCopied: 1,
+			expectDest:   map[string]interface{}{"rt-key": rtEntry(accountID)},
 		},
 		{
 			name:          "mismatched home account ID is skipped",
@@ -128,6 +141,10 @@ func TestCopyAtmosRefreshTokensInto(t *testing.T) {
 				"RefreshToken": map[string]interface{}{"pre-existing": rtEntry("other-account")},
 			},
 			expectCopied: 1,
+			expectDest: map[string]interface{}{
+				"pre-existing": rtEntry("other-account"),
+				"rt-key":       rtEntry(accountID),
+			},
 		},
 	}
 
@@ -135,7 +152,7 @@ func TestCopyAtmosRefreshTokensInto(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
 			if tt.atmosCache != nil {
-				writeAtmosRealmCache(t, home, "test-realm", tt.atmosCache)
+				writeAtmosRealmCache(t, home, tt.realm, tt.atmosCache)
 			}
 
 			preExisting := 0
@@ -147,6 +164,9 @@ func TestCopyAtmosRefreshTokensInto(t *testing.T) {
 
 			dest, _ := tt.azCache["RefreshToken"].(map[string]interface{})
 			assert.Len(t, dest, preExisting+tt.expectCopied)
+			if tt.expectDest != nil {
+				assert.Equal(t, tt.expectDest, dest)
+			}
 			for _, raw := range dest {
 				entry, ok := raw.(map[string]interface{})
 				require.True(t, ok, "copied entries must be objects")
