@@ -1,0 +1,252 @@
+base_path: "./"
+
+workflows:
+  base_path: "workflows"
+
+# Task-runner convergence field-test fixture.
+#
+# Exercises: dependencies.commands / dependencies.workflows (DAG execution, fail modes,
+# dedup), step-level inputs/artifacts freshness checking, precondition steps, the
+# continue: step field, native command aliases/internal, and constrained flag values.
+commands:
+  # --- Dependency graph: commands depending on commands, with dedup and parameterization ---
+  - name: compile
+    description: Compiles the app. Used as a dependency target; logs every real invocation.
+    flags:
+      - name: target
+        description: Build target.
+        default: default
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs build
+          echo "compile target={{ .Flags.target }} $(date +%s%N)" >> logs/compile.log
+
+  - name: trd-lint
+    description: >-
+      Depends on compile with default flags. Named trd-lint (not lint) to avoid colliding with
+      this repo's own top-level `lint` dev-tooling command when running from within this worktree.
+    dependencies:
+      commands: [compile]
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "lint ran $(date +%s%N)" >> logs/order.log
+
+  - name: unit-test
+    description: Depends on compile with target=test (a distinct, differently-flagged DAG node).
+    dependencies:
+      commands:
+        - name: compile
+          flags:
+            target: test
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "unit-test ran $(date +%s%N)" >> logs/order.log
+
+  - name: verify
+    description: >-
+      Depends on compile twice (identical flags -- should dedup to one execution) plus
+      trd-lint and unit-test (each of which also depends on compile).
+    dependencies:
+      commands:
+        - compile
+        - compile
+        - trd-lint
+        - unit-test
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "verify ran $(date +%s%N)" >> logs/order.log
+
+  # --- Fail modes: fail_fast vs best_effort across sibling dependencies ---
+  - name: step-a
+    internal: true
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "step-a ran $(date +%s%N)" >> logs/fail-mode.log
+
+  - name: step-b-fails
+    internal: true
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "step-b-fails ran $(date +%s%N)" >> logs/fail-mode.log
+          exit 1
+
+  - name: step-c-slow
+    internal: true
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          sleep 2
+          echo "step-c-slow completed $(date +%s%N)" >> logs/fail-mode.log
+
+  - name: release-failfast
+    description: fail_fast should abort step-c-slow once step-b-fails fails.
+    dependencies:
+      commands:
+        - name: step-a
+        - name: step-b-fails
+          fail: fail_fast
+        - name: step-c-slow
+    steps:
+      - type: shell
+        command: echo "release-failfast ran" >> logs/order.log
+
+  - name: release-besteffort
+    description: best_effort should let step-c-slow finish despite step-b-fails failing.
+    dependencies:
+      commands:
+        - name: step-a
+        - name: step-b-fails
+          fail: best_effort
+        - name: step-c-slow
+    steps:
+      - type: shell
+        command: echo "release-besteffort ran" >> logs/order.log
+
+  # --- Command depends on workflow (dependencies.workflows on a command) ---
+  - name: deploy
+    description: Depends on the 'smoke' workflow defined in workflows/task-runner.yaml.
+    dependencies:
+      workflows:
+        - name: smoke
+          file: task-runner.yaml
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "deploy ran after smoke workflow" >> logs/order.log
+
+  # --- Freshness: inputs/artifacts (implicit checksum.changed) ---
+  - name: freshbuild
+    description: Skips its own step when src/**/*.txt is unchanged (default checksum.changed).
+    steps:
+      - name: compile-step
+        type: shell
+        command: |
+          mkdir -p build logs
+          echo "built at $(date +%s%N)" > build/output.txt
+          echo "freshbuild ran $(date +%s%N)" >> logs/freshness.log
+        inputs:
+          sources: ["src/**/*.txt"]
+        artifacts:
+          paths: ["build/output.txt"]
+
+  # --- Freshness: explicit timestamp.changed instead of the checksum default ---
+  - name: freshbuild-ts
+    description: Same as freshbuild but keyed on mtime comparison instead of content hash.
+    steps:
+      - name: compile-step
+        type: shell
+        command: |
+          mkdir -p build logs
+          echo "built at $(date +%s%N)" > build/output-ts.txt
+          echo "freshbuild-ts ran $(date +%s%N)" >> logs/freshness-ts.log
+        inputs:
+          sources: ["src/**/*.txt"]
+        artifacts:
+          paths: ["build/output-ts.txt"]
+        when: timestamp.changed
+
+  # --- Freshness: structured sources/artifacts CEL records ---
+  - name: smart-build
+    description: "Explicit when condition comparing structured sources/artifacts records directly."
+    steps:
+      - name: compile-step
+        type: shell
+        command: |
+          mkdir -p build logs
+          echo "built at $(date +%s%N)" > build/smart-output.txt
+          echo "smart-build ran $(date +%s%N)" >> logs/smart.log
+        inputs:
+          sources: ["src/**/*.txt"]
+        artifacts:
+          paths: ["build/smart-output.txt"]
+        when: "sources.exists(s, artifacts.all(a, s.mtime > a.mtime))"
+
+  # --- Precondition: inverted polarity vs inputs/artifacts ---
+  - name: install-missing-tool
+    description: Tool never present on PATH, so the step should run every single time.
+    steps:
+      - name: install
+        type: shell
+        command: |
+          mkdir -p logs
+          echo "install ran $(date +%s%N)" >> logs/precondition-missing.log
+        precondition:
+          tools: ["definitely-not-a-real-tool-xyz-123"]
+
+  - name: install-present-tool
+    description: Tool (echo) is always present, so the step should always be skipped.
+    steps:
+      - name: install
+        type: shell
+        command: |
+          mkdir -p logs
+          echo "install ran $(date +%s%N)" >> logs/precondition-present.log
+        precondition:
+          tools: ["echo"]
+
+  # --- continue: always forgiveness, and interaction with when: failure ---
+  - name: ci-like
+    description: >-
+      lint-step fails but is forgiven (continue: always); after-lint still runs; the
+      forgiven failure must NOT satisfy only-on-failure's when: failure.
+    steps:
+      - name: lint-step
+        type: shell
+        command: exit 1
+        continue: always
+      - name: after-lint
+        type: shell
+        command: |
+          mkdir -p logs
+          echo "after-lint ran" >> logs/continue.log
+      - name: only-on-failure
+        type: shell
+        command: |
+          mkdir -p logs
+          echo "SHOULD NOT APPEAR" >> logs/continue.log
+        when: failure
+
+  # --- Native command aliases + internal ---
+  - name: status
+    description: Native alias target; internal commands stay invocable/dependency-targetable.
+    aliases: [st]
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "status ran $(date +%s%N)" >> logs/order.log
+
+  # --- Constrained flag values ---
+  - name: promote
+    description: environment must be one of dev/staging/prod.
+    flags:
+      - name: environment
+        description: Target environment.
+        required: true
+        values: [dev, staging, prod]
+    steps:
+      - type: shell
+        command: echo "promoting to {{ .Flags.environment }}"
+
+  - name: promote-bad-default
+    description: default value ("qa") is deliberately outside the values list.
+    flags:
+      - name: environment
+        default: qa
+        values: [dev, staging, prod]
+    steps:
+      - type: shell
+        command: echo "promoting to {{ .Flags.environment }}"

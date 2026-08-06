@@ -476,9 +476,20 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		runs, err := step.When.EvaluateWithImplicitSuccessE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
-		if err != nil {
-			return err
+		// A step whose effective `when:` references a freshness fact can't be decided here: no
+		// freshness.Checker has run yet, so those facts are all zero-value (always "unchanged"),
+		// even on a step's very first-ever run. Treat it as possibly-runnable instead of skipping
+		// it via `continue`, matching cmd.executeCustomCommand's identical fix for the same
+		// empty-Context short-circuit.
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		effective := freshness.EffectiveWhen(step.When, declared)
+		runs := freshness.MentionsAnyFreshnessFact(effective)
+		if !runs {
+			var err error
+			runs, err = step.When.EvaluateWithImplicitSuccessE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+			if err != nil {
+				return err
+			}
 		}
 		if !runs {
 			continue

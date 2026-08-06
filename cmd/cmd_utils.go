@@ -737,6 +737,28 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
+// exitOrRecordStepFailure handles a step failure at the point executeCustomCommand would
+// otherwise unconditionally hard-exit the process. When cmd is running as someone else's
+// already-resolved dependency (adapters.DependenciesAlreadyResolved), exiting here would kill the
+// whole process from inside a single dependency's own execution, before control ever returns to
+// taskgraph.Run -- making its fail-mode handling (wait_all/fail_fast/best_effort) unreachable
+// regardless of what was declared. Recording into the dependency's error sink instead lets that
+// error surface normally through taskgraph.Run's aggregate result. Preserves today's exact exit
+// behavior for a command's own top-level (non-dependency) invocation.
+//
+// Scope: covers the step-failure paths executeCustomCommand's regression tests exercise (a
+// step's own command failing, a malformed `continue:` condition, and the final aggregated
+// command error). Other, rarer exit points earlier in this function (flag/working-directory/
+// identity resolution failures that occur before any step runs) are not covered by this seam and
+// still hard-exit unconditionally even when running as a dependency.
+func exitOrRecordStepFailure(cmd *cobra.Command, err error) {
+	if adapters.DependenciesAlreadyResolved(cmd) {
+		adapters.RecordDependencyError(cmd, err)
+		return
+	}
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+}
+
 // executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -779,6 +801,18 @@ func executeCustomCommand(
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		// A step whose effective `when:` references a freshness fact (checksum.changed,
+		// timestamp.changed, precondition.success, or the structured sources/artifacts records)
+		// can't be decided here: this cheap pre-check has no freshness.Checker yet, so those
+		// facts are all zero-value, and evaluating against them would always read as "unchanged"
+		// -- even on a step's very first-ever run. Treat it as possibly-runnable instead and defer
+		// to the real per-step loop below, which does compute and pass real freshness facts.
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		effective := freshness.EffectiveWhen(step.When, declared)
+		if freshness.MentionsAnyFreshnessFact(effective) {
+			hasRunnableStep = true
+			break
 		}
 		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv, schema.ConditionPredicateSuccess))
 		if err != nil {
@@ -880,6 +914,7 @@ func executeCustomCommand(
 		depOpts := adapters.CustomCommandDependencyOptions(&atmosConfig, cmd.Root(), isCustomCommand)
 		if err := taskgraph.Run(context.Background(), direct, depOpts...); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return
 		}
 	}
 
@@ -1320,7 +1355,8 @@ func executeCustomCommand(
 		if err != nil {
 			var silentExit errUtils.ExitCodeError
 			if errors.As(err, &silentExit) && silentExit.Silent {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				exitOrRecordStepFailure(cmd, err)
+				return
 			}
 
 			// A `continue:` condition that matches this step's own failure forgives it:
@@ -1331,7 +1367,8 @@ func executeCustomCommand(
 				customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, schema.ConditionPredicateFailure),
 			)
 			if continueErr != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr), "", "")
+				exitOrRecordStepFailure(cmd, fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr))
+				return
 			}
 			if forgiven {
 				log.Warn("Custom command step failed but 'continue' matched; continuing", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i, "error", err)
@@ -1353,7 +1390,7 @@ func executeCustomCommand(
 			}
 		}
 	}
-	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
+	exitOrRecordStepFailure(cmd, commandErr)
 }
 
 // stepFreshnessName returns name, or a positional fallback ("step-%d") when the step has no

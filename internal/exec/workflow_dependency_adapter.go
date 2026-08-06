@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -84,8 +85,22 @@ func CommandLookup(atmosConfig *schema.AtmosConfiguration) taskgraph.Lookup {
 	}
 }
 
+// resolveAtmosBinary returns the absolute path to the currently-running atmos binary, mirroring
+// pkg/runner/step/atmos.go's identical os.Executable() pattern for `type: atmos` workflow steps.
+// Using the running binary's own path -- rather than the bare command name "atmos" -- ensures the
+// same binary handles a dependency's subprocess dispatch even when a different atmos version
+// (e.g. a stable release) also happens to be first on PATH; a bare name would be resolved via a
+// PATH lookup at exec time, silently running whatever version that finds instead.
+func resolveAtmosBinary() (string, error) {
+	atmosBin, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine atmos executable path: %w", err)
+	}
+	return atmosBin, nil
+}
+
 // commandRunnerViaSubprocess executes a taskgraph.Ref{Kind: KindCommand} dependency declared
-// on a WORKFLOW by shelling out to `atmos <name> [flags] [args]`, exactly like an existing
+// on a WORKFLOW by shelling out to `<atmos> <name> [flags] [args]`, exactly like an existing
 // `type: atmos` workflow step already does (ExecuteShellCommand). This is deliberate, not a
 // missed optimization: internal/exec cannot invoke a registered *cobra.Command in-process
 // without importing the cmd package, which already imports internal/exec -- doing so directly
@@ -93,11 +108,15 @@ func CommandLookup(atmosConfig *schema.AtmosConfiguration) taskgraph.Lookup {
 // runs in-process instead; only the workflow-depends-on-command edge pays the subprocess cost.
 func commandRunnerViaSubprocess(atmosConfig *schema.AtmosConfiguration) taskgraph.Runner {
 	return func(ctx context.Context, ref taskgraph.Ref) error {
+		atmosBin, err := resolveAtmosBinary()
+		if err != nil {
+			return err
+		}
 		args := []string{ref.Name}
 		for name, value := range ref.Flags {
 			args = append(args, fmt.Sprintf("--%s=%s", name, value))
 		}
 		args = append(args, ref.Args...)
-		return ExecuteShellCommand(*atmosConfig, "atmos", args, ".", nil, false, "")
+		return ExecuteShellCommand(*atmosConfig, atmosBin, args, ".", nil, false, "")
 	}
 }

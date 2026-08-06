@@ -118,3 +118,22 @@ workflows:
 	assert.FileExists(t, buildLog, "cross-file dependency 'build' (resolved via file: build.yaml) must run")
 	assert.FileExists(t, deployLog, "deploy's own step must still run after its cross-file dependency completes")
 }
+
+// TestResolveAtmosBinary_UsesOwnExecutablePath verifies commandRunnerViaSubprocess resolves the
+// currently-running binary's own absolute path (via os.Executable(), mirroring the established
+// pkg/runner/step/atmos.go pattern for `type: atmos` steps) rather than the bare string "atmos",
+// which exec.Command would resolve via a PATH lookup -- silently running whatever atmos version
+// happens to be first on PATH instead of the actively-running one. A bare-name regression here is
+// exactly what let a workflow's dependencies.commands subprocess dispatch run a stale/different
+// atmos version in a dev environment where a released version also lives on PATH.
+func TestResolveAtmosBinary_UsesOwnExecutablePath(t *testing.T) {
+	resolved, err := resolveAtmosBinary()
+	require.NoError(t, err)
+
+	wantExecutable, err := os.Executable()
+	require.NoError(t, err)
+
+	assert.Equal(t, wantExecutable, resolved, "must resolve the currently-running binary's own path")
+	assert.NotEqual(t, "atmos", resolved, "must never be the bare command name (PATH-resolved at exec time)")
+	assert.True(t, filepath.IsAbs(resolved), "resolved binary path must be absolute")
+}

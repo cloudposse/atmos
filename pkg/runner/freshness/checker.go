@@ -157,6 +157,28 @@ func EffectiveWhen(when schema.Condition, declared StepDeclarations) schema.Cond
 	}
 }
 
+// freshnessFactIdentifiers lists every CEL identifier a freshness Checker can populate (see
+// pkg/condition's Context.ChecksumChanged/TimestampChanged/PreconditionSuccess/Sources/Artifacts
+// fields and pkg/condition/cel.go's matching declarations).
+var freshnessFactIdentifiers = []string{"checksum", "timestamp", "precondition", "sources", "artifacts"}
+
+// MentionsAnyFreshnessFact reports whether when references any freshness-derived CEL identifier.
+// Callers that need a cheap "might this step run" answer without a freshness.Checker on hand yet
+// (facts would all read as their Go zero value, i.e. always "unchanged" -- wrong even for a
+// step's very first-ever run) should treat a true result as "assume runnable" and defer the real
+// decision to wherever Compute's actual facts get evaluated, rather than evaluating when here
+// against an empty Context.
+func MentionsAnyFreshnessFact(when schema.Condition) bool {
+	defer perf.Track(nil, "freshness.MentionsAnyFreshnessFact")()
+
+	for _, ident := range freshnessFactIdentifiers {
+		if when.MentionsCELIdentifier(ident) {
+			return true
+		}
+	}
+	return false
+}
+
 // freshnessNeeds records which facts a step's effective `when:` actually references, so Compute
 // only does the expensive work (hashing, statting, building per-file records) for what's needed.
 type freshnessNeeds struct {
