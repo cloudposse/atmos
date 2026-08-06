@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -295,6 +296,8 @@ func (s *SecretsManagerStore) Get(stack string, component string, key string) (a
 
 // GetRaw retrieves the original Secrets Manager string without JSON decoding.
 func (s *SecretsManagerStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.SecretsManagerStore.GetRaw")()
+
 	if key == "" {
 		return "", store.ErrEmptyKey
 	}

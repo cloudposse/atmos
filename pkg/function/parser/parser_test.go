@@ -194,33 +194,47 @@ func TestParseStoreGet(t *testing.T) {
 }
 
 func TestParseSecret(t *testing.T) {
-	actual, err := ParseSecret(`SERVICE_CONFIG | path ".credentials.token" | default "not set"`)
-	require.NoError(t, err)
-	assert.Equal(t, SecretArgs{Name: "SERVICE_CONFIG", Path: ".credentials.token", Default: stringPtr("not set")}, actual)
+	tests := []struct {
+		name     string
+		input    string
+		expected SecretArgs
+		wantErr  bool
+	}{
+		{
+			name:     "path with default",
+			input:    `SERVICE_CONFIG | path ".credentials.token" | default "not set"`,
+			expected: SecretArgs{Name: "SERVICE_CONFIG", Path: ".credentials.token", Default: stringPtr("not set")},
+		},
+		{
+			name:     "path expression with spaces",
+			input:    `SERVICE_CONFIG | path .credentials.token // "not set"`,
+			expected: SecretArgs{Name: "SERVICE_CONFIG", Path: `.credentials.token // "not set"`},
+		},
+		{
+			name:     "compact raw with empty default",
+			input:    `SERVICE_CREDENTIALS |raw | default ""`,
+			expected: SecretArgs{Name: "SERVICE_CREDENTIALS", Raw: true, Default: stringPtr("")},
+		},
+		{name: "empty input", input: "", wantErr: true},
+		{name: "empty name", input: "| raw", wantErr: true},
+		{name: "missing delimiter", input: "SERVICE_CONFIG raw", wantErr: true},
+		{name: "raw with value", input: "SERVICE_CONFIG | raw value", wantErr: true},
+		{name: "path without value", input: "SERVICE_CONFIG | path", wantErr: true},
+		{name: "unknown option", input: "SERVICE_CONFIG | unknown value", wantErr: true},
+		{name: "raw path conflict", input: `SERVICE_CONFIG | raw | path ".token"`, wantErr: true},
+		{name: "empty path conflicts with raw", input: `SERVICE_CONFIG | path "" | raw`, wantErr: true},
+	}
 
-	actual, err = ParseSecret(`SERVICE_CONFIG | path .credentials.token // "not set"`)
-	require.NoError(t, err)
-	assert.Equal(t, `.credentials.token // "not set"`, actual.Path)
-
-	actual, err = ParseSecret(`SERVICE_CREDENTIALS |raw | default ""`)
-	require.NoError(t, err)
-	assert.Equal(t, "SERVICE_CREDENTIALS", actual.Name)
-	assert.True(t, actual.Raw)
-	require.NotNil(t, actual.Default)
-	assert.Empty(t, *actual.Default)
-
-	for _, input := range []string{
-		"",
-		"| raw",
-		"SERVICE_CONFIG raw",
-		"SERVICE_CONFIG | raw value",
-		"SERVICE_CONFIG | path",
-		"SERVICE_CONFIG | unknown value",
-		`SERVICE_CONFIG | raw | path ".token"`,
-		`SERVICE_CONFIG | path "" | raw`,
-	} {
-		_, err = ParseSecret(input)
-		require.Error(t, err, input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual, err := ParseSecret(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, actual)
+		})
 	}
 }
 

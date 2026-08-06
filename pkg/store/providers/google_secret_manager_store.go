@@ -18,6 +18,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/gcp"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -477,6 +478,8 @@ func (s *GSMStore) getRaw(stack string, component string, key string) (string, e
 
 // GetRaw retrieves the original Secret Manager payload without JSON decoding.
 func (s *GSMStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.GSMStore.GetRaw")()
+
 	value, err := s.getRaw(stack, component, key)
 	if err != nil {
 		return "", err

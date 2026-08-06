@@ -107,6 +107,13 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 	svc := newFakeSecretService()
 	svc.scopes = map[string]secrets.Scope{"SHARED_TOKEN": secrets.ScopeGlobal}
 	installService(t, svc, nil)
+	originalLoadService := loadServiceFn
+	var loadedScope secretScope
+	loadServiceFn = func(scope secretScope) (secretService, error) {
+		loadedScope = scope
+		return originalLoadService(scope)
+	}
+	t.Cleanup(func() { loadServiceFn = originalLoadService })
 	overrideEnumerateScopes(t, []scopeEntry{
 		{
 			Stack:         "dev",
@@ -122,75 +129,96 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 	err := runSecretSubcommand(t, "set", "SHARED_TOKEN=v1", "--stack", "dev", "--type", "helm")
 	require.NoError(t, err)
 	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "helm", loadedScope.ComponentType)
 }
 
 func TestFindGlobalSetContext(t *testing.T) {
-	t.Run("enumeration error", func(t *testing.T) {
-		sentinel := errors.New("stack enumeration failed")
-		overrideEnumerateScopes(t, nil, sentinel)
-
-		_, _, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
-		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
-	})
-
-	t.Run("no matching declaration", func(t *testing.T) {
-		overrideEnumerateScopes(t, []scopeEntry{
-			{
-				Stack:         "prod",
-				Component:     "other-stack-service",
-				ComponentType: "helm",
-				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+	sharedSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
+	tests := []struct {
+		name              string
+		entries           []scopeEntry
+		enumerationErr    error
+		scope             secretScope
+		expectedComponent string
+		expectedType      string
+		expectedErr       error
+	}{
+		{
+			name:           "enumeration error",
+			enumerationErr: errors.New("stack enumeration failed"),
+			scope:          secretScope{Stack: "dev"},
+			expectedErr:    errUtils.ErrRequiredFlagNotProvided,
+		},
+		{
+			name: "no matching declaration",
+			entries: []scopeEntry{
+				{
+					Stack:         "prod",
+					Component:     "other-stack-service",
+					ComponentType: "helm",
+					Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+				},
+				{
+					Stack:         "dev",
+					Component:     "other-type-service",
+					ComponentType: "terraform",
+					Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+				},
+				{
+					Stack:         "dev",
+					Component:     "example-service",
+					ComponentType: "helm",
+					Section:       secretDeclarationSection("OTHER_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+				},
 			},
-			{
-				Stack:         "dev",
-				Component:     "other-type-service",
-				ComponentType: "terraform",
-				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+			scope:       secretScope{Stack: "dev", ComponentType: "helm"},
+			expectedErr: errUtils.ErrRequiredFlagNotProvided,
+		},
+		{
+			name: "inconsistent declarations",
+			entries: []scopeEntry{
+				{
+					Stack:         "dev",
+					Component:     "example-service-a",
+					ComponentType: "helm",
+					Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-a", "scope": "global"}),
+				},
+				{
+					Stack:         "dev",
+					Component:     "example-service-b",
+					ComponentType: "helm",
+					Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-b", "scope": "global"}),
+				},
 			},
-			{
-				Stack:         "dev",
-				Component:     "example-service",
-				ComponentType: "helm",
-				Section:       secretDeclarationSection("OTHER_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+			scope:       secretScope{Stack: "dev"},
+			expectedErr: errUtils.ErrRequiredFlagNotProvided,
+		},
+		{
+			name: "identical declarations select first component",
+			entries: []scopeEntry{
+				{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: sharedSection},
+				{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: sharedSection},
 			},
-		}, nil)
+			scope:             secretScope{Stack: "dev"},
+			expectedComponent: "example-service-a",
+			expectedType:      "helm",
+		},
+	}
 
-		_, _, err := findGlobalSetContext(secretScope{Stack: "dev", ComponentType: "helm"}, "SHARED_TOKEN")
-		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			overrideEnumerateScopes(t, tt.entries, tt.enumerationErr)
 
-	t.Run("inconsistent declarations", func(t *testing.T) {
-		overrideEnumerateScopes(t, []scopeEntry{
-			{
-				Stack:         "dev",
-				Component:     "example-service-a",
-				ComponentType: "helm",
-				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-a", "scope": "global"}),
-			},
-			{
-				Stack:         "dev",
-				Component:     "example-service-b",
-				ComponentType: "helm",
-				Section:       secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets-b", "scope": "global"}),
-			},
-		}, nil)
-
-		_, _, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
-		require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
-	})
-
-	t.Run("identical declarations select first component", func(t *testing.T) {
-		section := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
-		overrideEnumerateScopes(t, []scopeEntry{
-			{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: section},
-			{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: section},
-		}, nil)
-
-		component, componentType, err := findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
-		require.NoError(t, err)
-		assert.Equal(t, "example-service-a", component)
-		assert.Equal(t, "helm", componentType)
-	})
+			component, componentType, err := findGlobalSetContext(tt.scope, "SHARED_TOKEN")
+			if tt.expectedErr != nil {
+				require.ErrorIs(t, err, tt.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedComponent, component)
+			assert.Equal(t, tt.expectedType, componentType)
+		})
+	}
 }
 
 func TestRunSecretSet_NonGlobalScopeStillRequiresComponent(t *testing.T) {

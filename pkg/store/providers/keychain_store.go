@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/keyring"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -149,6 +150,8 @@ func (s *KeychainStore) Get(stack string, component string, key string) (any, er
 // GetRaw returns the original textual value represented by the keychain entry. Values written
 // as strings are unquoted; structured values remain in their JSON representation.
 func (s *KeychainStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.KeychainStore.GetRaw")()
+
 	composed, err := s.composeKey(stack, component, key)
 	if err != nil {
 		return "", err

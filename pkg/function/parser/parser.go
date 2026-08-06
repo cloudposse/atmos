@@ -337,7 +337,7 @@ func ParseStoreGet(input string) (StoreGetArgs, error) {
 	return StoreGetArgs{Store: words[0], Key: words[1], Default: options.defaultValue, Query: options.query}, nil
 }
 
-// ParseSecret parses `name [| path expression] [| raw] [| default value]`.
+// ParseSecret parses `name [| path expression | raw] [| default value]`.
 func ParseSecret(input string) (SecretArgs, error) {
 	hasPath := false
 	tokens, err := tokenize(input)
