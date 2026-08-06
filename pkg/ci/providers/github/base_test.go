@@ -3,6 +3,7 @@ package github
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -691,4 +692,205 @@ func writeEventPayload(t *testing.T, payload map[string]any) string {
 	require.NoError(t, err)
 
 	return path
+}
+
+// runGit runs a git command in dir, failing the test on error.
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(
+		os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(output))
+}
+
+// runGitOutput runs a git command in dir and returns trimmed stdout.
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(
+		os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v failed", args)
+	return strings.TrimSpace(string(out))
+}
+
+// TestResolveBase_PullRequest_Merged_UsesMergeCommitParent reproduces the
+// production incident at the unit-test level: the workflow's checkout was
+// not pinned to pull_request.head.sha, so HEAD ends up on the target
+// branch's post-merge tip (the merge commit itself) instead of the PR's
+// original branch. Without the fix, this degenerates tier 1's
+// merge-base(HEAD, origin/<target>) into a self-referential, meaningless
+// base. The fix must instead resolve merge_commit_sha^1 -- the merge
+// commit's first parent, which is always the target branch's pre-merge
+// tip (verified: `git merge --no-ff` always parents a merge commit as
+// [previous-tip-of-current-branch, merged-branch-tip], never the fork
+// point) -- giving downstream merge-base-aware diffing a real commit on
+// the target branch's mainline to work from, instead of HEAD itself.
+func TestResolveBase_PullRequest_Merged_UsesMergeCommitParent(t *testing.T) {
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init", "-q", "-b", "main")
+	runGit(t, repoDir, "config", "user.name", "Test")
+	runGit(t, repoDir, "config", "user.email", "test@test.com")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "a.txt"), []byte("a"), 0o644))
+	runGit(t, repoDir, "add", "a.txt")
+	runGit(t, repoDir, "commit", "-q", "-m", "A: initial commit")
+
+	runGit(t, repoDir, "checkout", "-q", "-b", "pr-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "f1.txt"), []byte("f1"), 0o644))
+	runGit(t, repoDir, "add", "f1.txt")
+	runGit(t, repoDir, "commit", "-q", "-m", "F1: the PR's own change")
+	prHeadSHA := runGitOutput(t, repoDir, "rev-parse", "HEAD")
+
+	runGit(t, repoDir, "checkout", "-q", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "b.txt"), []byte("b"), 0o644))
+	runGit(t, repoDir, "add", "b.txt")
+	runGit(t, repoDir, "commit", "-q", "-m", "B: unrelated commit landed on main after the PR branch was cut")
+	mainTipBeforeMergeSHA := runGitOutput(t, repoDir, "rev-parse", "HEAD")
+
+	runGit(t, repoDir, "merge", "-q", "--no-ff", "pr-branch", "-m", "Merge pull request from pr-branch")
+	mergeCommitSHA := runGitOutput(t, repoDir, "rev-parse", "HEAD")
+
+	// HEAD is now the merge commit on main -- reproduces "checkout already
+	// at post-merge HEAD."
+	t.Chdir(repoDir)
+
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged": true,
+			"head": map[string]any{
+				"sha": prHeadSHA,
+			},
+			"base": map[string]any{
+				"ref": "main",
+			},
+			"merge_commit_sha": mergeCommitSHA,
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, mainTipBeforeMergeSHA, res.SHA, "must resolve to the merge commit's first parent")
+	assert.NotEqual(t, mergeCommitSHA, res.SHA, "must not be the degenerate merge commit itself (== checked-out HEAD)")
+	assert.Equal(t, sourceMergeCommitParent, res.Source)
+	assert.Equal(t, prHeadSHA, res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+	assert.Equal(t, "pull_request", res.EventType)
+}
+
+// TestResolveBase_PullRequest_Merged_NoMergeCommitSHA_FallsThroughUnchanged
+// is a regression guard: when the payload has no merge_commit_sha (e.g. an
+// older GitHub Actions runner, or a hand-crafted payload), tier 0 must be a
+// no-op and resolution must fall through to the pre-existing chain exactly
+// as it did before this fix -- mirrors TestResolveBase_PullRequest_Closed.
+func TestResolveBase_PullRequest_Merged_NoMergeCommitSHA_FallsThroughUnchanged(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged": true,
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "pull_request", res.EventType)
+	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.NotContains(t, res.Source, "merge_commit_sha", "tier 0 must not fire when the payload has no merge_commit_sha")
+	// Same nondeterministic-but-bounded assertion as TestResolveBase_PullRequest_Closed:
+	// in the test environment, merge-base and HEAD~1 may or may not work.
+	if res.SHA != "" {
+		validSources := []string{
+			"merge-base",
+			"HEAD~1",
+			"event.pull_request.base.sha",
+		}
+		matched := false
+		for _, want := range validSources {
+			if strings.Contains(res.Source, want) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched,
+			"Source %q must contain one of %v", res.Source, validSources)
+	} else {
+		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	}
+}
+
+// TestResolveBase_PullRequest_OpenedOrSynchronize_Unaffected is a direct
+// regression guard: tier 0 must only ever run for action == "closed". Even
+// if a payload somehow carries "merged": true and a merge_commit_sha on a
+// "synchronize" action (which shouldn't happen in real GitHub payloads, but
+// nothing stops a malformed/replayed event from having it), it must be
+// ignored. Uses a nonexistent target branch so tier 1 (merge-base) is
+// guaranteed to fail and tier 3 (payload base.sha) fires deterministically.
+func TestResolveBase_PullRequest_OpenedOrSynchronize_Unaffected(t *testing.T) {
+	const target = "nonexistent-target-for-merged-pr-tier0-guard"
+
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", target)
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"merged": true,
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": target,
+				"sha": "stalebasesha789012345678901234567890abcd",
+			},
+			"merge_commit_sha": "shouldneverbeusedsha123456789012345678ab",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "stalebasesha789012345678901234567890abcd", res.SHA)
+	assert.Equal(t, "event.pull_request.base.sha", res.Source, "tier 0 must never fire for a non-closed action")
+	assert.NotContains(t, res.Source, "merge_commit_sha")
 }

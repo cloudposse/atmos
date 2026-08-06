@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-git/go-git/v5/plumbing"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -34,10 +37,15 @@ const (
 	sourceMergeGroupBaseSHA = "event.merge_group.base_sha"
 	// SourceMergeGroupBaseRef is the source label when falling back to event.merge_group.base_ref.
 	sourceMergeGroupBaseRef = "event.merge_group.base_ref"
+	// SourceMergeCommitParent is the source label when resolving from merge_commit_sha^1 for a merged PR.
+	sourceMergeCommitParent = "merge_commit_sha^1 (merged PR)"
 	// EventMergeGroup is the GitHub Actions merge_group event name.
 	eventMergeGroup = "merge_group"
 	// RefsHeadsPrefix is the prefix on fully-qualified branch refs in event payloads.
 	refsHeadsPrefix = "refs/heads/"
+	// PayloadKeySHA is the JSON key for a commit SHA field in event payloads,
+	// and doubles as the structured-log key used when logging a SHA value.
+	payloadKeySHA = "sha"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -80,9 +88,17 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 // resolvePRBase resolves the base commit for pull request events.
 //
 // Strategy chain (first success wins):
-//  1. merge-base(HEAD, origin/<target>) — gold standard. Self-heals from
-//     shallow CI checkouts via MergeBaseWithAutoFetch (fetches the target
-//     branch and deepens history when needed).
+//  0. merge_commit_sha^1 — for closed/merged PRs only. The gold standard for
+//     merged PRs specifically: derived from the merge commit GitHub itself
+//     created, so it's correct regardless of what the workflow checked out.
+//     This matters because an unpinned checkout (no `ref: head.sha`) can
+//     leave HEAD on or past the target branch's post-merge tip, which makes
+//     tier 1 below degenerate (see its self-referential guard).
+//  1. merge-base(HEAD, origin/<target>) — gold standard for open/synced PRs.
+//     Self-heals from shallow CI checkouts via MergeBaseWithAutoFetch
+//     (fetches the target branch and deepens history when needed). For
+//     closed PRs, a result equal to the checked-out HEAD is treated as a
+//     failed/degenerate resolution rather than accepted.
 //  2. HEAD~1 — only for closed/merged PRs when merge-base is unavailable.
 //     Correct when the merge commit is checked out with merge/squash
 //     strategy.
@@ -105,17 +121,28 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	targetBranch := extractTargetBranch(payload)
 	action, _ := payload["action"].(string)
 
+	// 0) Merged PRs: merge_commit_sha^1. See the tier-0 note in the doc
+	// comment above — this is only ever a *preferred* first attempt; any
+	// failure (field missing, fetch failure, no parent) falls through to
+	// the unchanged tier 1-4 chain below.
+	if res := resolveMergedPRTier(payload, action, headSHA, targetBranch, eventName); res != nil {
+		return res, nil
+	}
+
 	// 1) merge-base — the gold standard. Works regardless of what's
 	// checked out, merge strategy, or number of commits on the PR.
 	if targetBranch != "" {
 		if sha, mbErr := git.MergeBaseWithAutoFetch(".", targetBranch); mbErr == nil {
-			return &provider.BaseResolution{
-				SHA:          sha,
-				HeadSHA:      headSHA,
-				TargetBranch: targetBranch,
-				Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
-				EventType:    eventName,
-			}, nil
+			if action != "closed" || !mergeBaseIsSelfReferential(sha) {
+				return &provider.BaseResolution{
+					SHA:          sha,
+					HeadSHA:      headSHA,
+					TargetBranch: targetBranch,
+					Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
+					EventType:    eventName,
+				}, nil
+			}
+			log.Debug("merge-base equals current HEAD for a closed PR, treating as degenerate", "target", targetBranch, payloadKeySHA, sha)
 		} else {
 			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
 		}
@@ -201,7 +228,62 @@ func extractPRHeadSHA(payload map[string]any) string {
 		return ""
 	}
 
-	sha, _ := head["sha"].(string)
+	sha, _ := head[payloadKeySHA].(string)
+	return sha
+}
+
+// resolveMergedPRTier attempts tier 0 of resolvePRBase's strategy chain:
+// resolving merge_commit_sha^1 for a closed, merged PR. Returns nil if the
+// tier doesn't apply (not a closed/merged PR, or no merge_commit_sha in the
+// payload) or fails to resolve, so the caller falls through to the unchanged
+// tier 1-4 chain.
+func resolveMergedPRTier(payload map[string]any, action, headSHA, targetBranch, eventName string) *provider.BaseResolution {
+	if action != "closed" || !isPRMerged(payload) {
+		return nil
+	}
+
+	mergeCommitSHA := extractMergeCommitSHA(payload)
+	if mergeCommitSHA == "" {
+		return nil
+	}
+
+	sha, err := resolveMergeCommitParent(mergeCommitSHA)
+	if err != nil {
+		log.Debug("merge_commit_sha^1 failed, trying fallbacks", "merge_commit_sha", mergeCommitSHA, "error", err)
+		return nil
+	}
+
+	return &provider.BaseResolution{
+		SHA:          sha,
+		HeadSHA:      headSHA,
+		TargetBranch: targetBranch,
+		Source:       sourceMergeCommitParent,
+		EventType:    eventName,
+	}
+}
+
+// isPRMerged reports whether the pull request event payload indicates the PR
+// was actually merged (event.pull_request.merged == true), as opposed to
+// closed without merging.
+func isPRMerged(payload map[string]any) bool {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return false
+	}
+
+	merged, _ := pr["merged"].(bool)
+	return merged
+}
+
+// extractMergeCommitSHA extracts the merge commit SHA GitHub created when the
+// PR was merged, from event.pull_request.merge_commit_sha.
+func extractMergeCommitSHA(payload map[string]any) string {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return ""
+	}
+
+	sha, _ := pr["merge_commit_sha"].(string)
 	return sha
 }
 
@@ -220,7 +302,7 @@ func extractBaseSHA(payload map[string]any) string {
 		return ""
 	}
 
-	sha, _ := base["sha"].(string)
+	sha, _ := base[payloadKeySHA].(string)
 	return sha
 }
 
@@ -434,4 +516,101 @@ func resolveParentCommit() (string, error) {
 	}
 
 	return parent.Hash.String(), nil
+}
+
+// currentHeadSHA resolves the SHA of the currently checked-out HEAD commit.
+func currentHeadSHA() (string, error) {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("opening local repo: %w", err)
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("getting HEAD: %w", err)
+	}
+
+	return head.Hash().String(), nil
+}
+
+// mergeBaseIsSelfReferential reports whether sha equals the currently
+// checked-out HEAD commit. For closed/merged PRs, this indicates the
+// workflow's checkout was not pinned to pull_request.head.sha: HEAD already
+// sits on (or past) the target branch's post-merge tip, so
+// merge-base(HEAD, origin/<target>) degenerates to HEAD itself instead of
+// the PR's true fork point. On any error resolving HEAD, this returns false
+// so the caller falls back to accepting the merge-base result unchanged.
+func mergeBaseIsSelfReferential(sha string) bool {
+	head, err := currentHeadSHA()
+	if err != nil {
+		return false
+	}
+
+	return sha == head
+}
+
+// resolveMergeCommitParent resolves the first parent of a merge commit SHA,
+// fetching the commit from origin first if it is not present locally. Mirrors
+// the try-then-fetch-then-retry-once shape of git.MergeBaseWithAutoFetch, but
+// targets a single commit SHA rather than a branch ref: a merge commit's SHA
+// is known from the event payload but is not necessarily reachable from any
+// local ref when the workflow's checkout wasn't pinned to the PR head.
+func resolveMergeCommitParent(mergeCommitSHA string) (string, error) {
+	defer perf.Track(nil, "github.resolveMergeCommitParent")()
+
+	sha, err := commitParentSHA(mergeCommitSHA)
+	if err == nil {
+		return sha, nil
+	}
+
+	if fetchErr := fetchCommitSHA(mergeCommitSHA); fetchErr != nil {
+		log.Debug("fetching merge commit failed", "merge_commit_sha", mergeCommitSHA, "error", fetchErr)
+		return "", err
+	}
+
+	return commitParentSHA(mergeCommitSHA)
+}
+
+// commitParentSHA resolves the first parent of an arbitrary commit SHA using
+// the local repository. Same shape as resolveParentCommit, but for a commit
+// specified by SHA rather than HEAD.
+func commitParentSHA(sha string) (string, error) {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("opening local repo: %w", err)
+	}
+
+	commit, err := repo.CommitObject(plumbing.NewHash(sha))
+	if err != nil {
+		return "", fmt.Errorf("getting commit %s: %w", sha, err)
+	}
+
+	if commit.NumParents() == 0 {
+		return "", ErrNoParentCommit
+	}
+
+	parent, err := commit.Parent(0)
+	if err != nil {
+		return "", fmt.Errorf("getting parent commit: %w", err)
+	}
+
+	return parent.Hash.String(), nil
+}
+
+// fetchCommitSHA fetches a single commit SHA from the "origin" remote,
+// making it available locally even if it isn't reachable from any local
+// remote-tracking ref.
+func fetchCommitSHA(sha string) error {
+	defer perf.Track(nil, "github.fetchCommitSHA")()
+
+	cmd := exec.Command("git", "fetch", "origin", sha, "--no-tags", "--depth=1")
+	cmd.Dir = "."
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fetching commit %s from origin: %w\n%s", sha, err, string(output))
+	}
+
+	log.Debug("Fetched commit", payloadKeySHA, sha)
+
+	return nil
 }
