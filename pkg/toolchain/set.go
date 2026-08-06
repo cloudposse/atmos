@@ -340,14 +340,22 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 	}
 
-	// Add the tool with the selected version.
+	// Set the tool's default version. AddToolToVersionsAsDefault reorders the
+	// version list so version becomes the resolved default, matching what
+	// GetDefaultVersion/LookupToolVersion and this command's own help text expect.
+	//
+	// Write under toolName (the string the user passed), not spec.key (the
+	// resolved owner/repo form) -- matching AddToolVersion's (add.go) pattern.
+	// .tool-versions is keyed by whatever string is already on disk (often a
+	// short alias like "jq"); writing the canonical form here would create a
+	// second, disconnected entry instead of updating the existing one.
 	filePath := GetToolVersionsFilePath()
-	err = AddToolToVersions(filePath, spec.key, version)
+	err = AddToolToVersionsAsDefault(filePath, toolName, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	ui.Successf("Set %s@%s in %s", spec.key, version, filePath)
+	ui.Successf("Set %s@%s in %s", toolName, version, filePath)
 	return nil
 }
 
