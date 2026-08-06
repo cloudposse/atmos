@@ -254,7 +254,7 @@ The I/O package provides the stream isolation primitives that per-node output wi
 - Merges environment: system + `atmos.yaml` global env + command-specific env
 - Preserves exit codes: `exec.ExitError` → `errUtils.ExitCodeError`
 - Propagates TTY: injects `ATMOS_FORCE_TTY=true` when parent has TTY
-- `terraform_plan_diff.go` swaps global `os.Stdout` to capture output — race condition under concurrency
+- `terraform_plan_diff.go` no longer swaps global `os.Stdout` to capture output — it now captures via a local `bytes.Buffer` (see Phase 1, shipped), eliminating the concurrency race this section originally flagged
 
 ### Routing Gap (resolved in Phase 3)
 - `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, `--max-concurrency` controls parallelism)
@@ -902,7 +902,7 @@ Notable details from PR #2159 that should be preserved:
 - **No new exec files**: Adapters and orchestrator live in `pkg/scheduler/` and `pkg/scheduler/adapters/`, NOT in `internal/exec/`. The long-term goal is to eliminate `internal/exec/`.
 - **`pkg/process/` vs `pkg/runner/`**: `pkg/process/` is subprocess-level (spawn, streams, signals, exit codes). `pkg/runner/` is task-level (shell tasks, atmos sub-commands). Different abstraction levels, complementary.
 - **Default concurrency**: `1` (sequential, backward-compatible), configurable via `atmos.yaml`, ENV, or CLI flag
-- **Cross-type dependency syntax**: Solved by PR #2193 — new `dependencies.components` format with `kind` field for cross-type dependencies (terraform/helmfile/packer/plugin). The scheduler consumes this format via the graph builder.
+- **Cross-type dependency syntax**: Partially solved. PR #2193 added the `dependencies.components` `kind` field (terraform/helmfile/packer/plugin) at the schema level, and it's normalized/validated today. The Terraform scheduler adapter does not yet consume it, though: `addTerraformDependencies()` (`pkg/scheduler/adapters/terraform.go`) explicitly skips any dependency whose `kind` isn't `terraform` (`if dep.Kind != "" && dep.Kind != cfg.TerraformComponentType { continue }`), so a declared `kind: packer` edge is parsed but never added to the DAG the scheduler executes. Real cross-type scheduling requires the Phase 3 items still open below (`PackerAdapter`, `AnsibleAdapter`, graph building for non-Terraform nodes).
 
 ---
 

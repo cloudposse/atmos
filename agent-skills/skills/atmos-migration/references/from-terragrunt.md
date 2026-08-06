@@ -176,7 +176,7 @@ undeclared `mocks` entry is a hard error rather than a silent fallback. A workin
 provider-free reference lives at `examples/terraform-component-mocks` in the Atmos
 repository.
 
-Reserve the YQ-default pattern (`!terraform.state vpc .vpc_id // "vpc-mock1234"`)
+Reserve the YQ-default pattern (`!terraform.state vpc '.vpc_id // "vpc-mock1234"'`)
 for the narrower case of a placeholder that should also apply during a normal,
 non-mock run against a dependency that genuinely has not deployed yet — for example,
 while bringing up a dependency graph for the first time. `mocks` and `--use-mocks` are
@@ -293,7 +293,7 @@ components:
       vars:
         name: my-service
         runtime: nodejs22.x
-        iam_role_arn: !terraform.state iam-role .arn // "pending"
+        iam_role_arn: !terraform.state iam-role '.arn // "pending"'
     iam-role:
       vars:
         name: my-service-role
@@ -323,7 +323,9 @@ side.
 2. **Stand up `atmos.yaml` and one stack file** for a single unit, converting `include`
     and `inputs` per the concept mapping above.
 3. **Wire `dependency` blocks** to `dependencies.components` and `!terraform.state`,
-    translating `mock_outputs` to the `// "default"` pattern.
+    mapping `mock_outputs` to the producer component's `mocks:` field and using
+    `--use-mocks` for read-only planning/description (reserve the YQ `// "default"`
+    pattern for real dependencies that simply have not deployed yet).
 4. **Convert `generate` blocks.** Backend and provider generation need no
     configuration at all; anything else becomes a `generate:` stack section.
 5. **Validate** with `atmos validate stacks`, then compare `atmos list affected`

@@ -854,8 +854,8 @@ See [YAML Functions](/functions/yaml) for the complete reference.
     **GitOps-native:** Atmos goes beyond simple "run all" with intelligent change detection:
 
     ```bash
-    # See what changed between commits (compares current branch to main; table output for humans)
-    atmos list affected
+    # See what changed between commits (table output for humans)
+    atmos list affected --ref main
 
     # Plan ONLY components affected by changes in current branch
     atmos terraform plan --affected
