@@ -31,13 +31,13 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 
 	// Change to the test directory.
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Set up the command with global flags.
 	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")
@@ -108,6 +108,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 
 	// Change to the test directory.
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Verify that multiple vendor files exist in the directory.
 	vendorFiles := []string{"vendor.yaml", "vendor-test.yaml"}
@@ -120,7 +121,6 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "aws", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")

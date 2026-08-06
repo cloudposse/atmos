@@ -41,6 +41,10 @@ type deviceCodeProvider struct {
 	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
 	cacheStorage   CacheStorage
 	realm          string // Credential isolation realm set by auth manager.
+	// authMethod is the AzureCredentials.AuthMethod value this provider mints
+	// (device_code, or interactive when embedded by interactiveProvider). It also
+	// selects the MSAL cache account_source label.
+	authMethod string
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
@@ -112,6 +116,7 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		clientID:       cfg.ClientID,
 		cloudEnv:       azureCloud.GetCloudEnvironment(cfg.CloudEnvironment),
 		cacheStorage:   &defaultCacheStorage{},
+		authMethod:     authTypes.AzureAuthMethodDeviceCode,
 	}, nil
 }
 
@@ -252,6 +257,7 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 		GraphExpiresAt:    tokens.graphExpiresOn,
 		KeyVaultToken:     tokens.keyVaultToken,
 		KeyVaultExpiresAt: tokens.keyVaultExpiresOn,
+		HomeAccountID:     tokens.homeAccountID,
 	}); err != nil {
 		log.Debug("Failed to update Azure CLI token cache", "error", err)
 	}
@@ -267,6 +273,10 @@ type tokenAcquisitionResult struct {
 	expiresOn         time.Time
 	graphExpiresOn    time.Time
 	keyVaultExpiresOn time.Time
+	// homeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
+	// account. For guest (B2B) users the home tenant differs from p.tenantID, and
+	// the Azure CLI cache write-back must use this value to avoid duplicate accounts.
+	homeAccountID string
 }
 
 // trySilentTokenAcquisition attempts to acquire tokens silently from cached account.
@@ -291,7 +301,8 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 		azureCloud.LogFieldTenantID, p.tenantID)
 
 	// Try to get management token silently.
-	mgmtResult, err := client.AcquireTokenSilent(ctx,
+	mgmtResult, err := client.AcquireTokenSilent(
+		ctx,
 		[]string{p.cloudEnv.ManagementScope},
 		public.WithSilentAccount(account),
 	)
@@ -302,10 +313,12 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 
 	result.accessToken = mgmtResult.AccessToken
 	result.expiresOn = mgmtResult.ExpiresOn
+	result.homeAccountID = account.HomeAccountID
 	log.Debug("Successfully acquired management token silently", "expiresOn", result.expiresOn)
 
 	// Try to get Graph token silently.
-	graphResult, err := client.AcquireTokenSilent(ctx,
+	graphResult, err := client.AcquireTokenSilent(
+		ctx,
 		[]string{p.cloudEnv.GraphAPIScope},
 		public.WithSilentAccount(account),
 	)
@@ -318,7 +331,8 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 	}
 
 	// Try to get KeyVault token silently.
-	kvResult, err := client.AcquireTokenSilent(ctx,
+	kvResult, err := client.AcquireTokenSilent(
+		ctx,
 		[]string{p.cloudEnv.KeyVaultScope},
 		public.WithSilentAccount(account),
 	)
@@ -342,7 +356,8 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 		return result, fmt.Errorf("%w: Azure device code flow requires an interactive terminal (no TTY detected). Use managed identity or service principal authentication in headless environments", errUtils.ErrAuthenticationFailed)
 	}
 
-	log.Debug("Starting Azure device code authentication",
+	log.Debug(
+		"Starting Azure device code authentication",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"clientID", p.clientID,
@@ -366,6 +381,8 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 		return result, nil
 	}
 
+	p.captureHomeAccountID(accounts, &result)
+
 	// Acquire additional API tokens for azuread and azurerm providers.
 	p.acquireAdditionalTokens(ctx, client, accounts, &result)
 
@@ -385,7 +402,8 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 
 	// Request Graph API token for azuread provider (silently, using refresh token).
 	log.Debug("Requesting Graph API token for azuread provider")
-	graphResult, err := client.AcquireTokenSilent(ctx,
+	graphResult, err := client.AcquireTokenSilent(
+		ctx,
 		[]string{p.cloudEnv.GraphAPIScope},
 		public.WithSilentAccount(account),
 	)
@@ -401,7 +419,8 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 
 	// Request KeyVault token for azurerm provider KeyVault operations (silently).
 	log.Debug("Requesting KeyVault token for azurerm provider")
-	kvResult, err := client.AcquireTokenSilent(ctx,
+	kvResult, err := client.AcquireTokenSilent(
+		ctx,
 		[]string{p.cloudEnv.KeyVaultScope},
 		public.WithSilentAccount(account),
 	)
@@ -414,6 +433,33 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 			"expiresOn", result.keyVaultExpiresOn,
 			"tokenLength", len(result.keyVaultToken))
 	}
+}
+
+// captureHomeAccountID records the MSAL home account ID for correct Azure CLI
+// cache interop (guest users have a home tenant different from p.tenantID).
+func (p *deviceCodeProvider) captureHomeAccountID(accounts []public.Account, result *tokenAcquisitionResult) {
+	if account, err := p.findAccountForTenant(accounts); err == nil {
+		result.homeAccountID = account.HomeAccountID
+	}
+}
+
+// credentialsAuthMethod returns the AuthMethod this provider mints, defaulting
+// to device_code for instances constructed without one (e.g. in tests).
+func (p *deviceCodeProvider) credentialsAuthMethod() string {
+	if p.authMethod == "" {
+		return authTypes.AzureAuthMethodDeviceCode
+	}
+	return p.authMethod
+}
+
+// accountSource returns the MSAL cache account_source label matching this
+// provider's flow, mirroring what az itself records: "authorization_code" for
+// the interactive browser flow, "device_code" otherwise.
+func (p *deviceCodeProvider) accountSource() string {
+	if p.authMethod == authTypes.AzureAuthMethodInteractive {
+		return "authorization_code"
+	}
+	return "device_code"
 }
 
 // createCredentials creates Azure credentials from acquired tokens.
@@ -429,6 +475,8 @@ func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (
 		SubscriptionID:   p.subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
+		AuthMethod:       p.credentialsAuthMethod(),
+		HomeAccountID:    tokens.homeAccountID,
 	}
 
 	// Add Graph API token if available.

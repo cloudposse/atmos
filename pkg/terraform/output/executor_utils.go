@@ -8,6 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -84,14 +85,51 @@ func checkOutputsCache(stackSlug, component, stack string) map[string]any {
 	return nil
 }
 
-// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode, returns a stop function.
+// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode.
 func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) func() {
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+	if strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelTrace)) ||
+		strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelDebug)) {
 		log.Debug(message)
+		return func() {}
+	}
+	if spinnersSuppressed() {
 		return func() {}
 	}
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	RunSpinner(p, spinnerDone, message)
 	return func() { StopSpinner(p, spinnerDone) }
+}
+
+// clearSpinnerLine clears transient lookup output unless concurrent execution suppressed it.
+func clearSpinnerLine() {
+	writeVisibleOutput(ui.ClearLine)
+}
+
+// writeVisibleOutput renders transient lookup UI unless concurrent execution suppressed it.
+func writeVisibleOutput(write func()) {
+	spinnerSuppression.Lock()
+	defer spinnerSuppression.Unlock()
+
+	if spinnerSuppression.count == 0 {
+		write()
+	}
+}
+
+func outputLookupSucceeded(message string) {
+	writeVisibleOutput(func() {
+		ui.ClearLine()
+		ui.Success(message)
+	})
+}
+
+func outputLookupFailed(message string) {
+	writeVisibleOutput(func() {
+		ui.ClearLine()
+		ui.Error(message)
+	})
+}
+
+func outputLookupVisible() bool {
+	return !spinnersSuppressed()
 }

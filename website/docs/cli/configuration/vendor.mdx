@@ -39,6 +39,13 @@ vendor:
     initial_delay: 2s
     max_delay: 30s
     backoff_strategy: exponential
+
+  # Path to the vendor lock file (optional)
+  lock_file: vendor.lock.yaml
+
+  # How `atmos vendor pull` reacts to vendor.lock.yaml drift (optional)
+  lock:
+    enforcement: warn
 ```
 </File>
 
@@ -115,7 +122,112 @@ vendor:
       <dd>Maximum total time for all retry attempts. **Default:** `5m`</dd>
     </dl>
   </dd>
+
+  <dt>`lock_file`</dt>
+  <dd>
+    The vendor lock file. It records a per-file SHA-256 receipt for every artifact vendored
+    through `vendor.yaml` or `component.yaml`. The <a href="/cli/commands/vendor/vendor-verify">`atmos vendor verify`</a> command checks
+    this file for drift; <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a> and `atmos vendor update --pull`
+    write to it.
+
+    **Default:** `vendor.lock.yaml`
+  </dd>
+
+  <dt>`lock.enforcement`</dt>
+  <dd>
+    How `atmos vendor pull` reacts when a package's on-disk state no longer matches its
+    `vendor.lock.yaml` receipt.
+
+    **Valid values:**
+    - `warn` — re-fetch the drifted package and print one warning per package naming why it drifted.
+    - `silent` — re-fetch the drifted package with no reporting.
+    - `strict` — refuse to run (before any fetch/copy/write) when a drifted package is found and
+      `--refresh-lock` was not explicitly passed, naming every drifted package and its reason.
+
+    **Default:** `warn`
+
+    Override per invocation with `--lock-enforcement <strict|warn|silent>` on `atmos vendor pull`
+    or `atmos vendor update --pull`.
+  </dd>
 </dl>
+
+## Component Updater Configuration
+
+The `vendor.update` and `vendor.ci` sections configure <a href="/cli/commands/vendor/vendor-update">`atmos vendor update --pull-request`</a> — see
+<a href="/changelog/component-updater-pull-requests">Native Pull Requests for Vendored Component Updates</a>
+for the full workflow and a worked example.
+
+<File title="atmos.yaml">
+```yaml
+vendor:
+  update:
+    execution:
+      mode: current # or "worktree"
+    batching:
+      mode: scope # the only supported value today
+    groups:
+      platform:
+        include: ["terraform/vpc", "terraform/eks/*"]
+        exclude: ["terraform/eks/legacy"]
+  ci:
+    pull_request:
+      provider: github
+      base_branch: main
+      branch_prefix: atmos/component-updater
+      title: "chore(components): update {{ .scope.name }}"
+      # body left unset here to use the default: the Atmos CI badge, a one-line explanation, and
+      # {{ .updates | markdownTable }} -- set your own template to replace it entirely.
+      labels: [component-update]
+      draft: false
+      reviewers: []
+      assignees: []
+    summary:
+      enabled: true
+```
+</File>
+
+<dl>
+  <dt>`update.execution.mode`</dt>
+  <dd>
+    The default, `current`, runs the whole cycle — discover, branch, commit, push — in the
+    invoking checkout. The `worktree` mode runs it in an isolated linked Git worktree instead.
+    The invoking checkout stays untouched, which helps when other steps in the same job need an
+    unmodified checkout.
+  </dd>
+  <dt>`update.batching.mode`</dt>
+  <dd>The only supported value is `scope`: one branch and one PR for the whole update run. Per-component batching (one PR per updated component) isn't implemented yet.</dd>
+  <dt>`update.groups.<name>`</dt>
+  <dd>
+    Selects components for `--group <name>`. Each group has `include` and optional `exclude` glob
+    lists against component paths; exclusions win.
+  </dd>
+  <dt>`ci.pull_request.provider`</dt>
+  <dd>Pull request provider. **Valid values:** `github`. **Default:** `github`.</dd>
+  <dt>`ci.pull_request.base_branch`</dt>
+  <dd>Base branch for the pull request. **Default:** the remote's advertised default branch.</dd>
+  <dt>`ci.pull_request.branch_prefix`</dt>
+  <dd>Prefix for the deterministic branch name. **Default:** `atmos/component-updater`.</dd>
+  <dt>`ci.pull_request.title` / `ci.pull_request.body`</dt>
+  <dd>
+    Go templates rendered with `.scope.name` and `.updates` (see `markdownTable` in the example
+    above). **Title default:** `"chore(components): update {{ .scope.name }}"`. **Body default:**
+    the Atmos CI badge, a one-line "Automated by `atmos vendor update --pull-request`" note, and
+    `{{ .updates | markdownTable }}` — not just the bare table on its own.
+  </dd>
+  <dt>`ci.pull_request.labels` / `.reviewers` / `.assignees`</dt>
+  <dd>Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.</dd>
+  <dt>`ci.pull_request.draft`</dt>
+  <dd>Create the pull request as a draft. **Default:** `false`.</dd>
+  <dt>`ci.summary.enabled`</dt>
+  <dd>Whether to write a GitHub Actions step summary. **Default:** `true`.</dd>
+</dl>
+
+:::note
+A default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` Actions workflows.
+Pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro)
+auth integration to get a token that does. See
+<a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a>'s token precedence notes for details.
+:::
 
 ## Vendor Manifest Structure
 
@@ -175,6 +287,8 @@ Atmos processes files in alphabetical order: `aws.yaml`, then `common.yaml`, the
 <DocCardList items={[
   {type: 'link', href: '/cli/commands/vendor/usage', label: 'atmos vendor', description: 'Vendor Atmos components and stacks'},
   {type: 'link', href: '/cli/commands/vendor/pull', label: 'atmos vendor pull', description: 'Pull dependencies from vendor manifest'},
+  {type: 'link', href: '/cli/commands/vendor/vendor-verify', label: 'atmos vendor verify', description: 'Check vendored files against vendor.lock.yaml'},
+  {type: 'link', href: '/cli/commands/vendor/vendor-clean', label: 'atmos vendor clean', description: 'Remove lock-owned vendored files'},
 ]} />
 
 ## Try It

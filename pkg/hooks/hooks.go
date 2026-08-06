@@ -3,6 +3,7 @@ package hooks
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -60,6 +61,8 @@ type Hooks struct {
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
+	stdout        io.Writer
+	stderr        io.Writer
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
@@ -229,8 +232,7 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 
 	kind, ok := GetKind(hook.Kind)
 	if !ok {
-		log.Debug("Unknown hook kind", "kind", hook.Kind)
-		return nil
+		return unknownHookKindError(name, hook.Kind)
 	}
 
 	executionHook, err := h.resolveHookForExecution(name, hook, ctx.atmosConfig, ctx.info, ctx.outcome)
@@ -254,6 +256,8 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		HookName:      name,
 		Outcome:       ctx.outcome,
 		ToolchainPATH: h.toolchainPATH,
+		Stdout:        h.stdout,
+		Stderr:        h.stderr,
 	}
 	return runHookLogGroup(ctx.atmosConfig, ci.DimensionPhase, hookLogGroupLabel(name, ctx.event), func() error {
 		_, err := kind.Engine.Run(execCtx)
@@ -765,17 +769,21 @@ func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
 	return nil
 }
 
-// verifyHookBinary verifies a single hook's runtime requirement: step-kind
-// hooks need a registered step type; command-backed kinds need their command on
-// PATH. Returns nil for hooks with nothing to verify (deprecated CI kinds,
-// unknown kinds, no command).
+// verifyHookBinary verifies a single hook's configuration and runtime
+// requirement: the hook's own on_failure literal (if set) must be a valid
+// value; step-kind hooks need a registered step type; command-backed kinds
+// need their command on PATH. Returns nil for hooks with nothing further to
+// verify (deprecated CI kinds, no command).
 func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
+	if err := verifyOnFailureValue(name, hook); err != nil {
+		return err
+	}
 	if isDeprecatedCIKind(hook.Kind) {
 		return nil
 	}
 	kind, ok := GetKind(hook.Kind)
 	if !ok {
-		return nil
+		return unknownHookKindError(name, hook.Kind)
 	}
 	// Step-kind hooks have no Command to resolve on PATH; instead verify the
 	// named step type is registered so a typo fails before terraform runs
@@ -791,11 +799,12 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 		return nil
 	}
 	if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
-		return errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
+		// The cause already wraps ErrCommandNotFound with the command name, so
+		// build on it directly instead of stacking a second sentinel prefix.
+		return errUtils.Build(err).
 			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
-			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before terraform runs", resolved.Command).
-			WithHint("Or install it manually so it appears on PATH").
+			WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it before terraform runs", resolved.Command).
+			WithHintf("Alternatively, install %s manually so it appears on PATH", resolved.Command).
 			WithContext("hook", name).
 			WithContext("kind", hook.Kind).
 			WithContext("command", resolved.Command).
@@ -814,6 +823,40 @@ func verifyCommandAvailable(name, toolchainPATH string) error {
 	}
 	_, err := resolveBinaryOnPath(name, toolchainPATH)
 	return err
+}
+
+// unknownHookKindError builds the hard error for a hook whose kind is not
+// registered. There is no reasonable "skip and continue" behavior for a kind
+// Atmos has never heard of: the hook's author almost certainly made a typo,
+// and silently no-op'ing it would let a state-affecting hook (e.g.
+// kind: tfmigrate) simply never run with no signal to the user.
+func unknownHookKindError(name, kind string) error {
+	return errUtils.Build(errUtils.ErrUnknownHookKind).
+		WithExplanationf("Hook %q uses kind %q, which is not registered", name, kind).
+		WithHintf("Valid kinds: %s", strings.Join(ListKinds(), ", ")).
+		WithContext("hook", name).
+		WithContext("kind", kind).
+		Err()
+}
+
+// verifyOnFailureValue checks a hook's own on_failure literal, if set, is one
+// of the values the stack manifest schema allows. Empty is valid (falls back
+// to the kind's default, then "warn"). Checked here at preflight - before any
+// terraform operation runs - rather than only inside applyOnFailure's runtime
+// switch, so a typo (e.g. "waarn") is caught immediately instead of silently
+// behaving like "warn" only if and when the hook happens to fail.
+func verifyOnFailureValue(name string, hook *Hook) error {
+	switch hook.OnFailure {
+	case "", OnFailureWarn, OnFailureFail, OnFailureIgnore:
+		return nil
+	default:
+		return errUtils.Build(errUtils.ErrInvalidHookOnFailure).
+			WithExplanationf("Hook %q has on_failure: %q, which is not a valid value", name, hook.OnFailure).
+			WithHintf("Use one of: %s, %s, %s", OnFailureWarn, OnFailureFail, OnFailureIgnore).
+			WithContext("hook", name).
+			WithContext("on_failure", hook.OnFailure).
+			Err()
+	}
 }
 
 // isDeprecatedCIKind reports whether the given kind name was one of the
@@ -927,6 +970,11 @@ type RunPerComponentHooksOptions struct {
 	// Outcome is the lifecycle outcome (success/failure) used to filter `when:`
 	// and expose status to hook engines. Zero value defaults to success.
 	Outcome Outcome
+
+	// Stdout and Stderr receive hook subprocess output. Nil preserves the
+	// process streams used by single-component execution.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // RunPerComponentHooks resolves and runs one component's user-defined hooks
@@ -953,6 +1001,8 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	}
 
 	hooksForComponent.SetOutcome(opts.Outcome)
+	hooksForComponent.stdout = opts.Stdout
+	hooksForComponent.stderr = opts.Stderr
 	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)

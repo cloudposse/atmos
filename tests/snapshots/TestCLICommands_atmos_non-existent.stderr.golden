@@ -34,9 +34,11 @@ Valid subcommands are:
   • packer
   • pro
   • profile
+  • sbom
   • scaffold
   • secret
   • stack
+  • store
   • support
   • terraform
   • theme
