@@ -658,6 +658,48 @@ func TestBuildWorkflowStepError(t *testing.T) {
 	}
 }
 
+// TestBuildWorkflowStepErrorPreservesInnerHintsAndContext reproduces a bug
+// found while field-testing the working-directory fix: a handler-level error
+// built via errUtils.Build(...).WithContext(...).WithHint(...).Err() (e.g.
+// ResolveInWorkingDirectory's template-evaluation error) lost its hint and
+// context entirely once wrapped as a workflow step failure, even with
+// --verbose. Root cause: buildWorkflowStepError used to dual-wrap the error
+// with a raw fmt.Errorf before handing it to errUtils.Build, and
+// cockroachdb/errors' hint/safe-detail extraction treats a Go 1.20 multi-error
+// (Unwrap() []error) as an opaque leaf node, never reaching the decorations
+// further down the chain.
+func TestBuildWorkflowStepErrorPreservesInnerHintsAndContext(t *testing.T) {
+	innerErr := errUtils.Build(errUtils.ErrTemplateEvaluation).
+		WithCause(errors.New("template: step-pass-1:1: unclosed action")).
+		WithHint("Check the working_directory template for a missing closing '}}'").
+		WithContext("step", "pack").
+		WithContext("field", "working_directory").
+		Err()
+
+	result := buildWorkflowStepError(innerErr, &workflowStepErrorContext{
+		WorkflowPath:     "/workflows/deploy.yaml",
+		WorkflowBasePath: "/workflows",
+		Workflow:         "deploy",
+		StepName:         "pack",
+		Command:          "echo hi",
+		CommandType:      "shell",
+	})
+
+	require.Error(t, result)
+	assert.ErrorIs(t, result, errUtils.ErrWorkflowStepFailed)
+	assert.ErrorIs(t, result, errUtils.ErrTemplateEvaluation)
+
+	formatted := atmosansi.Strip(errUtils.Format(result, errUtils.FormatterConfig{Verbose: true}))
+	assert.Contains(t, formatted, "Check the working_directory template for a missing closing", "inner hint must survive the workflow step wrapping")
+	assert.Contains(t, formatted, "## Context", "inner context section must render")
+	// Context renders as a "Key │ Value" markdown table, so assert the keys and
+	// values independently rather than an exact formatted row.
+	assert.Contains(t, formatted, "field", "inner context key must survive the workflow step wrapping")
+	assert.Contains(t, formatted, "working_directory", "inner context value must survive the workflow step wrapping")
+	assert.Contains(t, formatted, "step", "inner context key must survive the workflow step wrapping")
+	assert.Contains(t, formatted, "pack", "inner context value must survive the workflow step wrapping")
+}
+
 // TestPromptForWorkflowFile_EmptyMatches tests promptForWorkflowFile with no matches.
 func TestPromptForWorkflowFile_EmptyMatches(t *testing.T) {
 	result, err := promptForWorkflowFile([]WorkflowMatch{})

@@ -116,15 +116,23 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	}
 
 	// Build error with context about the failed command.
-	// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
-	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
-	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
-
-	// Now build the error with explanation and hints using the wrapped error.
-	// This preserves the error chain while adding formatted context.
+	// Use WithCause (not a manual fmt.Errorf("%w: %w", ...) dual-wrap) so hints
+	// and safe-details attached deep inside err (e.g. by a step handler's own
+	// errUtils.Build(...).WithHint(...).WithContext(...)) survive rendering.
+	// cockroachdb/errors' hint/safe-detail extraction walks the chain via
+	// UnwrapOnce and treats a Go 1.20 multi-error (the Unwrap() []error a dual
+	// %w produces) as an opaque leaf node, so wrapping first and calling
+	// errUtils.Build after would silently drop everything below that node.
+	// WithCause extracts hints/context from err eagerly, before any wrapping,
+	// so they end up on this builder regardless. errors.Is() against both
+	// ErrWorkflowStepFailed and the original err still holds (WithCause's
+	// contract), and the underlying error's exit code is still read from err
+	// directly below.
+	//
 	// Commands are wrapped in code fences for proper formatting and copy-paste.
 	// Single quotes are used for shell safety (step names and stacks can contain spaces).
-	builder := errUtils.Build(wrappedErr).
+	builder := errUtils.Build(errUtils.ErrWorkflowStepFailed).
+		WithCause(err).
 		WithTitle("Workflow Error").
 		WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
 		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
