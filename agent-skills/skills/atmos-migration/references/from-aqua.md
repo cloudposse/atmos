@@ -41,7 +41,8 @@ toolchain:
   registries:
     - name: aqua
       type: aqua
-      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      source: https://github.com/aquaproj/aqua-registry/pkgs
+      ref: v4.245.0
       priority: 10
   verification:
     checksums: when_available
@@ -64,10 +65,11 @@ version and checksum for each tool. It serves the same purpose as `aqua-checksum
 ## Steps
 
 1. **Mirror the registry.** Map Aqua's `type: standard` registry with a `ref:` pin to a
-  `toolchain.registries` entry of `type: aqua`. Point it at
-  `https://github.com/aquaproj/aqua-registry/tree/main/pkgs`. If `aqua.yaml` used a private or
-  custom registry, add it as a second `type: aqua` registry entry. Use a `file://` or GitHub
-  `source` for this entry. Set its `priority` higher than the public registry.
+  `toolchain.registries` entry of `type: aqua`. Set `source` to
+  `https://github.com/aquaproj/aqua-registry/pkgs`. Set `ref` to the same tag Aqua pinned. Atmos
+  resolves the pin through the separate `ref` field, not through the URL path. If `aqua.yaml` used
+  a private or custom registry, add it as a second `type: aqua` registry entry. Use a `file://` or
+  GitHub `source` for this entry. Set its `priority` higher than the public registry.
 2. **Convert each plain package.** For a `packages:` entry with no unusual fields, run
   `atmos toolchain add owner/repo@version`. You can also hand-write the `.tool-versions` line.
   Both methods produce the same result.
@@ -179,7 +181,7 @@ Atmos intentionally does not support the following Aqua schema features. These c
 | `version_expr` / `version_expr_prefix` | Same as above. | Same as above. |
 | `go_version_file` | Atmos does not support reading a version from a Go source file. | Pin the version explicitly in `.tool-versions`. |
 | `import` | Atmos does not support Aqua's registry-composition mechanism. | Add multiple `toolchain.registries` entries instead of one registry that imports others. |
-| `command_aliases` | Atmos does not support this Aqua field. | Use `toolchain.aliases` in `atmos.yaml` instead. |
+| `command_aliases` | Atmos does not support this Aqua field. | Use `toolchain.proxies` in `atmos.yaml` instead. `toolchain.proxies` creates a command-name link, the same role `command_aliases` plays in Aqua. Do not use `toolchain.aliases` for this. `toolchain.aliases` only maps a short tool name to an `owner/repo` registry entry for lookup. It does not change the command name a tool runs under. See the Shell Integration section above. |
 | `tags` | Not supported. | No equivalent exists. Atmos does not filter installs by tag. |
 | `vars` | Atmos does not support Aqua's per-package template variables. | Hard-code the value into the `url` template of a `type: atmos` inline registry entry. |
 

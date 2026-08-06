@@ -107,14 +107,22 @@ Each reference includes a command-mapping table. This table shows the old tool's
 the equivalent Atmos toolchain command. Use it to translate familiar commands directly.
 
 Each reference also includes a Shell Integration section. Most tools that a user migrates from add
-themselves to every shell automatically, through a shim on `PATH`. The Atmos toolchain does not do
-this by default. The Atmos toolchain resolves tools only while an `atmos <subcommand>` runs.
+themselves to every shell automatically. asdf, aqua, tfenv, tofuenv, and tenv do this through a
+shim or proxy on `PATH`. The shim or proxy re-resolves the nearest per-directory config file on
+every invocation. Homebrew works a different way. `brew shellenv` puts one global `bin` directory
+on `PATH`. It has no per-directory resolution. Either way, the Atmos toolchain does not add itself
+to `PATH` by default. The Atmos toolchain resolves tools only while an `atmos <subcommand>` runs.
 
 A user can still get the old shell experience back, where a plain `terraform` command works in any
-shell. This is a supported feature, not a missing feature. To enable it, add `atmos toolchain env`
-or `atmos toolchain path` to `~/.bashrc`, `~/.zshrc`, the fish config, or the PowerShell profile.
+shell. This is a supported feature, not a missing feature. To enable it, add a wrapped form of
+`atmos toolchain env` or `atmos toolchain path` to `~/.bashrc`, `~/.zshrc`, the fish config, or the
+PowerShell profile. A bare `atmos toolchain env` or `atmos toolchain path` line does nothing on its
+own. It must be wrapped in `eval` or `export`, for example `eval "$(atmos toolchain env
+--format=bash)"` in Bash or Zsh, or `export PATH="$(atmos toolchain path):$PATH"` in any POSIX
+shell. See each reference's Shell Integration section for the exact form for every shell.
 
-Always tell the user about this option when they are used to a shim-based tool.
+Always tell the user about this option when they are used to a tool that adds itself to `PATH`
+automatically.
 
 ## The Minimum-Viable Migration
 
