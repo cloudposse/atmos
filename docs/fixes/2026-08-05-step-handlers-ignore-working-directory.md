@@ -135,9 +135,9 @@ silently dropped all hints/context from the wrapped step error (see Changes belo
 - `go build ./...` — clean.
 - `go test ./pkg/runner/step/... ./internal/exec/... ./pkg/hooks/...` (`-count=1`) — all packages
   `ok`.
-- Live re-repro against the field test's `/tmp/atmos-field-test/` fixture: the `container-bake-print`
-  workflow now resolves the bake file from the configured `working_directory` instead of the launch
-  directory (crash case resolved, confirmed by deleting the correct bake file and observing a clean
+- Live re-repro against the field test's `container-bake-print` fixture workflow: it now resolves
+  the bake file from the configured `working_directory` instead of the launch directory (crash case
+  resolved, confirmed by deleting the correct bake file and observing a clean
   error naming the *anchored* path rather than a silent build against the wrong file). A workflow
   error with a `WithHint` (no `--verbose` needed — hints are unconditional) now correctly shows that
   hint end-to-end through the real CLI. The `Context` half of this fix (`field`/`step`) is verified
