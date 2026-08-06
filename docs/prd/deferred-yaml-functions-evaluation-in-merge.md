@@ -1,12 +1,18 @@
 # PRD: Deferred YAML Function Evaluation in Merge
 
 ## Status
-**Current**: ⚠️ Partially implemented — merge-time deferral (avoids the type-conflict crash) is
-implemented and tested; post-merge resolution-and-remerge (the actual deep-merge this PRD exists
-to deliver) was never wired up in production. See [Known Gap: #2888](#known-gap-2888--deferred-values-are-never-actually-resolved-in-production)
-and the [Completion Plan](#completion-plan-wiring-post-merge-resolution-plan-b) below.
-**Date**: 2025-11-29 (original), updated 2026-08-06
-**Version**: 2.1
+**Current**: ✅ Implemented — the Completion Plan below (Plan B, full unification) has shipped: a
+real `YAMLFunctionProcessor` now resolves deferred YAML functions at Stage 3 (per-invocation,
+`internal/exec/utils.go`'s `resolveDeferredYamlFunctions`), and the result deep-merges against any
+concrete override at the same path — including the mirror-precedence direction the original plan
+didn't anticipate (a concrete value at a *lower*-precedence layer than the function; see
+`pkg/merge/merge_yaml_functions.go`'s `fillMissingLayerValues`). The literal #2888 report
+(`!labels`/`!tags` never deferred at all) is fixed via the allowlist unification in
+`pkg/merge/merge_yaml_functions.go`. See [Known Gap: #2888](#known-gap-2888--deferred-values-are-never-actually-resolved-in-production)
+and the [Completion Plan](#completion-plan-wiring-post-merge-resolution-plan-b) below for the
+implementation this delivered.
+**Date**: 2025-11-29 (original), updated 2026-08-06 (gap discovered), implemented 2026-08-06
+**Version**: 2.2
 
 ## Problem Statement
 

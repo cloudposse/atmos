@@ -400,7 +400,7 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ProcessStackConfig(
+			_, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1033,7 +1033,7 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ProcessStackConfig(
+			result, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1085,7 +1085,7 @@ func TestProcessStackConfig_HelmErrorPaths(t *testing.T) {
 				config = map[string]any{cfg.HelmSectionName: tt.helmSection}
 			}
 
-			_, err := ProcessStackConfig(
+			_, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1144,7 +1144,7 @@ func TestProcessStackConfig_KubernetesErrorPaths(t *testing.T) {
 				config = map[string]any{cfg.KubernetesSectionName: tt.k8sSection}
 			}
 
-			_, err := ProcessStackConfig(
+			_, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1201,7 +1201,7 @@ func TestProcessStackConfig_ComponentTypeFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ProcessStackConfig(
+			result, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1270,7 +1270,7 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ProcessStackConfig(
+			result, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
@@ -1351,7 +1351,7 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 		},
 	}
 
-	result, err := ProcessStackConfig(
+	result, _, err := ProcessStackConfig(
 		atmosConfig,
 		"/test/stacks",
 		"/test/terraform",
@@ -1449,7 +1449,7 @@ func TestProcessStackConfig_HooksWrongScopeNotInherited(t *testing.T) {
 		},
 	}
 
-	result, err := ProcessStackConfig(
+	result, _, err := ProcessStackConfig(
 		atmosConfig,
 		"/test/stacks",
 		"/test/terraform",

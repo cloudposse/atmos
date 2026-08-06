@@ -26,11 +26,15 @@ func ProcessStacksForGenerate(
 }
 
 // FindStacksMapForGenerate wraps FindStacksMap for use by the generate adapter.
-// Signature matches ExecFindStacksMap in pkg/terraform/generate/adapter.go.
+// Signature matches ExecFindStacksMap in pkg/terraform/generate/adapter.go. Deliberately discards
+// FindStacksMap's deferred-contexts return value: varfile/backend generation reads already-merged
+// component config, it never resolves deferred YAML functions, so pkg/terraform/generate has no
+// need to depend on internal/exec.ComponentDeferredContexts.
 func FindStacksMapForGenerate(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.FindStacksMapForGenerate")()
 
-	return FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, rawStackConfigs, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	return stacksMap, rawStackConfigs, err
 }
 
 // GenerateFilesForComponent generates files from the generate section during component execution.

@@ -30,7 +30,7 @@ func ExecuteTerraformGenerateVarfiles(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}

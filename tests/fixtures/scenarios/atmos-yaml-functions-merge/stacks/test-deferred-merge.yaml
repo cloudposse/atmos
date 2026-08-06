@@ -64,14 +64,26 @@ components:
           # Override existing keys
           enabled: false
 
+    # Test Case 5b: Mirror of Test Case 5 — the !template function is the HIGHER-precedence layer
+    # (component-level override) and the concrete map is the LOWER-precedence layer (abstract
+    # base), the reverse of test-deep-merge above. Proves the deep-merge is symmetric: it
+    # shouldn't matter which side of the merge is the deferred function.
+    test-mirror-precedence:
+      component: base-component-mirror
+      vars:
+        mirror_config: !template '{{ toJson (dict "new_key" "new_value") }}'
+
     # Test Case 6: Multiple YAML functions of same type
     # Tests precedence handling when multiple YAML functions merge
     test-multiple-yaml-functions:
-      metadata:
-        component: yaml-function-test
+      component: base-component
       vars:
-        # Multiple !env functions in import chain
-        stage: !env ATMOS_STAGE
+        # Multiple !env functions in import chain. Deliberately does NOT override `stage`: this
+        # fixture's name_template ("{{ .vars.stage }}") resolves the stack's own name from
+        # top-level vars.stage before any component is processed, so a component overriding that
+        # same field with a deferred function is a different (and separately worth investigating)
+        # concern from what this test exercises — precedence among multiple deferred functions.
+        env_stage: !env ATMOS_STAGE
         region: "us-west-2"
 
     # Test Case 7: Deep merge with !labels/!tags (regression fixture for
@@ -79,10 +91,17 @@ components:
     # when another layer sets a conflicting value at the same path instead of deep-merging).
     test-labels-override:
       component: base-component-labels
+      # Maps always deep-merge regardless of list_merge_strategy (tested by the tags field below),
+      # but tag_list is a *list*, whose merge behavior is governed by list_merge_strategy — this
+      # component opts into "append" (overriding the fixture-wide "replace" default in atmos.yaml)
+      # so the !tags-produced list and the component's own override list combine instead of the
+      # override replacing the function's contribution outright.
+      settings:
+        list_merge_strategy: append
       vars:
         # This must deep-merge with the !labels-produced map {X: "1", Y: "2"}, not replace it.
         tags:
           Z: "override-value"
-        # This must deep-merge with the !tags-produced list ["X", "Y"], not replace it.
+        # This must merge (append) with the !tags-produced list ["X", "Y"], not replace it.
         tag_list:
           - "Z"

@@ -27,6 +27,19 @@ components:
           timeout: 30
           retries: 3
 
+    # Abstract base component with a concrete (non-function) map, for the mirror-precedence case:
+    # a component layer overriding this with a !template value (the REVERSE of base-component
+    # above, where the function is the lower-precedence layer) — proves the deep-merge is
+    # symmetric regardless of which side is the function.
+    base-component-mirror:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        mirror_config:
+          enabled: true
+          base_only: "yes"
+
     # Abstract base component demonstrating !labels/!tags fed by metadata.labels/metadata.tags.
     # Regression fixture for https://github.com/cloudposse/atmos/issues/2888.
     base-component-labels:

@@ -68,7 +68,7 @@ func ExecuteTerraformGenerateBackends(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}

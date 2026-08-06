@@ -132,3 +132,61 @@ func TestDeferredMergeContext_GetDeferredValues(t *testing.T) {
 		assert.Len(t, values["path2"], 1)
 	})
 }
+
+func TestDeferredMergeContext_Clone(t *testing.T) {
+	t.Run("returns nil for nil receiver", func(t *testing.T) {
+		var dctx *DeferredMergeContext
+		assert.Nil(t, dctx.Clone())
+	})
+
+	t.Run("clone has equal contents to the original", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "config"}, "!template 'value1'")
+		dctx.IncrementPrecedence()
+		dctx.AddDeferred([]string{"vars", "config"}, "!template 'value2'")
+
+		clone := dctx.Clone()
+
+		assert.Equal(t, dctx.precedence, clone.precedence)
+		assert.Equal(t, dctx.GetDeferredValues(), clone.GetDeferredValues())
+	})
+
+	t.Run("mutating the clone's DeferredValue pointers does not affect the original", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		path := []string{"vars", "config"}
+		dctx.AddDeferred(path, "!template 'value1'")
+
+		clone := dctx.Clone()
+		cloneValues := clone.GetDeferredValues()["vars.config"]
+		cloneValues[0].Value = "resolved-value"
+		cloneValues[0].IsFunction = false
+
+		originalValues := dctx.GetDeferredValues()["vars.config"]
+		assert.Equal(t, "!template 'value1'", originalValues[0].Value)
+		assert.True(t, originalValues[0].IsFunction)
+	})
+
+	t.Run("mutating the clone's path slice does not affect the original", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		path := []string{"vars", "config"}
+		dctx.AddDeferred(path, "!template 'value1'")
+
+		clone := dctx.Clone()
+		cloneValues := clone.GetDeferredValues()["vars.config"]
+		cloneValues[0].Path[0] = "mutated"
+
+		originalValues := dctx.GetDeferredValues()["vars.config"]
+		assert.Equal(t, "vars", originalValues[0].Path[0])
+	})
+
+	t.Run("appending to the clone's deferred values does not affect the original", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "config"}, "!template 'value1'")
+
+		clone := dctx.Clone()
+		clone.AddDeferred([]string{"vars", "config"}, "!template 'value2'")
+
+		assert.Len(t, clone.GetDeferredValues()["vars.config"], 2)
+		assert.Len(t, dctx.GetDeferredValues()["vars.config"], 1)
+	})
+}

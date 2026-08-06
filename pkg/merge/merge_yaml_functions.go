@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func isAtmosYAMLFunction(s string) bool {
@@ -18,15 +19,26 @@ func isAtmosYAMLFunction(s string) bool {
 		return false
 	}
 
-	// YAML functions processed after merging.
+	// YAML functions processed after merging. Sourced from the canonical constants in
+	// pkg/utils/yaml_utils.go rather than a second, independently-maintained literal list — the
+	// literal #2888 report was exactly this: !labels/!tags/!labels.keys/!labels.values existed as
+	// recognized YAML functions but were missing from this list, so they were never deferred and
+	// silently lost data on merge (see docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
+	// Deliberately excluded: !unset/!append (handled by merge-structural mechanisms, see
+	// processAppendTags in merge.go) and !include/!include.raw/!literal (resolved at parse time,
+	// before merge ever sees them).
 	postMergeFunctions := []string{
-		"!template",
-		"!terraform.output",
-		"!terraform.state",
-		"!store.get",
-		"!store",
-		"!exec",
-		"!env",
+		u.AtmosYamlFuncTemplate,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncExec,
+		u.AtmosYamlFuncEnv,
+		u.AtmosYamlFuncLabels,
+		u.AtmosYamlFuncLabelsKeys,
+		u.AtmosYamlFuncLabelsValues,
+		u.AtmosYamlFuncTags,
 	}
 
 	for _, fn := range postMergeFunctions {
@@ -412,6 +424,24 @@ func MergeWithDeferred(
 		dctx.IncrementPrecedence()
 	}
 
+	// For every deferred path, also capture the concrete (non-function) value from every OTHER
+	// layer at that same path, at that layer's own precedence.
+	//
+	// Without this, a concrete value at a LOWER-precedence layer than the deferred function is
+	// silently destroyed by the raw structural merge below: WalkAndDeferYAMLFunctions replaces the
+	// function with a literal nil placeholder, and a higher-precedence nil overrides a
+	// lower-precedence concrete map/slice during the merge — the lower layer's contribution is
+	// gone before ApplyDeferredMerges (which discovers competing concrete values by reading back
+	// the merge *result*, via addExistingConcreteValue) ever runs. That path only recovers a
+	// concrete value that structurally *survives* the raw merge (i.e., has the highest precedence
+	// at that path) — the exact mirror image of the #2888 bug this whole mechanism exists to fix.
+	//
+	// Reads from processedInputs (not the raw inputs) so a nested deferred function inside this
+	// same competing value is already a nil placeholder here, not the raw, still-untouched
+	// function string — its own DeferredValue entry (recorded above, at the deeper path) is what
+	// resolves it later.
+	fillMissingLayerValues(dctx, processedInputs)
+
 	// Perform normal merge (no type conflicts now that YAML functions are deferred).
 	result, err := Merge(atmosConfig, processedInputs)
 	if err != nil {
@@ -419,6 +449,38 @@ func MergeWithDeferred(
 	}
 
 	return result, dctx, nil
+}
+
+// fillMissingLayerValues adds a concrete DeferredValue entry, at that layer's own precedence, for
+// every layer that has a value at a deferred path but hasn't otherwise contributed a DeferredValue
+// there (i.e., its own value at that path isn't itself a deferred function). See MergeWithDeferred's
+// call-site comment for why this is necessary.
+func fillMissingLayerValues(dctx *DeferredMergeContext, processedInputs []map[string]any) {
+	for pathKey, values := range dctx.deferredValues {
+		if len(values) == 0 {
+			continue
+		}
+		path := values[0].Path
+
+		covered := make(map[int]bool, len(values))
+		for _, dv := range values {
+			covered[dv.Precedence] = true
+		}
+
+		for i, input := range processedInputs {
+			if covered[i] {
+				continue
+			}
+			if v, ok := GetValueAtPath(input, path); ok && v != nil {
+				dctx.deferredValues[pathKey] = append(dctx.deferredValues[pathKey], &DeferredValue{
+					Path:       slices.Clone(path),
+					Value:      v,
+					Precedence: i,
+					IsFunction: false,
+				})
+			}
+		}
+	}
 }
 
 // processYAMLFunctions processes YAML functions in deferred values using the provided processor.
@@ -456,44 +518,11 @@ func getConfigOrDefault(atmosConfig *schema.AtmosConfiguration) *schema.AtmosCon
 	return atmosConfig
 }
 
-// findMaxPrecedence returns the maximum precedence value from a slice of deferred values.
-func findMaxPrecedence(values []*DeferredValue) int {
-	if len(values) == 0 {
-		return 0
-	}
-
-	maxPrecedence := values[0].Precedence
-	for _, dv := range values[1:] {
-		if dv.Precedence > maxPrecedence {
-			maxPrecedence = dv.Precedence
-		}
-	}
-	return maxPrecedence
-}
-
-// addExistingConcreteValue includes an existing concrete value in deferred values with highest precedence.
-func addExistingConcreteValue(result map[string]interface{}, deferredValues []*DeferredValue) []*DeferredValue {
-	existingValue, ok := GetValueAtPath(result, deferredValues[0].Path)
-	if !ok || existingValue == nil {
-		return deferredValues
-	}
-
-	// Find the maximum precedence and add existing value with higher precedence.
-	maxPrecedence := findMaxPrecedence(deferredValues)
-	return append(deferredValues, &DeferredValue{
-		Path:       deferredValues[0].Path,
-		Value:      existingValue,
-		Precedence: maxPrecedence + 1,
-		IsFunction: false,
-	})
-}
-
 // processDeferredField processes a single deferred field and applies it to the result.
 func processDeferredField(pathKey string, deferredValues []*DeferredValue, result map[string]interface{}, cfgPtr *schema.AtmosConfiguration, processor YAMLFunctionProcessor) error {
-	// Include existing concrete value if present.
-	deferredValues = addExistingConcreteValue(result, deferredValues)
-
-	// Sort by precedence (lower first, so higher precedence wins in merge).
+	// Every layer's contribution at this path — deferred function or concrete value — was already
+	// collected into deferredValues by MergeWithDeferred (see fillMissingLayerValues), each at its
+	// own layer's precedence. Sort by precedence (lower first, so higher precedence wins in merge).
 	sort.Slice(deferredValues, func(i, j int) bool {
 		return deferredValues[i].Precedence < deferredValues[j].Precedence
 	})
@@ -525,11 +554,22 @@ func processDeferredField(pathKey string, deferredValues []*DeferredValue, resul
 //
 // If processor is nil, YAML function strings are kept as-is (for testing or when processing is not needed).
 // If processor is provided, YAML functions are processed to their actual values before merging.
+//
+// When processor is non-nil, this function resolves against a clone of dctx rather than dctx
+// itself: processYAMLFunctions mutates DeferredValue.Value/IsFunction in place, and dctx may be a
+// reference into shared/cached storage (e.g. a caller recovered it from a FindStacksMap cache
+// entry) that other concurrent callers still hold an unresolved view of. Cloning here is
+// defense-in-depth on top of any cloning callers do themselves — it makes "processor != nil never
+// mutates the caller's dctx" a guarantee of this function, not a caller discipline requirement.
 func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface{}, atmosConfig *schema.AtmosConfiguration, processor YAMLFunctionProcessor) error {
 	defer perf.Track(atmosConfig, "merge.ApplyDeferredMerges")()
 
 	if dctx == nil || !dctx.HasDeferredValues() {
 		return nil
+	}
+
+	if processor != nil {
+		dctx = dctx.Clone()
 	}
 
 	cfgPtr := getConfigOrDefault(atmosConfig)

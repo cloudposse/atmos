@@ -954,6 +954,46 @@ func TestApplyDeferredMerges(t *testing.T) {
 		// Default is replace strategy, so last value wins.
 		assert.Equal(t, []interface{}{3, 4}, result["key"])
 	})
+
+	t.Run("does not mutate the caller's context when a processor is provided", func(t *testing.T) {
+		// Regression guard for the deferred-context cache-safety fix: a dctx recovered from
+		// shared/cached storage (e.g. a FindStacksMap cache entry) must remain safe for a
+		// concurrent caller to resolve independently. ApplyDeferredMerges must never mutate
+		// the DeferredValue.Value/IsFunction fields of the dctx it was given when a processor
+		// resolves them — it must operate on a clone internally.
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: ListMergeStrategyReplace,
+			},
+		}
+
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"config"}, "!template 'value'")
+
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				return "resolved", nil
+			},
+		}
+
+		result := map[string]interface{}{}
+		err := ApplyDeferredMerges(dctx, result, cfg, processor)
+		require.NoError(t, err)
+		assert.Equal(t, "resolved", result["config"], "the result should reflect the processed value")
+
+		// The original context handed in by the caller must be untouched.
+		originalValues := dctx.GetDeferredValues()["config"]
+		require.Len(t, originalValues, 1)
+		assert.True(t, originalValues[0].IsFunction, "caller's DeferredValue.IsFunction must not be mutated")
+		assert.Equal(t, "!template 'value'", originalValues[0].Value, "caller's DeferredValue.Value must not be mutated")
+
+		// A second, independent resolution of the same original context must resolve again
+		// from the unresolved string, not reuse (or be corrupted by) the first resolution.
+		result2 := map[string]interface{}{}
+		err = ApplyDeferredMerges(dctx, result2, cfg, processor)
+		require.NoError(t, err)
+		assert.Equal(t, "resolved", result2["config"])
+	})
 }
 
 // TestProcessYAMLFunctions tests the processYAMLFunctions helper function.
@@ -1201,114 +1241,101 @@ func TestGetConfigOrDefault(t *testing.T) {
 	})
 }
 
-// TestFindMaxPrecedence tests the findMaxPrecedence function.
-func TestFindMaxPrecedence(t *testing.T) {
-	t.Run("returns max precedence from multiple values", func(t *testing.T) {
-		values := []*DeferredValue{
-			{Precedence: 0},
-			{Precedence: 5},
-			{Precedence: 2},
-			{Precedence: 8},
-			{Precedence: 3},
+// TestFillMissingLayerValues tests the fillMissingLayerValues function.
+func TestFillMissingLayerValues(t *testing.T) {
+	t.Run("adds a concrete value from a higher-precedence layer not yet represented", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"key"}, "!template 'value1'")
+		dctx.IncrementPrecedence()
+
+		processedInputs := []map[string]any{
+			{"key": "!template 'value1'"}, // precedence 0, already recorded above
+			{"key": "existing_value"},     // precedence 1, concrete, not yet recorded
 		}
 
-		max := findMaxPrecedence(values)
+		fillMissingLayerValues(dctx, processedInputs)
 
-		assert.Equal(t, 8, max)
+		values := dctx.GetDeferredValues()["key"]
+		require.Len(t, values, 2)
+		assert.Equal(t, "existing_value", values[1].Value)
+		assert.Equal(t, 1, values[1].Precedence)
+		assert.False(t, values[1].IsFunction)
 	})
 
-	t.Run("returns first precedence when only one value", func(t *testing.T) {
-		values := []*DeferredValue{
-			{Precedence: 42},
+	t.Run("adds a concrete value from a LOWER-precedence layer that the function would structurally overwrite", func(t *testing.T) {
+		// This is the mirror-precedence case: the deferred function is the higher-precedence
+		// layer, so without this backfill the lower-precedence concrete value would never survive
+		// the raw structural merge for ApplyDeferredMerges to find later.
+		dctx := NewDeferredMergeContext()
+		dctx.IncrementPrecedence()
+		dctx.AddDeferred([]string{"key"}, "!template 'value2'") // precedence 1
+
+		processedInputs := []map[string]any{
+			{"key": "existing_value"},     // precedence 0, concrete, not yet recorded
+			{"key": "!template 'value2'"}, // precedence 1, already recorded above
 		}
 
-		max := findMaxPrecedence(values)
+		fillMissingLayerValues(dctx, processedInputs)
 
-		assert.Equal(t, 42, max)
+		values := dctx.GetDeferredValues()["key"]
+		require.Len(t, values, 2)
+		// The backfilled entry is appended after the pre-existing function entry, so it's at
+		// index 1, not 0 — find it by precedence rather than assuming slice order.
+		var backfilled *DeferredValue
+		for _, dv := range values {
+			if dv.Precedence == 0 {
+				backfilled = dv
+			}
+		}
+		require.NotNil(t, backfilled, "expected a backfilled entry at precedence 0")
+		assert.Equal(t, "existing_value", backfilled.Value)
+		assert.False(t, backfilled.IsFunction)
 	})
 
-	t.Run("returns zero for empty slice", func(t *testing.T) {
-		values := []*DeferredValue{}
+	t.Run("does not add anything when every layer is already represented", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"key"}, "!template 'value1'")
+		dctx.IncrementPrecedence()
+		dctx.AddDeferred([]string{"key"}, "!template 'value2'")
 
-		max := findMaxPrecedence(values)
+		processedInputs := []map[string]any{
+			{"key": "!template 'value1'"},
+			{"key": "!template 'value2'"},
+		}
 
-		assert.Equal(t, 0, max)
+		fillMissingLayerValues(dctx, processedInputs)
+
+		assert.Len(t, dctx.GetDeferredValues()["key"], 2)
 	})
 
-	t.Run("handles all same precedence", func(t *testing.T) {
-		values := []*DeferredValue{
-			{Precedence: 5},
-			{Precedence: 5},
-			{Precedence: 5},
+	t.Run("does not add anything when the other layer has no value at that path", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"key"}, "!template 'value1'")
+		dctx.IncrementPrecedence()
+
+		processedInputs := []map[string]any{
+			{"key": "!template 'value1'"},
+			{}, // no "key" at all in this layer
 		}
 
-		max := findMaxPrecedence(values)
+		fillMissingLayerValues(dctx, processedInputs)
 
-		assert.Equal(t, 5, max)
-	})
-}
-
-// TestAddExistingConcreteValue tests the addExistingConcreteValue function.
-func TestAddExistingConcreteValue(t *testing.T) {
-	t.Run("adds existing non-nil value with highest precedence", func(t *testing.T) {
-		result := map[string]interface{}{
-			"key": "existing_value",
-		}
-		deferredValues := []*DeferredValue{
-			{Path: []string{"key"}, Value: "value1", Precedence: 0},
-			{Path: []string{"key"}, Value: "value2", Precedence: 1},
-		}
-
-		updated := addExistingConcreteValue(result, deferredValues)
-
-		assert.Len(t, updated, 3)
-		assert.Equal(t, "existing_value", updated[2].Value)
-		assert.Equal(t, 2, updated[2].Precedence) // maxPrecedence + 1
-		assert.False(t, updated[2].IsFunction)
+		assert.Len(t, dctx.GetDeferredValues()["key"], 1)
 	})
 
-	t.Run("returns unchanged when no existing value", func(t *testing.T) {
-		result := map[string]interface{}{}
-		deferredValues := []*DeferredValue{
-			{Path: []string{"key"}, Value: "value1", Precedence: 0},
+	t.Run("skips a nil placeholder at an unrepresented layer (that layer's own value wasn't a function, so it can't produce a placeholder there — defensive)", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"key"}, "!template 'value1'")
+		dctx.IncrementPrecedence()
+
+		processedInputs := []map[string]any{
+			{"key": "!template 'value1'"},
+			{"key": nil},
 		}
 
-		updated := addExistingConcreteValue(result, deferredValues)
+		fillMissingLayerValues(dctx, processedInputs)
 
-		assert.Len(t, updated, 1)
-		assert.Equal(t, deferredValues, updated)
-	})
-
-	t.Run("returns unchanged when existing value is nil", func(t *testing.T) {
-		result := map[string]interface{}{
-			"key": nil,
-		}
-		deferredValues := []*DeferredValue{
-			{Path: []string{"key"}, Value: "value1", Precedence: 0},
-		}
-
-		updated := addExistingConcreteValue(result, deferredValues)
-
-		assert.Len(t, updated, 1)
-		assert.Equal(t, deferredValues, updated)
-	})
-
-	t.Run("handles nested paths", func(t *testing.T) {
-		result := map[string]interface{}{
-			"level1": map[string]interface{}{
-				"level2": "nested_value",
-			},
-		}
-		deferredValues := []*DeferredValue{
-			{Path: []string{"level1", "level2"}, Value: "value1", Precedence: 0},
-			{Path: []string{"level1", "level2"}, Value: "value2", Precedence: 3},
-		}
-
-		updated := addExistingConcreteValue(result, deferredValues)
-
-		assert.Len(t, updated, 3)
-		assert.Equal(t, "nested_value", updated[2].Value)
-		assert.Equal(t, 4, updated[2].Precedence) // maxPrecedence (3) + 1
+		assert.Len(t, dctx.GetDeferredValues()["key"], 1)
 	})
 }
 
@@ -1379,16 +1406,23 @@ func TestProcessDeferredField(t *testing.T) {
 		assert.Equal(t, "value2", result["config"]) // Higher precedence wins.
 	})
 
-	t.Run("includes existing concrete value", func(t *testing.T) {
-		result := map[string]interface{}{
-			"config": "existing",
-		}
+	t.Run("higher-precedence concrete value in deferredValues wins over a lower-precedence function", func(t *testing.T) {
+		// Discovering a competing concrete value from another layer is MergeWithDeferred's job
+		// (via fillMissingLayerValues, tested separately) — by the time processDeferredField runs,
+		// every layer's contribution, concrete or function, is already present in deferredValues.
+		result := map[string]interface{}{}
 		deferredValues := []*DeferredValue{
 			{
 				Path:       []string{"config"},
 				Value:      "!template 'deferred'",
 				Precedence: 0,
 				IsFunction: true,
+			},
+			{
+				Path:       []string{"config"},
+				Value:      "existing",
+				Precedence: 1,
+				IsFunction: false,
 			},
 		}
 		cfg := &schema.AtmosConfiguration{
@@ -1400,7 +1434,8 @@ func TestProcessDeferredField(t *testing.T) {
 		err := processDeferredField("config", deferredValues, result, cfg, nil)
 
 		assert.NoError(t, err)
-		// Existing concrete value should win (highest precedence).
+		// Higher-precedence concrete value wins over the (unresolved, since processor is nil)
+		// lower-precedence function string.
 		assert.Equal(t, "existing", result["config"])
 	})
 

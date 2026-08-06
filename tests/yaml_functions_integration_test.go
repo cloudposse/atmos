@@ -241,10 +241,21 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		componentName := "test-deep-merge"
 		stack := "test"
 
+		// ProcessTemplates/ProcessYamlFunctions must be explicitly opted into: describe component
+		// defaults both to false (deferred functions are left unresolved in the output, e.g. for
+		// dry inspection — see the "!env AWS_REGION (deferred until execution)" case above). This
+		// deep-merge behavior is specifically about the RESOLVED-function case (matching the
+		// defaults real callers like `atmos describe component`/`atmos terraform plan` use), so
+		// the test must ask for both, or it never exercises the deferred-merge resolution path at
+		// all — it would instead pass trivially on the raw, unresolved structural merge (which
+		// happens to already produce a map here since the component's own override is a literal
+		// map, not a function).
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
-				Component: componentName,
-				Stack:     stack,
+				Component:            componentName,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
 			},
 		)
 
@@ -272,6 +283,39 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 			"!template result must deep-merge with the component's own override, not be replaced by it")
 	})
 
+	t.Run("deep merges with yaml function at higher precedence (mirror of Test Case 5)", func(t *testing.T) {
+		// Test Case 5b: the deferred function is the component-level (higher-precedence) layer and
+		// the concrete map is the abstract-base (lower-precedence) layer — the reverse of "deep
+		// merges with yaml functions" above. The deep-merge must be symmetric: it shouldn't matter
+		// which side of the merge holds the unresolved function.
+		componentName := "test-mirror-precedence"
+		stack := "test"
+
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            componentName,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		mirrorConfig, ok := vars["mirror_config"].(map[string]interface{})
+		require.True(t, ok, "vars.mirror_config should be a map")
+
+		assert.Equal(t, map[string]interface{}{
+			"enabled":   true,
+			"base_only": "yes",
+			"new_key":   "new_value",
+		}, mirrorConfig, "the higher-precedence !template result must deep-merge with the lower-precedence concrete base map, not replace it")
+	})
+
 	t.Run("deep merges with labels and tags functions (regression for #2888)", func(t *testing.T) {
 		// https://github.com/cloudposse/atmos/issues/2888
 		// !labels/!tags are fed by metadata.labels/metadata.tags and must deep-merge with
@@ -280,10 +324,14 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		componentName := "test-labels-override"
 		stack := "test"
 
+		// See the ProcessTemplates/ProcessYamlFunctions comment on the "deep merges with yaml
+		// functions" subtest above — describe component defaults both to false, and this
+		// deep-merge behavior only exercises the deferred-merge resolution path when opted in.
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
-				Component: componentName,
-				Stack:     stack,
+				Component:            componentName,
+				Stack:                stack,
+				ProcessYamlFunctions: true,
 			},
 		)
 
@@ -343,6 +391,7 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 			"test-list-yaml-to-concrete",
 			"test-map-yaml-to-concrete",
 			"test-deep-merge",
+			"test-mirror-precedence",
 			"test-labels-override",
 		}
 
@@ -365,6 +414,65 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 				require.NotEmpty(t, vars)
 			})
 		}
+	})
+}
+
+// TestYAMLFunctionsDeferredMergeCacheCorrectness guards against a leaked/shared deferred-merge
+// context: FindStacksMap caches its result (including the per-component ComponentDeferredContexts
+// bundle) across calls within a process, and the Stage 3 resolution path
+// (internal/exec/utils.go, ProcessStacks) must clone a section's context before resolving it —
+// resolving one call's copy must not mutate the shared cached context that a later, independent
+// call for the same (or a different) component will read.
+func TestYAMLFunctionsDeferredMergeCacheCorrectness(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/atmos-yaml-functions-merge")
+	t.Setenv("ATMOS_STAGE", "test")
+
+	describeDeepMerge := func(t *testing.T) map[string]interface{} {
+		t.Helper()
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-deep-merge",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+		templateConfig, ok := vars["template_config"].(map[string]interface{})
+		require.True(t, ok, "vars.template_config should be a map")
+		return templateConfig
+	}
+
+	expected := map[string]interface{}{"enabled": false, "timeout": float64(30), "retries": float64(3), "new_key": "new_value"}
+
+	t.Run("two independent describe-component calls for the same component resolve identically", func(t *testing.T) {
+		first := describeDeepMerge(t)
+		second := describeDeepMerge(t)
+
+		assert.Equal(t, expected, first, "first call must resolve the full deep-merge")
+		assert.Equal(t, expected, second, "second call must resolve identically — not corrupted or short-circuited by the first call's resolution")
+	})
+
+	t.Run("resolving a different component in between does not corrupt a shared cached context", func(t *testing.T) {
+		before := describeDeepMerge(t)
+
+		// Resolve a completely different component sharing the same cached stacksMap/deferredContexts.
+		_, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-labels-override",
+				Stack:                "test",
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+
+		after := describeDeepMerge(t)
+
+		assert.Equal(t, expected, before)
+		assert.Equal(t, expected, after, "resolving a sibling component must not leak state into this component's cached deferred context")
 	})
 }
 

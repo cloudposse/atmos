@@ -318,7 +318,7 @@ func TestMergeComponentConfigurations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comp, err := mergeComponentConfigurations(tt.opts.AtmosConfig, &tt.opts, tt.result)
+			comp, _, err := mergeComponentConfigurations(tt.opts.AtmosConfig, &tt.opts, tt.result)
 
 			require.NoError(t, err)
 			require.NotNil(t, comp)
@@ -420,7 +420,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 
 	t.Run("absent-omits-section", func(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.PluginsSectionName]
 		assert.False(t, present, "plugins must be absent when neither base nor component set it")
@@ -430,7 +430,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.PluginsSectionName].([]any)
 		require.True(t, ok, "plugins must be present and a list")
@@ -443,7 +443,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmComponentType, Component: "app", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.BaseComponentPlugins = []any{"diff@v3.9.4"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.PluginsSectionName].([]any)
 		require.True(t, ok)
@@ -456,7 +456,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentPlugins = []any{"diff@v3.8.0"}
 		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.PluginsSectionName].([]any)
 		require.Len(t, got, 2, "default replace strategy keeps the concrete component's list")
@@ -468,7 +468,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.TerraformComponentType, Component: "vpc", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.ComponentPlugins = []any{"diff@v3.9.4"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		_, present := comp[cfg.PluginsSectionName]
 		assert.False(t, present, "terraform components must not emit a plugins section")
@@ -495,7 +495,7 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 		},
 	}
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 
 	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
@@ -524,7 +524,7 @@ func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *te
 	}
 	res := minimalComponentResult()
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 	assert.NotContains(t, comp, cfg.TestSectionName)
 }
@@ -551,7 +551,7 @@ func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
 		},
 	}
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 
 	mocks, ok := comp[cfg.MocksSectionName].(map[string]any)
@@ -583,7 +583,7 @@ func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
 			GlobalKubernetesManifests: []any{"global.yaml"},
 			GlobalKubernetesRender:    map[string]any{"output": map[string]any{"split": true}},
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		assert.Equal(t, "kustomize", comp[cfg.ProviderSectionName])
 		assert.Equal(t, []any{"base"}, comp[cfg.PathsSectionName])
@@ -603,7 +603,7 @@ func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.ComponentProvider = "kubectl"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName], "component provider must override the global default")
 	})
@@ -626,7 +626,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentProvider = "kubectl"
 		res.ComponentProvider = "kustomize-component"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName],
 			"component provider must win over base and global")
@@ -641,7 +641,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentProvider = "kubectl"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName],
 			"base provider must win over the global default when the component sets nothing")
@@ -660,7 +660,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentPaths = map[string]any{"component": "c.yaml"}
 		res.BaseComponentManifests = map[string]any{"base": "bm.yaml"}
 		res.ComponentManifests = map[string]any{"component": "cm.yaml"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		paths, ok := comp[cfg.PathsSectionName].(map[string]any)
@@ -686,7 +686,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRender = map[string]any{"engine": "base", "from_base": true}
 		res.ComponentRender = map[string]any{"engine": "component", "from_component": true}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		render, ok := comp[cfg.RenderSectionName].(map[string]any)
@@ -712,7 +712,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
 		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
 		res.ComponentProvision = map[string]any{"timeout": "5m"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
@@ -751,7 +751,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.RetrySectionName]
 		assert.False(t, present, "retry must be absent when neither base, component, nor overrides set it")
@@ -768,7 +768,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			"max_attempts": 5,
 			"conditions":   []any{"/Bad Gateway/"},
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.RetrySectionName].(map[string]any)
 		require.True(t, ok, "retry section must be present and a map")
@@ -785,7 +785,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = map[string]any{"max_attempts": 3}
 		res.ComponentRetry = map[string]any{"max_attempts": 7}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		assert.EqualValues(t, 7, got["max_attempts"], "concrete component must override base scalar")
@@ -801,7 +801,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"max_attempts": 1, "backoff_strategy": "constant"}
 		res.ComponentRetry = map[string]any{"max_attempts": 2}
 		res.ComponentOverridesRetry = map[string]any{"max_attempts": 9, "backoff_strategy": "exponential"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win")
@@ -821,7 +821,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
 		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
 		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		conds, ok := got["conditions"].([]any)
@@ -846,7 +846,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
 		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
 		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
-		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(appendCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		conds, ok := got["conditions"].([]any)
@@ -869,7 +869,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = baseRetry
 		res.ComponentRetry = compRetry
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		got["max_attempts"] = 999
@@ -890,7 +890,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = baseRetry
 		res.ComponentRetry = compRetry
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		// Pre-condition: merged result reflects the component-wins-over-base precedence.
@@ -925,7 +925,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"tools":   map[string]any{"tflint": "0.54.2"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -957,7 +957,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"folders":    []any{"src/component"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -993,7 +993,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"folders":    []any{"src/component"},
 		}
 
-		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(appendCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1027,7 +1027,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"files": []any{"configs/component.json"},
 		}
 
-		comp, err := mergeComponentConfigurations(replaceCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(replaceCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1058,7 +1058,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 		}
 		res := minimalComponentResult()
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1081,7 +1081,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"labels": map[string]any{"org": "platform-team"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1103,7 +1103,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"locked": true,
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1128,7 +1128,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"terraform_workspace_pattern": "component-pattern",
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1154,7 +1154,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"labels": map[string]any{"org": "should-not-apply"},
 		}
 
-		comp, err := mergeComponentConfigurations(disabledCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(disabledCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1609,7 +1609,7 @@ func TestProcessAuthConfig(t *testing.T) {
 				globalAuthConfig = map[string]any{}
 			}
 
-			result, err := processAuthConfig(atmosConfig, globalAuthConfig, tt.authConfig)
+			result, _, err := processAuthConfig(atmosConfig, globalAuthConfig, tt.authConfig)
 
 			if tt.expectError {
 				require.Error(t, err)
