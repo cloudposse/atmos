@@ -30,9 +30,11 @@ var vendorCmd = &cobra.Command{
 
 // vendorPullCmd executes 'vendor pull' CLI commands.
 var vendorPullCmd = &cobra.Command{
-	Use:                "pull",
-	Short:              "Pull the latest vendor configurations or dependencies",
-	Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
+	Use:   "pull",
+	Short: "Pull the latest vendor configurations or dependencies",
+	Long:  "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
+	Example: `  # Vendor all components in a specific stack
+  atmos vendor pull --stack dev-us-west-2`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,6 +48,7 @@ func init() {
 	// no subcommands of its own, so persistent inheritance was never needed here.
 	vendorPullParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Only vendor the specified component"),
+		flags.WithStringFlag("stack", "s", "", "Only vendor components belonging to the specified stack"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),
 		flags.WithStringFlag("tags", "", "", "Only vendor the components that have the specified tags"),

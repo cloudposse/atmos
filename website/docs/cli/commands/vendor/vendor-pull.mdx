@@ -37,6 +37,7 @@ atmos vendor pull --everything
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 atmos vendor pull --tags <tag1>,<tag2> [options]
+atmos vendor pull --stack <stack> [options]
 ```
 
 ## Description
@@ -274,12 +275,30 @@ atmos vendor pull -c vpc-flow-logs-bucket
 atmos vendor pull -c echo-server --type helmfile
 ```
 
+### Pull by Stack
+
+Use `--stack` to vendor every component in a stack that declares its own `component.yaml`, without vendoring the rest of the repository:
+
+```shell
+# Vendor all component.yaml-declared components used by a stack
+atmos vendor pull --stack dev-us-west-2
+atmos vendor pull -s dev-us-west-2
+
+# Preview what a stack pull would do (dry-run)
+atmos vendor pull --stack dev-us-west-2 --dry-run
+```
+
+Components in the stack without their own `component.yaml` are silently skipped -- not every component in a stack has to vendor this way.
+
 :::note
 
 When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
 
-- If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command
-  against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
+- If `--stack` is specified, Atmos vendors every component declared in that stack that has its own `component.yaml`, regardless of whether a
+  `vendor.yaml` also exists. `--stack` cannot be combined with `--component`.
+
+- Otherwise, if `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the
+  command against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
   If the flag `--component` is passed in, Atmos will vendor only that component
 
 - If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found,
@@ -292,6 +311,9 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 <dl>
   <dt>`--component` / `-c` <em>(optional)</em></dt>
   <dd>Atmos component to pull.</dd>
+
+  <dt>`--stack` / `-s` <em>(optional)</em></dt>
+  <dd>Only vendor components belonging to the specified stack. Vendors every component in the stack that has its own `component.yaml`, bypassing `vendor.yaml`. Cannot be combined with `--component`.</dd>
 
   <dt>`--everything` <em>(optional)</em></dt>
   <dd>Vendor all components.</dd>

@@ -17,8 +17,12 @@ import (
 var (
 	ErrNoVendorSourcesFound   = errors.New("no vendor.yaml found and no component.yaml manifests were discovered under any component type")
 	ErrValidateComponentFlag  = errors.New("either '--component' or '--tags' flag can be provided, but not both")
-	ErrValidateEverythingFlag = errors.New("'--everything' flag cannot be combined with '--component' or '--tags' flags")
-	ErrMissingComponent       = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+	ErrValidateEverythingFlag = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
+	// ErrValidateComponentStackFlag guards the stack-based vendoring path (handleStackVendor):
+	// --stack resolves and vendors every component declared in the stack, so a single
+	// --component target doesn't compose with it.
+	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
+	ErrMissingComponent           = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 	ErrInvalidLockEnforcement = errors.New("'--lock-enforcement' must be one of: strict, warn, silent")
 	// ErrSingleComponentRequired guards the 'vendor update --pull' delegation path, where
@@ -54,8 +58,12 @@ func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 }
 
 type VendorFlags struct {
-	DryRun        bool
-	Component     string
+	DryRun    bool
+	Component string
+	// Stack, when set, vendors every component declared in the stack that has its own
+	// component.yaml -- see handleStackVendor. Bypasses vendor.yaml entirely, even when one
+	// exists (checked ahead of the vendor.yaml lookup in handleVendorConfig).
+	Stack         string
 	Tags          []string
 	Everything    bool
 	ComponentType string
@@ -107,6 +115,9 @@ func parseVendorFlags(flags *pflag.FlagSet, atmosConfig *schema.AtmosConfigurati
 		return vendorFlags, err
 	}
 	if vendorFlags.Component, err = parseVendorComponentFlag(flags); err != nil {
+		return vendorFlags, err
+	}
+	if vendorFlags.Stack, err = parseOptionalStringFlag(flags, "stack"); err != nil {
 		return vendorFlags, err
 	}
 	if vendorFlags.Tags, err = parseVendorTagsFlag(flags); err != nil {
@@ -181,6 +192,16 @@ func parseOptionalBoolFlag(flags *pflag.FlagSet, name string) (bool, error) {
 	return flags.GetBool(name)
 }
 
+// parseOptionalStringFlag reads a string flag that isn't registered on every cmd.Flags() this is
+// called with (e.g. 'vendor update --pull' delegates to parseVendorFlags with its own FlagSet,
+// which doesn't register "stack"), returning "" without error when the flag itself is absent.
+func parseOptionalStringFlag(flags *pflag.FlagSet, name string) (string, error) {
+	if flags.Lookup(name) == nil {
+		return "", nil
+	}
+	return flags.GetString(name)
+}
+
 // resolveLockEnforcementFlag resolves --lock-enforcement's effective value: the flag's own value
 // when explicitly passed, else vendor.lock.enforcement's configured default (DefaultLockEnforcement).
 // A nil atmosConfig (some callers construct VendorFlags without a loaded config in tests) falls
@@ -208,17 +229,21 @@ func parseVendorTypeFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) error {
 // Helper function to set the default for 'everything' if no specific flags are provided.
 func setDefaultEverythingFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) {
 	if !vendorFlags.Everything && !flags.Changed("everything") &&
-		vendorFlags.Component == "" && len(vendorFlags.Tags) == 0 {
+		vendorFlags.Component == "" && vendorFlags.Stack == "" && len(vendorFlags.Tags) == 0 {
 		vendorFlags.Everything = true
 	}
 }
 
 func validateVendorFlags(flg *VendorFlags) error {
+	if flg.Component != "" && flg.Stack != "" {
+		return ErrValidateComponentStackFlag
+	}
+
 	if flg.Component != "" && len(flg.Tags) > 0 {
 		return ErrValidateComponentFlag
 	}
 
-	if flg.Everything && (flg.Component != "" || len(flg.Tags) > 0) {
+	if flg.Everything && (flg.Component != "" || flg.Stack != "" || len(flg.Tags) > 0) {
 		return ErrValidateEverythingFlag
 	}
 
@@ -230,6 +255,12 @@ func validateVendorFlags(flg *VendorFlags) error {
 }
 
 func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags, args []string) error {
+	// --stack takes precedence over vendor.yaml -- it vendors the stack's own components
+	// (each via its component.yaml) regardless of whether a repo-wide vendor.yaml also exists.
+	if flg.Stack != "" {
+		return handleStackVendor(atmosConfig, flg)
+	}
+
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(
 		atmosConfig,
 		cfg.AtmosVendorConfigFileName,

@@ -11,7 +11,7 @@ The `vendor pull` command now supports a `--stack` flag to vendor all components
 
 ## What Changed
 
-The `atmos vendor pull` command now accepts a `--stack` flag that vendors all components with vendor configurations in the specified stack. This eliminates the need to vendor components individually when working with a specific stack.
+The `atmos vendor pull` command now accepts a `--stack` flag that vendors every component in the specified stack that declares its own `component.yaml`. This eliminates the need to vendor components individually when working with a specific stack.
 
 ```shell
 # Vendor all components in a stack
@@ -41,7 +41,7 @@ atmos vendor pull --stack prod-us-east-1
 atmos vendor pull --stack staging-eu-west-1 --dry-run
 ```
 
-The command will identify all components in the stack that have vendor configurations (via `vendor.yaml`) and vendor them together.
+The command identifies every component in the stack that has its own `component.yaml` and vendors them together, bypassing `vendor.yaml` entirely -- components in the stack without a `component.yaml` are silently skipped, and `--stack` can't be combined with `--component`.
 
 ## Get Involved
 

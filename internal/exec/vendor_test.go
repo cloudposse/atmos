@@ -220,6 +220,98 @@ func TestParseVendorFlags_TypeChanged(t *testing.T) {
 	})
 }
 
+// newVendorPullFlagSetWithStack mirrors cmd/vendor/vendor.go's vendorPullCmd flag set including
+// the "stack" flag, for TestParseVendorFlags_Stack.
+func newVendorPullFlagSetWithStack(withStack bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withStack {
+		flags.StringP("stack", "s", "", "")
+	}
+	return flags
+}
+
+// TestParseVendorFlags_Stack proves parseVendorFlags reads --stack when the calling command
+// registers it (cmd/vendor/vendor.go's vendorPullCmd), and defaults to "" without erroring when
+// the flag isn't registered at all ('vendor update --pull' delegates to parseVendorFlags with a
+// FlagSet that doesn't define "stack").
+func TestParseVendorFlags_Stack(t *testing.T) {
+	t.Run("stack flag set is read", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		require.NoError(t, flags.Set("stack", "dev-us-west-2"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "dev-us-west-2", vendorFlags.Stack)
+	})
+
+	t.Run("stack flag left at its default is empty", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Stack)
+	})
+
+	t.Run("stack flag not registered at all does not error", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(false)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Stack)
+	})
+}
+
+// TestValidateVendorFlags_Stack proves validateVendorFlags rejects --stack combined with
+// --component or --everything, matching the existing --tags mutual-exclusivity rules, while
+// allowing --stack on its own (including together with --tags, which parseVendorFlags never
+// threads through the stack-based handleStackVendor path but validateVendorFlags does not reject).
+func TestValidateVendorFlags_Stack(t *testing.T) {
+	t.Run("stack alone is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2"}))
+	})
+
+	t.Run("component and stack together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Component: "vpc", Stack: "dev-us-west-2"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateComponentStackFlag)
+	})
+
+	t.Run("everything and stack together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Everything: true, Stack: "dev-us-west-2"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateEverythingFlag)
+	})
+}
+
+// TestSetDefaultEverythingFlag_Stack proves --stack alone (like --component and --tags) suppresses
+// the "no flags given" default that otherwise sets Everything to true.
+func TestSetDefaultEverythingFlag_Stack(t *testing.T) {
+	t.Run("stack set suppresses the everything default", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		vendorFlags := &VendorFlags{Stack: "dev-us-west-2"}
+
+		setDefaultEverythingFlag(flags, vendorFlags)
+
+		assert.False(t, vendorFlags.Everything)
+	})
+
+	t.Run("no flags given still defaults everything to true", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		vendorFlags := &VendorFlags{}
+
+		setDefaultEverythingFlag(flags, vendorFlags)
+
+		assert.True(t, vendorFlags.Everything)
+	})
+}
+
 // TestParseVendorFlags_ComponentSliceFlag proves parseVendorFlags tolerates the flag shape
 // `vendor update --pull` delegates with: vendorUpdateCmd registers --component as a repeatable
 // string slice (cmd/vendor/update.go), while vendorPullCmd registers a plain string. A
