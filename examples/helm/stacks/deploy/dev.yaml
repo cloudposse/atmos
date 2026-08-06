@@ -115,7 +115,9 @@ components:
       name: demo-timeout
       namespace: demo-timeout
       release:
-        timeout: 2s
+        # Keep the lifecycle deadline below the readiness delay while leaving
+        # enough time for recovery to finish on resource-constrained runners.
+        timeout: 15s
         wait:
           strategy: watcher
         install:
@@ -124,7 +126,7 @@ components:
           on_failure: rollback
       values:
         deployment:
-          readinessDelaySeconds: 20
+          readinessDelaySeconds: 60
         hooks:
           enabled: false
 
