@@ -4,7 +4,7 @@ description: "AWS compliance commands in Atmos: atmos aws compliance report, Sec
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
-  category: security
+  category: aws
 ---
 
 # Atmos AWS Compliance

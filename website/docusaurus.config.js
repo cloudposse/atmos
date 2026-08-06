@@ -527,6 +527,8 @@ const config = {
                 cardIcon: 'graduation-cap',
                 cardCtaLabel: 'Learn',
                 enableCopyMarkdown: true,
+                enablePerPageMarkdown: true,
+                titleAsCode: true,
             },
         ],
     ],

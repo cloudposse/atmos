@@ -58,6 +58,7 @@ export default function DirectoryPage({
           example={example}
           routeBasePath={routeBasePath}
           currentPath={dirData.path}
+          titleAsCode={optionsData.titleAsCode}
         />
         <main className={styles.mainContent}>
           <div className={styles.pageToolbar}>

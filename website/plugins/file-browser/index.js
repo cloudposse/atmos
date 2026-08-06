@@ -706,6 +706,74 @@ function collectDirectories(node, basePath) {
   return dirs;
 }
 
+// Binary extensions skipped when concatenating Markdown context — mirrors
+// isBinaryFile() in website/src/components/FileBrowser/utils.ts.
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'pdf', 'zip', 'tar',
+  'gz', 'exe', 'dll', 'so', 'dylib', 'bin', 'dat',
+]);
+
+/**
+ * Recursively concatenates every readable file under a directory into one
+ * Markdown document — the whole item, nested reference files included, as a
+ * single block of context. Mirrors collectMarkdownContext() in
+ * website/src/components/FileBrowser/utils.ts (used by the client-side "Copy
+ * as Markdown" button); this build-time twin backs the per-page `.md` files
+ * written by generatePerPageMarkdown() below. Keep both in sync.
+ * @param {object} root - Directory node (an example's `root`).
+ * @returns {string} - Concatenated Markdown.
+ */
+function collectMarkdownContext(root) {
+  const sections = [];
+  const readmePath = root.readme ? root.readme.path : undefined;
+
+  const addFile = (node) => {
+    if (node.content == null || BINARY_EXTENSIONS.has((node.extension || '').toLowerCase())) return;
+    const ext = (node.extension || '').toLowerCase();
+    const body = ext === 'md' || ext === 'mdx'
+      ? node.content.trim()
+      : `\`\`\`${node.language}\n${node.content.trim()}\n\`\`\``;
+    sections.push(`## ${node.path}\n\n${body}`);
+  };
+
+  const visit = (node) => {
+    if (node.type === 'directory') {
+      node.children.forEach(visit);
+    } else if (node.path !== readmePath) {
+      addFile(node);
+    }
+  };
+
+  if (root.readme) addFile(root.readme);
+  visit(root);
+
+  return sections.join('\n\n---\n\n');
+}
+
+/**
+ * Writes a raw `.md` file for each example, mirroring the sitewide
+ * "append `.md` to any URL for raw Markdown" convention that
+ * docusaurus-plugin-llms-txt provides for regular docs/blog pages — those
+ * pages are invisible to that plugin since file-browser routes aren't
+ * docs/blog content, so this instance has to generate its own.
+ * @param {object} tree - The scanned examples tree (see scanExamples()).
+ * @param {string} outDir - Docusaurus build output directory.
+ * @param {string} routeBasePath - This instance's route base path.
+ * @param {string} id - Plugin instance id, for logging.
+ */
+async function generatePerPageMarkdown(tree, outDir, routeBasePath, id) {
+  let written = 0;
+  for (const example of tree.examples) {
+    const heading = `# ${example.title || example.name}\n\n${example.description ? `${example.description}\n\n` : ''}`;
+    const body = heading + collectMarkdownContext(example.root);
+    const outPath = path.join(outDir, routeBasePath, `${example.name}.md`);
+    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.promises.writeFile(outPath, body, 'utf-8');
+    written += 1;
+  }
+  console.log(`[file-browser:${id}] Wrote ${written} per-page .md files`);
+}
+
 module.exports = function fileBrowserPlugin(context, options) {
   const {
     id = 'default',
@@ -732,6 +800,15 @@ module.exports = function fileBrowserPlugin(context, options) {
     // clipboard-ready document. Defaults to false so existing instances
     // render unchanged unless opted in.
     enableCopyMarkdown = false,
+    // Writes a raw `.md` file for each item's root page at build time (e.g.
+    // /ai/skills/atmos-terraform.md), so it's fetchable the same way any
+    // docs/blog page is via docusaurus-plugin-llms-txt's `<url>.md`
+    // convention. Defaults to false so existing instances are unaffected.
+    enablePerPageMarkdown = false,
+    // Renders each item's title as a code-formatted `/name` (e.g. `/atmos-terraform`)
+    // instead of plain text, signaling how it's invoked. Defaults to false —
+    // examples/gists have friendly English titles this wouldn't suit.
+    titleAsCode = false,
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -773,6 +850,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           cardIcon,
           cardCtaLabel,
           enableCopyMarkdown,
+          titleAsCode,
         },
       };
     },
@@ -863,6 +941,12 @@ module.exports = function fileBrowserPlugin(context, options) {
     getPathsToWatch() {
       // Watch the source directory for changes during development.
       return [absoluteSourceDir];
+    },
+
+    async postBuild({ content, outDir }) {
+      if (!enablePerPageMarkdown) return;
+      const { tree, options: pluginOptions } = content;
+      await generatePerPageMarkdown(tree, outDir, pluginOptions.routeBasePath, id);
     },
   };
 };

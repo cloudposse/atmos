@@ -103,6 +103,8 @@ export interface FileBrowserOptions {
   cardCtaLabel?: string;
   /** Shows a "Copy as Markdown" button on each item's root page when true. */
   enableCopyMarkdown?: boolean;
+  /** Renders each item's title as a code-formatted `/name`, signaling how it's invoked. */
+  titleAsCode?: boolean;
 }
 
 /**

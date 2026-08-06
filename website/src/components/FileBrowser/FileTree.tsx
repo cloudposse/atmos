@@ -11,12 +11,14 @@ interface FileTreeProps {
   example: ExampleProject;
   routeBasePath: string;
   currentPath: string;
+  titleAsCode?: boolean;
 }
 
 export default function FileTree({
   example,
   routeBasePath,
   currentPath,
+  titleAsCode,
 }: FileTreeProps): JSX.Element {
   return (
     <aside className={styles.sidebar}>
@@ -26,7 +28,7 @@ export default function FileTree({
             to={`${routeBasePath}/${example.name}`}
             className={styles.sidebarExampleLink}
           >
-            {example.name}
+            {titleAsCode ? <code>/{example.name}</code> : example.name}
           </Link>
         </div>
         <ul className={styles.fileTree}>

@@ -40,7 +40,7 @@ interface IndexPageProps {
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
-  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel } = optionsData;
+  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode } = optionsData;
   const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;
   const cardCta = cardCtaLabel || 'Open';
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -82,7 +82,9 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <div className={styles.exampleCardIcon}>
             <FontAwesomeIcon icon={cardIconDefinition} />
           </div>
-          <h2 className={styles.exampleCardTitle}>{displayName}</h2>
+          <h2 className={styles.exampleCardTitle}>
+            {titleAsCode ? <code>/{example.name}</code> : displayName}
+          </h2>
         </div>
       </Link>
       {example.cast?.file && (
