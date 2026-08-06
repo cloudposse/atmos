@@ -26,7 +26,16 @@ const (
 	defaultTeardownQuietPeriod = 500 * time.Millisecond
 	defaultTeardownMaxWait     = 2 * time.Second
 	defaultProcessExitMaxWait  = 2 * time.Second
-	sessionReadBufferSize      = 4096
+	// Fallback safety valve for finishSession when a shell never signals
+	// exit via its output stream (the `done` channel) or the caller's
+	// context. Real interactive shells -- notably bash with
+	// profile-loading overhead (.bashrc/.bash_profile, history flushing
+	// on exit) -- can legitimately take longer than a couple of seconds
+	// to fully process EOT and exit, especially on first startup; too
+	// tight a value here forcibly kills a shell that was about to exit
+	// cleanly on its own, discarding an otherwise-successful recording.
+	defaultSessionExitMaxWait = 5 * time.Second
+	sessionReadBufferSize     = 4096
 )
 
 var (
@@ -81,12 +90,26 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 		return fmt.Errorf("start cast session shell: %w", err)
 	}
 	defer func() { _ = proc.close() }()
+	// The PTY input is written from two independent goroutines: the
+	// background output-reader (answerTerminalQueries, whenever the shell
+	// emits a terminal capability query) and this function's own action
+	// loop/teardown EOT write below. Neither pty writes nor Go's io.Writer
+	// contract guarantee atomicity across concurrent, unsynchronized
+	// callers, so without serializing them a query response can interleave
+	// mid-write with a scripted "write"/"key" action and corrupt the
+	// command the shell receives. syncedInput protects every subsequent use
+	// of the pty input (newSessionState, runAction, finishSession via
+	// proc.input), and its Locked method lets a whole multi-write action
+	// (every character of a "write", every response byte of a query answer)
+	// stay atomic as a unit rather than just each individual Write call.
+	syncedInput := &syncWriter{w: proc.input}
+	proc.input = syncedInput
 
-	state := newSessionState(ctx, proc.output, proc.input, proc.close)
+	state := newSessionState(ctx, proc.output, syncedInput, proc.close)
 	defer state.stop()
 
 	for i := range opts.Actions {
-		if err := runAction(ctx, proc.input, state, &opts.Actions[i], opts); err != nil {
+		if err := runAction(ctx, syncedInput, state, &opts.Actions[i], opts); err != nil {
 			proc.kill()
 			return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
 		}
@@ -103,6 +126,50 @@ type sessionProcess struct {
 	close              func() error
 	kill               func()
 	wait               func() error
+}
+
+// syncWriter serializes concurrent Write calls to a shared io.WriteCloser.
+// See its construction site in RunSession for why this is required: the PTY
+// input is written from more than one goroutine, and neither pty writes nor
+// io.Writer implementations are guaranteed atomic across concurrent,
+// unsynchronized callers.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "asciicast.syncWriter.Write")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
+
+// Close closes the wrapped writer if it supports it; a no-op otherwise, so
+// syncWriter can wrap any io.Writer (e.g. io.Discard in tests) while still
+// satisfying io.WriteCloser for the real session's PTY input.
+func (s *syncWriter) Close() error {
+	defer perf.Track(nil, "asciicast.syncWriter.Close")()
+
+	if c, ok := s.w.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
+// Locked runs fn while holding the writer's lock, so every Write fn issues
+// is atomic as a whole relative to any other writer sharing this
+// syncWriter -- e.g. every character of one scripted "write" action, or
+// every response byte of one terminal-query answer, stays together as an
+// indivisible unit instead of being split apart by a concurrent writer
+// landing between two of its individual Write calls.
+func (s *syncWriter) Locked(fn func(io.Writer)) {
+	defer perf.Track(nil, "asciicast.syncWriter.Locked")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fn(s.w)
 }
 
 func newSessionProcessWait(wait func() error) func() error {
@@ -124,7 +191,7 @@ func newSessionProcessWait(wait func() error) func() error {
 type sessionState struct {
 	mu     sync.Mutex
 	output bytes.Buffer
-	input  io.Writer
+	input  *syncWriter
 	// discardRecording suppresses the live recording stream only (toggled
 	// mid-session by scripted "hide"/"show" actions); the wait-matching
 	// buffer keeps updating regardless, mirroring VHS's own Hide, which only
@@ -137,6 +204,16 @@ type sessionState struct {
 	changed           chan struct{}
 	done              chan error
 	cancel            context.CancelFunc
+	// pendingQueryTail holds a trailing fragment of the previous output
+	// chunk that looks like the start of a terminal-capability query
+	// (e.g. "\x1b]10;?") but was cut off before its terminator by a PTY
+	// read boundary. answerTerminalQueries only scans one chunk at a time
+	// via bytes.Contains, so without carrying this forward and prepending
+	// it to the next chunk, a query split across two reads is silently
+	// never answered -- observed with real bash (whose query writes seem
+	// more likely to land in separate reads than zsh/sh's), which then
+	// retries the same query indefinitely, corrupting/hanging the session.
+	pendingQueryTail []byte
 }
 
 func normalizeSessionOptions(opts *SessionOptions) {
@@ -224,7 +301,7 @@ func safePTYSize(value int) uint16 {
 	return uint16(value)
 }
 
-func newSessionState(ctx context.Context, output io.Reader, input io.Writer, closeOutput func() error) *sessionState {
+func newSessionState(ctx context.Context, output io.Reader, input *syncWriter, closeOutput func() error) *sessionState {
 	watchCtx, cancel := context.WithCancel(ctx)
 	state := &sessionState{
 		input:   input,
@@ -258,7 +335,24 @@ func (s *sessionState) readOutput(output io.Reader) {
 
 func (s *sessionState) recordOutputChunk(chunk []byte) {
 	copied := append([]byte(nil), chunk...)
-	answerTerminalQueries(copied, s.input)
+	// Query detection scans pendingQueryTail (carried over from the previous
+	// chunk) plus this chunk together, so a query split across a PTY read
+	// boundary is still recognized -- see the pendingQueryTail field comment.
+	// The recorded/wait-matching streams below still only ever see `copied`
+	// (the carried-over prefix was already recorded when it first arrived).
+	scan := copied
+	if len(s.pendingQueryTail) > 0 {
+		scan = append(append([]byte(nil), s.pendingQueryTail...), copied...)
+	}
+	// The whole query-response burst (background color, cursor position,
+	// etc. -- answerTerminalQueries can issue several Write calls for one
+	// chunk) must land as one atomic unit, or a concurrent scripted action
+	// could interleave between two of its individual writes. input is nil
+	// in tests that only care about output capture, not query-answering.
+	if s.input != nil {
+		s.input.Locked(func(w io.Writer) { answerTerminalQueries(scan, w) })
+	}
+	s.pendingQueryTail = terminalQueryTail(scan)
 	s.mu.Lock()
 	discardWaitBuffer := s.discardWaitBuffer
 	if !discardWaitBuffer {
@@ -276,6 +370,49 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 		return
 	}
 	_, _ = iolib.GetContext().Data().Write(copied)
+}
+
+// terminalQueryPatterns lists every exact terminal-capability query byte
+// sequence answerTerminalQueries recognizes and answers.
+var terminalQueryPatterns = [][]byte{
+	[]byte("\x1b]11;?\x07"),
+	[]byte("\x1b]11;?\x1b\\"),
+	[]byte("\x1b]10;?\x07"),
+	[]byte("\x1b]10;?\x1b\\"),
+	[]byte("\x1b[6n"),
+}
+
+// maxTerminalQueryPatternLen is the length of the longest entry in
+// terminalQueryPatterns.
+var maxTerminalQueryPatternLen = func() int {
+	max := 0
+	for _, p := range terminalQueryPatterns {
+		if len(p) > max {
+			max = len(p)
+		}
+	}
+	return max
+}()
+
+// terminalQueryTail returns the longest suffix of chunk that is a proper
+// (strictly shorter) prefix of one of terminalQueryPatterns -- i.e. bytes
+// that could be the start of a terminal-capability query cut off by a PTY
+// read boundary, worth carrying into the next chunk. Returns nil if chunk's
+// tail doesn't look like the start of any recognized query.
+func terminalQueryTail(chunk []byte) []byte {
+	limit := maxTerminalQueryPatternLen - 1
+	if limit > len(chunk) {
+		limit = len(chunk)
+	}
+	for length := limit; length > 0; length-- {
+		tail := chunk[len(chunk)-length:]
+		for _, pattern := range terminalQueryPatterns {
+			if len(tail) < len(pattern) && bytes.Equal(pattern[:len(tail)], tail) {
+				return append([]byte(nil), tail...)
+			}
+		}
+	}
+	return nil
 }
 
 func answerTerminalQueries(chunk []byte, input io.Writer) {
@@ -361,7 +498,7 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	case <-ctx.Done():
 		proc.kill()
 		return errors.Join(ctx.Err(), waitForSessionProcess(proc, defaultProcessExitMaxWait))
-	case <-time.After(2 * time.Second):
+	case <-time.After(defaultSessionExitMaxWait):
 		proc.kill()
 		return waitForSessionProcess(proc, defaultProcessExitMaxWait)
 	}

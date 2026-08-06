@@ -172,7 +172,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runWriteAction(writer, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
+	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = writer.Close() }()
-	err = runWriteAction(writer, &SessionAction{Text: "x", Rate: "fast"}, 0)
+	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "x", Rate: "fast"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid write rate") {
 		t.Fatalf("expected invalid write rate error, got %v", err)
 	}
@@ -208,7 +208,7 @@ func TestRunWriteActionSleepsBetweenRunesWhenRatePositive(t *testing.T) {
 	// A tiny positive rate exercises the `if rate > 0 { time.Sleep(rate) }`
 	// branch without meaningfully slowing down the test.
 	start := time.Now()
-	err = runWriteAction(writer, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
+	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestRunWriteActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runWriteAction(writer, &SessionAction{Text: "boom", Rate: "0"}, 0)
+	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "boom", Rate: "0"}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -238,7 +238,7 @@ func TestRunKeyActionWritesRepeatedSequences(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runKeyAction(writer, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
+	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	start := time.Now()
-	err = runKeyAction(writer, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
+	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -272,14 +272,14 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 }
 
 func TestRunKeyActionRejectsUnknownKeySequence(t *testing.T) {
-	err := runKeyAction(io.Discard, &SessionAction{Key: "page-up"}, 0)
+	err := runKeyAction(&syncWriter{w: io.Discard}, &SessionAction{Key: "page-up"}, 0)
 	if !errors.Is(err, ErrUnsupportedCastKey) {
 		t.Fatalf("expected unsupported key error, got %v", err)
 	}
 }
 
 func TestRunKeyActionRejectsInvalidInterval(t *testing.T) {
-	err := runKeyAction(io.Discard, &SessionAction{Key: "enter", Interval: "soon"}, 0)
+	err := runKeyAction(&syncWriter{w: io.Discard}, &SessionAction{Key: "enter", Interval: "soon"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid key interval") {
 		t.Fatalf("expected invalid key interval error, got %v", err)
 	}
@@ -292,7 +292,7 @@ func TestRunKeyActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runKeyAction(writer, &SessionAction{Key: "enter", Repeat: 1}, 0)
+	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 1}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -370,7 +370,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err = runAction(context.Background(), writer, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, &SessionOptions{})
+	err = runAction(context.Background(), &syncWriter{w: writer}, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction write error: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 		t.Fatalf("written content = %q", content)
 	}
 
-	err = runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "bogus"}, &SessionOptions{})
+	err = runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "bogus"}, &SessionOptions{})
 	if !errors.Is(err, ErrUnknownSessionAction) {
 		t.Fatalf("expected unknown action error, got %v", err)
 	}
@@ -391,7 +391,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 
 func TestRunActionDispatchesPause(t *testing.T) {
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "pause", Duration: "1ns"}, &SessionOptions{})
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "pause", Duration: "1ns"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction pause error: %v", err)
 	}
@@ -659,7 +659,7 @@ func (w *closeTrackingWriter) Close() error {
 
 func TestFinishSessionKillsAndWaitsOnHardcodedTimeout(t *testing.T) {
 	// Neither done nor ctx ever fire, so finishSession must fall through to
-	// its final hardcoded time.After(2*time.Second) teardown branch.
+	// its final defaultSessionExitMaxWait teardown branch.
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -685,8 +685,8 @@ func TestFinishSessionKillsAndWaitsOnHardcodedTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error from the hardcoded-timeout branch, got %v", err)
 	}
-	if elapsed < 2*time.Second {
-		t.Fatalf("finishSession returned after %s, want at least 2s", elapsed)
+	if elapsed < defaultSessionExitMaxWait {
+		t.Fatalf("finishSession returned after %s, want at least %s", elapsed, defaultSessionExitMaxWait)
 	}
 	if !killed {
 		t.Fatal("expected proc.kill to be called on hardcoded teardown timeout")
@@ -990,7 +990,7 @@ func TestKeySequenceRejectsInvalidCtrlModifier(t *testing.T) {
 
 func TestRunActionDispatchesHideAndShow(t *testing.T) {
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	if err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "hide"}, &SessionOptions{}); err != nil {
+	if err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "hide"}, &SessionOptions{}); err != nil {
 		t.Fatalf("runAction hide error: %v", err)
 	}
 	state.mu.Lock()
@@ -1000,7 +1000,7 @@ func TestRunActionDispatchesHideAndShow(t *testing.T) {
 		t.Fatal("expected discardRecording to be true after a hide action")
 	}
 
-	if err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "show"}, &SessionOptions{}); err != nil {
+	if err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "show"}, &SessionOptions{}); err != nil {
 		t.Fatalf("runAction show error: %v", err)
 	}
 	state.mu.Lock()
@@ -1038,7 +1038,7 @@ func TestRunActionDispatchesScreenshot(t *testing.T) {
 	defer restore()
 
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "screenshot", Path: "out.png"}, &SessionOptions{})
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "screenshot", Path: "out.png"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction screenshot error: %v", err)
 	}
@@ -1051,7 +1051,7 @@ func TestRunActionDispatchesScreenshot(t *testing.T) {
 
 func TestRunActionScreenshotRequiresPath(t *testing.T) {
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "screenshot"}, &SessionOptions{})
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "screenshot"}, &SessionOptions{})
 	if !errors.Is(err, ErrScreenshotActionRequiresPath) {
 		t.Fatalf("expected ErrScreenshotActionRequiresPath, got %v", err)
 	}

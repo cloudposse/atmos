@@ -16,7 +16,7 @@ import (
 // mapping they rely on. session.go owns the surrounding session lifecycle:
 // spawning the shell, tracking output, and tearing down.
 
-func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts *SessionOptions) error {
+func runAction(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, opts *SessionOptions) error {
 	switch action.Type {
 	case "write":
 		return runWriteAction(input, action, opts.WriteRate)
@@ -50,7 +50,7 @@ func runScreenshotAction(action *SessionAction) error {
 	return nil
 }
 
-func runWriteAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
+func runWriteAction(input *syncWriter, action *SessionAction, fallback time.Duration) error {
 	rate := fallback
 	if action.Rate != "" {
 		parsed, err := time.ParseDuration(action.Rate)
@@ -59,18 +59,28 @@ func runWriteAction(input io.Writer, action *SessionAction, fallback time.Durati
 		}
 		rate = parsed
 	}
-	for _, r := range action.Text {
-		if _, err := input.Write([]byte(string(r))); err != nil {
-			return err
+	// The whole typed string is one atomic unit: holding the lock only
+	// per-rune still lets a concurrent terminal-query response land between
+	// two characters of the same command, and some shells (observed with
+	// real bash, not zsh/sh) re-issue additional queries when a response is
+	// delayed, compounding rather than avoiding corruption. See
+	// syncWriter.Locked.
+	var writeErr error
+	input.Locked(func(w io.Writer) {
+		for _, r := range action.Text {
+			if _, err := w.Write([]byte(string(r))); err != nil {
+				writeErr = err
+				return
+			}
+			if rate > 0 {
+				time.Sleep(rate)
+			}
 		}
-		if rate > 0 {
-			time.Sleep(rate)
-		}
-	}
-	return nil
+	})
+	return writeErr
 }
 
-func runKeyAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
+func runKeyAction(input *syncWriter, action *SessionAction, fallback time.Duration) error {
 	repeat := action.Repeat
 	if repeat <= 0 {
 		repeat = 1
@@ -83,15 +93,20 @@ func runKeyAction(input io.Writer, action *SessionAction, fallback time.Duration
 	if err != nil {
 		return err
 	}
-	for i := 0; i < repeat; i++ {
-		if _, err := input.Write([]byte(seq)); err != nil {
-			return err
+	// See runWriteAction: the whole repeated sequence must be atomic.
+	var writeErr error
+	input.Locked(func(w io.Writer) {
+		for i := 0; i < repeat; i++ {
+			if _, err := w.Write([]byte(seq)); err != nil {
+				writeErr = err
+				return
+			}
+			if interval > 0 && i < repeat-1 {
+				time.Sleep(interval)
+			}
 		}
-		if interval > 0 && i < repeat-1 {
-			time.Sleep(interval)
-		}
-	}
-	return nil
+	})
+	return writeErr
 }
 
 func keyInterval(value string, fallback time.Duration) (time.Duration, error) {
