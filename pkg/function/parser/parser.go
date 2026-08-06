@@ -339,6 +339,7 @@ func ParseStoreGet(input string) (StoreGetArgs, error) {
 
 // ParseSecret parses `name [| path expression] [| raw] [| default value]`.
 func ParseSecret(input string) (SecretArgs, error) {
+	hasPath := false
 	tokens, err := tokenize(input)
 	if err != nil {
 		return SecretArgs{}, err
@@ -361,6 +362,7 @@ func ParseSecret(input string) (SecretArgs, error) {
 			result.Raw = true
 			index += 2
 		case "path":
+			hasPath = true
 			if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
 				return SecretArgs{}, parseError(tokens[index+1], "expected option value")
 			}
@@ -385,7 +387,7 @@ func ParseSecret(input string) (SecretArgs, error) {
 			return SecretArgs{}, parseError(tokens[index+1], "expected path, raw, or default option")
 		}
 	}
-	if result.Raw && result.Path != "" {
+	if result.Raw && hasPath {
 		return SecretArgs{}, &Error{Position: Position{Line: 1, Column: 1}, Message: "raw and path options are mutually exclusive"}
 	}
 	return result, nil

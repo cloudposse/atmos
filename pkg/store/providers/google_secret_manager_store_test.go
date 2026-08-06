@@ -517,6 +517,40 @@ func TestGSMStore_Get(t *testing.T) {
 	}
 }
 
+func TestGSMStore_GetRawPreservesPayload(t *testing.T) {
+	const versionName = "projects/test-project/secrets/test-prefix_dev_usw2_example_service_config-key/versions/latest"
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+
+	for _, tt := range []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"enabled":true,"port":8080}`},
+		{name: "plain text", payload: "example-token"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
+			mockClient.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				return req.Name == versionName
+			})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+				Payload: &secretmanagerpb.SecretPayload{Data: []byte(tt.payload)},
+			}, nil)
+
+			s := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			got, err := s.GetRaw("dev-usw2", "example/service", "config-key")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
+		})
+	}
+}
+
 func TestGSMStore_Delete(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"

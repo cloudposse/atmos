@@ -217,6 +217,7 @@ func TestParseSecret(t *testing.T) {
 		"SERVICE_CONFIG | path",
 		"SERVICE_CONFIG | unknown value",
 		`SERVICE_CONFIG | raw | path ".token"`,
+		`SERVICE_CONFIG | path "" | raw`,
 	} {
 		_, err = ParseSecret(input)
 		require.Error(t, err, input)

@@ -113,6 +113,17 @@ func TestKeychainStore_GetRaw(t *testing.T) {
 		assert.JSONEq(t, `{"enabled":true}`, got)
 	})
 
+	t.Run("JSON null remains raw", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		kr := keyring.NewMockKeyring(ctrl)
+		kr.EXPECT().Get("atmos/dev/example-service/token").Return("null", nil)
+		s := &KeychainStore{kr: kr, prefix: "atmos", stackDelimiter: "-"}
+
+		got, err := s.GetRaw("dev", "example-service", "token")
+		require.NoError(t, err)
+		assert.Equal(t, "null", got)
+	})
+
 	t.Run("empty key is rejected", func(t *testing.T) {
 		s := newTestKeychainStore(t)
 		_, err := s.(store.RawStore).GetRaw("dev", "example-service", "")

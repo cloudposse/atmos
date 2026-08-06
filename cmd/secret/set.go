@@ -117,6 +117,9 @@ func findGlobalSetContext(scope secretScope, name string) (string, string, error
 		if decl.Scope != secrets.ScopeGlobal {
 			return "", "", componentRequiredForSet(name, "the declaration is not global")
 		}
+		// Equality of global declarations is sufficient here: coordinateForDeclaration drops both
+		// stack and component for global scope before any provider-specific reference rendering.
+		// A reference therefore cannot resolve differently for two component contexts.
 		if selected != nil && decl != *selected {
 			return "", "", componentRequiredForSet(name, "global declarations differ between components")
 		}

@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,7 +83,10 @@ func retrieveAndMask(atmosConfig *schema.AtmosConfiguration, provider providers.
 		value, err = provider.Get(coord)
 	}
 	if err != nil {
-		if opts.Default != nil {
+		// A default replaces a missing value, not an unsupported retrieval capability. In
+		// particular, `raw | default` must not silently turn a structured-only backend into a
+		// successful lookup.
+		if opts.Default != nil && !errors.Is(err, providers.ErrRawNotSupported) {
 			return *opts.Default, nil
 		}
 		return nil, fmt.Errorf("%w: %q: %w", ErrSecretMissing, name, err)
