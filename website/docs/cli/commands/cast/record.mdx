@@ -1,0 +1,60 @@
+---
+title: atmos cast record
+sidebar_label: record
+sidebar_class_name: command
+id: record
+description: Record a VHS-dialect tape into an asciicast recording.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to interpret a [VHS](https://github.com/charmbracelet/vhs)-dialect `.tape` file directly into an asciicast recording — an ad hoc entry point for a one-off tape with no workflow YAML at all. It reuses the exact same interpreter as a `type: cast` step's `tape`/`tape_file` fields (see [`type: cast`](/workflows/steps/type/cast#tape-interpretation)); `record` is the missing third verb alongside `play` and `render`: it takes a `.tape` and produces a `.cast` (optionally rendered further), the inverse direction of `render`.
+</Intro>
+
+## Usage
+
+```shell
+atmos cast record <input.tape> --output=<path> [--format=<fmt>] [--mode=<session|steps>]
+```
+
+## Arguments
+
+<dl>
+  <dt>`input.tape`</dt>
+  <dd>**Required.** Path to the VHS-dialect tape file to interpret.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--output`, `-o`</dt>
+  <dd>**Required.** Write the recording (or rendered artifact) to this path. A `.cast` extension keeps the raw recording; any other supported extension (`.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`) records to a temporary `.cast` first, renders it here, and removes the temporary file.</dd>
+
+  <dt>`--format`, `-f`</dt>
+  <dd>Output format (`cast`, `gif`, `mp4`, `html`, `ascii`, `png`, `jpg`, `jpeg`). Optional when `--output`'s extension already identifies the format.</dd>
+
+  <dt>`--mode`</dt>
+  <dd>Cast mode: `session` (default) or `steps`. Defaults to `session` — the opposite of `type: cast`'s own default — since a bare `.tape` handed to the CLI is almost always meant to replay as an actual VHS-style session, which commonly includes raw keypresses that only `mode: session` supports. Use `--mode=steps` for a tape that only types shell commands, to get real per-command exit codes; the command errors if the tape contains anything `mode: steps` can't express (see [`type: cast` tape interpretation](/workflows/steps/type/cast#tape-interpretation)).</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos cast record ./demo.tape --output=demo.mp4
+atmos cast record ./demo.tape --output=demo.cast
+atmos cast record ./demo.tape --output=demo.gif --mode=steps
+```
+
+Recording straight to `.cast` lets you inspect, play, or render it further without re-interpreting the tape:
+
+```shell
+atmos cast record ./demo.tape --output=demo.cast
+atmos cast play demo.cast
+atmos cast render demo.cast --output=demo.gif
+```
+
+## See Also
+
+- [`type: cast` tape interpretation](/workflows/steps/type/cast#tape-interpretation) — the `tape`/`tape_file` step fields this command shares its interpreter with
+- [`atmos cast play`](/cli/commands/cast/play) — Replay a cast recording in the terminal
+- [`atmos cast render`](/cli/commands/cast/render) — Render a cast recording to media output
