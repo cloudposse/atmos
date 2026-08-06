@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -35,9 +36,10 @@ const (
 var recordParser = newRecordParser()
 
 var recordCmd = &cobra.Command{
-	Use:   "record <input.tape>",
-	Short: "Record a VHS-dialect tape into an asciicast recording",
-	Args:  cobra.ExactArgs(1),
+	Use:     "record <input.tape>",
+	Short:   "Record a VHS-dialect tape into an asciicast recording",
+	Example: markdown.CastRecordUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := recordParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 			return err

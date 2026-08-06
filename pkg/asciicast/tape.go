@@ -125,7 +125,7 @@ func ParseTapeFile(path, baseDir string, fr TapeFileReader) (*Tape, error) {
 
 	content, err := fr.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %w", ErrTapeSourceNotFound, path, err)
 	}
 	return ParseTape(string(content), path, baseDir, fr)
 }
@@ -206,16 +206,15 @@ type tapeToken struct {
 
 // tapeLexer holds the mutable scan position for tokenizeTape, so the
 // dispatch switch in step() can stay a flat, single-branch-per-case
-// function: each case delegates its own bookkeeping (index/line/atLineStart
+// function: each case delegates its own bookkeeping (index/line
 // advancement, token append, error propagation) to a dedicated method
 // instead of repeating it inline per case.
 type tapeLexer struct {
-	runes       []rune
-	file        string
-	i           int
-	line        int
-	atLineStart bool
-	tokens      []tapeToken
+	runes  []rune
+	file   string
+	i      int
+	line   int
+	tokens []tapeToken
 }
 
 // tokenizeTape scans source into a flat token stream. Whitespace-delimited
@@ -225,11 +224,10 @@ type tapeLexer struct {
 // non-whitespace character is '#' is a comment and is skipped to end of line.
 func tokenizeTape(source, file string) ([]tapeToken, error) {
 	lx := &tapeLexer{
-		runes:       []rune(source),
-		file:        file,
-		line:        1,
-		atLineStart: true,
-		tokens:      make([]tapeToken, 0, len(source)/tapeAvgTokenLen),
+		runes:  []rune(source),
+		file:   file,
+		line:   1,
+		tokens: make([]tapeToken, 0, len(source)/tapeAvgTokenLen),
 	}
 	for lx.i < len(lx.runes) {
 		if err := lx.step(); err != nil {
@@ -244,17 +242,16 @@ func (lx *tapeLexer) step() error {
 	switch {
 	case r == '\n':
 		lx.line++
-		lx.atLineStart = true
 		lx.i++
 	case unicode.IsSpace(r):
 		lx.i++
-	case r == '#' && lx.atLineStart:
+	case r == '#':
 		lx.skipComment()
 	case r == '"':
 		return lx.scanQuoted()
 	case r == '`' || r == '\'':
 		return lx.scanRaw(r)
-	case r == '/':
+	case r == '/' && lx.regexAllowed():
 		return lx.scanRegexToken()
 	default:
 		lx.scanWordToken()
@@ -276,7 +273,6 @@ func (lx *tapeLexer) scanQuoted() error {
 	lx.tokens = append(lx.tokens, tok)
 	lx.line += strings.Count(tok.Value, "\n")
 	lx.i = next
-	lx.atLineStart = false
 	return nil
 }
 
@@ -288,8 +284,27 @@ func (lx *tapeLexer) scanRaw(delim rune) error {
 	lx.tokens = append(lx.tokens, result.Token)
 	lx.line = result.EndLine
 	lx.i = result.Next
-	lx.atLineStart = false
 	return nil
+}
+
+// regexAllowed reports whether a /regex/ literal is legal at the current
+// lexer position, so a leading '/' on an absolute path (e.g. `Output
+// /tmp/demo.gif`) scans as a bare word instead. Only Wait/Wait+Screen/
+// Wait+Line's optional trailing pattern, and a Set directive's value, ever
+// accept a regex token -- see consumeTapeWait and nextTapeSetValue in
+// tape_parser.go, which is where a Set key's regex value is actually
+// consumed; this lexer-level guard only needs to recognize the two token
+// shapes that precede a legal regex start.
+func (lx *tapeLexer) regexAllowed() bool {
+	n := len(lx.tokens)
+	if n == 0 {
+		return false
+	}
+	switch lx.tokens[n-1].Value {
+	case "Wait", "Wait+Screen", "Wait+Line":
+		return true
+	}
+	return n >= 2 && lx.tokens[n-2].Value == "Set"
 }
 
 func (lx *tapeLexer) scanRegexToken() error {
@@ -299,7 +314,6 @@ func (lx *tapeLexer) scanRegexToken() error {
 	}
 	lx.tokens = append(lx.tokens, tok)
 	lx.i = next
-	lx.atLineStart = false
 	return nil
 }
 
@@ -307,7 +321,6 @@ func (lx *tapeLexer) scanWordToken() {
 	tok, next := scanTapeWord(lx.runes, lx.i, lx.line)
 	lx.tokens = append(lx.tokens, tok)
 	lx.i = next
-	lx.atLineStart = false
 }
 
 const tapeAvgTokenLen = 6

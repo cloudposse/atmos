@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -137,6 +138,33 @@ Show`,
 	assertWorkflowStepsEqual(t, want, step.Steps)
 }
 
+// TestExpandCastTapeSessionModeRepeatedHidePreservesBufferedActions ensures a
+// second Hide before the matching Show doesn't discard whatever the first
+// Hide already buffered -- the file's own contract is that nothing inside a
+// real tape's Hide block is silently dropped.
+func TestExpandCastTapeSessionModeRepeatedHidePreservesBufferedActions(t *testing.T) {
+	step := &schema.WorkflowStep{
+		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
+		Tape: `Hide
+Type "docker compose up -d" Enter
+Hide
+Type "docker compose logs" Enter
+Show`,
+	}
+	if err := expandCastTape(step); err != nil {
+		t.Fatalf("expandCastTape error: %v", err)
+	}
+	want := []schema.WorkflowStep{
+		{Type: "hide"},
+		{Type: "write", Text: "docker compose up -d"},
+		{Type: "key", Key: "enter"},
+		{Type: "write", Text: "docker compose logs"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+	}
+	assertWorkflowStepsEqual(t, want, step.Steps)
+}
+
 func TestExpandCastTapeStepsModeTranslatesTypeToSimulateAndShellPair(t *testing.T) {
 	step := &schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "steps",
@@ -185,7 +213,8 @@ Type "pwd" Enter`,
 	if shellChildren[0].Env["GREETING"] != "hi" {
 		t.Fatalf("expected first shell child to see the export, got %+v", shellChildren[0].Env)
 	}
-	if shellChildren[1].Command != "pwd" || shellChildren[1].WorkingDirectory != "examples/quick-start/nested" {
+	wantNested := filepath.Join("examples", "quick-start", "nested")
+	if shellChildren[1].Command != "pwd" || shellChildren[1].WorkingDirectory != wantNested {
 		t.Fatalf("unexpected second shell child (relative cd should compose with the tracked cwd): %+v", shellChildren[1])
 	}
 }

@@ -40,11 +40,11 @@ Identical to `atmos cast render`'s supported output formats:
 | `.webm` | **No -- hard error at tape-parse time.** Fix: change the `Output` line to `.mp4` or another supported extension. Real tapes in `demo/landing/*.tape` target `.webm` (for the website's `atmos demo record` pipeline) -- this is a genuine gap you will hit interpreting any of them as-is. |
 | `.txt` | **No -- hard error at tape-parse time.** Fix: use `.ascii` instead (same plain-text, no-ANSI-codes output). |
 
-## Cosmetic, Silently Ignored
+## Cosmetic -- Warns, Then Ignored
 
-No cast equivalent exists for these; the interpreter accepts and ignores them without error or
-warning, since the recording engine's own theme/rendering system already produces a consistent,
-themed result:
+No cast equivalent exists for these; the interpreter logs a warning naming the key and value, then
+continues without applying it, since the recording engine's own theme/rendering system already
+produces a consistent, themed result:
 
 - `Set FontFamily`
 - `Set FontSize`
@@ -87,13 +87,17 @@ to switch to `mode: session`.
 | Bare/standalone `PageDown` | Same |
 | `Ctrl+<letter>` (e.g. `Ctrl+C`) | Same |
 | `Type "text"` with no trailing `Enter` | Sends a bare keystroke to an already-running interactive program (e.g. `Type "q"` to quit `less` mid-command) -- has no discrete-step equivalent |
-| `Hide` ... `Show` around anything other than `export KEY=VALUE`, `unset VAR`, `cd <path>`, or `clear` | The common case (env/cwd setup, screen clearing) lifts to the step's native `env:`/`working_directory:` config and works under **both** modes -- see below. Anything beyond that (partial typing, mid-`Hide` `Set` changes, etc.) has no discrete-step equivalent |
+| `Hide` ... `Show`, regardless of contents | There is no PTY pass over the tape under `mode: steps`, so the interpreter can't look inside a `Hide` block to tell setup-only content apart from anything else -- the `Hide`/`Show` token itself is the error, before its contents are ever inspected |
 
-**Exception that works under both modes**: a `Hide` ... `Show` block whose `Type ... Enter` lines
-are *exactly* one of `export KEY=VALUE`, `unset VAR`, `cd <path>`, or `clear` is lifted to the
-step's own `env:`/`working_directory:` fields instead of requiring `mode: session`. `Hide` in VHS
-exists purely as a workaround for not having step-level env/cwd configuration -- Atmos already has
-that natively, so this common case does not force session mode.
+**`mode: session`-only lift, not a both-modes exception**: under `mode: session`, a `Hide` ...
+`Show` block whose `Type ... Enter` lines are *exactly* one of `export KEY=VALUE`, `unset VAR`,
+`cd <path>`, or `clear` is lifted to the step's own `env:`/`working_directory:` fields instead of
+being replayed as literal (muted) PTY keystrokes. `Hide` in VHS exists purely as a workaround for
+not having step-level env/cwd configuration -- Atmos already has that natively, so this common case
+doesn't need a literal replay. This lift only happens in the `mode: session` translator, though: it
+does not make `Hide`/`Show` legal under `mode: steps`. Getting the steps-mode equivalent requires
+manually rewriting the tape's `Hide` block into the step's own `env:`/`working_directory:` fields by
+hand (see the atmos-vhs SKILL.md's "Hand-migrated to `mode: steps`" worked example).
 
 **Note on `Screenshot`**: `Screenshot <path>` is explicitly *not* session-only -- it is supported
 in both `mode: steps` and `mode: session`. It marks a point in the recording to render a still

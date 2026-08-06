@@ -83,9 +83,14 @@ For a single tape with no workflow YAML at all, use the CLI directly -- it reuse
 interpreter as `tape_file:`, just without a `type: cast` step wrapping it:
 
 ```shell
-atmos cast record demo/landing/hero.tape --output=hero.mp4                   # mode: session (default)
-atmos cast record demo/landing/hero.tape --output=hero.cast --mode=steps     # real exit codes
+atmos cast record demo/landing/hero.tape --output=hero.mp4          # mode: session (default)
+atmos cast record demo.tape --output=demo.cast --mode=steps         # real exit codes
 ```
+
+`hero.tape` itself only works under `mode: session` -- its `Hide` block (see the worked example
+below) is a hard parse-time error under `mode: steps` regardless of what's inside it. `--mode=steps`
+only applies to a tape with no `Hide`/`Show`, bare keypresses, or `Type` without a trailing `Enter`
+(see "Choosing `mode: steps` vs `mode: session`" below).
 
 `atmos cast record` is a distinct subcommand from `atmos cast play`/`atmos cast render` -- `play`
 and `render` are unchanged and still only operate on `.cast` recordings; neither accepts a tape,
@@ -98,8 +103,7 @@ This is the decision that matters most. Scan the tape for any of these three thi
 - [ ] A **bare/standalone keypress** anywhere: `Enter`, `Space`, `Tab`, `Up`, `Down`, `Left`,
       `Right`, `Backspace`, `Escape`, `PageUp`, `PageDown`, `Ctrl+<letter>` -- when it is *not*
       immediately the terminating `Enter` of a `Type "..." Enter` line.
-- [ ] A `Hide` ... `Show` block whose `Type ... Enter` lines are anything other than
-      `export KEY=VALUE`, `unset VAR`, `cd <path>`, or `clear`.
+- [ ] A `Hide` ... `Show` block anywhere, regardless of what it contains.
 - [ ] A `Type "text"` with **no** trailing `Enter` -- a bare keystroke sent to an already-running
       interactive program.
 
@@ -128,12 +132,16 @@ The `Down` / `Enter` / `Enter` sequence drives an interactive plan-confirmation 
 keypresses -- there is no discrete "step" that means "press the down arrow once." That tape can
 only be interpreted (or hand-migrated) under `mode: session`.
 
-The important nuance: `Hide`/`Show` around plain `export`/`unset`/`cd`/`clear` lines does **not**
-force `mode: session`, because Atmos steps already have native `env:` and `working_directory:`
-fields -- `Hide` in VHS is purely a workaround for not having those, and the interpreter lifts
-that common case out automatically under **both** modes. `demo/landing/hero.tape`'s `Hide` block
-is exactly this case (see the worked example below): four lines, all `unset`/`export`/`cd`/`clear`
--- none of it forces `mode: session`.
+The important nuance: under `mode: session`, `Hide`/`Show` around plain `export`/`unset`/`cd`/
+`clear` lines gets lifted automatically -- Atmos steps already have native `env:` and
+`working_directory:` fields, `Hide` in VHS is purely a workaround for not having those, and the
+session translator recognizes this common case and turns it into step config instead of literal
+PTY replay. `demo/landing/hero.tape`'s `Hide` block is exactly this case (see the worked example
+below): four lines, all `unset`/`export`/`cd`/`clear`. But that lift is `mode: session`-only --
+under `mode: steps` there's no PTY pass over the tape to look inside a `Hide` block in the first
+place, so *any* `Hide`/`Show` token, regardless of contents, is still the hard parse-time error
+described above. Getting the steps-mode equivalent of `hero.tape`'s `Hide` block requires the
+manual hand-migration shown in worked example (b) below, not the automatic interpreter.
 
 ## Worked Example: `demo/landing/hero.tape`
 
@@ -257,8 +265,9 @@ steps:
 | Category | Directives | Behavior |
 |---|---|---|
 | Mapped to a real cast field | `Set Shell`, `Set Width`/`Height`, `Set TypingSpeed`, `Set WaitTimeout`, `Output`, `Require`, `Source` | Fills in the corresponding step field/behavior; explicit YAML always wins |
-| Cosmetic, silently ignored | `Set FontFamily`/`FontSize`/`Theme`/`Margin`/`Padding`/`BorderRadius`/`Framerate`/`CursorBlink`/`LetterSpacing`/`LineHeight`/`MarginFill`/`WindowBar`/`PlaybackSpeed`/`LoopOffset`, `Set WaitPattern` (v1) | No cast equivalent, no error, no effect |
-| Session-only | bare keypresses, `Type` with no `Enter`, `Hide`/`Show` around anything but `export`/`unset`/`cd`/`clear` | Legal under `mode: session` only; hard parse-time error under `mode: steps` |
+| Cosmetic -- warns, then ignored | `Set FontFamily`/`FontSize`/`Theme`/`Margin`/`Padding`/`BorderRadius`/`Framerate`/`CursorBlink`/`LetterSpacing`/`LineHeight`/`MarginFill`/`WindowBar`/`PlaybackSpeed`/`LoopOffset`, `Set WaitPattern` (v1) | No cast equivalent; logs a warning naming the key and continues without applying it |
+| Session-only | bare keypresses, `Type` with no `Enter`, `Hide`/`Show` (always, regardless of contents) | Legal under `mode: session` only; hard parse-time error under `mode: steps` |
+| Pacing, dropped under `mode: steps` | `Sleep`, `Wait` | Under `mode: session`, translated to real `pause`/`wait` actions; under `mode: steps`, step execution is already synchronous, so these are dropped with a warning (not an error) |
 | Works in both modes | `Screenshot <path>` | Marks a still-image capture point in the recording |
 | Always a hard error | `Copy`, `Paste`, `Env` | Not silently dropped -- rewrite as `Type`/`export` (see reference) |
 

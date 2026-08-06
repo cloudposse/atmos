@@ -483,7 +483,6 @@ func (t *tapeSessionTranslator) dispatch(directives []asciicast.TapeDirective, i
 	switch d.Kind {
 	case asciicast.TapeHide:
 		t.hidden = true
-		t.hiddenBuffer = nil
 		return i + 1, nil
 	case asciicast.TapeShow:
 		t.handleShow()

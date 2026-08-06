@@ -6,10 +6,13 @@ id: record
 description: Record a VHS-dialect tape into an asciicast recording.
 ---
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to interpret a [VHS](https://github.com/charmbracelet/vhs)-dialect `.tape` file directly into an asciicast recording — an ad hoc entry point for a one-off tape with no workflow YAML at all. It reuses the exact same interpreter as a `type: cast` step's `tape`/`tape_file` fields (see [`type: cast`](/workflows/steps/type/cast#tape-interpretation)); `record` is the missing third verb alongside `play` and `render`: it takes a `.tape` and produces a `.cast` (optionally rendered further), the inverse direction of `render`.
 </Intro>
+
+<CastPlayer title="atmos cast record --help" src="/casts/screengrabs/atmos-cast-record--help.cast" static chrome />
 
 ## Usage
 
