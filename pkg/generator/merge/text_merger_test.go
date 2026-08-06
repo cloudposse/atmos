@@ -837,6 +837,20 @@ func TestTextMerger_TrailingNewlinePreservation(t *testing.T) {
 			theirs: "line 1\nline 2\nline 3",
 			want:   "line 1\nline 2\nline 3",
 		},
+		{
+			name:   "genuine change, theirs adds trailing blank line (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1\n\n",
+			want:   "line 1\n\n",
+		},
+		{
+			name:   "genuine change, theirs removes trailing newline (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1",
+			want:   "line 1",
+		},
 	}
 
 	for _, tt := range tests {
