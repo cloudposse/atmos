@@ -203,45 +203,21 @@ toolchain:
 
 ## Key Commands
 
-### Manual Installation and Cleanup
+See `references/commands-reference.md` for the full command/flag reference. Common commands:
 
 ```bash
-atmos toolchain install                    # Bootstrap/cache warm tools from .tool-versions
-atmos toolchain install terraform@1.9.8    # Ad-hoc install for shell use or troubleshooting
-atmos toolchain uninstall terraform@1.9.8  # Remove installed tool
-atmos toolchain clean                      # Remove all installed tools and cache
+atmos toolchain install [tool@version]      # Bootstrap/cache warm, or ad-hoc install
+atmos toolchain uninstall <tool@version>    # Remove installed tool
+atmos toolchain add/remove/set/get <tool>   # Manage .tool-versions entries
+atmos toolchain search/info/list/which      # Discovery and inspection
+atmos toolchain exec <tool@version> -- ...  # Run a pinned third-party binary
+atmos toolchain env/path                    # Shell PATH integration
+atmos toolchain registry list/search        # Registry inspection
+atmos toolchain du / clean                  # Disk usage / cleanup
 ```
 
 Prefer `dependencies.tools` for normal Atmos execution. Component, workflow, custom-command, and hook
 runs install missing declared tools automatically.
-
-### Version Management
-
-```bash
-atmos toolchain add terraform              # Add tool to .tool-versions (latest)
-atmos toolchain add terraform@1.9.8        # Add with specific version
-atmos toolchain remove terraform           # Remove from .tool-versions
-atmos toolchain set terraform 1.9.8        # Set default version
-atmos toolchain get terraform              # Get version from .tool-versions
-```
-
-### Discovery
-
-```bash
-atmos toolchain search terraform           # Search across registries
-atmos toolchain info hashicorp/terraform   # Display tool configuration
-atmos toolchain list                       # Show installed tools
-atmos toolchain which terraform            # Show full path to binary
-atmos toolchain du                         # Show disk usage
-```
-
-### Execution
-
-```bash
-atmos toolchain exec terraform@1.9.8 -- plan    # Run specific version
-atmos toolchain env --format=bash                # Export PATH for shell
-atmos toolchain path                             # Print PATH entries
-```
 
 **Anti-pattern: never run `atmos toolchain exec -- atmos ...`.** Every `atmos` command is already
 toolchain-aware — it resolves and injects declared tool paths for its own execution automatically (see
@@ -254,14 +230,6 @@ If a workflow/custom-command/hook step needs to confirm a tool is present on `PA
 installing it, use the `require` step type (alias `assert`) instead of `dependencies.tools` (which
 auto-installs) or a hand-rolled `command -v` shell check — see `atmos-workflows` for the `tools:`/`files:`/
 `dirs:` config.
-
-### Registry Management
-
-```bash
-atmos toolchain registry list              # List all registries
-atmos toolchain registry list aqua         # List tools in specific registry
-atmos toolchain registry search jq         # Search across registries
-```
 
 ## Environment Variables
 
@@ -436,18 +404,8 @@ Aqua and inline registries support Go templates in asset URLs:
 
 ### Project Setup
 
-```yaml
-# atmos.yaml
-toolchain:
-  aliases:
-    terraform: hashicorp/terraform
-    kubectl: kubernetes-sigs/kubectl
-  registries:
-    - name: aqua
-      type: aqua
-      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
-      priority: 10
-```
+Combine repo-wide defaults in `.tool-versions` with the `toolchain.aliases`/`registries` config shown
+under "Configuration in atmos.yaml" above:
 
 ```text
 # .tool-versions
@@ -470,24 +428,7 @@ developer shell or CI cache.
 - run: atmos toolchain env --format=github
 ```
 
-### Custom Tool Registry
-
-```yaml
-toolchain:
-  registries:
-    - name: internal
-      type: atmos
-      priority: 150
-      tools:
-        company/internal-tool:
-          type: github_release
-          url: "internal-tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
-          format: tar.gz
-    - name: aqua
-      type: aqua
-      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
-      priority: 10
-```
+See "Custom Registries in atmos.yaml" above for adding a company-internal tool registry.
 
 ## Unsupported Aqua Features
 
