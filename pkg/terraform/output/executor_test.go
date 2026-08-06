@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Helper function to create minimal valid sections.
@@ -1088,6 +1090,13 @@ func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
 	stopFunc()
 }
 
+func TestOutputLookupHiddenWhenSpinnersSuppressed(t *testing.T) {
+	restore := SuppressSpinners()
+	t.Cleanup(restore)
+
+	require.False(t, outputLookupVisible())
+}
+
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.
 func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -2108,6 +2117,49 @@ func TestEnsureWorkdirProvisioned_CallsProvisionerWhenEnabled(t *testing.T) {
 
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
 	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_SuppressesProvisioningOutputWhenSpinnersSuppressed(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	t.Cleanup(ResetWorkdirProvisionCache)
+
+	tempDir := t.TempDir()
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	restoreSpinners := SuppressSpinners()
+	t.Cleanup(restoreSpinners)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	sections := jitSections()
+	sections["component"] = "vpc"
+
+	err = NewExecutor(nil).ensureWorkdirProvisioned(
+		context.Background(),
+		atmosConfig,
+		sections,
+		nil,
+		"vpc",
+		"dev",
+		&ComponentConfig{AutoProvisionWorkdirForOutputs: true},
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, sections[provWorkdir.WorkdirPathKey])
+	assert.Empty(t, uiOutput.String())
 }
 
 func TestEnsureWorkdirProvisioned_SkipsWhenWorkdirDisabled(t *testing.T) {

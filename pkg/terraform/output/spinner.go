@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,6 +16,35 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+var spinnerSuppression struct {
+	sync.Mutex
+	count int
+}
+
+// SuppressSpinners disables animated output spinners until the returned function is called.
+func SuppressSpinners() func() {
+	defer perf.Track(nil, "output.SuppressSpinners")()
+
+	spinnerSuppression.Lock()
+	spinnerSuppression.count++
+	spinnerSuppression.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			spinnerSuppression.Lock()
+			spinnerSuppression.count--
+			spinnerSuppression.Unlock()
+		})
+	}
+}
+
+func spinnersSuppressed() bool {
+	spinnerSuppression.Lock()
+	defer spinnerSuppression.Unlock()
+	return spinnerSuppression.count > 0
+}
 
 type modelSpinner struct {
 	spinner spinner.Model
