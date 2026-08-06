@@ -255,9 +255,9 @@ These commands represent significant architectural improvements:
 1. **Command Registry Pattern**: Both commands use the new command registry pattern, making them independently testable and maintainable
 
 2. **Shared Core Packages**:
-   - `pkg/init/ui` - Interactive UI components and prompts
-   - `pkg/scaffold/templating` - Template processing engine
-   - `pkg/init/config` - Scaffold configuration parsing
+  - `pkg/init/ui` - Interactive UI components and prompts
+  - `pkg/scaffold/templating` - Template processing engine
+  - `pkg/init/config` - Scaffold configuration parsing
 
 3. **Embedded Templates**: Built-in templates are embedded in the Atmos binary, ensuring version compatibility and eliminating external dependencies
 
