@@ -12528,10 +12528,11 @@
             "$ref": "#/$defs/UnitDependency"
           },
           {
-            "type": "null"
+            "type": "string",
+            "description": "Dependency name shorthand, equivalent to {name: \u003cvalue\u003e}."
           },
           {
-            "$ref": "#/$defs/yamlFunction"
+            "type": "null"
           }
         ]
       },

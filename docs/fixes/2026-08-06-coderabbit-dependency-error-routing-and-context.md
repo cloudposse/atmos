@@ -7,16 +7,16 @@
 Two related CodeRabbit findings on `cmd/cmd_utils.go`'s `executeCustomCommand`:
 
 1. `dependencies.commands`/`dependencies.workflows` resolution used `context.Background()` for
-   `taskgraph.Run`, discarding cancellation from the invoking Cobra command's own context -- a
-   dependency graph could keep running after the user cancelled (e.g. Ctrl-C) the top-level
-   command.
+    `taskgraph.Run`, discarding cancellation from the invoking Cobra command's own context -- a
+    dependency graph could keep running after the user cancelled (e.g. Ctrl-C) the top-level
+    command.
 2. The dependency-error-sink routing added for `fail: best_effort`/`fail_fast` (see
-   `2026-08-05-custom-command-dependency-shared-cobra-state.md`) only covered step-execution
-   failures. Roughly two dozen other exit points earlier in the same function -- argument
-   processing, dependency/tool resolution, working-directory resolution, step/exec validation,
-   component_config template/lookup errors, ENV var resolution, and per-step flag/auth
-   preparation -- still called `errUtils.CheckErrorPrintAndExit` unconditionally, hard-exiting
-   the whole process even when this command was running as someone else's dependency.
+    `2026-08-05-custom-command-dependency-shared-cobra-state.md`) only covered step-execution
+    failures. Roughly two dozen other exit points earlier in the same function -- argument
+    processing, dependency/tool resolution, working-directory resolution, step/exec validation,
+    component_config template/lookup errors, ENV var resolution, and per-step flag/auth
+    preparation -- still called `errUtils.CheckErrorPrintAndExit` unconditionally, hard-exiting
+    the whole process even when this command was running as someone else's dependency.
 
 ## Context
 
