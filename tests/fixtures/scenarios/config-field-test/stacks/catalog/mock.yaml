@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - catalog/abstract
+
+components:
+  terraform:
+    # Concrete component inheriting `environment`/`region`/`replicas`/`enabled`
+    # from abstract-component (defined in catalog/abstract.yaml, one import
+    # level up). None of those inherited keys are overridden here or in
+    # deploy/*.yaml, so editing them via `stack set` has no concrete node in
+    # any manifest -- used to field-test the provenance "no editable node,
+    # pass --file" error path.
+    mycomponent:
+      metadata:
+        component: mock
+        inherits:
+          - abstract-component
+      vars:
+        foo: "foo catalog default"
+        bar: "bar catalog default"
+        baz: "baz catalog default"
+
+    # A component whose `region` is a YAML anchor definition, aliased by the
+    # component below IN THIS SAME FILE (anchors/aliases don't cross files --
+    # they're scoped to a single YAML document). Used to field-test whether
+    # `stack set`/`stack delete` on the anchor-defining node is rejected as
+    # "would expand/alter a shared anchor."
+    mycomponent-anchor-owner:
+      metadata:
+        component: mock
+      vars:
+        foo: "foo anchor-owner default"
+        region: &shared_region "us-east-1"
+
+    # Aliases mycomponent-anchor-owner's `region` anchor. Used to field-test
+    # editing the ALIAS use-site instead of the anchor definition.
+    mycomponent-anchor-user:
+      metadata:
+        component: mock
+      vars:
+        foo: "foo anchor-user default"
+        region: *shared_region

@@ -1,0 +1,9 @@
+# Fragment merged automatically from atmos.d/. Only exists in the merged
+# (`atmos describe config`) view -- `atmos config get/set` targets the root
+# atmos.yaml file only, so a value defined ONLY here should not be visible
+# to those edit commands. Used to field-test that gap.
+logs:
+  level: Debug
+
+settings:
+  fragment_only_setting: "defined only in atmos.d/extra.yaml"
