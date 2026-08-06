@@ -117,9 +117,13 @@ func findGlobalSetContext(scope secretScope, name string) (string, string, error
 		if decl.Scope != secrets.ScopeGlobal {
 			return "", "", componentRequiredForSet(name, "the declaration is not global")
 		}
-		// Equality of global declarations is sufficient here: coordinateForDeclaration drops both
-		// stack and component for global scope before any provider-specific reference rendering.
-		// A reference therefore cannot resolve differently for two component contexts.
+		// Component-less writes must never select one component's backend address arbitrarily.
+		// Enumeration normally renders templates per component, so different results are caught by
+		// the declaration equality check below. Reject an unresolved component template as well so
+		// an identical raw declaration cannot bypass that guarantee.
+		if componentDependentReference(decl.Reference) {
+			return "", "", componentRequiredForSet(name, "the global declaration reference depends on the component context")
+		}
 		if selected != nil && decl != *selected {
 			return "", "", componentRequiredForSet(name, "global declarations differ between components")
 		}
@@ -133,6 +137,10 @@ func findGlobalSetContext(scope secretScope, name string) (string, string, error
 		return "", "", componentRequiredForSet(name, "no global declaration was found in the stack")
 	}
 	return component, componentType, nil
+}
+
+func componentDependentReference(reference string) bool {
+	return strings.Contains(reference, "{{") && strings.Contains(reference, "atmos_component")
 }
 
 func componentRequiredForSet(name, reason string) error {
