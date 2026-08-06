@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -253,8 +254,57 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		vars, ok := componentSection["vars"].(map[string]interface{})
 		require.True(t, ok, "vars should be a map")
 
-		// template_config should be deep-merged
-		require.Contains(t, vars, "template_config")
+		// template_config must be deep-merged: keys unique to the !template result
+		// (timeout, retries) must survive, keys the component overrides (enabled) must
+		// win, and keys the component adds (new_key) must be present. Regression for the
+		// broader gap behind https://github.com/cloudposse/atmos/issues/2888: today the
+		// component's concrete map silently replaces the !template result outright
+		// instead of deep-merging with it, dropping timeout/retries.
+		templateConfig, ok := vars["template_config"].(map[string]interface{})
+		require.True(t, ok, "vars.template_config should be a map")
+
+		var expectedTemplateConfig map[string]interface{}
+		require.NoError(t, json.Unmarshal(
+			[]byte(`{"enabled":false,"timeout":30,"retries":3,"new_key":"new_value"}`),
+			&expectedTemplateConfig,
+		))
+		assert.Equal(t, expectedTemplateConfig, templateConfig,
+			"!template result must deep-merge with the component's own override, not be replaced by it")
+	})
+
+	t.Run("deep merges with labels and tags functions (regression for #2888)", func(t *testing.T) {
+		// https://github.com/cloudposse/atmos/issues/2888
+		// !labels/!tags are fed by metadata.labels/metadata.tags and must deep-merge with
+		// a concrete override at the same vars path, the same way !template already
+		// claims to (see the "deep merges with yaml functions" subtest above).
+		componentName := "test-labels-override"
+		stack := "test"
+
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: componentName,
+				Stack:     stack,
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		tags, ok := vars["tags"].(map[string]interface{})
+		require.True(t, ok, "vars.tags should be a map")
+		assert.Equal(t, map[string]interface{}{
+			"X": "1",
+			"Y": "2",
+			"Z": "override-value",
+		}, tags, "!labels result must deep-merge with the component's own override, not be replaced by it")
+
+		tagList, ok := vars["tag_list"].([]interface{})
+		require.True(t, ok, "vars.tag_list should be a list")
+		assert.ElementsMatch(t, []interface{}{"X", "Y", "Z"}, tagList,
+			"!tags result must merge with the component's own override list, not be replaced by it")
 	})
 
 	t.Run("handles multiple yaml functions with precedence", func(t *testing.T) {
@@ -293,6 +343,7 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 			"test-list-yaml-to-concrete",
 			"test-map-yaml-to-concrete",
 			"test-deep-merge",
+			"test-labels-override",
 		}
 
 		for _, componentName := range components {

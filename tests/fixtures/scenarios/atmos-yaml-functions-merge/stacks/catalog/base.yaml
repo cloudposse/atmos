@@ -26,3 +26,20 @@ components:
           enabled: true
           timeout: 30
           retries: 3
+
+    # Abstract base component demonstrating !labels/!tags fed by metadata.labels/metadata.tags.
+    # Regression fixture for https://github.com/cloudposse/atmos/issues/2888.
+    base-component-labels:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+        labels:
+          X: "1"
+          Y: "2"
+        tags:
+          - "X"
+          - "Y"
+      vars:
+        # YAML functions that a later layer will contribute a conflicting value for.
+        tags: !labels
+        tag_list: !tags

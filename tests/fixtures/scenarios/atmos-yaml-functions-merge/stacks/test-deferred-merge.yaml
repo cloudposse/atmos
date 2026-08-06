@@ -73,3 +73,16 @@ components:
         # Multiple !env functions in import chain
         stage: !env ATMOS_STAGE
         region: "us-west-2"
+
+    # Test Case 7: Deep merge with !labels/!tags (regression fixture for
+    # https://github.com/cloudposse/atmos/issues/2888 — !labels/!tags silently lose data
+    # when another layer sets a conflicting value at the same path instead of deep-merging).
+    test-labels-override:
+      component: base-component-labels
+      vars:
+        # This must deep-merge with the !labels-produced map {X: "1", Y: "2"}, not replace it.
+        tags:
+          Z: "override-value"
+        # This must deep-merge with the !tags-produced list ["X", "Y"], not replace it.
+        tag_list:
+          - "Z"
