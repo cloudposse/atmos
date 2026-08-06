@@ -103,18 +103,28 @@ type helmfileNodeHooks struct {
 }
 
 // Before implements schema.ComponentNodeHooks.
-func (n *helmfileNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+func (n *helmfileNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+// BeforeWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *helmfileNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	n.called = true
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Warn("CI hook config init failed", "component", info.ComponentFromArg, "error", err)
 		return nil // Config errors surface on the real execution path, not here.
 	}
-	return n.runUserHooks(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess})
+	return n.runUserHooksWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers)
 }
 
 // After implements schema.ComponentNodeHooks.
-func (n *helmfileNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+func (n *helmfileNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+// AfterWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *helmfileNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error, writers schema.ComponentNodeHookWriters) error {
 	n.called = true
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -126,7 +136,7 @@ func (n *helmfileNodeHooks) After(_ context.Context, info *schema.ConfigAndStack
 	if execErr != nil {
 		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
 	}
-	hookErr := n.runUserHooks(&atmosConfig, info, n.afterEvent, outcome)
+	hookErr := n.runUserHooksWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        n.afterEvent,
@@ -147,6 +157,10 @@ func (n *helmfileNodeHooks) After(_ context.Context, info *schema.ConfigAndStack
 // verbatim: RunAll already resolves each hook's on_failure mode internally
 // (applyOnFailure) — a non-nil return specifically means on_failure: fail.
 func (n *helmfileNodeHooks) runUserHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome) error {
+	return n.runUserHooksWithWriters(atmosConfig, info, event, outcome, schema.ComponentNodeHookWriters{})
+}
+
+func (n *helmfileNodeHooks) runUserHooksWithWriters(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome, writers schema.ComponentNodeHookWriters) error {
 	if event == "" {
 		return nil
 	}
@@ -157,6 +171,8 @@ func (n *helmfileNodeHooks) runUserHooks(atmosConfig *schema.AtmosConfiguration,
 		Cmd:         n.cmd,
 		Args:        n.args,
 		Outcome:     outcome,
+		Stdout:      writers.Stdout,
+		Stderr:      writers.Stderr,
 	})
 }
 
