@@ -1100,6 +1100,26 @@ func TestDecodeTaskFromMap_InvalidStepsMap(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
 }
 
+// TestDecodeTaskFromMap_InvalidWithBlock verifies decodeTaskFromMap wraps a
+// decodeStepWithFromMapValue error (an unsupported container `action` rejecting
+// a non-empty `with:` block, mirroring decodeContainerWith's default case in
+// workflow.go) with the "failed to decode task with-block at index N" context
+// and the ErrWorkflowControlStepInvalid sentinel.
+func TestDecodeTaskFromMap_InvalidWithBlock(t *testing.T) {
+	m := map[string]any{
+		"type":   TaskTypeShell,
+		"action": "not-a-real-action",
+		"with": map[string]any{
+			"context": "app",
+		},
+	}
+
+	_, err := decodeTaskFromMap(m, 6)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode task with-block at index 6")
+	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
+}
+
 func TestDecodeTaskFromMap_EmptyMap(t *testing.T) {
 	m := map[string]any{}
 
@@ -1438,4 +1458,50 @@ func TestNormalizeTaskOutputMap_ParallelOutputDecodeErrorPropagates(t *testing.T
 	}
 	_, err := normalizeTaskOutputMap(m, &task)
 	require.Error(t, err)
+}
+
+// withValueMarshalError implements yaml.Marshaler and always fails, so
+// decodeStepWithFromMapValue's yaml.Marshal(withValue) call surfaces a real
+// error instead of silently dropping it or panicking.
+type withValueMarshalError struct{}
+
+var errWithValueMarshal = errors.New("with-value marshal failed")
+
+func (withValueMarshalError) MarshalYAML() (any, error) {
+	return nil, errWithValueMarshal
+}
+
+// TestDecodeStepWithFromMapValue_MarshalErrorPropagates verifies that when the
+// `with:` value round-tripped through YAML (see decodeStepWithFromMapValue's
+// doc comment) cannot itself be marshaled, the error is returned rather than
+// swallowed. A mapstructure/Viper-sourced `with:` value can implement
+// yaml.Marshaler indirectly (e.g. via an embedded custom type), so this is a
+// real, reachable failure mode of the round-trip, not a contrived one.
+func TestDecodeStepWithFromMapValue_MarshalErrorPropagates(t *testing.T) {
+	err := decodeStepWithFromMapValue(withValueMarshalError{}, TaskTypeShell, "", &stepPolyTargets{generic: &map[string]any{}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errWithValueMarshal)
+}
+
+// withValueDanglingAlias implements yaml.Marshaler by returning a *yaml.Node
+// alias with no corresponding anchor. Marshaling happily serializes this
+// (it does not validate that aliases resolve) as the literal text `*x`, but
+// unmarshaling that text back into a *yaml.Node fails with "unknown anchor
+// 'x' referenced" -- a genuine, non-contrived way the second round-trip step
+// (yaml.Unmarshal(withBytes, &doc)) in decodeStepWithFromMapValue can fail
+// even though the preceding yaml.Marshal succeeded.
+type withValueDanglingAlias struct{}
+
+func (withValueDanglingAlias) MarshalYAML() (any, error) {
+	return &yaml.Node{Kind: yaml.AliasNode, Value: "x"}, nil
+}
+
+// TestDecodeStepWithFromMapValue_UnmarshalErrorPropagates verifies that when
+// the intermediate YAML bytes produced by yaml.Marshal cannot themselves be
+// parsed back by yaml.Unmarshal, decodeStepWithFromMapValue returns that error
+// rather than swallowing it.
+func TestDecodeStepWithFromMapValue_UnmarshalErrorPropagates(t *testing.T) {
+	err := decodeStepWithFromMapValue(withValueDanglingAlias{}, TaskTypeShell, "", &stepPolyTargets{generic: &map[string]any{}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown anchor")
 }

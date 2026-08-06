@@ -794,6 +794,40 @@ func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
 	}
 }
 
+// TestIsCIGitCloneBootstrapArgs covers isCIGitCloneBootstrapArgs directly,
+// including the len(args) < 1 guard (no argv[0] at all), which
+// handleConfigInitErrorWithArgs's real callers (os.Args, always containing at
+// least the program name) never exercise but the helper must still handle
+// defensively since it's called with an explicit, test-controllable args slice.
+func TestIsCIGitCloneBootstrapArgs(t *testing.T) {
+	// These cases resolve to false before ever consulting CI detection
+	// (either the len(args) < 1 guard fires directly, or the shape doesn't
+	// match "git clone" / has a positional argument), so no env setup is
+	// needed for a deterministic result.
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "empty args slice returns false", args: []string{}, want: false},
+		{name: "nil args returns false", args: nil, want: false},
+		{name: "explicit repo argument is not the bootstrap case", args: []string{"atmos", "git", "clone", "flux-deploy"}, want: false},
+		{name: "not a git clone command", args: []string{"atmos", "terraform", "plan"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isCIGitCloneBootstrapArgs(tt.args))
+		})
+	}
+
+	t.Run("bootstrap clone with no extra args under detected CI", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("ATMOS_CI", "true")
+		assert.True(t, isCIGitCloneBootstrapArgs([]string{"atmos", "git", "clone"}))
+	})
+}
+
 func TestIsBuiltinConfigValidationCommand(t *testing.T) {
 	newCommand := func(uses ...string) *cobra.Command {
 		root := &cobra.Command{Use: "atmos"}

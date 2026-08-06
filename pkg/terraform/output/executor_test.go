@@ -579,6 +579,60 @@ func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
 		"the second cache-hit lookup (a different output key on the same already-cached component) must also be visible")
 }
 
+// TestResolveOutputFromCache_MissReturnsNil verifies that resolveOutputFromCache
+// returns nil (not a zero-value *cachedOutputResult) for a stackSlug that was
+// never stored in the cache, so callers such as GetOutput correctly fall
+// through to a real fetch instead of mistaking a miss for a cache hit that
+// resolved to a nil value.
+func TestResolveOutputFromCache_MissReturnsNil(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	// A unique, never-populated stackSlug guarantees test isolation --
+	// nothing else in this package's test suite could have cached it.
+	stackSlug := stackComponentKey("never-cached-stack", "never-cached-component")
+	terraformOutputsCache.Delete(stackSlug) // defensive: ensure a clean slate.
+
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "never-cached-component", "never-cached-stack", "some_output")
+	assert.Nil(t, result, "a cache miss must return nil so the caller falls through to a real fetch")
+}
+
+// TestResolveOutputFromCache_GetOutputVariableErrorIsVisible verifies that when
+// a cache hit's stored outputs cannot be evaluated for the requested output key
+// (a malformed yq expression), resolveOutputFromCache returns a
+// *cachedOutputResult carrying the error AND surfaces the same visible
+// outputLookupFailed notification a real fetch failure would -- mirroring
+// TestExecutor_GetOutput_CacheHitIsVisible's success-path assertion but for the
+// failure branch.
+func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	stackSlug := stackComponentKey("malformed-yq-stack", "malformed-yq-component")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id": "vpc-abc123",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	// An unbalanced `[` is not a missing key -- it is a yq syntax error,
+	// which getOutputVariable/extractYqValue propagate as a real error
+	// rather than an "exists: false" result.
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
+	require.NotNil(t, result)
+	require.Error(t, result.err)
+	assert.Contains(t, result.err.Error(), "failed to evaluate YQ expression")
+
+	rendered := ansi.Strip(uiOutput.String())
+	assert.Contains(t, rendered, "Fetching vpc_id[ output from malformed-yq-component in malformed-yq-stack",
+		"a cache-hit lookup that fails to evaluate must still surface a visible failure notification")
+}
+
 func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
