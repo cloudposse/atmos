@@ -549,9 +549,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)' -count=1 -timeout 25m -v
 
-  # run k3s demo tests
+  # Run the approachable k3s demos plus the focused native Helm lifecycle
+  # scenario. Keep failure-path coverage under tests/fixtures so public examples
+  # remain small, happy-path configurations.
   k3s:
-    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.demo-folder }}"
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
     needs: build
     runs-on: ${{ matrix.flavor.os }}
     env:
@@ -564,9 +566,10 @@ jobs:
         flavor:
           - { os: ubuntu-latest, target: linux, artifact: linux }
           - { os: "macos-15-intel", target: macos, artifact: macos-intel }
-        demo-folder:
-          - demo-helmfile
-          - helm
+        fixture:
+          - { name: demo-helmfile, path: examples/demo-helmfile }
+          - { name: helm, path: examples/helm }
+          - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
 
     # The macOS matrix may spend up to 45 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
@@ -619,9 +622,9 @@ jobs:
           mkdir -p ~/.aws
           echo '[default]' > ~/.aws/config
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests for ${{ matrix.fixture.name }}
         run: |
-          cd examples/${{ matrix.demo-folder }}
+          cd "${{ matrix.fixture.path }}"
           run_with_timeout() {
             python3 - "$@" <<'PY'
           import os

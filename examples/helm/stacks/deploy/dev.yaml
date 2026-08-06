@@ -1,26 +1,6 @@
 vars:
   stage: dev
 
-# Native Helm lifecycle defaults for every Helm component in this stack.
-helm:
-  release:
-    wait:
-      strategy: watcher
-    # Nested k3s runners can leave Helm's watcher blocked after release
-    # resources are gone. Live deletes use deterministic legacy waiting; the
-    # workflow still exercises watcher selection through its delete dry-run.
-    delete:
-      wait:
-        strategy: legacy
-    # Leave enough headroom for nested k3s workloads on resource-constrained
-    # macOS/Colima runners. Components that exercise timeout behavior override
-    # this value explicitly below.
-    timeout: 4m
-    history:
-      max: 10
-    install:
-      crds: skip
-
 components:
   emulator:
     kubernetes:
@@ -35,14 +15,6 @@ components:
       # (components/helm/demo), which contains Chart.yaml.
       chart: "."
       namespace: demo
-      release:
-        wait:
-          strategy: legacy
-        install:
-          on_failure: uninstall
-        upgrade:
-          on_failure: rollback
-          cleanup_on_failure: true
       # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
       values:
         replicaCount: 2
@@ -50,9 +22,6 @@ components:
           tag: "1.27"
         service:
           port: 8080
-        tpl:
-          source: from-stack
-          expression: !literal "{{ .Values.tpl.source }}"
 
     demo-repo:
       metadata:
@@ -69,134 +38,3 @@ components:
           tag: "1.27"
         service:
           port: 8080
-
-    demo-jobs:
-      metadata:
-        component: demo
-      chart: "."
-      name: demo-jobs
-      namespace: demo-jobs
-      release:
-        wait:
-          jobs: true
-      values:
-        hooks:
-          enabled: false
-        job:
-          enabled: true
-          sleepSeconds: 3
-
-    demo-no-hooks:
-      metadata:
-        component: demo
-      chart: "."
-      name: demo-no-hooks
-      namespace: demo-no-hooks
-      release:
-        chart_hooks: false
-
-    demo-hook-only:
-      metadata:
-        component: demo
-      chart: "."
-      name: demo-hook-only
-      namespace: demo-hook-only
-      release:
-        wait:
-          strategy: hookOnly
-      values:
-        deployment:
-          readinessGate: true
-
-    demo-timeout:
-      metadata:
-        component: demo
-      chart: "."
-      name: demo-timeout
-      namespace: demo-timeout
-      release:
-        # Keep the lifecycle deadline below the readiness delay while leaving
-        # enough time for recovery to finish on resource-constrained runners.
-        timeout: 15s
-        wait:
-          strategy: watcher
-        install:
-          on_failure: uninstall
-        upgrade:
-          on_failure: rollback
-      values:
-        deployment:
-          readinessDelaySeconds: 60
-        hooks:
-          enabled: false
-
-    demo-install-fail:
-      metadata:
-        component: demo
-      chart: "."
-      name: demo-install-fail
-      namespace: demo-install-fail
-      release:
-        wait:
-          strategy: legacy
-        install:
-          on_failure: uninstall
-      values:
-        hooks:
-          fail: true
-
-    demo-upgrade-fail:
-      metadata:
-        component: demo
-      dependencies:
-        components:
-          - name: demo
-      chart: "."
-      # Intentionally targets the already-installed demo release.
-      name: demo
-      namespace: demo
-      release:
-        upgrade:
-          wait:
-            strategy: legacy
-          on_failure: rollback
-          cleanup_on_failure: true
-      values:
-        hooks:
-          fail: true
-        extraConfigMap:
-          enabled: true
-
-    dag-foundation:
-      metadata:
-        component: demo
-        tags: [lifecycle-dag]
-      chart: "."
-      name: dag-foundation
-      namespace: lifecycle-dag
-      release:
-        wait:
-          strategy: legacy
-      values:
-        deployment:
-          readinessDelaySeconds: 3
-
-    dag-dependent:
-      metadata:
-        component: demo
-        tags: [lifecycle-dag]
-      dependencies:
-        components:
-          - name: dag-foundation
-      chart: "."
-      name: dag-dependent
-      namespace: lifecycle-dag
-      release:
-        wait:
-          strategy: legacy
-      values:
-        hooks:
-          requiredDeployment: dag-foundation
-          # The lifecycle DAG integration test explicitly opts into a live
-          # cluster lookup; ordinary offline chart rendering leaves this off.
-          validateDependency: true
