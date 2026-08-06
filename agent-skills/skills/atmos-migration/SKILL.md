@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration"
+description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,6 +9,8 @@ references:
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
   - references/from-component-updater.md
+  - references/from-mise.md
+  - references/from-aqua.md
 ---
 
 # Migrating to Atmos
@@ -19,6 +21,10 @@ This skill is the agent's decision guide for migrating an existing Terraform rep
 Atmos is designed to **adopt an existing repo without forcing a reorganization** -- the canonical
 `components/terraform/` layout is a recommendation, not a requirement. Lead with the minimum
 change that delivers value, then escalate only as the user's needs grow.
+
+This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
+toolchain -- see [from-mise.md](references/from-mise.md) and
+[from-aqua.md](references/from-aqua.md) in the routing table below.
 
 For full prose tutorials aimed at end users, link to:
 
@@ -75,6 +81,8 @@ different reference:
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
+| mise config (`mise.toml`, `.mise.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
+| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
@@ -188,3 +196,7 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
+  vars from mise to the Atmos toolchain
+- [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
+  `aqua.yaml` to the Atmos toolchain
