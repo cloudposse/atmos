@@ -40,7 +40,7 @@ scope):
 toolchain:
   aliases:
     terraform: hashicorp/terraform
-    kubectl: kubernetes-sigs/kubectl
+    kubectl: kubernetes/kubectl
   registries:
     - name: aqua
       type: aqua
@@ -69,7 +69,7 @@ mas "Xcode", id: 497799835
   or require a source build stay out of scope. Leave these entries in the Brewfile.
 2. **Resolve each candidate's GitHub `owner/repo`.** Homebrew formula names often differ from the
   upstream GitHub repository name. This differs from asdf or aqua. For example, `kubernetes-cli`
-  maps to `kubernetes-sigs/kubectl`, and `hashicorp/tap/terraform` maps to `hashicorp/terraform`.
+  maps to `kubernetes/kubectl`, and `hashicorp/tap/terraform` maps to `hashicorp/terraform`.
   You must do this step manually. If the mapping is not obvious, check the formula's `homepage` or
   `url` field with `brew info <formula>`.
 3. **Pick a version to pin.** A Brewfile has no native per-project version pinning. `brew bundle`

@@ -38,7 +38,7 @@ asdf install
 toolchain:
   aliases:
     terraform: hashicorp/terraform
-    kubectl: kubernetes-sigs/kubectl
+    kubectl: kubernetes/kubectl
     helm: helm/helm
   registries:
     - name: aqua
@@ -100,11 +100,11 @@ runs. As a result, plain `terraform` always resolves correctly in any shell, IDE
 script. This works with no per-project setup.
 
 **The Atmos toolchain does not do this by default.** Atmos resolves and injects tools declared in
-`dependencies.tools` into `PATH` only for the duration of an `atmos <subcommand>` invocation. If
-you run plain `terraform` in your shell, it will not use the Atmos-managed version. To use the
-Atmos-managed version in your shell, you must opt in to shell integration. This is a supported
-mode, not a limitation. Use `atmos toolchain env` to export the resolved `PATH` into your
-interactive shell:
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) into `PATH`
+only for the duration of an `atmos <subcommand>` invocation. If you run plain `terraform` in your
+shell, it will not use the Atmos-managed version. To use the Atmos-managed version in your shell,
+you must opt in to shell integration. This is a supported mode, not a limitation. Use
+`atmos toolchain env` to export the resolved `PATH` into your interactive shell:
 
 **Bash** (add to `~/.bashrc`):
 ```bash

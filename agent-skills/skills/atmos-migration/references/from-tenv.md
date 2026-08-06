@@ -106,9 +106,10 @@ every invocation. Plain commands such as `terraform` or `tofu` always resolve co
 shell. This setup needs no per-project configuration.
 
 **The Atmos toolchain does not do this by default.** Atmos resolves tools declared in
-`dependencies.tools` and injects them into `PATH` only for the duration of an `atmos <subcommand>`
-invocation. If you run one of these tools plain in your shell, it will not use the Atmos-managed
-version. To use the Atmos-managed version in your shell, opt in to shell integration.
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) and injects
+them into `PATH` only for the duration of an `atmos <subcommand>` invocation. If you run one of
+these tools plain in your shell, it will not use the Atmos-managed version. To use the
+Atmos-managed version in your shell, opt in to shell integration.
 
 Shell integration is a **supported mode**. It is not a limitation. Use `atmos toolchain env` to
 export the resolved `PATH` into your interactive shell:

@@ -80,11 +80,11 @@ re-reads the nearest `.terraform-version` file on every command. As a result, pl
 always resolves to the correct version in any shell. This setup needs no per-project configuration.
 
 **The Atmos toolchain does not do this by default.** Atmos resolves tools declared in
-`dependencies.tools` and injects them into `PATH`. It does this only for the duration of one
-`atmos <subcommand>` command. If you run plain `terraform` in your shell, it will not use the
-Atmos-managed version. To use it, you must opt in to shell integration. This is a **supported
-mode**, not a limitation. Use `atmos toolchain env` to export the resolved `PATH` into your
-interactive shell:
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) and injects
+them into `PATH`. It does this only for the duration of one `atmos <subcommand>` command. If you
+run plain `terraform` in your shell, it will not use the Atmos-managed version. To use it, you must
+opt in to shell integration. This is a **supported mode**, not a limitation. Use
+`atmos toolchain env` to export the resolved `PATH` into your interactive shell:
 
 **Bash** (add to `~/.bashrc`):
 ```bash

@@ -25,7 +25,7 @@ registries:
 packages:
   - name: hashicorp/terraform
     version: v1.9.8
-  - name: kubernetes-sigs/kubectl
+  - name: kubernetes/kubectl
     version: v1.28.0
   - name: jqlang/jq
     version: v1.7.1
@@ -51,7 +51,7 @@ toolchain:
 ```text
 # .tool-versions
 hashicorp/terraform 1.9.8
-kubernetes-sigs/kubectl 1.28.0
+kubernetes/kubectl 1.28.0
 jqlang/jq 1.7.1
 ```
 ```bash
@@ -104,10 +104,11 @@ nearest `aqua.yaml` again on every invocation. As a result, plain `terraform` al
 correctly in any shell. This method needs no per-project setup.
 
 **The Atmos toolchain does not do this by default.** Atmos resolves tools declared in
-`dependencies.tools` and injects them into `PATH` only for the duration of one
-`atmos <subcommand>` invocation. If you run plain `terraform` in your shell, it will not use the
-Atmos-managed version unless you opt in to shell integration. This is a **supported mode**, not a
-limitation. Use `atmos toolchain env` to export the resolved `PATH` into your interactive shell:
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) and injects
+them into `PATH` only for the duration of one `atmos <subcommand>` invocation. If you run plain
+`terraform` in your shell, it will not use the Atmos-managed version unless you opt in to shell
+integration. This is a **supported mode**, not a limitation. Use `atmos toolchain env` to export the
+resolved `PATH` into your interactive shell:
 
 **Bash** (add to `~/.bashrc`):
 ```bash

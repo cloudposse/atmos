@@ -86,10 +86,11 @@ reads the nearest `.opentofu-version` file on every invocation. Plain `tofu` alw
 the correct version in any shell. This needs no per-project setup.
 
 **The Atmos toolchain does not do this by default.** Atmos resolves tools declared in
-`dependencies.tools` and injects them into `PATH` only for the duration of one
-`atmos <subcommand>` invocation. Plain `tofu` in your shell does not pick up the Atmos-managed
-version unless you opt in to shell integration. This is a **supported mode**, not a limitation.
-Use `atmos toolchain env` to export the resolved `PATH` into your interactive shell:
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) and injects
+them into `PATH` only for the duration of one `atmos <subcommand>` invocation. Plain `tofu` in your
+shell does not pick up the Atmos-managed version unless you opt in to shell integration. This is a
+**supported mode**, not a limitation. Use `atmos toolchain env` to export the resolved `PATH` into
+your interactive shell:
 
 **Bash** (add to `~/.bashrc`):
 ```bash
