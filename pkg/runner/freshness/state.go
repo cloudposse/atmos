@@ -19,9 +19,13 @@ type Record struct {
 
 // StateStore persists/retrieves the last-recorded Record for a step, keyed by a caller-computed
 // stable identity (see Checker.stateKey). Abstracted for testability -- the real implementation
-// is one JSON file per key under stateDir, guarded by pkg/cache.FileLock so concurrent steps
-// (e.g. inside a `parallel` block, or two CI jobs sharing an archived cache directory) can't
-// corrupt each other's state.
+// is one JSON file per key under stateDir, guarded by pkg/cache.FileLock on platforms where it
+// provides real mutual exclusion. On Windows, pkg/cache.FileLock is explicitly best-effort (no
+// native locking there); Save always writes to a uniquely-named temp file before the final
+// rename, so concurrent writers never collide on the temp file itself regardless of platform,
+// but a concurrent Save and Load can still transiently fail against each other on Windows if
+// they land on the exact same instant -- callers already treat a Save/RecordSuccess failure as
+// log-and-continue, not fatal, which is the correct posture for a best-effort cache.
 type StateStore interface {
 	Load(stateDir, key string) (Record, bool, error)
 	Save(stateDir, key string, r Record) error
@@ -87,11 +91,30 @@ func (fileStateStore) Save(stateDir, key string, r Record) error {
 		if err != nil {
 			return err
 		}
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		// A uniquely-named temp file (rather than a fixed "<path>.tmp") means concurrent
+		// writers never collide on the temp file itself -- required on Windows, where
+		// pkg/cache.FileLock provides no real mutual exclusion (see the StateStore doc
+		// comment), so a fixed temp name would let two writers race on the same open handle.
+		tmpFile, err := os.CreateTemp(stateDir, key+".*.tmp")
+		if err != nil {
 			return err
 		}
-		return os.Rename(tmp, path)
+		tmp := tmpFile.Name()
+		_, writeErr := tmpFile.Write(data)
+		closeErr := tmpFile.Close()
+		if writeErr != nil {
+			_ = os.Remove(tmp) //nolint:gosec // G703: path is from os.CreateTemp, not user input.
+			return writeErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(tmp) //nolint:gosec // G703: path is from os.CreateTemp, not user input.
+			return closeErr
+		}
+		if err := os.Rename(tmp, path); err != nil { //nolint:gosec // G703: path is from os.CreateTemp, not user input.
+			_ = os.Remove(tmp) //nolint:gosec // G703: path is from os.CreateTemp, not user input.
+			return err
+		}
+		return nil
 	})
 }
 

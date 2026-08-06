@@ -30,18 +30,25 @@ func TestExecuteWorkflow_DependenciesWorkflowsSameFile(t *testing.T) {
 	buildLog := filepath.Join(tmpDir, "build.txt")
 	deployLog := filepath.Join(tmpDir, "deploy.txt")
 
+	// Forward slashes when embedding a path into this raw YAML manifest string: a Windows
+	// backslash path (e.g. C:\Users\...) parsed through a YAML double-quoted scalar would be
+	// misread as C-style escapes (\U, \u, \x expect hex digits, failing with "did not find
+	// expected hexdecimal number"), and the same backslashes would also be consumed as shell
+	// escapes once the resulting command string reaches the mvdan/sh interpreter. Forward
+	// slashes are valid path separators on Windows too, so os.OpenFile-based redirects still
+	// resolve correctly.
 	manifest := `
 workflows:
   build:
     steps:
-      - command: "echo build >> ` + buildLog + `"
+      - command: "echo build >> ` + filepath.ToSlash(buildLog) + `"
         type: shell
   deploy:
     dependencies:
       workflows:
         - build
     steps:
-      - command: "echo deploy >> ` + deployLog + `"
+      - command: "echo deploy >> ` + filepath.ToSlash(deployLog) + `"
         type: shell
 `
 	workflowPath := filepath.Join(tmpDir, "same-file.yaml")
@@ -76,11 +83,13 @@ func TestExecuteWorkflow_DependenciesWorkflowsCrossFile(t *testing.T) {
 	buildLog := filepath.Join(tmpDir, "build.txt")
 	deployLog := filepath.Join(tmpDir, "deploy.txt")
 
+	// See the same-file test's comment: forward slashes avoid both a YAML double-quoted-scalar
+	// hex-escape misparse and mvdan/sh consuming backslashes as shell escapes on Windows.
 	buildManifest := `
 workflows:
   build:
     steps:
-      - command: "echo build >> ` + buildLog + `"
+      - command: "echo build >> ` + filepath.ToSlash(buildLog) + `"
         type: shell
 `
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.yaml"), []byte(buildManifest), 0o644))
@@ -93,7 +102,7 @@ workflows:
         - name: build
           file: build.yaml
     steps:
-      - command: "echo deploy >> ` + deployLog + `"
+      - command: "echo deploy >> ` + filepath.ToSlash(deployLog) + `"
         type: shell
 `
 	deployPath := filepath.Join(tmpDir, "deploy.yaml")

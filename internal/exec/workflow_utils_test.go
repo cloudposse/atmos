@@ -1505,7 +1505,7 @@ func TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:             "compile",
-				Command:          "echo ran >> " + runLog,
+				Command:          "echo ran >> " + filepath.ToSlash(runLog),
 				Type:             "shell",
 				WorkingDirectory: tmpDir,
 				Inputs:           &schema.Inputs{Sources: []string{"main.go"}},
@@ -1555,7 +1555,7 @@ func TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:             "install",
-				Command:          "echo ran >> " + runLog,
+				Command:          "echo ran >> " + filepath.ToSlash(runLog),
 				Type:             "shell",
 				WorkingDirectory: tmpDir,
 				Precondition:     &schema.Precondition{Tools: []string{"go"}},

@@ -51,7 +51,7 @@ func TestCustomCommandIntegration_InputsSkipsWhenSourcesUnchanged(t *testing.T) 
 			Steps: schema.Tasks{
 				{
 					Type:      "shell",
-					Command:   "echo ran >> " + runLog,
+					Command:   "echo ran >> " + filepath.ToSlash(runLog),
 					Inputs:    &schema.Inputs{Sources: []string{"main.go"}},
 					Artifacts: &schema.Artifacts{Paths: []string{"bin/app"}},
 				},
@@ -125,7 +125,7 @@ func TestCustomCommandIntegration_PreconditionSkipsWhenToolAlreadyOnPath(t *test
 			Steps: schema.Tasks{
 				{
 					Type:         "shell",
-					Command:      "echo ran >> " + runLog,
+					Command:      "echo ran >> " + filepath.ToSlash(runLog),
 					Precondition: &schema.Precondition{Tools: []string{"go"}},
 					// Explicit here for clarity; this is also the implicit default for a
 					// precondition-only step with no `when:` at all.
@@ -179,7 +179,7 @@ func TestCustomCommandIntegration_PreconditionRunsWhenToolMissing(t *testing.T) 
 			Steps: schema.Tasks{
 				{
 					Type:         "shell",
-					Command:      "echo ran >> " + runLog,
+					Command:      "echo ran >> " + filepath.ToSlash(runLog),
 					Precondition: &schema.Precondition{Tools: []string{"atmos-definitely-does-not-exist-tool"}},
 				},
 			},

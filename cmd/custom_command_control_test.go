@@ -43,14 +43,17 @@ func TestCustomCommandIntegration_ParallelStepWithNeeds(t *testing.T) {
 				Type: schema.TaskTypeParallel,
 				Steps: []schema.WorkflowStep{
 					{
-						Name:    "first",
-						Type:    "shell",
-						Command: "echo first >> " + orderFile,
+						Name: "first",
+						Type: "shell",
+						// filepath.ToSlash: an unquoted Windows backslash path reaching mvdan/sh
+						// (pkg/utils/shell_utils.go) would have its backslashes consumed as shell
+						// escapes; forward slashes are valid path separators on Windows too.
+						Command: "echo first >> " + filepath.ToSlash(orderFile),
 					},
 					{
 						Name:    "second",
 						Type:    "shell",
-						Command: "echo second >> " + orderFile,
+						Command: "echo second >> " + filepath.ToSlash(orderFile),
 						Needs:   []string{"first"},
 					},
 				},
@@ -106,16 +109,17 @@ func TestCustomCommandIntegration_ContinueAlwaysForgivesFailure(t *testing.T) {
 		Description: "Test continue: always forgives a step failure",
 		Steps: schema.Tasks{
 			{
-				Command:  "echo fail >> " + failFile + " && exit 7",
+				// filepath.ToSlash: see the comment on the parallel-needs test above.
+				Command:  "echo fail >> " + filepath.ToSlash(failFile) + " && exit 7",
 				Type:     "shell",
 				Continue: schema.MustCondition(schema.ConditionPredicateAlways),
 			},
 			{
-				Command: "echo ran >> " + ranFile,
+				Command: "echo ran >> " + filepath.ToSlash(ranFile),
 				Type:    "shell",
 			},
 			{
-				Command: "echo failure-handler >> " + handlerFile,
+				Command: "echo failure-handler >> " + filepath.ToSlash(handlerFile),
 				Type:    "shell",
 				When:    schema.MustCondition(schema.ConditionPredicateFailure),
 			},

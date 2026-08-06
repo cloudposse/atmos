@@ -15,7 +15,10 @@ import (
 func RefsFromDependencies(deps schema.Dependencies) []Ref {
 	defer perf.Track(nil, "taskgraph.RefsFromDependencies")()
 
-	refs := make([]Ref, 0, len(deps.Commands)+len(deps.Workflows))
+	// Capacity hint only (not exact) -- sized to Commands alone. CodeQL's go/allocation-size-
+	// overflow query flags len(a)+len(b) as a potentially-overflowing sum; a single len() is
+	// fine since it's bounded, and the slice still grows correctly if Workflows adds more.
+	refs := make([]Ref, 0, len(deps.Commands))
 	for i := range deps.Commands {
 		refs = append(refs, refFromUnitDependency(KindCommand, &deps.Commands[i]))
 	}

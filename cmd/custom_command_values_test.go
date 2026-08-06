@@ -39,7 +39,7 @@ func TestCustomCommandIntegration_ValuesRejectsInvalidFlagValue(t *testing.T) {
 			Flags: []schema.CommandFlag{
 				{Name: "environment", Type: "string", Values: []string{"dev", "staging", "prod"}},
 			},
-			Steps: schema.Tasks{{Type: "shell", Command: "echo ran >> " + ranFile}},
+			Steps: schema.Tasks{{Type: "shell", Command: "echo ran >> " + filepath.ToSlash(ranFile)}},
 		},
 	}
 
@@ -93,7 +93,7 @@ func TestCustomCommandIntegration_ValuesAcceptsValidFlagValue(t *testing.T) {
 			Flags: []schema.CommandFlag{
 				{Name: "environment", Type: "string", Values: []string{"dev", "staging", "prod"}},
 			},
-			Steps: schema.Tasks{{Type: "shell", Command: "echo ran >> " + ranFile}},
+			Steps: schema.Tasks{{Type: "shell", Command: "echo ran >> " + filepath.ToSlash(ranFile)}},
 		},
 	}
 

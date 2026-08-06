@@ -40,25 +40,30 @@ func TestCustomCommandIntegration_DependenciesCommandsDiamondDedup(t *testing.T)
 	buildLog := filepath.Join(tmpDir, "build.txt")
 	releaseLog := filepath.Join(tmpDir, "release.txt")
 
+	// filepath.ToSlash: see the comment on the parallel-needs test in
+	// custom_command_control_test.go — an unquoted Windows backslash path reaching mvdan/sh
+	// would have its backslashes consumed as shell escapes.
+	buildLogArg := filepath.ToSlash(buildLog)
+	releaseLogArg := filepath.ToSlash(releaseLog)
 	atmosConfig.Commands = []schema.Command{
 		{
 			Name:  "dd-build",
-			Steps: schema.Tasks{{Type: "shell", Command: "echo build >> " + buildLog}},
+			Steps: schema.Tasks{{Type: "shell", Command: "echo build >> " + buildLogArg}},
 		},
 		{
 			Name:         "dd-test",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-build"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo test >> " + buildLog}},
+			Steps:        schema.Tasks{{Type: "shell", Command: "echo test >> " + buildLogArg}},
 		},
 		{
 			Name:         "dd-lint",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-build"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo lint >> " + buildLog}},
+			Steps:        schema.Tasks{{Type: "shell", Command: "echo lint >> " + buildLogArg}},
 		},
 		{
 			Name:         "dd-release",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-test"}, {Name: "dd-lint"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo release >> " + releaseLog}},
+			Steps:        schema.Tasks{{Type: "shell", Command: "echo release >> " + releaseLogArg}},
 		},
 	}
 
@@ -117,7 +122,7 @@ func TestCustomCommandIntegration_DependenciesCommandsParameterizedBothRun(t *te
 			Flags: []schema.CommandFlag{
 				{Name: "env", Type: "string", Default: "dev"},
 			},
-			Steps: schema.Tasks{{Type: "shell", Command: "echo env={{ .Flags.env }} >> " + buildLog}},
+			Steps: schema.Tasks{{Type: "shell", Command: "echo env={{ .Flags.env }} >> " + filepath.ToSlash(buildLog)}},
 		},
 		{
 			Name: "pp-release",
