@@ -205,6 +205,18 @@ export function getParentPath(path: string): string {
 }
 
 /**
+ * Wraps content in a fenced code block using a fence longer than any
+ * backtick run already in the content, so a nested file containing its own
+ * ``` doesn't close the wrapping fence early and corrupt the document.
+ * Mirrors codeFence() in website/plugins/file-browser/index.js.
+ */
+function codeFence(content: string, language: string): string {
+  const longestRun = Math.max(0, ...(content.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+
+/**
  * Recursively concatenates every readable file under a directory into one
  * Markdown document — the whole skill, references included, as a single
  * block of context that can be copied without installing anything. The
@@ -219,9 +231,8 @@ export function collectMarkdownContext(root: DirectoryNode): string {
 
   const addFile = (node: FileNode) => {
     if (node.content == null || isBinaryFile(node)) return;
-    const body = isMarkdownFile(node)
-      ? node.content.trim()
-      : `\`\`\`${node.language}\n${node.content.trim()}\n\`\`\``;
+    const trimmed = node.content.trim();
+    const body = isMarkdownFile(node) ? trimmed : codeFence(trimmed, node.language);
     sections.push(`## ${node.path}\n\n${body}`);
   };
 

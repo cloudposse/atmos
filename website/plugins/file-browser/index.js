@@ -714,6 +714,21 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 /**
+ * Wraps content in a fenced code block using a fence longer than any
+ * backtick run already in the content, so a nested file containing its own
+ * ``` doesn't close the wrapping fence early and corrupt the document.
+ * Mirrors codeFence() in website/src/components/FileBrowser/utils.ts.
+ * @param {string} content - File content (already trimmed by caller).
+ * @param {string} language - Syntax-highlighting language hint.
+ * @returns {string} - Fenced code block.
+ */
+function codeFence(content, language) {
+  const longestRun = Math.max(0, ...(content.match(/`+/g) || []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+
+/**
  * Recursively concatenates every readable file under a directory into one
  * Markdown document — the whole item, nested reference files included, as a
  * single block of context. Mirrors collectMarkdownContext() in
@@ -730,9 +745,8 @@ function collectMarkdownContext(root) {
   const addFile = (node) => {
     if (node.content == null || BINARY_EXTENSIONS.has((node.extension || '').toLowerCase())) return;
     const ext = (node.extension || '').toLowerCase();
-    const body = ext === 'md' || ext === 'mdx'
-      ? node.content.trim()
-      : `\`\`\`${node.language}\n${node.content.trim()}\n\`\`\``;
+    const trimmed = node.content.trim();
+    const body = ext === 'md' || ext === 'mdx' ? trimmed : codeFence(trimmed, node.language);
     sections.push(`## ${node.path}\n\n${body}`);
   };
 

@@ -567,6 +567,7 @@ func TestListCmd_InstalledOnly(t *testing.T) {
 
 		var rows []map[string]string
 		require.NoError(t, json.Unmarshal([]byte(output), &rows), "output must be valid JSON")
+		require.NotNil(t, rows, "output must be a JSON array, not null")
 		assert.Empty(t, rows)
 	})
 }
