@@ -11,9 +11,10 @@ const (
 	ProviderKindAWSAssumeRoot        = "aws/assume-root"
 
 	// Azure provider kinds.
-	ProviderKindAzureOIDC       = "azure/oidc"
-	ProviderKindAzureCLI        = "azure/cli"
-	ProviderKindAzureDeviceCode = "azure/device-code"
+	ProviderKindAzureOIDC        = "azure/oidc"
+	ProviderKindAzureCLI         = "azure/cli"
+	ProviderKindAzureDeviceCode  = "azure/device-code"
+	ProviderKindAzureInteractive = "azure/interactive"
 
 	// GCP provider kinds.
 	ProviderKindGCPADC                        = "gcp/adc"

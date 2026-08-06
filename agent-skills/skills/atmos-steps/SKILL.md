@@ -93,7 +93,7 @@ the type-specific files under `website/docs/workflows/workflows/workflow/steps/t
 as the canonical reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
-  `emulator`, `http`, `archive`, `require`, `workdir`, `cast`.
+  `emulator`, `http`, `archive`, `require`, `workdir`, `cast`, `store`.
 - Orchestration: `parallel`, `matrix`, `wait`, `wait-all`, `cancel`.
 - Interactive: `input`, `confirm`, `choose`, `filter`, `file`, `write`.
 - UI and output: `toast`, `markdown`, `spin`, `table`, `pager`, `format`,

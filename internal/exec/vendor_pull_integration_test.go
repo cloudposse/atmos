@@ -26,6 +26,7 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	}
 
 	stacksPath := "../../tests/fixtures/scenarios/vendor2"
+	t.Cleanup(func() { _ = os.Remove(filepath.Join(stacksPath, "vendor.lock.yaml")) })
 
 	// Use t.Setenv for automatic cleanup.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -42,7 +43,6 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	// Add vendor-specific flags.
 	cmd.DisableFlagParsing = false
 	cmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	cmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
 	cmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
@@ -90,7 +90,6 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")
@@ -167,13 +166,13 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	// Change to test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 	t.Chdir(testDir)
+	t.Cleanup(func() { _ = os.Remove("vendor.lock.yaml") })
 
 	// Set up command with global flags.
 	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
 	flags.String("tags", "", "")
 	flags.Bool("dry-run", false, "")
 	flags.Bool("everything", false, "")

@@ -3,6 +3,9 @@ package azure
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -219,6 +222,102 @@ func TestSubscriptionIdentity_GetProviderName(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedName, providerName)
 		})
+	}
+}
+
+func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
+	// Sandbox HOME so credential files land under a temp dir.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	identity := &subscriptionIdentity{
+		name:           "azure-test",
+		subscriptionID: "sub-123",
+		location:       "centralus",
+	}
+	identity.SetRealm("test-realm")
+
+	creds := &types.AzureCredentials{
+		AccessToken:    "access-token",
+		Expiration:     time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
+		TenantID:       "tenant-123",
+		SubscriptionID: "sub-123",
+		Location:       "centralus",
+		AuthMethod:     types.AzureAuthMethodCLI, // CLI-sourced: az cache write-back is skipped.
+	}
+
+	authContext := &schema.AuthContext{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	err := identity.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stackInfo,
+		ProviderName: "azure-cli",
+		IdentityName: "azure-test",
+		Credentials:  creds,
+		Realm:        "test-realm",
+	})
+	require.NoError(t, err)
+
+	// Credentials file was written under the sandboxed home.
+	credsPath := filepath.Join(tmpHome, ".azure", "atmos", "test-realm", "azure-cli", "credentials.json")
+	_, statErr := os.Stat(credsPath)
+	assert.NoError(t, statErr, "credentials.json should be written by SetupFiles")
+
+	// Auth context was populated and env vars derived into stack info.
+	require.NotNil(t, authContext.Azure)
+	assert.Equal(t, "sub-123", authContext.Azure.SubscriptionID)
+	assert.Equal(t, "tenant-123", authContext.Azure.TenantID)
+	assert.Equal(t, "sub-123", stackInfo.ComponentEnvSection["ARM_SUBSCRIPTION_ID"])
+
+	// CLI-sourced credentials must not have created az CLI cache files.
+	_, msalErr := os.Stat(filepath.Join(tmpHome, ".azure", "msal_token_cache.json"))
+	assert.True(t, os.IsNotExist(msalErr), "az MSAL cache must not be written for CLI-sourced credentials")
+}
+
+func TestSubscriptionIdentity_Authenticate_PreservesAllProviderFields(t *testing.T) {
+	// Regression: the identity used to rebuild AzureCredentials field-by-field,
+	// silently dropping newly added fields (AuthMethod, HomeAccountID) — which
+	// disabled the Azure CLI write-back gating and re-broke az for guest users.
+	// Populate every field via reflection so any future field is covered
+	// automatically without updating this test.
+	base := &types.AzureCredentials{}
+	bv := reflect.ValueOf(base).Elem()
+	for idx := 0; idx < bv.NumField(); idx++ {
+		f := bv.Field(idx)
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString(bv.Type().Field(idx).Name + "-sentinel")
+		case reflect.Bool:
+			f.SetBool(true)
+		default:
+			t.Fatalf("unhandled field kind %s for %s; extend this test", f.Kind(), bv.Type().Field(idx).Name)
+		}
+	}
+
+	identity := &subscriptionIdentity{
+		name:           "azure-test",
+		subscriptionID: "identity-sub",
+		location:       "identity-location",
+	}
+
+	result, err := identity.Authenticate(context.Background(), base)
+	require.NoError(t, err)
+	creds, ok := result.(*types.AzureCredentials)
+	require.True(t, ok)
+
+	rv := reflect.ValueOf(creds).Elem()
+	for idx := 0; idx < rv.NumField(); idx++ {
+		field := rv.Type().Field(idx)
+		switch field.Name {
+		case "SubscriptionID":
+			assert.Equal(t, "identity-sub", creds.SubscriptionID, "identity subscription must override the provider's")
+		case "Location":
+			assert.Equal(t, "identity-location", creds.Location, "identity location must override the provider's")
+		default:
+			assert.False(t, rv.Field(idx).IsZero(), "field %s was dropped by the identity credential wrap", field.Name)
+		}
 	}
 }
 
