@@ -91,16 +91,18 @@ terraform:
 Atmos writes `backend.tf.json` from this section automatically at plan/apply time. No
 provider-file generation is needed either — set provider region and account
 restrictions through stack `vars:` that the component's own `providers.tf` reads, or
-through `settings.terraform.provider_overrides` when the provider block itself needs
-per-stack values Atmos does not already inject through an identity.
+through the `providers:` stack section (`website/docs/stacks/providers.mdx`, e.g.
+`terraform.providers:` at the component-type level or `providers:` on the component)
+when the provider block itself needs per-stack values Atmos does not already inject
+through an identity.
 
 If a Terragrunt unit's `generate` block writes something other than a backend or
 provider file, Atmos has a direct, more general equivalent: the declarative `generate:`
 stack section (`website/docs/stacks/generate.mdx`), which writes arbitrary files from
 stack configuration with full templating and a 5-level merge (global, component-type,
-component, and override). This covers the general case Terragrunt's `generate` block
-handles; backend and provider files are simply the two cases Atmos automates without
-any `generate:` configuration at all.
+base component, component, and override). This covers the general case Terragrunt's
+`generate` block handles; backend and provider files are simply the two cases Atmos
+automates without any `generate:` configuration at all.
 
 ### `dependency` blocks → `dependencies.components` and `!terraform.state`
 
@@ -324,8 +326,10 @@ side.
     translating `mock_outputs` to the `// "default"` pattern.
 4. **Convert `generate` blocks.** Backend and provider generation need no
     configuration at all; anything else becomes a `generate:` stack section.
-5. **Validate** with `atmos validate stacks`, then compare `atmos describe affected`
-    against the equivalent Terragrunt change-detection output.
+5. **Validate** with `atmos validate stacks`, then compare `atmos list affected`
+    (human-readable table; commit your change first — it diffs committed trees, not
+    the working tree) against the equivalent Terragrunt change-detection output. Use
+    `atmos describe affected` instead when scripting/CI needs the JSON/YAML form.
 6. **Make the result testable.** Wire the component's stack manifest to an
     `aws/emulator` (or the matching cloud target) identity so `atmos terraform plan`/
     `apply` runs with zero real cloud credentials before the user connects a real

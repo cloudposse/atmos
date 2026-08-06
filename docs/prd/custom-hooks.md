@@ -1,6 +1,6 @@
 # Custom Hooks
 
-**Status**: Shipped (core). Atmos ships the kind system, the scanner kinds (`infracost`, `trivy`, `checkov`, `kics`), the generic `command` kind, `--skip-hooks`, dependency auto-install, and workdir compatibility. Only the Atmos Pro upload backend remains outstanding — see Implementation Plan below. Core hook functionality is production-ready today.
+**Status**: Shipped (core). Atmos ships the kind system, the scanner kinds (`infracost`, `trivy`, `checkov`, `kics`), the generic `command` kind, `--skip-hooks`, dependency auto-install, and workdir compatibility. Only the Atmos Pro upload backend remains outstanding — see Implementation Plan below. Core hook functionality is production-ready as of 2026-07-24.
 
 **Last Updated**: 2026-07-24
 

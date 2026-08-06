@@ -1,6 +1,6 @@
 # PRD: DAG-Based Concurrent Execution
 
-**Status:** Mostly shipped. Atmos implements Phases 1–3 — foundation packages, the `pkg/scheduler/` Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and the `--affected`/`--query` routing consolidation onto the scheduler — in `pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, and `internal/exec/terraform_query.go`. Phase 4 (per-type concurrency limits, critical-path scheduling, a TUI progress display, and resumability) remains open.
+**Status:** Mostly shipped. Atmos implements Phases 1–2 in full, and Phase 3's Terraform-routing items — foundation packages, the `pkg/scheduler/` Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and the `--affected`/`--query` routing consolidation onto the scheduler — in `pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, and `internal/exec/terraform_query.go`. Phase 3's multi-type-DAG items (Packer/Ansible scheduler adapters, cross-type `depends_on`) and all of Phase 4 (per-type concurrency limits, critical-path scheduling, a TUI progress display, and resumability) remain open.
 **Version:** 2.0
 **Last Updated:** 2026-07-11
 **Author:** Erik Osterman
@@ -256,10 +256,10 @@ The I/O package provides the stream isolation primitives that per-node output wi
 - Propagates TTY: injects `ATMOS_FORCE_TTY=true` when parent has TTY
 - `terraform_plan_diff.go` swaps global `os.Stdout` to capture output — race condition under concurrency
 
-### Routing Gap
-- `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, sequential)
-- `--components`, `--query` still route through `ExecuteTerraformQuery()` (no DAG awareness)
-- No `--all` equivalent exists for other component types
+### Routing Gap (resolved in Phase 3)
+- `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, `--max-concurrency` controls parallelism)
+- `--components`, `--query` now route through `ExecuteTerraformQuery()` → `scheduleradapters.ExecuteTerraform()` (DAG-aware via the scheduler, consolidated in Phase 3)
+- No `--all` equivalent exists yet for other component types
 
 ---
 
@@ -838,13 +838,13 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 
 ## Phased Rollout
 
-### Phase 1: Foundation Packages
+### Phase 1: Foundation Packages — ✅ Shipped
 1. Create `pkg/process/` with `Runner` interface, `TaskSpec`, `Streams`, `Result`, default exec-based implementation
 2. Extend `pkg/io/` with `prefixedWriter` and `NewOutput()` factory (reuse existing `maskedWriter` pattern)
 3. Refactor `ExecuteShellCommand()` to accept optional `process.Streams` parameter (backward-compatible: `nil` means current behavior)
 4. Eliminate the `os.Stdout` swap pattern in `terraform_plan_diff.go` — replaced by stream injection
 
-### Phase 2: Scheduler + Terraform Adapter
+### Phase 2: Scheduler + Terraform Adapter — ✅ Shipped
 1. Create `pkg/scheduler/` with pure scheduling logic (`Scheduler`, `Node`, `Dispatcher` interface, `AggregateResult`)
 2. Create `pkg/scheduler/orchestrator.go` combining scheduler + process runner + adapter registry
 3. Create `pkg/scheduler/adapters/` with `TerraformAdapter` (Prepare/Finalize calling existing exec functions)
@@ -854,13 +854,13 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 7. JSON summary output (`--output json`)
 8. Require `-auto-approve` when `--max-concurrency > 1` for `apply`/`destroy`
 
-### Phase 3: Routing Consolidation + Multi-Type DAGs
-1. Converge `--components` and `--query` onto the DAG-backed executor (currently `ExecuteTerraformQuery`)
-2. Unify `--affected` path to use the scheduler
-3. Add `--fail-fast` / `--keep-going` flags
-4. Create `PackerAdapter`, `AnsibleAdapter` (wraps `ComponentProvider`), `ComponentProviderAdapter` for registered types
-5. Extend graph building to include Packer and Ansible nodes
-6. Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
+### Phase 3: Routing Consolidation + Multi-Type DAGs — partially shipped
+1. ✅ Shipped — Converge `--components` and `--query` onto the DAG-backed executor (currently `ExecuteTerraformQuery`)
+2. ✅ Shipped — Unify `--affected` path to use the scheduler
+3. ✅ Shipped — Failure-mode handling equivalent to `--fail-fast` / `--keep-going`, implemented as a single `--failure-mode {fail-fast,keep-going}` flag on `plan`/`apply`/`deploy`/`destroy`
+4. Open — Create `PackerAdapter`, `AnsibleAdapter` (wraps `ComponentProvider`), `ComponentProviderAdapter` for registered types
+5. Open — Extend graph building to include Packer and Ansible nodes
+6. Open — Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
 
 ### Phase 4: Advanced Scheduling
 1. Per-type concurrency limits (resource pools, like Ninja)
