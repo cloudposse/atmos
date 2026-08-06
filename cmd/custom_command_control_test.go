@@ -79,7 +79,11 @@ func TestCustomCommandIntegration_ParallelStepWithNeeds(t *testing.T) {
 
 	content, err := os.ReadFile(orderFile)
 	require.NoError(t, err, "parallel step must execute instead of erroring on missing workflow executor context")
-	assert.Equal(t, "first\nsecond\n", string(content), "second must run after first per sibling needs:, even though the group runs concurrently")
+	// splitNonEmptyLines trims each line (\r and surrounding whitespace): mvdan/sh's `echo`+`>>`
+	// redirect on Windows CI has been observed producing a trailing space and \r before the \n,
+	// which isn't a correctness bug in the redirect itself (see the ToSlash comments above) --
+	// exact byte comparison would assert on shell/OS text formatting Atmos doesn't control.
+	assert.Equal(t, []string{"first", "second"}, splitNonEmptyLines(string(content)), "second must run after first per sibling needs:, even though the group runs concurrently")
 }
 
 // TestCustomCommandIntegration_ContinueAlwaysForgivesFailure verifies GitHub-Actions-

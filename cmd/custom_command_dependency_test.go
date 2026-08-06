@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -155,21 +156,19 @@ func TestCustomCommandIntegration_DependenciesCommandsParameterizedBothRun(t *te
 		"differently-parameterized invocations of build must both run, exactly once each")
 }
 
+// splitNonEmptyLines splits shell-command-captured output into trimmed, non-empty lines. Each
+// line is trimmed of surrounding whitespace (not just the \n split character) because mvdan/sh's
+// `echo`+`>>` redirect on Windows CI has been observed producing a trailing space and \r before
+// the \n (e.g. "first \r\n") where the same command on Unix produces a bare "first\n" -- trimming
+// keeps line-content assertions ("first", not "first \r") portable across platforms without
+// asserting on that shell/OS-level formatting difference, which Atmos doesn't control.
 func splitNonEmptyLines(s string) []string {
 	var out []string
-	line := ""
-	for _, r := range s {
-		if r == '\n' {
-			if line != "" {
-				out = append(out, line)
-			}
-			line = ""
-			continue
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			out = append(out, trimmed)
 		}
-		line += string(r)
-	}
-	if line != "" {
-		out = append(out, line)
 	}
 	return out
 }
