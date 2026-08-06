@@ -33,17 +33,19 @@ if anything, to do:
   like `jq-1.7.1`) — replaced with the newest available version from the
   registry and reinstalled, if a newer one exists. Already-current tools are
   reported as up to date and left untouched.
-- **Pinned to `pr:NNNN`, `sha:xxxxxxx`, or `ref:<name>`** — skipped. These are
-  immutable-by-design pins; updating them automatically would defeat their
-  purpose. Use [`atmos toolchain add`](/cli/commands/toolchain/add) to change
-  one explicitly.
+- **Pinned to `pr:NNNN`, `sha:xxxxxxx`, or `ref:<name>`** — skipped. `update`
+  never overrides an explicit source selection like this — even `ref:<name>`,
+  which can move over time, is left alone so it keeps tracking the name you
+  chose rather than being silently replaced with a resolved version. Use
+  [`atmos toolchain add`](/cli/commands/toolchain/add) to change one
+  explicitly.
 
 `update` always replaces the tool's default version rather than appending —
 unlike plain `add`, it never leaves a tool pinned to two versions at once.
 
 For range/constraint-based pinning (`^1.2.0`, `~>1.0.0`, `>=1.0.0`) instead of
 exact-version tracking, see
-[`dependencies.tools`](/cli/commands/toolchain/usage) in a stack manifest, or
+[`dependencies.tools`](/stacks/dependencies) in a stack manifest, or
 [`atmos version track`](/cli/commands/version/track) — `.tool-versions` is
 intentionally exact-version-only.
 

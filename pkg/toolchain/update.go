@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,7 +56,7 @@ func RunUpdate(toolNames []string, opts UpdateOptions) error {
 	filePath := GetToolVersionsFilePath()
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
+		return fmt.Errorf("%w: failed to load .tool-versions: %w", errUtils.ErrToolVersionsFileOperation, err)
 	}
 
 	targets, err := resolveUpdateTargets(toolVersions, toolNames)
@@ -134,6 +135,9 @@ func resolveUpdateTargets(toolVersions *ToolVersions, toolNames []string) ([]str
 		for tool := range toolVersions.Tools {
 			targets = append(targets, tool)
 		}
+		// Map iteration order is randomized; sort so `atmos toolchain update` with no
+		// arguments reports tools in the same order on every run.
+		sort.Strings(targets)
 		return targets, nil
 	}
 
@@ -234,11 +238,10 @@ func updateExactPinnedTool(tool, owner, repo, current string, opts UpdateOptions
 		return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("%s: %s -> %s (dry-run)", tool, current, newest)}
 	}
 
-	filePath := GetToolVersionsFilePath()
-	if err := AddToolToVersionsAsDefault(filePath, tool, newest); err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to update .tool-versions: %v", tool, err)}
-	}
-
+	// Install the newest version BEFORE writing it to .tool-versions as the new default.
+	// If install fails, the previously-configured (and actually-installed) version must
+	// remain the default -- otherwise which/exec would report a version the user never
+	// asked for as "configured but not installed".
 	installer := NewInstaller()
 	if err := installSingleToolWithInstaller(installer, owner, repo, newest, InstallOptions{
 		ShowProgressBar:    false,
@@ -246,6 +249,11 @@ func updateExactPinnedTool(tool, owner, repo, current string, opts UpdateOptions
 		ShowHint:           false,
 	}); err != nil {
 		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to install %s: %v", tool, newest, err)}
+	}
+
+	filePath := GetToolVersionsFilePath()
+	if err := AddToolToVersionsAsDefault(filePath, tool, newest); err != nil {
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to update .tool-versions: %v", tool, err)}
 	}
 
 	return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("✓ %s: %s -> %s", tool, current, newest)}

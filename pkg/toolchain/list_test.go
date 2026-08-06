@@ -994,6 +994,31 @@ func TestRunListWithOptions_NoFilterReturnsAll(t *testing.T) {
 	require.Len(t, got.Tools, 2)
 }
 
+// TestRunListWithOptions_EmptyToolVersionsJSON verifies that an empty .tool-versions file with
+// --format=json produces valid (empty) JSON rather than the human-readable "No tools configured"
+// message, so JSON consumers never have to handle a non-JSON response.
+func TestRunListWithOptions_EmptyToolVersionsJSON(t *testing.T) {
+	tempDir := t.TempDir()
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	require.NoError(t, SaveToolVersions(toolVersionsFile, &ToolVersions{Tools: map[string][]string{}}))
+
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsFile,
+			InstallPath:  filepath.Join(tempDir, ".tools"),
+		},
+	})
+
+	stdout := captureDataOutput(t)
+	err := RunListWithOptions("json", false, false)
+	require.NoError(t, err)
+
+	var got ListToolsOutput
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	assert.Empty(t, got.Tools)
+	assert.NotNil(t, got.Tools, "JSON output should contain an empty array, not null")
+}
+
 func TestRunListWithOptions_FormatPlain(t *testing.T) {
 	SetAtmosConfig(setUpListToolsFixture(t))
 

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -29,7 +30,7 @@ prompt, or --dry-run to preview what would be deleted without removing anything)
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()
 		if err := cleanParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errUtils.ErrFlagBinding, err)
 		}
 
 		toolsDir := toolchain.GetInstallPath()

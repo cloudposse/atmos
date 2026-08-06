@@ -37,7 +37,13 @@ Examples:
 		if err := execParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		dryRun := v.GetBool("dry-run")
+		// Use IsBoolFlagExplicitlySet rather than v.GetBool: both "exec" and
+		// "update" register a "dry-run" flag on the shared global Viper instance
+		// under the same key, so v.BindEnv calls for one command's env var can
+		// overwrite the other's binding for that key. IsBoolFlagExplicitlySet
+		// checks this parser's own registry/env vars directly, avoiding the
+		// cross-command collision.
+		_, dryRun := execParser.IsBoolFlagExplicitlySet(cmd, "dry-run")
 
 		installer := toolchain.NewInstaller()
 		err := toolchain.RunExecCommandWithOptions(installer, args, dryRun)

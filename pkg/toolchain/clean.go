@@ -139,7 +139,7 @@ func confirmClean(toolsDir, cacheDir, tempCacheDir string, cacheOnly bool) (bool
 		if errors.Is(err, huh.ErrUserAborted) {
 			return false, nil
 		}
-		return false, fmt.Errorf("confirmation prompt failed: %w", err)
+		return false, fmt.Errorf("%w: %w", errUtils.ErrToolchainCleanConfirmation, err)
 	}
 
 	return confirmed, nil

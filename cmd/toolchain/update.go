@@ -50,7 +50,13 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dryRun := v.GetBool("dry-run")
+	// Use IsBoolFlagExplicitlySet rather than v.GetBool: both "update" and
+	// "exec" register a "dry-run" flag on the shared global Viper instance
+	// under the same key, so v.BindEnv calls for one command's env var can
+	// overwrite the other's binding for that key. IsBoolFlagExplicitlySet
+	// checks this parser's own registry/env vars directly, avoiding the
+	// cross-command collision.
+	_, dryRun := updateParser.IsBoolFlagExplicitlySet(cmd, "dry-run")
 	maxConcurrency, err := resolveInstallMaxConcurrency(cmd)
 	if err != nil {
 		return err

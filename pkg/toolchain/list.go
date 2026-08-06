@@ -250,6 +250,10 @@ func RunListWithOptions(format string, installedOnly, pendingOnly bool) error {
 	}
 
 	if len(toolVersions.Tools) == 0 {
+		if format == "json" {
+			// JSON consumers expect valid (possibly empty) JSON, not a human-readable message.
+			return printToolRowsJSON(nil)
+		}
 		ui.Writeln("No tools configured in .tool-versions file")
 		return nil
 	}

@@ -374,10 +374,12 @@ var (
 	ErrUnsupportedVersionConstraint       = errors.New("unsupported version constraint format")
 	ErrToolchainPlainFormatWithAllFlag    = errors.New("--format=plain can't be used with --all")
 	ErrToolchainCleanRequiresConfirmation = errors.New("toolchain clean requires interactive confirmation or --force flag")
+	ErrToolchainCleanConfirmation         = errors.New("toolchain clean confirmation prompt failed")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
 	ErrInvalidFlagValue               = errors.New("invalid value for flag")
+	ErrFlagBinding                    = errors.New("failed to bind flags")
 
 	// File and URL handling errors.
 	ErrInvalidPagerCommand   = errors.New("invalid pager command")

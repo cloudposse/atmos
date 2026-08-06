@@ -238,3 +238,55 @@ func TestRunExecCommandWithOptions_DryRun(t *testing.T) {
 // TestRunExecCommand_Success above (RunExecCommand delegates to
 // RunExecCommandWithOptions(installer, args, false)), so it isn't duplicated here — doing so
 // would just repeat the same real-binary-install fixture cost for no additional coverage.
+
+// TestRunExecCommandWithOptions_DryRun_AutoInstallsMissingTool verifies the documented
+// "dry-run auto-installs a missing tool, then reports without executing" behavior. Unlike
+// TestRunExecCommandWithOptions_DryRun above (which pre-installs the binary before running
+// in dry-run mode), this test starts with nothing installed, so it actually exercises the
+// ensureToolInstalled auto-install branch inside RunExecCommandWithOptions.
+//
+// This intentionally does not wrap the call in captureCleanTestOutput like the sibling test
+// above: ensureToolInstalled's auto-install path always runs with showProgressBar=true, and
+// its spinner/progress bar goroutine is not guaranteed to fully unwind by the time this
+// function returns. Redirecting os.Stderr through a short-lived os.Pipe (as
+// captureCleanTestOutput does) around that window risks the OS reusing the pipe's file
+// descriptor number for the *next* test's own redirect before the spinner goroutine is done,
+// leaking stray bytes into that unrelated test's captured output. The "Would execute" /
+// resolved-path message text is already covered by TestRunExecCommandWithOptions_DryRun
+// above; this test's unique value is the auto-install side effects below.
+func TestRunExecCommandWithOptions_DryRun_AutoInstallsMissingTool(t *testing.T) {
+	setupTestIO(t)
+	resetExecMock()
+	execFunc = mockExec // Swap the real exec function so a regression would be caught, not silently run.
+
+	tempDir := t.TempDir()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: filepath.Join(tempDir, ".tools")}})
+
+	fake := &fakeInstaller{
+		resolveOwner: "hashicorp",
+		resolveRepo:  "terraform",
+		binaryPath:   "/fake/path/terraform",
+		binaryErr:    nil,
+	}
+
+	args := []string{"terraform@1.13.1", "--version"}
+
+	binaryName := installer.EnsureWindowsExeExtension("terraform")
+	expectedPath := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.13.1", binaryName)
+
+	// Sanity check: nothing is installed yet.
+	if _, err := os.Stat(expectedPath); !os.IsNotExist(err) {
+		t.Fatalf("expected binary to not exist before the test runs, got err=%v", err)
+	}
+
+	err := RunExecCommandWithOptions(fake, args, true)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calledExecPath != "" {
+		t.Errorf("execFunc must not be invoked in dry-run mode, got exec path %q", calledExecPath)
+	}
+	if _, statErr := os.Stat(expectedPath); statErr != nil {
+		t.Errorf("expected dry-run to auto-install the missing binary at %q, stat error: %v", expectedPath, statErr)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -197,6 +198,21 @@ func TestSetEntryFieldsPreservesAmpersandInExclude(t *testing.T) {
 	}
 	if strings.Contains(text, "\\"+"u0026") {
 		t.Errorf("expected config to not contain escaped ampersand, got:\n%s", text)
+	}
+}
+
+// TestMarshalJSONNoEscapeWrapsEncodeErrors verifies encode failures from
+// marshalJSONNoEscape are wrapped with the static errUtils.ErrEncode sentinel,
+// so callers (SetEntryFields/AddEntry) can reliably errors.Is against it
+// instead of matching on an unwrapped, opaque encoding/json error.
+func TestMarshalJSONNoEscapeWrapsEncodeErrors(t *testing.T) {
+	// A channel is not JSON-encodable, so json.Encoder.Encode always fails on it.
+	_, err := marshalJSONNoEscape(make(chan int))
+	if err == nil {
+		t.Fatal("expected an error encoding a channel value, got nil")
+	}
+	if !errors.Is(err, errUtils.ErrEncode) {
+		t.Fatalf("expected error to wrap errUtils.ErrEncode, got %v", err)
 	}
 }
 

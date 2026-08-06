@@ -180,7 +180,7 @@ func marshalJSONNoEscape(v any) ([]byte, error) {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrEncode, err)
 	}
 	// json.NewEncoder.Encode always appends a trailing newline; json.Marshal
 	// does not, and callers here pass the result straight into SetRaw as a

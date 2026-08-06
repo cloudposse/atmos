@@ -1775,6 +1775,34 @@ func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
 	assert.Equal(t, "1.11.4", versions[0], "set should replace the default (first) version, not append")
 }
 
+// TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write
+// invalid SemVer range/constraint syntax (e.g. "^1.7.0") straight into .tool-versions without
+// validation, unlike the add/install paths which already reject it via ValidateVersionSpec.
+func TestSetToolVersion_RejectsRangeSyntax(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+		},
+	}
+
+	err = SetToolVersion("terraform", "^1.7.0", 3)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+
+	// The invalid spec must never have been written to .tool-versions.
+	toolVersions, loadErr := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, loadErr)
+	assert.Empty(t, toolVersions.Tools, "invalid version spec must not be persisted")
+}
+
 // TestSetToolVersion_WithInvalidTool tests SetToolVersion with an invalid tool name.
 func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 	// Create a temporary tool-versions file

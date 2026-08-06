@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,6 +111,43 @@ func TestUpdateOneTool_ExactPin_DryRunDoesNotMutate(t *testing.T) {
 	assert.Equal(t, []string{"1.9.8"}, toolVersions.Tools["hashicorp/terraform"])
 }
 
+// TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged reproduces a bug where
+// the exact-pin update path wrote the new "newest" version into .tool-versions as the default
+// BEFORE installing it. If install then failed, .tool-versions pointed at a version that was
+// never actually installed. This asserts install is attempted first, and a failed install
+// leaves the previously-configured (and actually-installed) default version untouched.
+func TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged(t *testing.T) {
+	setupTestIO(t)
+
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
+
+	// InstallPath MUST be isolated to a per-test temp dir: a failed install still touches
+	// the real, shared, XDG toolchain cache directory otherwise (see install_test.go for the
+	// same isolation requirement and rationale).
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+	}})
+
+	// "99.99.99" is not a real hashicorp/terraform release, so the real (unmocked) install
+	// step must fail -- this is the "newest" version fetchAllGitHubVersions reports via the
+	// mocked GitHub API, but the mock only fakes the release listing, not the download.
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "99.99.99"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+
+	toolVersions, err := LoadToolVersions(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.9.8"}, toolVersions.Tools["hashicorp/terraform"],
+		"a failed install must not overwrite .tool-versions with the un-installed version")
+}
+
 // TestResolveUpdateTargets covers the empty-args-means-everything convention
 // and alias resolution to canonical .tool-versions keys.
 func TestResolveUpdateTargets(t *testing.T) {
@@ -161,11 +200,23 @@ func TestDescribeImmutablePin(t *testing.T) {
 // (MaxConcurrency > 1) still report outcomes in the original target order,
 // not completion order.
 func TestRunUpdate_ConcurrencyPreservesOrder(t *testing.T) {
-	setupTestIO(t)
-
 	filePath := createTempToolVersionsFile(t, "owner/a pr:1\nowner/b sha:ceb7526\nowner/c ref:main\n")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
 
-	err := RunUpdate(nil, UpdateOptions{MaxConcurrency: 4})
+	var err error
+	output := captureCleanTestOutput(t, func() {
+		err = RunUpdate(nil, UpdateOptions{MaxConcurrency: 4})
+	})
 	require.NoError(t, err, "all-skipped tools should not count as failures")
+
+	// Assert the reported ordering matches the target (file) order, not completion order --
+	// this is the guarantee runUpdatesConcurrently/reportUpdateOutcomes must preserve.
+	idxA := strings.Index(output, "owner/a")
+	idxB := strings.Index(output, "owner/b")
+	idxC := strings.Index(output, "owner/c")
+	require.NotEqual(t, -1, idxA, "expected owner/a in output, got %q", output)
+	require.NotEqual(t, -1, idxB, "expected owner/b in output, got %q", output)
+	require.NotEqual(t, -1, idxC, "expected owner/c in output, got %q", output)
+	assert.Less(t, idxA, idxB, "owner/a must be reported before owner/b")
+	assert.Less(t, idxB, idxC, "owner/b must be reported before owner/c")
 }

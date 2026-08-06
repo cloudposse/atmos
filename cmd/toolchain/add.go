@@ -44,7 +44,7 @@ func init() {
 func runAdd(cmd *cobra.Command, args []string) error {
 	v := viper.GetViper()
 	if err := addParser.BindFlagsToViper(cmd, v); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrFlagBinding, err)
 	}
 	setAsDefault := v.GetBool("default")
 
