@@ -76,8 +76,8 @@ module.exports = {
                         'migration/terragrunt',
                         'migration/terraform-workspaces',
                         'migration/makefile',
-                        'migration/taskfile',
-                        'migration/justfile'
+                        'migration/justfile',
+                        'migration/taskfile'
                     ]
                 },
             ]

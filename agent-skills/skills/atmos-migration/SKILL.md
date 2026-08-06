@@ -94,9 +94,9 @@ The remote-state-bridge pattern makes progressive migration possible. It lets a 
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
 the user has existing Terraform state that a new Atmos component must read.
 
-### Two Common Problems in Task-Runner Migration
+### Common Problems in Task-Runner Migration
 
-Two behaviors apply to every task runner. Check them before you open a reference file:
+These behaviors apply to every task runner. Check them before you open a reference file:
 
 - **The default order can change.** Task runs `deps:` at the same time by default. Make and Just
   run dependencies one after another, unless the user adds a flag such as `make -j`. Atmos steps
@@ -107,6 +107,11 @@ Two behaviors apply to every task runner. Check them before you open a reference
   Make targets both skip work when a file has not changed. Atmos steps always run. The
   `require`/`assert` step type does not replace this. It only checks that a file exists. It does
   not check if the file is new. Tell the user this directly.
+- **`workflows.base_path` needs to be set explicitly once the user has their own `atmos.yaml`.**
+  A target chain becomes an Atmos workflow (Principle 7), but `atmos workflow <name>` fails with
+  `'workflows.base_path' must be configured in 'atmos.yaml'` until you add it (for example,
+  `workflows.base_path: "stacks/workflows"`). None of this skill's `atmos.yaml` snippets show it
+  by default -- add it the moment the user's migration reaches its first workflow.
 
 Each reference file has its own "Common Problems" section with the exact field names and steps
 for that tool. This section is only a short summary.

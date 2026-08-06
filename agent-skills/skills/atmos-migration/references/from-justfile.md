@@ -149,6 +149,22 @@ There is no `hidden` or `private` field in the custom command schema. Put a priv
 recipe's logic in a step inside the command or workflow that calls it. Do not create a separate
 command just to hide it from `--list` or `--help`.
 
+If a `[private]` recipe is never called by any public recipe (an orphaned helper, not a
+dependency), there is no public recipe to fold its steps into. Do not create a public `atmos`
+command just to preserve it -- that changes its visibility, which is the opposite of what
+`[private]` meant. Confirm with the user whether the recipe is still needed at all; if it is,
+ask where its logic should live (its own step inside whichever command ends up needing it, or a
+short script the user maintains separately) rather than migrating it by default.
+
+### Command echo differs between `just` and Atmos
+
+By default, Just prints each recipe line before running it (`sh -x`-style), so `just build`'s
+visible output includes every command line, not just what those commands print. Atmos `type:
+shell` steps run silently by default -- only the command's own stdout/stderr shows. The migrated
+command's side effects match the original recipe, but the terminal output will look sparser side
+by side. Tell the user this if they compare `just <recipe>` output to `atmos <command>` output
+directly; it is a visible difference, not a bug.
+
 ### Confirm `set dotenv-load` and `set shell` with the user
 
 Do not drop either setting without comment. Ask the user if the behavior matters to their

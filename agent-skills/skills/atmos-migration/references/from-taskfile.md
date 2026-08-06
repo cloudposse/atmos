@@ -151,12 +151,16 @@ them plainly that this behavior does not carry over. Then offer two honest choic
 Task's `includes:` field combines several Taskfiles into one. Atmos has two matching methods.
 Pick the one that fits the content being split:
 
-- To split command definitions across files, put them in files such as
-  `atmos.d/commands.yaml`. Add each file to the root config with `import:` in `atmos.yaml`. See
-  [Imports](https://atmos.tools/cli/configuration/imports).
+- To split command definitions across files, put them in files such as `atmos.d/commands.yaml`
+  or `.atmos.d/commands.yaml`. Atmos auto-discovers `atmos.d/`/`.atmos.d/` in the config
+  directory (and, as a lower-priority fallback, at the git/worktree root) -- no `import:` entry
+  is needed for this specific location. Use `import:` only when splitting across a directory
+  Atmos does not auto-discover. See [Imports](https://atmos.tools/cli/configuration/imports).
 - To split multi-step chains, use separate workflow files. Atmos workflows already live one file
-  per purpose, under `workflows.base_path` (`stacks/workflows/` by default). No extra step is
-  needed.
+  per purpose, under `workflows.base_path`. Unlike `atmos.d`/`.atmos.d`, there is no default for
+  `workflows.base_path` -- add it explicitly (for example `workflows.base_path:
+  "stacks/workflows"`) the first time the user's migration reaches a workflow, or `atmos
+  workflow <name>` fails with `'workflows.base_path' must be configured in 'atmos.yaml'`.
 
 ### `sources`/`generates` has no built-in match
 
