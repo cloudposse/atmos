@@ -432,3 +432,33 @@ func TestParseVendorFlags_ComponentSliceFlag(t *testing.T) {
 		assert.Equal(t, "vpc", vendorFlags.Component)
 	})
 }
+
+// TestParseVendorTagsFlag proves --tags trims whitespace around each tag and drops empty
+// segments, matching cmd/vendor's splitTags (e.g. "networking, database" yields "networking" and
+// "database" with no leading space, and "a,,b" doesn't yield an empty entry).
+func TestParseVendorTagsFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		csv  string
+		want []string
+	}{
+		{"empty string", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single tag", "networking", []string{"networking"}},
+		{"comma separated with a space", "networking, database", []string{"networking", "database"}},
+		{"leading and trailing commas", ",networking,database,", []string{"networking", "database"}},
+		{"whitespace around tags", " networking , database ", []string{"networking", "database"}},
+		{"empty segments between commas", "networking,,database", []string{"networking", "database"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := newVendorPullFlagSet(false)
+			require.NoError(t, flags.Set("tags", tt.csv))
+
+			vendorFlags, err := parseVendorFlags(flags, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, vendorFlags.Tags)
+		})
+	}
+}

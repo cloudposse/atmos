@@ -187,16 +187,25 @@ func parseVendorComponentFlag(flags *pflag.FlagSet) (string, error) {
 	}
 }
 
-// parseVendorTagsFlag splits --tags' comma-separated value, returning nil for an empty/unset flag.
+// parseVendorTagsFlag splits --tags' comma-separated value, trimming whitespace around each tag
+// and dropping empty segments (e.g. "networking, database" or "prod,,staging"), returning nil for
+// an empty/unset flag. Mirrors cmd/vendor's splitTags (a different package, so duplicated rather
+// than shared for a five-line helper).
 func parseVendorTagsFlag(flags *pflag.FlagSet) ([]string, error) {
 	tagsCsv, err := flags.GetString("tags")
 	if err != nil {
 		return nil, err
 	}
-	if tagsCsv == "" {
+	if strings.TrimSpace(tagsCsv) == "" {
 		return nil, nil
 	}
-	return strings.Split(tagsCsv, ","), nil
+	var tags []string
+	for _, tag := range strings.Split(tagsCsv, ",") {
+		if trimmed := strings.TrimSpace(tag); trimmed != "" {
+			tags = append(tags, trimmed)
+		}
+	}
+	return tags, nil
 }
 
 // parseOptionalLabelsFlag reads --labels (a comma-separated key=value/key:value list, parsed via
