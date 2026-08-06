@@ -323,9 +323,22 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	return false
 }
 
+// workflowCommandFilters carries optional, out-of-band ExecuteWorkflow invocation parameters
+// that don't warrant their own required arguments: tags/labels filtering, and (see
+// dependenciesResolved) whether this invocation is itself a dependency dispatch.
 type workflowCommandFilters struct {
 	tags   []string
 	labels string
+	// dependenciesResolved marks this ExecuteWorkflow call as already running inside another
+	// workflow's dependency graph (see WorkflowRunner), so ExecuteWorkflow must skip resolving
+	// and running its OWN dependencies.workflows/dependencies.commands again. Without this, a
+	// workflow depended on by another workflow would have its dependency graph built and
+	// executed twice: once by the parent's taskgraph.Run (which already discovers and runs the
+	// full transitive closure through WorkflowLookup), and again here, redundantly -- and a
+	// cycle reachable only through this workflow's own dependencies would be checked against a
+	// second, independent graph the parent's cycle detection never sees, rather than being
+	// caught once, up front, as part of the parent's single full-closure graph build.
+	dependenciesResolved bool
 }
 
 // ExecuteWorkflow executes an Atmos workflow.
@@ -516,8 +529,11 @@ func ExecuteWorkflow(
 	}
 
 	// Resolve and run dependencies.commands/dependencies.workflows before any of this
-	// workflow's own steps, concurrently by default via pkg/taskgraph's DAG scheduler.
-	if direct := taskgraph.RefsFromDependencies(workflowDefinition.Dependencies.OrEmpty()); len(direct) > 0 {
+	// workflow's own steps, concurrently by default via pkg/taskgraph's DAG scheduler. Skipped
+	// when this workflow is itself being invoked as someone else's dependency (see
+	// workflowCommandFilters.dependenciesResolved) -- the caller's taskgraph run already
+	// discovered and satisfied these as part of its own full-transitive-closure graph.
+	if direct := taskgraph.RefsFromDependencies(workflowDefinition.Dependencies.OrEmpty()); len(direct) > 0 && !commandFilters.dependenciesResolved {
 		if err := taskgraph.Run(
 			context.Background(), direct,
 			taskgraph.WithWorkflowRunner(WorkflowRunner(&atmosConfig, workflowPath, dryRun, commandLineIdentity)),

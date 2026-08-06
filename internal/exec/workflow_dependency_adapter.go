@@ -44,7 +44,11 @@ func WorkflowLookup(atmosConfig *schema.AtmosConfiguration, defaultFile string) 
 
 // WorkflowRunner resolves and executes a taskgraph.Ref{Kind: KindWorkflow} dependency,
 // reusing the same file-resolution rules as WorkflowLookup and the already-exported
-// ExecuteWorkflow entry point.
+// ExecuteWorkflow entry point. Marks the nested ExecuteWorkflow call as dependencies-already-
+// resolved (see workflowCommandFilters.dependenciesResolved) so it runs only its own steps,
+// not a second, redundant resolution of its own dependencies.workflows/dependencies.commands --
+// the caller's taskgraph.Run already discovered and will run those as part of one full
+// transitive-closure graph.
 func WorkflowRunner(atmosConfig *schema.AtmosConfiguration, defaultFile string, dryRun bool, commandLineIdentity string) taskgraph.Runner {
 	defer perf.Track(atmosConfig, "exec.WorkflowRunner")()
 
@@ -63,7 +67,8 @@ func WorkflowRunner(atmosConfig *schema.AtmosConfiguration, defaultFile string, 
 			return fmt.Errorf("%w: %q", errUtils.ErrWorkflowNoWorkflow, ref.Name)
 		}
 		stack := ref.Flags["stack"]
-		return ExecuteWorkflow(*atmosConfig, ref.Name, workflowPath, &def, dryRun, stack, "", commandLineIdentity)
+		return ExecuteWorkflow(*atmosConfig, ref.Name, workflowPath, &def, dryRun, stack, "", commandLineIdentity,
+			workflowCommandFilters{dependenciesResolved: true})
 	}
 }
 

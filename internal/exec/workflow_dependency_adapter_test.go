@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +118,87 @@ workflows:
 
 	assert.FileExists(t, buildLog, "cross-file dependency 'build' (resolved via file: build.yaml) must run")
 	assert.FileExists(t, deployLog, "deploy's own step must still run after its cross-file dependency completes")
+}
+
+// TestExecuteWorkflow_DependenciesWorkflowsDiamondDedup verifies a diamond-shaped
+// workflow-depends-on-workflow graph -- release depends on [test, lint], both of which depend on
+// build -- executes build exactly once for the whole `release` invocation. Before the fix,
+// WorkflowRunner dispatched a workflow dependency by calling the general-purpose ExecuteWorkflow
+// entry point, which unconditionally re-resolved and re-ran ITS OWN dependencies.workflows again
+// -- on top of the shared dependency already correctly deduped and run once by the parent's own
+// taskgraph.Run graph. A shared dependency reached through two different parents would then run
+// three times (once correctly, twice redundantly) instead of once.
+func TestExecuteWorkflow_DependenciesWorkflowsDiamondDedup(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	atmosConfig.BasePath = tmpDir
+	atmosConfig.Workflows.BasePath = ""
+
+	buildLog := filepath.Join(tmpDir, "build.txt")
+	releaseLog := filepath.Join(tmpDir, "release.txt")
+
+	// See TestExecuteWorkflow_DependenciesWorkflowsSameFile's comment on forward slashes.
+	manifest := `
+workflows:
+  build:
+    steps:
+      - command: "echo build >> ` + filepath.ToSlash(buildLog) + `"
+        type: shell
+  test:
+    dependencies:
+      workflows: [build]
+    steps:
+      - command: "echo test"
+        type: shell
+  lint:
+    dependencies:
+      workflows: [build]
+    steps:
+      - command: "echo lint"
+        type: shell
+  release:
+    dependencies:
+      workflows: [test, lint]
+    steps:
+      - command: "echo release >> ` + filepath.ToSlash(releaseLog) + `"
+        type: shell
+`
+	workflowPath := filepath.Join(tmpDir, "diamond.yaml")
+	require.NoError(t, os.WriteFile(workflowPath, []byte(manifest), 0o644))
+
+	workflowConfig, err := LoadWorkflowConfig(workflowPath)
+	require.NoError(t, err)
+	releaseDef := workflowConfig["release"]
+
+	err = ExecuteWorkflow(atmosConfig, "release", workflowPath, &releaseDef, false, "", "", "")
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(buildLog)
+	require.NoError(t, err)
+	lines := splitNonEmptyTrimmedLines(string(content))
+	assert.Len(t, lines, 1, "build must execute exactly once despite two dependents (test and lint), got: %v", lines)
+	assert.FileExists(t, releaseLog, "release's own step must still run after its dependencies complete")
+}
+
+// splitNonEmptyTrimmedLines splits shell-command-captured output into trimmed, non-empty lines.
+// Trimmed (not just \n-split) because mvdan/sh's echo+>> redirect on Windows CI has been observed
+// producing a trailing space and \r before the \n, which bare \n-splitting would preserve as
+// content differences irrelevant to what these tests assert.
+func splitNonEmptyTrimmedLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 // TestResolveAtmosBinary_UsesOwnExecutablePath verifies commandRunnerViaSubprocess resolves the

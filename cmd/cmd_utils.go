@@ -74,7 +74,10 @@ const (
 	annotationDefaultChain   = "atmos.custom.default.chain"
 )
 
-var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
+var (
+	errCustomCommandFlagNotRegistered      = errors.New("flag is not registered")
+	errCustomCommandInvalidComponentConfig = errors.New("the command defines an invalid legacy component_config value")
+)
 
 // FlagStack is the name of the stack flag used across commands.
 const FlagStack = "stack"
@@ -737,26 +740,25 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// exitOrRecordStepFailure handles a step failure at the point executeCustomCommand would
-// otherwise unconditionally hard-exit the process. When cmd is running as someone else's
-// already-resolved dependency (adapters.DependenciesAlreadyResolved), exiting here would kill the
-// whole process from inside a single dependency's own execution, before control ever returns to
-// taskgraph.Run -- making its fail-mode handling (wait_all/fail_fast/best_effort) unreachable
-// regardless of what was declared. Recording into the dependency's error sink instead lets that
-// error surface normally through taskgraph.Run's aggregate result. Preserves today's exact exit
-// behavior for a command's own top-level (non-dependency) invocation.
-//
-// Scope: covers the step-failure paths executeCustomCommand's regression tests exercise (a
-// step's own command failing, a malformed `continue:` condition, and the final aggregated
-// command error). Other, rarer exit points earlier in this function (flag/working-directory/
-// identity resolution failures that occur before any step runs) are not covered by this seam and
-// still hard-exit unconditionally even when running as a dependency.
-func exitOrRecordStepFailure(cmd *cobra.Command, err error) {
+// exitOrRecordDependencyErr handles any executeCustomCommand failure at the point it would
+// otherwise unconditionally hard-exit the process -- argument processing, dependency resolution,
+// working-directory resolution, validation, and step execution alike. When cmd is running as
+// someone else's already-resolved dependency (adapters.DependenciesAlreadyResolved), exiting here
+// would kill the whole process from inside a single dependency's own execution, before control
+// ever returns to taskgraph.Run -- making its fail-mode handling
+// (wait_all/fail_fast/best_effort) unreachable regardless of what was declared, no matter which
+// stage of this function the failure came from. Recording into the dependency's error sink
+// instead lets that error surface normally through taskgraph.Run's aggregate result. Preserves
+// today's exact exit behavior (including title/suggestion) for a command's own top-level
+// (non-dependency) invocation. Every call site must still `return` (or otherwise stop) right
+// after calling this: a real top-level exit never returns either, so the code after it was
+// already unreachable in that branch.
+func exitOrRecordDependencyErr(cmd *cobra.Command, err error, title, suggestion string) {
 	if adapters.DependenciesAlreadyResolved(cmd) {
 		adapters.RecordDependencyError(cmd, err)
 		return
 	}
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	errUtils.CheckErrorPrintAndExit(err, title, suggestion)
 }
 
 // executeCustomCommand executes a custom command.
@@ -774,8 +776,9 @@ func executeCustomCommand(
 	args = separated.BeforeSeparator
 	trailingArgs, err := separated.GetAfterSeparatorAsQuotedString()
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
+		exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: failed to quote trailing arguments: %w",
 			errUtils.ErrFailedToProcessArgs, err), "", "")
+		return
 	}
 
 	if commandConfig.Verbose {
@@ -800,7 +803,8 @@ func executeCustomCommand(
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 		// A step whose effective `when:` references a freshness fact (checksum.changed,
 		// timestamp.changed, precondition.success, or the structured sources/artifacts records)
@@ -816,7 +820,8 @@ func executeCustomCommand(
 		}
 		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv, schema.ConditionPredicateSuccess))
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 		if runs {
 			hasRunnableStep = true
@@ -840,7 +845,8 @@ func executeCustomCommand(
 			WithHint("Check the command's dependencies section for valid tool specifications").
 			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
 	}
 
 	if len(deps) > 0 {
@@ -852,7 +858,8 @@ func executeCustomCommand(
 				WithHint("Check the command's dependencies section for valid tool specifications").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 
 		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
@@ -863,7 +870,8 @@ func executeCustomCommand(
 				WithHint("Run `atmos toolchain install` to install tools from .tool-versions").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 	}
 
@@ -882,7 +890,8 @@ func executeCustomCommand(
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+		exitOrRecordDependencyErr(cmd, err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+		return
 	}
 	if commandConfig.WorkingDirectory != "" {
 		log.Debug("Using working directory for custom command", customCommandKeyCommand, commandConfig.Name, "working_directory", workDir)
@@ -892,7 +901,8 @@ func executeCustomCommand(
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
 	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
+		exitOrRecordDependencyErr(cmd, err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
+		return
 	}
 
 	// Validate parallel/matrix control steps (needs: cycle/unknown-reference checks) using the
@@ -902,7 +912,8 @@ func executeCustomCommand(
 		workflowSteps[wi] = commandConfig.Steps[wi].ToWorkflowStep()
 	}
 	if err := schema.ValidateWorkflowSteps(workflowSteps); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps")
+		exitOrRecordDependencyErr(cmd, err, "", "https://atmos.tools/cli/configuration/commands/steps")
+		return
 	}
 
 	// Resolve and run dependencies.commands/dependencies.workflows before any of this
@@ -912,7 +923,15 @@ func executeCustomCommand(
 	direct := taskgraph.RefsFromDependencies(commandConfig.Dependencies.OrEmpty())
 	if len(direct) > 0 && !adapters.DependenciesAlreadyResolved(cmd) {
 		depOpts := adapters.CustomCommandDependencyOptions(&atmosConfig, cmd.Root(), isCustomCommand)
-		if err := taskgraph.Run(context.Background(), direct, depOpts...); err != nil {
+		// Use cmd.Context() so cancellation (e.g. Ctrl-C on the top-level Cobra invocation)
+		// propagates into the dependency graph; context.Background() would let it run to
+		// completion after the user has already cancelled. cmd.Context() is nil only when this
+		// command is invoked directly in tests without going through Cobra's Execute().
+		depCtx := cmd.Context()
+		if depCtx == nil {
+			depCtx = context.Background()
+		}
+		if err := taskgraph.Run(depCtx, direct, depOpts...); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			return
 		}
@@ -928,7 +947,8 @@ func executeCustomCommand(
 			WithCause(err).
 			WithExplanationf("Failed to resolve toolchain PATH for command '%s'", commandConfig.Name).
 			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
 	}
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
@@ -969,7 +989,8 @@ func executeCustomCommand(
 			id := freshness.StepIdentity{BaseDir: freshnessWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: stepFreshnessName(step.Name, i)}
 			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
 			if factsErr != nil {
-				errUtils.CheckErrorPrintAndExit(factsErr, "", "")
+				exitOrRecordDependencyErr(cmd, factsErr, "", "")
+				return
 			}
 			conditionCtx.ChecksumChanged = facts.ChecksumChanged
 			conditionCtx.TimestampChanged = facts.TimestampChanged
@@ -979,7 +1000,8 @@ func executeCustomCommand(
 		}
 		runs, err := effectiveWhen.EvaluateWithImplicitSuccessE(conditionCtx)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 		if !runs {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i)
@@ -997,13 +1019,17 @@ func executeCustomCommand(
 		for _, fl := range commandConfig.Flags {
 			flag := cmd.Flag(fl.Name)
 			if flag == nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+				return
 			}
 			if fl.Type == "" || fl.Type == "string" {
 				flagsData[fl.Name] = flag.Value.String()
 			} else if fl.Type == "bool" {
 				boolFlag, err := strconv.ParseBool(flag.Value.String())
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					exitOrRecordDependencyErr(cmd, err, "", "")
+					return
+				}
 				flagsData[fl.Name] = boolFlag
 			}
 		}
@@ -1015,7 +1041,8 @@ func executeCustomCommand(
 		// Validate (and, if missing+required+interactive, prompt for) values:-constrained
 		// flags/arguments -- independent of the semantic component/stack prompting above.
 		if err := pkgFlags.ValidateConstrainedFields(cmd, commandConfig, argumentsData, flagsData); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
 		}
 
 		// Prepare template data
@@ -1037,18 +1064,26 @@ func executeCustomCommand(
 			// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 			// Process Go templates in the command's 'component_config.component'.
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
 			if component == "" || component == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: component_config.component: %s in %q",
+					errCustomCommandInvalidComponentConfig, commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				return
 			}
 
 			// Process Go templates in the command's 'component_config.stack'.
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
 			if stack == "" || stack == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: component_config.stack: %s in %q",
+					errCustomCommandInvalidComponentConfig, commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				return
 			}
 
 			// Get the config for the component in the stack.
@@ -1060,7 +1095,10 @@ func executeCustomCommand(
 				Skip:                 nil,
 				AuthManager:          authManager,
 			})
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
 			data["ComponentConfig"] = componentConfig
 		}
 
@@ -1108,19 +1146,26 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, workDir, env, false)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					exitOrRecordDependencyErr(cmd, err, "", "")
+					return
+				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = stepVars.Resolve(value)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				if err != nil {
+					exitOrRecordDependencyErr(cmd, err, "", "")
+					return
+				}
 			}
 
 			// Add or update the environment variable in the env slice
@@ -1150,8 +1195,9 @@ func executeCustomCommand(
 			ctx := context.Background()
 			env, err = authManager.PrepareShellEnvironment(ctx, commandIdentity, env)
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
+				exitOrRecordDependencyErr(cmd, fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
 					commandIdentity, commandConfig.Name, i, err), "", "")
+				return
 			}
 			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i)
 		}
@@ -1168,7 +1214,10 @@ func executeCustomCommand(
 		}
 		if len(stepEnv) > 0 {
 			resolvedStepEnv, resolveErr := stepVars.ResolveEnvMap(stepEnv)
-			errUtils.CheckErrorPrintAndExit(resolveErr, "", "")
+			if resolveErr != nil {
+				exitOrRecordDependencyErr(cmd, resolveErr, "", "")
+				return
+			}
 			for key, value := range resolvedStepEnv {
 				env = envpkg.UpdateEnvVar(env, key, value)
 			}
@@ -1194,12 +1243,18 @@ func executeCustomCommand(
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 		commandToRun, err := stepVars.Resolve(step.Command)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			exitOrRecordDependencyErr(cmd, err, "", "")
+			return
+		}
 
 		stepWorkDir := workDir
 		if strings.TrimSpace(step.WorkingDirectory) != "" {
 			stepWorkDir, err = resolveWorkingDirectory(step.WorkingDirectory, workDir, workDir)
-			errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+				return
+			}
 		}
 
 		// Execute the step based on type.
@@ -1355,7 +1410,7 @@ func executeCustomCommand(
 		if err != nil {
 			var silentExit errUtils.ExitCodeError
 			if errors.As(err, &silentExit) && silentExit.Silent {
-				exitOrRecordStepFailure(cmd, err)
+				exitOrRecordDependencyErr(cmd, err, "", "")
 				return
 			}
 
@@ -1367,7 +1422,7 @@ func executeCustomCommand(
 				customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, schema.ConditionPredicateFailure),
 			)
 			if continueErr != nil {
-				exitOrRecordStepFailure(cmd, fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr))
+				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr), "", "")
 				return
 			}
 			if forgiven {
@@ -1390,7 +1445,7 @@ func executeCustomCommand(
 			}
 		}
 	}
-	exitOrRecordStepFailure(cmd, commandErr)
+	exitOrRecordDependencyErr(cmd, commandErr, "", "")
 }
 
 // stepFreshnessName returns name, or a positional fallback ("step-%d") when the step has no
