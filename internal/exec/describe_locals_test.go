@@ -1667,3 +1667,140 @@ locals:
 	require.True(t, ok)
 	assert.Equal(t, "acme", locals["namespace"])
 }
+
+// TestDeriveStackNameFromTemplate_Sections covers the reworked derivation that feeds vars,
+// settings, and env to the name template and rejects `<no value>` renderings (#2343, #2374).
+func TestDeriveStackNameFromTemplate_Sections(t *testing.T) {
+	mk := func(tmpl string) *schema.AtmosConfiguration {
+		return &schema.AtmosConfiguration{Stacks: schema.Stacks{NameTemplate: tmpl}}
+	}
+
+	t.Run("settings reference resolves", func(t *testing.T) {
+		got := deriveStackNameFromTemplate(mk("{{ .settings.tenant }}-{{ .settings.stage }}"),
+			"orgs/prod", nil, map[string]any{"tenant": "plat", "stage": "prod"}, nil)
+		assert.Equal(t, "plat-prod", got)
+	})
+
+	t.Run("env reference resolves", func(t *testing.T) {
+		got := deriveStackNameFromTemplate(mk("{{ .env.REGION }}"),
+			"orgs/prod", nil, nil, map[string]any{"REGION": "ue1"})
+		assert.Equal(t, "ue1", got)
+	})
+
+	t.Run("vars and settings combined", func(t *testing.T) {
+		got := deriveStackNameFromTemplate(mk("{{ .vars.namespace }}-{{ .settings.stage }}"),
+			"orgs/prod", map[string]any{"namespace": "acme"}, map[string]any{"stage": "prod"}, nil)
+		assert.Equal(t, "acme-prod", got)
+	})
+
+	t.Run("missing key renders <no value> and is rejected", func(t *testing.T) {
+		got := deriveStackNameFromTemplate(mk("{{ .vars.namespace }}-{{ .vars.stage }}"),
+			"orgs/prod", map[string]any{"stage": "prod"}, nil, nil)
+		assert.Empty(t, got, "missing namespace -> <no value> -> rejected -> fall back to filename")
+	})
+
+	t.Run("empty template returns empty", func(t *testing.T) {
+		assert.Empty(t, deriveStackNameFromTemplate(mk(""), "orgs/prod", nil, nil, nil))
+	})
+
+	t.Run("nil sections do not panic", func(t *testing.T) {
+		assert.Empty(t, deriveStackNameFromTemplate(mk("{{ .settings.x }}"), "orgs/prod", nil, nil, nil))
+	})
+}
+
+// TestDeriveStackNameSections covers the lite, YAML-only import overlay used to feed name_template.
+func TestDeriveStackNameSections(t *testing.T) {
+	t.Run("nil config or rawConfig returns nil", func(t *testing.T) {
+		v, s, e := deriveStackNameSections(nil, map[string]any{}, "f")
+		assert.Nil(t, v)
+		assert.Nil(t, s)
+		assert.Nil(t, e)
+
+		v, s, e = deriveStackNameSections(&schema.AtmosConfiguration{}, nil, "f")
+		assert.Nil(t, v)
+		assert.Nil(t, s)
+		assert.Nil(t, e)
+	})
+
+	t.Run("leaf-only (no imports) returns leaf sections", func(t *testing.T) {
+		raw := map[string]any{
+			"vars":     map[string]any{"namespace": "acme"},
+			"settings": map[string]any{"tenant": "plat"},
+			"env":      map[string]any{"REGION": "ue1"},
+		}
+		v, s, e := deriveStackNameSections(&schema.AtmosConfiguration{}, raw, "orgs/prod.yaml")
+		assert.Equal(t, "acme", v["namespace"])
+		assert.Equal(t, "plat", s["tenant"])
+		assert.Equal(t, "ue1", e["REGION"])
+	})
+
+	t.Run("imported sections merged as base; leaf overrides", func(t *testing.T) {
+		dir := t.TempDir()
+		stacksBase := filepath.Join(dir, "stacks")
+		orgs := filepath.Join(stacksBase, "orgs")
+		require.NoError(t, os.MkdirAll(orgs, 0o755))
+		// Parent _defaults.yaml provides namespace + a shared tenant.
+		require.NoError(t, os.WriteFile(filepath.Join(orgs, "_defaults.yaml"),
+			[]byte("vars:\n  namespace: acme\nsettings:\n  tenant: base\n"), 0o600))
+
+		atmosConfig := &schema.AtmosConfiguration{BasePath: dir, Stacks: schema.Stacks{BasePath: "stacks"}}
+		raw := map[string]any{
+			"import":   []any{"./_defaults"},
+			"vars":     map[string]any{"stage": "prod"},
+			"settings": map[string]any{"tenant": "leaf"},
+		}
+		// stackFileName is the logical name (relative to the stacks base, no extension).
+		v, s, _ := deriveStackNameSections(atmosConfig, raw, filepath.Join("orgs", "prod"))
+		assert.Equal(t, "acme", v["namespace"], "namespace comes from the import")
+		assert.Equal(t, "prod", v["stage"], "stage comes from the leaf")
+		assert.Equal(t, "leaf", s["tenant"], "leaf settings override the import")
+	})
+}
+
+// TestDeriveStackNameFromTemplate_RejectsUnresolvedMarkers covers the branch that rejects a
+// rendered name still containing raw `{{ }}` markers (e.g. an unresolved `{{ .locals.* }}` value).
+func TestDeriveStackNameFromTemplate_RejectsUnresolvedMarkers(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{Stacks: schema.Stacks{NameTemplate: "{{ .vars.app }}"}}
+	got := deriveStackNameFromTemplate(atmosConfig, "orgs/prod",
+		map[string]any{"app": "{{ .locals.x }}"}, nil, nil)
+	assert.Empty(t, got, "a rendered name containing raw template markers must be rejected")
+}
+
+// TestDeriveStackNameSections_ImportCycle verifies the visited set breaks an import cycle without
+// infinite recursion and still merges both files' sections.
+func TestDeriveStackNameSections_ImportCycle(t *testing.T) {
+	dir := t.TempDir()
+	orgs := filepath.Join(dir, "stacks", "orgs")
+	require.NoError(t, os.MkdirAll(orgs, 0o755))
+	// a imports b; b imports a (cycle).
+	require.NoError(t, os.WriteFile(filepath.Join(orgs, "a.yaml"),
+		[]byte("import:\n  - ./b\nvars:\n  fromA: yes\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(orgs, "b.yaml"),
+		[]byte("import:\n  - ./a\nvars:\n  fromB: yes\n"), 0o600))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: dir, Stacks: schema.Stacks{BasePath: "stacks"}}
+	raw := map[string]any{"import": []any{"./b"}, "vars": map[string]any{"fromA": "yes"}}
+
+	// stackFileName is the logical name (relative to the stacks base, no extension).
+	v, _, _ := deriveStackNameSections(atmosConfig, raw, filepath.Join("orgs", "a"))
+	assert.Equal(t, "yes", v["fromA"])
+	assert.Equal(t, "yes", v["fromB"], "the cycle must be traversed once, merging b's vars")
+}
+
+// TestDeriveStackNameFromTemplate_MalformedTemplate covers the ProcessTmpl error branch: an
+// unparseable name_template falls back to the filename (empty result).
+func TestDeriveStackNameFromTemplate_MalformedTemplate(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{Stacks: schema.Stacks{NameTemplate: "{{ .vars.x "}}
+	got := deriveStackNameFromTemplate(atmosConfig, "orgs/prod", map[string]any{"x": "y"}, nil, nil)
+	assert.Empty(t, got, "an unparseable template must fall back to the filename")
+}
+
+// TestDeriveStackNameSections_InvalidImportSection covers the branch where the import section is
+// not a list; imports are skipped and the leaf file's own sections are still returned.
+func TestDeriveStackNameSections_InvalidImportSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir(), Stacks: schema.Stacks{BasePath: "stacks"}}
+	// `import` is not a list -> the type assertion fails -> imports skipped.
+	raw := map[string]any{"import": 123, "vars": map[string]any{"a": "b"}}
+	v, _, _ := deriveStackNameSections(atmosConfig, raw, "orgs/prod.yaml")
+	assert.Equal(t, "b", v["a"], "leaf vars must still merge when the import section is invalid")
+}

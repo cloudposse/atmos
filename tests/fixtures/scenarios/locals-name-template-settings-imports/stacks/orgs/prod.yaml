@@ -1,0 +1,21 @@
+# Leaf stack: defines `settings.stage` locally and inherits the rest
+# from `_defaults.yaml`. Adding any `locals:` block triggers the bug
+# in `deriveStackNameForLocals` -- both the missing-settings-in-
+# templateData defect and the unmerged-imports defect at once.
+import:
+  - ./_defaults
+
+settings:
+  stage: prod
+
+locals:
+  prefix: "cloudlabs-plat-ue1-prod"
+
+components:
+  terraform:
+    kms:
+      metadata:
+        component: mock
+      vars:
+        # Reporter saw "<no value>-key-logs" -- locals never resolved.
+        alias: "{{ .locals.prefix }}-key-logs"
