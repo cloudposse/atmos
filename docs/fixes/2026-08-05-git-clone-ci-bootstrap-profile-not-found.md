@@ -61,7 +61,7 @@ executed.
   (`cmd/git/bootstrap_test.go`, covering space- and equals-form value flags,
   `--branch`, positional args, `--all`, no-CI-provider, and malformed flag
   values) — confirmed both fail against the pre-fix code and pass post-fix.
-- `go build ./...`, `go vet ./cmd/...`, `gofmt` — clean.
+- `go build ./...`, `go vet ./cmd/...`, `gofumpt` — clean.
 - Full `go test ./cmd/ ./cmd/git/...` — all pass.
 - `./custom-gcl run` via the repo's pre-commit hook — pass (had to build
   `./custom-gcl` first via `atmos lint custom-gcl`; it wasn't prebuilt in
