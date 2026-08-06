@@ -228,7 +228,7 @@ are not supported in stack manifests (only in `atmos.yaml`).
 3. **Use `atmos.GomplateDatasource` instead of `datasource`** -- Built-in caching prevents
     redundant API calls
 4. **Minimize `atmos.Component` usage** -- Each call may initialize Terraform
-5. **All template functions cache results** per execution for repeated calls
+5. **All template functions cache results** per execution for repeated calls.
 
 ## Common Pitfalls
 

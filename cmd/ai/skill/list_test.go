@@ -13,9 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
@@ -129,12 +131,14 @@ func installedEntryWithMetadata(name, source, version, path string, enabled, isB
 	return entry
 }
 
-// resetListFlags restores the list command's flags to defaults between subtests.
+// resetListFlags restores the list command's flags to defaults between subtests,
+// clearing pflag's "Changed" state too. Without clearing Changed, a flag stays
+// "explicitly changed" forever once any earlier subtest calls Set() on it (pflag
+// has no unset), which would make Viper always prefer the stale CLI value over
+// an env var in later subtests that test env-var precedence.
 func resetListFlags(t *testing.T) {
 	t.Helper()
-	require.NoError(t, listCmd.Flags().Set("detailed", "false"))
-	require.NoError(t, listCmd.Flags().Set("installed", "false"))
-	require.NoError(t, listCmd.Flags().Set(flagFormat, ""))
+	flags.ResetCommandFlags(listCmd)
 }
 
 func TestListCmd_BasicProperties(t *testing.T) {
@@ -203,6 +207,27 @@ func TestListCmd_EnvVarBinding(t *testing.T) {
 		require.NoError(t, listParser.BindToViper(v))
 		assert.Equal(t, "json", v.GetString(flagFormat))
 	})
+}
+
+// TestListCmd_FormatEnvVarInvalid verifies that a value sourced from
+// ATMOS_AI_SKILL_FORMAT (rather than the --format flag itself) is still
+// validated: the flag parser only validates values that came directly from
+// an explicitly-changed CLI flag, so RunE must check the Viper-resolved
+// value before it reaches the renderer.
+func TestListCmd_FormatEnvVarInvalid(t *testing.T) {
+	withTempHome(t)
+	resetListFlags(t)
+	t.Setenv("ATMOS_AI_SKILL_FORMAT", "invalid")
+
+	// Set up output plumbing in case validation regresses and the command falls
+	// through to rendering; without this a regression would panic instead of
+	// failing the assertions below with a clear message.
+	setupSkillListOutput(t)
+
+	err := listCmd.RunE(listCmd, []string{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), "invalid")
 }
 
 func TestBuildListEntries(t *testing.T) {
@@ -526,6 +551,23 @@ func TestListCmd_InstalledOnly(t *testing.T) {
 
 		assert.Contains(t, output, "No skills installed")
 		assert.Contains(t, output, "atmos ai skill list")
+	})
+
+	t.Run("with nothing installed and format=json returns an empty array, not prose", func(t *testing.T) {
+		withTempHome(t)
+		resetListFlags(t)
+		require.NoError(t, listCmd.Flags().Set("installed", "true"))
+		require.NoError(t, listCmd.Flags().Set(flagFormat, "json"))
+
+		stdout := setupSkillListOutput(t)
+		require.NoError(t, listCmd.RunE(listCmd, []string{}))
+		output := stdout.String()
+
+		assert.NotContains(t, output, "No skills installed")
+
+		var rows []map[string]string
+		require.NoError(t, json.Unmarshal([]byte(output), &rows), "output must be valid JSON")
+		assert.Empty(t, rows)
 	})
 }
 

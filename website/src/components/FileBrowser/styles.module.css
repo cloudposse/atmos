@@ -346,15 +346,18 @@
    panel styling lives on the nested `.sidebarInner` instead of combining
    position: sticky + overflow-y: auto + border-radius on one element --
    that combination makes Chromium/WebKit render the element translucently
-   while scrolling (the underlying content bleeds through mid-scroll). */
+   while scrolling (the underlying content bleeds through mid-scroll).
+   The viewport-based `max-height` also lives on `.sidebarInner` (not `.sidebar`)
+   so it is a definite constraint for this element itself: `.sidebar` has no
+   `height`, so a `height: 100%` child would resolve against it as `auto` and
+   let a long file tree grow the sidebar instead of scrolling inside it. */
 .sidebar {
   position: sticky;
   top: 80px;
-  max-height: calc(100vh - 100px);
 }
 
 .sidebarInner {
-  height: 100%;
+  max-height: calc(100vh - 100px);
   overflow-y: auto;
   background: var(--ifm-background-surface-color);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -370,6 +373,9 @@
   .sidebar {
     position: relative;
     top: 0;
+  }
+
+  .sidebarInner {
     max-height: none;
   }
 }

@@ -3,6 +3,7 @@ package skill
 import (
 	_ "embed"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	ai "github.com/cloudposse/atmos/cmd/ai"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -33,6 +35,13 @@ const (
 
 // flagFormat is the name of the output-format flag.
 const flagFormat = "format"
+
+// validSkillListFormats lists the supported --format values. It is shared between
+// flag registration (CLI validation via flags.WithValidValues) and the explicit
+// check in RunE below, which is needed because a value sourced from Viper's
+// lower-precedence layers (ATMOS_AI_SKILL_FORMAT env var or config file) never
+// passes through the flag parser's "explicitly changed" validation path.
+var validSkillListFormats = []string{"table", "json", "yaml", "csv", "tsv"}
 
 // listParser handles flag parsing with Viper precedence for the list command.
 var listParser *flags.StandardParser
@@ -77,7 +86,15 @@ var listCmd = &cobra.Command{
 		// Get flags from Viper (supports CLI > ENV > config > defaults).
 		detailed := v.GetBool("detailed")
 		installedOnly := v.GetBool("installed")
-		outputFormat := listformat.Format(v.GetString(flagFormat))
+
+		// Validate explicitly: the flag parser only validates values that came
+		// directly from the CLI flag, so an invalid ATMOS_AI_SKILL_FORMAT env var
+		// or config-file value must be checked here before it reaches the renderer.
+		formatValue := v.GetString(flagFormat)
+		if formatValue != "" && !slices.Contains(validSkillListFormats, formatValue) {
+			return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, formatValue, validSkillListFormats)
+		}
+		outputFormat := listformat.Format(formatValue)
 
 		// Create installer (which manages registry).
 		installer, err := marketplace.NewInstaller(version.Version)
@@ -103,7 +120,7 @@ func init() {
 		flags.WithEnvVars("installed", "ATMOS_AI_SKILL_INSTALLED"),
 		flags.WithStringFlag(flagFormat, "f", "", "Output format: table, json, yaml, csv, tsv"),
 		flags.WithEnvVars(flagFormat, "ATMOS_AI_SKILL_FORMAT"),
-		flags.WithValidValues(flagFormat, "table", "json", "yaml", "csv", "tsv"),
+		flags.WithValidValues(flagFormat, validSkillListFormats...),
 	)
 
 	// Register flags on the command.
@@ -195,13 +212,16 @@ func renderSkillList(entries []listEntry, installedOnly, detailed bool, outputFo
 		display = filterInstalled(entries)
 	}
 
+	// Dispatch structured formats before the empty-message check so json/yaml/csv/tsv
+	// stay machine-readable (e.g. an empty array) even when --installed matches
+	// nothing, instead of falling through to the human-readable prose message below.
+	if outputFormat != "" && outputFormat != listformat.FormatTable {
+		return renderSkillListStructured(display, outputFormat)
+	}
+
 	if len(display) == 0 {
 		// Only reachable with --installed (the catalog is never empty).
 		return writeSkillListOutput("No skills installed.\n\nBrowse available skills with:\n  atmos ai skill list\n")
-	}
-
-	if outputFormat != "" && outputFormat != listformat.FormatTable {
-		return renderSkillListStructured(display, outputFormat)
 	}
 
 	var rendered string
