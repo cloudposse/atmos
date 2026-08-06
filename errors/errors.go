@@ -95,6 +95,7 @@ var (
 	ErrCastTapeSourceConflict                = errors.New("cast step cannot set both tape and tape_file")
 	ErrCastTapeStepsConflict                 = errors.New("cast step cannot combine tape/tape_file with explicit steps")
 	ErrScreenshotActionRequiresPath          = errors.New("screenshot action requires a path")
+	ErrScreenshotRenderFailed                = errors.New("failed to render marker screenshot")
 	ErrCastTapeAndInputConflict              = errors.New("cast record cannot combine --tape input with another input source")
 	ErrWorkdirPathRequired                   = errors.New("workdir path is required")
 	ErrWorkdirSourceRequired                 = errors.New("workdir source is required")

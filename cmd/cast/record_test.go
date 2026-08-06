@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	flagspkg "github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
@@ -139,18 +140,28 @@ func TestRecordCmdRunEReturnsErrorForMissingOutput(t *testing.T) {
 	}
 }
 
+// TestRecordCmdRunEExecutesTapeAndRecordsCast pins --mode=steps explicitly:
+// recordCmd defaults to mode: session, which drives a real PTY-backed shell
+// (see RunSession/startSessionShell) that depends on a host shell and PTY
+// support -- unavailable or flaky on Windows and in minimal CI containers.
+// mode: steps runs the tape's typed command as an ordinary, non-interactive
+// child step through the same executor a shell step uses, with no PTY.
 func TestRecordCmdRunEExecutesTapeAndRecordsCast(t *testing.T) {
 	resetRecordCommand(t)
 	clearRecordViperOverrides(t)
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
 	}
+	data.InitWriter(iolib.GetContext())
 	tapePath := filepath.Join(t.TempDir(), "demo.tape")
-	if err := os.WriteFile(tapePath, []byte("Sleep 1ms"), 0o644); err != nil {
+	if err := os.WriteFile(tapePath, []byte(`Type "true" Enter`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	output := filepath.Join(t.TempDir(), "out.cast")
 	if err := recordCmd.Flags().Set(recordFlagOutput, output); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordCmd.Flags().Set(recordFlagMode, recordModeSteps); err != nil {
 		t.Fatal(err)
 	}
 	recordCmd.SetContext(context.Background())

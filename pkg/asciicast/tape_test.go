@@ -89,6 +89,22 @@ func TestTokenizeTape(t *testing.T) {
 			},
 		},
 		{
+			name:   "absolute path is a bare word, not a regex",
+			source: "Output /tmp/demo.gif",
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Output", Line: 1},
+				{Kind: tapeTokenWord, Value: "/tmp/demo.gif", Line: 1},
+			},
+		},
+		{
+			name:   "trailing comment after a directive is skipped",
+			source: `Type "x" # set up the demo`,
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Type", Line: 1},
+				{Kind: tapeTokenString, Value: "x", Line: 1},
+			},
+		},
+		{
 			name:   "whole-line comment is skipped",
 			source: "# a comment\nSleep 500ms",
 			want: []tapeToken{
@@ -336,6 +352,18 @@ func TestParseTapeFileSourceResolvesRelativeToBaseDirNotReferencingFile(t *testi
 	assert.Equal(t, TapeSet, tape.Directives[0].Kind)
 	assert.Equal(t, TapeType, tape.Directives[1].Kind)
 	assert.Equal(t, TapeKey, tape.Directives[2].Kind)
+}
+
+// TestParseTapeFileMissingFileWrapsErrTapeSourceNotFoundWithPath ensures a
+// missing top-level tape reports the same matchable sentinel and path
+// context as a missing Source target (loadSource), instead of the bare
+// underlying "file does not exist" error.
+func TestParseTapeFileMissingFileWrapsErrTapeSourceNotFoundWithPath(t *testing.T) {
+	fr := fakeTapeFileReader{}
+	_, err := ParseTapeFile("demo/landing/missing.tape", ".", fr)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrTapeSourceNotFound)
+	assert.Contains(t, err.Error(), "demo/landing/missing.tape")
 }
 
 // TestParseTapeSourceBaseDirStaysFixedAcrossNestedSources proves the base

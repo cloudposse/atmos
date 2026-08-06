@@ -88,6 +88,7 @@ commands:
           atmos cast --help
           atmos cast play --help
           atmos cast render --help
+          atmos cast record --help
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
@@ -482,6 +483,7 @@ commands:
           atmos cast --help
           atmos cast play --help
           atmos cast render --help
+          atmos cast record --help
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
