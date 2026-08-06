@@ -772,6 +772,30 @@ func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
 }
 
+// TestFindAllStackConfigsInPathsForStack_GenuineGlobError verifies that a genuinely invalid
+// glob pattern (not just "matched nothing") still aborts and surfaces the underlying error,
+// rather than being tolerated the way an empty-match ErrFailedToFindImport now is post-#2867.
+func TestFindAllStackConfigsInPathsForStack_GenuineGlobError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern"),
+	}
+
+	includeStackPaths := []string{
+		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern", "[invalid"),
+	}
+
+	_, _, _, err := FindAllStackConfigsInPathsForStack(
+		atmosConfig,
+		"test-stack",
+		includeStackPaths,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"a genuine glob syntax error must not be reported as ErrNoStackManifestsFound")
+}
+
 // TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack
 // variant. See TestFindAllStackConfigsInPathsForStack_ErrorWrapping above for why this is
 // ErrNoStackManifestsFound rather than ErrFailedToFindImport post-#2867.
@@ -794,4 +818,26 @@ func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 
 	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
 		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
+}
+
+// TestFindAllStackConfigsInPaths_GenuineGlobError is the non-stack-variant counterpart of
+// TestFindAllStackConfigsInPathsForStack_GenuineGlobError above.
+func TestFindAllStackConfigsInPaths_GenuineGlobError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern2"),
+	}
+
+	includeStackPaths := []string{
+		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern2", "[invalid"),
+	}
+
+	_, _, err := FindAllStackConfigsInPaths(
+		&atmosConfig,
+		includeStackPaths,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"a genuine glob syntax error must not be reported as ErrNoStackManifestsFound")
 }

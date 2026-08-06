@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
@@ -1204,6 +1205,50 @@ func resolvedTempDir(t *testing.T) string {
 	return resolved
 }
 
+// TestGetVendorDirToUse covers both branches: the precomputed VendorDirAbsolutePath (set by
+// AtmosConfigAbsolutePaths in real callers) taking precedence, and the raw BasePath/Vendor.BasePath
+// join fallback for hand-built AtmosConfiguration values (e.g. in tests) that skip that step.
+func TestGetVendorDirToUse(t *testing.T) {
+	t.Run("uses precomputed VendorDirAbsolutePath when set", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath:              "/base",
+			VendorDirAbsolutePath: "/precomputed/vendor",
+			Vendor:                schema.Vendor{BasePath: "vendor"},
+		}
+		assert.Equal(t, "/precomputed/vendor", getVendorDirToUse(atmosConfig))
+	})
+
+	t.Run("falls back to joining BasePath and Vendor.BasePath", func(t *testing.T) {
+		base := filepath.Join(string(filepath.Separator), "base")
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: base,
+			Vendor:   schema.Vendor{BasePath: "vendor"},
+		}
+		assert.Equal(t, u.JoinPath(base, "vendor"), getVendorDirToUse(atmosConfig))
+	})
+}
+
+// TestResolveVendorConfigFilePath_CheckGlobalConfig covers resolveVendorConfigFilePath's
+// checkGlobalConfig branch: an absolute Vendor.BasePath is returned as-is, while a relative one
+// resolves via getVendorDirToUse (the precomputed-path case exercised here; the fallback-join
+// case is already covered by TestGetVendorDirToUse above).
+func TestResolveVendorConfigFilePath_CheckGlobalConfig(t *testing.T) {
+	t.Run("absolute Vendor.BasePath returned as-is", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{BasePath: "/abs/vendor"}}
+		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
+		assert.Equal(t, "/abs/vendor", got)
+	})
+
+	t.Run("relative Vendor.BasePath resolves via getVendorDirToUse", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			VendorDirAbsolutePath: "/precomputed/vendor",
+			Vendor:                schema.Vendor{BasePath: "./vendor.yaml"},
+		}
+		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
+		assert.Equal(t, "/precomputed/vendor", got)
+	})
+}
+
 // TestValidateTagsAndComponents_PathLeak guards against a bug found during a field-test pass on
 // cloudposse/atmos#2867/#2868: these error messages interpolated the raw (possibly absolute,
 // machine-specific) vendorConfigFileName directly, right next to the "Vendoring from" log line
@@ -1352,9 +1397,16 @@ func TestExecuteAtmosVendorInternal_AllMaterialized_NoOp(t *testing.T) {
 }
 
 // TestExecuteAtmosVendorInternal_PathLeak guards against a bug found during a field-test pass on
-// cloudposse/atmos#2867/#2868: ErrMissingVendorConfigDefinition and ErrEmptySources interpolated
-// the raw (possibly absolute) vendorConfigFileName directly, unlike the "Vendoring from" log line
-// one statement earlier in the same function, which was already fixed with displayPath().
+// cloudposse/atmos#2867/#2868: ErrMissingVendorConfigDefinition interpolated the raw (possibly
+// absolute) vendorConfigFileName directly, unlike the "Vendoring from" log line one statement
+// earlier in the same function, which was already fixed with displayPath().
+//
+// ErrEmptySources (fmt.Errorf("%w %s", ErrEmptySources, displayPath(...)), a few lines below the
+// case tested here) is NOT covered by an equivalent case: processVendorImports requires every
+// import in the chain to have non-empty sources or imports, so any input that would make the
+// final merged sources list empty hits ErrMissingVendorConfigDefinition somewhere in the
+// recursion first (confirmed empirically) -- ErrEmptySources is unreachable via this function's
+// public entry point given the current control flow.
 func TestExecuteAtmosVendorInternal_PathLeak(t *testing.T) {
 	resolvedDir := resolvedTempDir(t)
 	vendorConfigFileName := filepath.Join(resolvedDir, "vendor.yaml")
@@ -1370,14 +1422,6 @@ func TestExecuteAtmosVendorInternal_PathLeak(t *testing.T) {
 				vendorConfigFileName: vendorConfigFileName,
 				atmosConfig:          atmosConfig,
 				atmosVendorSpec:      schema.AtmosVendorSpec{},
-			},
-		},
-		{
-			name: "ErrEmptySources",
-			opts: &executeVendorOptions{
-				vendorConfigFileName: vendorConfigFileName,
-				atmosConfig:          atmosConfig,
-				atmosVendorSpec:      schema.AtmosVendorSpec{Imports: []string{}, Sources: []schema.AtmosVendorSource{}},
 			},
 		},
 	}
@@ -1451,6 +1495,22 @@ func TestProcessVendorImports_PathLeak(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrMissingVendorConfigDefinition)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+
+	t.Run("ErrDuplicateImport", func(t *testing.T) {
+		importFile := filepath.Join(resolvedDir, "dup-import.yaml")
+		require.NoError(t, os.WriteFile(importFile, []byte(
+			"apiVersion: atmos/v1\nkind: AtmosVendorConfig\nspec:\n  sources:\n    - component: vpc\n      source: ./a\n",
+		), 0o644))
+
+		// The same file listed twice: the second occurrence is already in allImports by the
+		// time it's processed, so it must be rejected as a duplicate rather than silently
+		// re-processed.
+		_, _, err := processVendorImports(atmosConfig, filepath.Join(resolvedDir, "vendor.yaml"), []string{importFile, importFile}, nil, nil)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateImport)
 		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
 	})
 }

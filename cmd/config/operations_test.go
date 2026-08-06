@@ -236,6 +236,26 @@ stacks:
 		"output must reflect the SECOND --config file's override, not just the first file's stale value: %s", output)
 }
 
+// TestConfigGetCommand_InitCliConfigError proves configGetCmd.RunE surfaces a genuine
+// InitCliConfig failure (a malformed --config file here) instead of panicking or masking it,
+// since `get` now reloads the full effective config on every invocation rather than reading a
+// single already-validated file (cloudposse/atmos#2867/#2868).
+func TestConfigGetCommand_InitCliConfigError(t *testing.T) {
+	dir := t.TempDir()
+	badFile := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(badFile, []byte("settings:\n  enabled: [true\n"), 0o644)) // unterminated flow sequence
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--config", badFile, "config", "get", "settings.enabled"}
+
+	err := configGetCmd.RunE(configGetCmd, []string{"settings.enabled"})
+	require.Error(t, err)
+}
+
 func TestConfigSetCommand_TypeVariants(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")

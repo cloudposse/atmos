@@ -272,6 +272,16 @@ func TestDisplayPath(t *testing.T) {
 			file: "config.yaml",
 			want: "config.yaml",
 		},
+		{
+			// A file named "..vendor.yaml" directly in cwd is IN-directory: filepath.Rel
+			// resolves it to "..vendor.yaml", which starts with ".." as a substring but is not
+			// a parent-directory escape (that would be "../vendor.yaml" or exactly ".."). A
+			// naive strings.HasPrefix(rel, "..") check would incorrectly reject this and leak
+			// the absolute path.
+			name: "in-directory filename starting with .. stays relative",
+			file: filepath.Join(cwd, "..vendor.yaml"),
+			want: "..vendor.yaml",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

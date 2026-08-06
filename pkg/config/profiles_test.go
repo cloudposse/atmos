@@ -120,6 +120,7 @@ func TestSplitCliConfigPath(t *testing.T) {
 		{name: "empty", input: "", expected: []string{""}},
 		{name: "single", input: "/test/config", expected: []string{"/test/config"}},
 		{name: "multiple", input: "/test/dirA;/test/dirB;", expected: []string{"/test/dirA", "/test/dirB"}},
+		{name: "separators only, no content", input: ";;;", expected: []string{""}},
 	}
 
 	for _, tt := range tests {

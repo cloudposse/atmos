@@ -29,15 +29,16 @@ Think of this file as where you bootstrap the settings of your project. If you'l
 
 Atmos discovers configuration from multiple sources in the following precedence order (highest to lowest priority):
 
-1. **Command-line flags** (`--config`, `--config-path`) or their environment variable
-   equivalents (`ATMOS_CONFIG`, `ATMOS_CONFIG_PATH`)
-2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
-3. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
-4. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
-5. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
-6. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
-7. **Home directory** (`~/.atmos/atmos.yaml`)
-8. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+1. **Command-line flags** (`--config`, `--config-path`) — if a flag is set, it always wins over
+   its environment variable equivalent below, even when both are present
+2. **Environment variable equivalents of the flags above** (`ATMOS_CONFIG`, `ATMOS_CONFIG_PATH`)
+3. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
+4. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
+5. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
+6. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
+7. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
+8. **Home directory** (`~/.atmos/atmos.yaml`)
+9. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
 Each configuration file discovered is deep-merged with the preceding configurations. Separately, Atmos may also auto-import configuration fragments from `.atmos.d/`. The git repository root is special: even when `atmos.yaml` is found elsewhere, Atmos always checks for `.atmos.d/` at the repo root to load shared fragments like custom commands.
 

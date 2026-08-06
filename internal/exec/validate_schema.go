@@ -367,11 +367,13 @@ func displayPath(file string) string {
 	return file
 }
 
-// relPath returns file relative to cwd when that relative path stays within cwd (no ".."
-// prefix), and whether it succeeded.
+// relPath returns file relative to cwd when that relative path stays within cwd, and whether it
+// succeeded. Only a leading ".." PATH SEGMENT means "escapes cwd" -- a bare HasPrefix(rel, "..")
+// check would also reject a legitimate in-directory name like "..vendor.yaml", leaking its
+// absolute path.
 func relPath(cwd, file string) (string, bool) {
 	rel, err := filepath.Rel(cwd, file)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false
 	}
 	return rel, true

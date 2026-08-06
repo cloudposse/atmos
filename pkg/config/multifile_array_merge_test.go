@@ -359,3 +359,58 @@ stacks:
 		"the profile must be found relative to fragment.yaml's directory (where profiles.base_path "+
 			"was actually declared), not main.yaml's directory (just the first --config file)")
 }
+
+// TestDeclaresProfilesBasePath covers declaresProfilesBasePath's branches directly: malformed
+// YAML, no top-level mapping, no profiles key, profiles present but not itself a mapping,
+// profiles a mapping without base_path, and the true-positive case.
+func TestDeclaresProfilesBasePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:    "malformed YAML returns error",
+			content: "profiles:\n  base_path: [unterminated\n",
+			wantErr: true,
+		},
+		{
+			name:    "empty content has no top-level mapping",
+			content: "",
+			want:    false,
+		},
+		{
+			name:    "no profiles key at all",
+			content: "logs:\n  level: Info\n",
+			want:    false,
+		},
+		{
+			name:    "profiles key present but not a mapping",
+			content: "profiles: not-a-mapping\n",
+			want:    false,
+		},
+		{
+			name:    "profiles is a mapping without base_path",
+			content: "profiles:\n  default: developer\n",
+			want:    false,
+		},
+		{
+			name:    "profiles declares base_path",
+			content: "profiles:\n  base_path: ./custom-profiles\n",
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := declaresProfilesBasePath([]byte(tt.content))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
