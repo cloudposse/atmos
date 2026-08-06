@@ -14,6 +14,17 @@ import (
 
 const cacheLockTimeout = 2 * time.Second
 
+// tryReadLockTimeout bounds the "best-effort, non-blocking" read-lock attempts
+// in WithRLock and TryWithRLock. It must stay well under cacheLockTimeout so
+// these still fail fast under genuine contention, but 1ms (the original
+// value) was tight enough that ordinary scheduling/IO jitter on a loaded CI
+// runner -- not actual lock contention -- could make an uncontended
+// acquisition miss its deadline, which TryWithRLock's callers (e.g. workdir
+// metadata reads) treat identically to "lock held by another process."
+// 50ms comfortably exceeds filelock's internal retryDelay (10ms), so a
+// briefly-held exclusive lock also has a real chance to clear within budget.
+const tryReadLockTimeout = 50 * time.Millisecond
+
 type flockFileLock struct{ lockPath string }
 
 // NewFileLock preserves the cache package API while using a stable sibling
@@ -50,8 +61,8 @@ func (l *flockFileLock) WithRLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithRLock")()
 
 	// Cache reads are deliberately best-effort. Preserve the old non-blocking
-	// behavior by reading without a lock when one is immediately unavailable.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	// behavior by reading without a lock when one isn't quickly available.
+	ctx, cancel := context.WithTimeout(context.Background(), tryReadLockTimeout)
 	defer cancel()
 	err := filelock.New(l.lockPath).WithShared(ctx, fn)
 	if errors.Is(err, filelock.ErrAcquire) && ctx.Err() != nil {
@@ -68,11 +79,11 @@ func cacheLockError(err error) error {
 }
 
 // TryWithRLock executes fn only when a shared read lock can be acquired
-// immediately.
+// quickly (see tryReadLockTimeout).
 func (f *flockFileLock) TryWithRLock(fn func() error) (bool, error) {
 	defer perf.Track(nil, "cache.flockFileLock.TryWithRLock")()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), tryReadLockTimeout)
 	defer cancel()
 	err := filelock.New(f.lockPath).WithShared(ctx, fn)
 	if errors.Is(err, filelock.ErrAcquire) {
