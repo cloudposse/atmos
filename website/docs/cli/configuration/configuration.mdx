@@ -29,7 +29,8 @@ Think of this file as where you bootstrap the settings of your project. If you'l
 
 Atmos discovers configuration from multiple sources in the following precedence order (highest to lowest priority):
 
-1. **Command-line flags** (`--config`, `--config-path`)
+1. **Command-line flags** (`--config`, `--config-path`) or their environment variable
+   equivalents (`ATMOS_CONFIG`, `ATMOS_CONFIG_PATH`)
 2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
 3. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
 4. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
@@ -72,7 +73,14 @@ atmos --config /path/to/config1.yaml --config /path/to/config2.yaml \
       --config-path /path/first/config/ --config-path /path/second/config/ ...
 ```
 
-Configurations are deep-merged in the order provided, with later configurations overriding earlier ones.
+Configurations are deep-merged in the order provided, with later configurations overriding earlier ones. `--config-path` directories are always merged after — and therefore override — `--config` files, regardless of the order the flags appear on the command line.
+
+Both flags also accept comma-separated values via environment variables — `ATMOS_CONFIG` for `--config`, `ATMOS_CONFIG_PATH` for `--config-path`:
+
+```bash
+export ATMOS_CONFIG=/path/to/config1.yaml,/path/to/config2.yaml
+atmos describe config
+```
 
 ### Profiles
 

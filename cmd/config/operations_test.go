@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -134,6 +135,29 @@ func TestResolveConfigFile_Error(t *testing.T) {
 
 	_, err := resolveConfigFile(cmd)
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestResolveConfigFile_MultipleConfigFilesAmbiguous guards against a bug found during a
+// field-test pass on cloudposse/atmos#2867/#2868: resolveConfigFile silently used only the
+// FIRST --config file (cfgFiles[0]) when multiple were given, so `config set --config a,b
+// logs.level X` reported success editing a.yaml while the actual effective value (what `config
+// get` reports, and what every other atmos command uses) stayed unchanged whenever b.yaml also
+// set that key -- a false success, not just a stale-value bug.
+func TestResolveConfigFile_MultipleConfigFilesAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	fileA := filepath.Join(dir, "a.yaml")
+	fileB := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(fileA, []byte("settings:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(fileB, []byte("settings:\n  enabled: false\n"), 0o644))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", []string{fileA, fileB}, "")
+
+	_, err := resolveConfigFile(cmd)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "a.yaml")
+	assert.Contains(t, details, "b.yaml")
 }
 
 func TestConfigGetCommand_MissingValue(t *testing.T) {

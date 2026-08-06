@@ -67,13 +67,22 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 		primaryDir = baseDirs[0]
 	}
 
-	// 1. Configurable base_path (highest precedence), resolved from the primary directory.
+	// 1. Configurable base_path (highest precedence), resolved from whichever --config file
+	// actually declared profiles.base_path (ProfilesBasePathConfigDir), falling back to the
+	// primary directory for single-file/non-CLI-arg config sources where that isn't tracked.
+	// Resolving against primaryDir unconditionally previously broke this whenever
+	// profiles.base_path was declared in a --config file OTHER than the first
+	// (cloudposse/atmos#2867).
 	if atmosConfig.Profiles.BasePath != "" {
 		basePath := atmosConfig.Profiles.BasePath
 
-		// If relative, resolve from atmos.yaml directory.
+		// If relative, resolve from the declaring file's directory.
 		if !filepath.IsAbs(basePath) {
-			basePath = filepath.Join(primaryDir, basePath)
+			resolveDir := atmosConfig.ProfilesBasePathConfigDir
+			if resolveDir == "" {
+				resolveDir = primaryDir
+			}
+			basePath = filepath.Join(resolveDir, basePath)
 		}
 
 		locations = append(locations, ProfileLocation{

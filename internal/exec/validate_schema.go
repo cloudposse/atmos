@@ -344,11 +344,37 @@ func displayPath(file string) string {
 	if err != nil {
 		return file
 	}
-	rel, err := filepath.Rel(cwd, file)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if rel, ok := relPath(cwd, file); ok {
+		return rel
+	}
+	// os.Getwd() preserves the logical $PWD-style path (e.g. macOS's /tmp), while
+	// config-derived absolute paths resolved through git-root discovery resolve symlinks
+	// internally (via go-git/go-billy's filepath.EvalSymlinks) -- so cwd and file can end up in
+	// different (logical vs. physical) forms of the same directory when a symlink is involved.
+	// Retry with both resolved to their canonical physical form; EvalSymlinks on an
+	// already-physical path is a no-op, so this only changes behavior for the mismatched case.
+	// Resolve the DIRECTORY, not file itself: file frequently doesn't exist yet (that's often
+	// exactly why displayPath is being called, e.g. "file not found" errors), and EvalSymlinks
+	// requires its target to exist.
+	resolvedCwd, cwdErr := filepath.EvalSymlinks(cwd)
+	resolvedFileDir, fileErr := filepath.EvalSymlinks(filepath.Dir(file))
+	if cwdErr != nil || fileErr != nil {
 		return file
 	}
-	return rel
+	if rel, ok := relPath(resolvedCwd, filepath.Join(resolvedFileDir, filepath.Base(file))); ok {
+		return rel
+	}
+	return file
+}
+
+// relPath returns file relative to cwd when that relative path stays within cwd (no ".."
+// prefix), and whether it succeeded.
+func relPath(cwd, file string) (string, bool) {
+	rel, err := filepath.Rel(cwd, file)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return rel, true
 }
 
 func (av *atmosValidatorExecutor) printValidation(schema string, files []string) (uint, error) {

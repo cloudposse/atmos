@@ -174,7 +174,7 @@ func getConfigFiles(path string) ([]string, error) {
 			return nil, ErrVendoringNotConfigured
 		}
 		if os.IsPermission(err) {
-			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)
+			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, displayPath(path))
 		}
 		return nil, fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
@@ -186,7 +186,7 @@ func getConfigFiles(path string) ([]string, error) {
 		}
 
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, path)
+			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, displayPath(path))
 		}
 		for i, match := range matches {
 			matches[i] = filepath.Join(path, match)
@@ -218,7 +218,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			source := currentConfig.Spec.Sources[i]
 			if source.Component != "" {
 				if sourceMap[source.Component] {
-					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, displayPath(configFile))
 				}
 				sourceMap[source.Component] = true
 			}
@@ -247,7 +247,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	// itself stays untouched (and possibly absolute) for the actual file/source resolution below.
 	logInitialMessage(displayPath(params.vendorConfigFileName), params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
-		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
+		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(params.vendorConfigFileName))
 	}
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
@@ -262,7 +262,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("%w %s", ErrEmptySources, params.vendorConfigFileName)
+		return fmt.Errorf("%w %s", ErrEmptySources, displayPath(params.vendorConfigFileName))
 	}
 
 	if err := validateTagsAndComponents(sources, params.vendorConfigFileName, params.component, params.tags); err != nil {
@@ -306,7 +306,7 @@ func validateTagsAndComponents(
 
 		if len(lo.Intersect(tags, componentTags)) == 0 {
 			return fmt.Errorf("%w '%s' tagged with the tags %v",
-				ErrNoComponentsWithTags, vendorConfigFileName, tags)
+				ErrNoComponentsWithTags, displayPath(vendorConfigFileName), tags)
 		}
 	}
 
@@ -316,12 +316,12 @@ func validateTagsAndComponents(
 
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
 		return fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
-			ErrDuplicateComponents, duplicates, vendorConfigFileName)
+			ErrDuplicateComponents, duplicates, displayPath(vendorConfigFileName))
 	}
 
 	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
-			ErrComponentNotDefined, component, vendorConfigFileName)
+			ErrComponentNotDefined, component, displayPath(vendorConfigFileName))
 	}
 
 	return nil
@@ -592,8 +592,8 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf(
 				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
-				imp,
-				vendorConfigFile,
+				displayPath(imp),
+				displayPath(vendorConfigFile),
 			)
 		}
 
@@ -605,11 +605,11 @@ func processVendorImports(
 		}
 
 		if slices.Contains(vendorConfig.Spec.Imports, imp) {
-			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
+			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, displayPath(imp))
 		}
 
 		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
-			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, imp)
+			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(imp))
 		}
 
 		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
@@ -641,10 +641,10 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 		s.File = vendorConfigFileName
 	}
 	if s.Source == "" {
-		return fmt.Errorf("%w `%s`", ErrSourceMissing, s.File)
+		return fmt.Errorf("%w `%s`", ErrSourceMissing, displayPath(s.File))
 	}
 	if len(s.Targets) == 0 {
-		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, s.File)
+		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, displayPath(s.File))
 	}
 	if err := version.ValidateVersionRangeConstraints(s.Version, s.Constraints); err != nil {
 		return err

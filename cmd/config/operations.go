@@ -158,12 +158,16 @@ func init() {
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent
-// --config flag (first entry) acts as an explicit override; otherwise the file
-// is discovered in the current directory or git root.
+// --config flag acts as an explicit override when it names exactly one file;
+// otherwise the file is discovered in the current directory or git root.
 func resolveConfigFile(cmd *cobra.Command) (string, error) {
-	override := ""
-	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
-		override = cfgFiles[0]
+	cfgFiles, _ := cmd.Flags().GetStringSlice("config")
+	override, err := cfg.ResolveConfigOverride(cfgFiles)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation(err.Error()).
+			WithHint("Pass a single --config file to config set/delete/format, or edit the target file directly.").
+			Err()
 	}
 
 	file, err := cfg.ResolveEditableConfigFile(atmosConfigPtr, override)

@@ -1,7 +1,7 @@
 ---
 name: field-test
-description: "Hands-on manual DX test pass of a feature or CLI command: read the real implementation and tests, hypothesize plausible user misunderstandings and misuse automated tests don't cover, build durable fixtures, execute for real against real state, and report ranked findings. Investigation only — never fixes anything found. Invoke on explicit requests like 'field test X' / 'do a DX test pass on X' / 'find vibe-coded slop in X'."
-argument-hint: "Feature or command to test, e.g. 'atmos vendor pull'"
+description: "Hands-on manual DX test pass of a feature or CLI command: read the real implementation and tests, hypothesize plausible user misunderstandings and misuse automated tests don't cover, build durable fixtures, execute for real against real state, and report ranked findings. Investigation only — never fixes anything found. Defaults to testing whatever the current branch changed vs its base branch when no explicit target is given. Invoke on explicit requests like 'field test X' / 'do a DX test pass on X' / 'find vibe-coded slop in X' / 'field test this branch'."
+argument-hint: "Feature or command to test, e.g. 'atmos vendor pull' (omit to default to this branch's change)"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -10,8 +10,17 @@ metadata:
 # Field Test
 
 Hands-on, adversarial test pass of **`$ARGUMENTS`** (the feature/command named when this skill
-was invoked, e.g. `atmos vendor pull`). If no target was given, ask which feature/command to test
-before starting.
+was invoked, e.g. `atmos vendor pull`).
+
+**If no target was given, default to the change introduced on the current branch** rather than
+asking. Determine the base branch (the upstream tracking branch via
+`git rev-parse --abbrev-ref --symbolic-full-name @{u}`, falling back to `origin/main`/`main` if
+no upstream is configured), then run `git diff <base>...HEAD --stat` (and the full diff for
+context) to see what actually changed. Derive the test target from that diff — the CLI
+command(s), flag(s), config option(s), or subsystem the changed files implement — and state
+explicitly what you inferred and why before proceeding to Phase 1. Only fall back to asking the
+user if the diff is empty (nothing to test) or spans multiple unrelated features with no coherent
+single target (ask which one to focus on, don't silently pick one).
 
 Goal: catch "vibe-coded slop" — behavior that looks fine in code review but breaks or misleads a
 real user — not to re-run what automated tests already cover. Anticipate plausible user
@@ -27,10 +36,18 @@ The goal is a map of "documented or plausible usage" minus "already tested" = wh
 verification. This phase is broad, read-only research — delegate it to `Agent subagent_type:
 "Explore"` (1-3 agents in parallel, one per bullet below) rather than doing it all serially inline.
 
+When defaulting to the current branch (no explicit target given), scope every bullet below to the
+target inferred from the branch diff — don't research the whole surrounding subsystem when the
+branch only touched one corner of it. If the branch's changed files span more than one command or
+package, treat each as a separate target to cover in Phase 2-4, prioritized by how much of the
+diff each accounts for.
+
 - **Implementation** — the actual code, not just its docs or the skill describing it. Per this
   repo's conventions, business logic lives in narrow `pkg/` packages, not `internal/exec/` (being
   phased out) — check both `cmd/<command>/` (thin call site) and the `pkg/` package(s) it
-  delegates to for the real logic and error paths.
+  delegates to for the real logic and error paths. When defaulting from a branch diff, read the
+  diff itself first (not just the post-change files) — the diff shows what changed *from*,
+  which is exactly where a regression or half-finished edge case would show up.
 - **Docs and skills** — every relevant page under `website/docs/cli/commands/`, the matching
   `.claude/skills/atmos-*` skill(s) for the subsystem, and any README describing the feature. Note
   anything phrased with confidence you haven't independently confirmed against the code — docs and

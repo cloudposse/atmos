@@ -13,7 +13,10 @@ import (
 )
 
 // mergeConfigFromCLIArgs merges config sources selected via --config/--config-path into v,
-// returning the directories that contributed configuration (for CliConfigPath assembly).
+// returning the directories that contributed configuration (for CliConfigPath assembly) and the
+// directory of whichever --config file declared profiles.base_path, if any (for
+// discoverProfileLocations to resolve it against the correct file's directory, not just the
+// first --config file's -- cloudposse/atmos#2867).
 //
 // Split out from loadConfigFromCLIArgs so LoadConfig's main flow can merge the CLI-selected
 // config and then fall through into the same profile-loading/edition/final-unmarshal tail
@@ -23,18 +26,23 @@ import (
 // could not be combined, cloudposse/atmos#2867/#2868 audit finding) along with the
 // profiles.base_path/vendor-updater/container-runtime config bridging the shared tail
 // performs for every other config source.
-func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) ([]string, error) {
+func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) ([]string, string, error) {
 	log.Debug("loading config from command line arguments")
 
 	configFilesArgs := configAndStacksInfo.AtmosConfigFilesFromArg
 	configDirsArgs := configAndStacksInfo.AtmosConfigDirsFromArg
 	var configPaths []string
+	profilesBasePathConfigDir := ""
 
-	// Merge all config from --config files
+	// Merge all config from --config files. --config-path directories are always merged AFTER
+	// --config files below, regardless of which flag appears later on the command line --
+	// documented (website/docs/cli/configuration/configuration.mdx) and intentional, not a bug.
 	if len(configFilesArgs) > 0 {
-		if err := mergeFiles(v, configFilesArgs); err != nil {
-			return nil, err
+		dir, err := mergeFiles(v, configFilesArgs)
+		if err != nil {
+			return nil, "", err
 		}
+		profilesBasePathConfigDir = dir
 		for _, configFilePath := range configFilesArgs {
 			configPaths = append(configPaths, filepath.Dir(configFilePath))
 		}
@@ -44,7 +52,7 @@ func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAn
 	if len(configDirsArgs) > 0 {
 		paths, err := mergeConfigFromDirectories(v, configDirsArgs)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		configPaths = append(configPaths, paths...)
 	}
@@ -52,10 +60,10 @@ func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAn
 	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
-		return nil, fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
+		return nil, "", fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
-	return configPaths, nil
+	return configPaths, profilesBasePathConfigDir, nil
 }
 
 // loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and
@@ -63,7 +71,7 @@ func mergeConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAn
 // shared-tail config bridging LoadConfig's main flow performs -- see mergeConfigFromCLIArgs).
 // Kept as a standalone entry point for direct callers/tests exercising --config in isolation.
 func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
-	configPaths, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
+	configPaths, profilesBasePathConfigDir, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
 	if err != nil {
 		return err
 	}
@@ -102,33 +110,59 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	}
 
 	atmosConfig.CliConfigPath = connectPaths(configPaths)
+	atmosConfig.ProfilesBasePathConfigDir = profilesBasePathConfigDir
 	return nil
 }
 
-// mergeFiles merges config files from the provided paths.
-func mergeFiles(v *viper.Viper, configFilePaths []string) error {
+// trackConfigDirs inspects a single config file's raw content for declared base_path and
+// profiles.base_path keys, returning the (possibly updated) basePathConfigDir and
+// profilesBasePathConfigDir accumulators for mergeFiles' per-file loop. Split out from
+// mergeFiles to keep its cognitive complexity down.
+func trackConfigDirs(content []byte, configPath, configDir, basePathConfigDir, profilesBasePathConfigDir string) (string, string, error) {
+	declaresBasePath, _, err := importBasePathDeclaration(content)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %s: %w", errUtils.ErrMergeConfiguration, configPath, err)
+	}
+	if declaresBasePath || basePathConfigDir == "" {
+		basePathConfigDir = configDir
+	}
+
+	declaresProfilesPath, err := declaresProfilesBasePath(content)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %s: %w", errUtils.ErrMergeConfiguration, configPath, err)
+	}
+	if declaresProfilesPath {
+		profilesBasePathConfigDir = configDir
+	}
+
+	return basePathConfigDir, profilesBasePathConfigDir, nil
+}
+
+// mergeFiles merges config files from the provided paths, returning the directory of the file
+// that declared profiles.base_path (empty if none did), for discoverProfileLocations to resolve
+// a relative profiles.base_path against the correct file's directory (cloudposse/atmos#2867)
+// instead of always the first --config file's.
+func mergeFiles(v *viper.Viper, configFilePaths []string) (string, error) {
 	err := validatedIsFiles(configFilePaths)
 	if err != nil {
-		return err
+		return "", err
 	}
 	basePathConfigDir := ""
+	profilesBasePathConfigDir := ""
 	for _, configPath := range configFilePaths {
 		configDir := filepath.Dir(configPath)
 		content, readErr := os.ReadFile(configPath)
 		if readErr != nil {
-			return fmt.Errorf("%w: %s: %w", errUtils.ErrReadConfig, configPath, readErr)
+			return "", fmt.Errorf("%w: %s: %w", errUtils.ErrReadConfig, configPath, readErr)
 		}
-		declaresBasePath, _, parseErr := importBasePathDeclaration(content)
-		if parseErr != nil {
-			return fmt.Errorf("%w: %s: %w", errUtils.ErrMergeConfiguration, configPath, parseErr)
-		}
-		if declaresBasePath || basePathConfigDir == "" {
-			basePathConfigDir = configDir
+		basePathConfigDir, profilesBasePathConfigDir, err = trackConfigDirs(content, configPath, configDir, basePathConfigDir, profilesBasePathConfigDir)
+		if err != nil {
+			return "", err
 		}
 		err := mergeConfigFile(configPath, v)
 		if err != nil {
 			log.Debug("error loading config file", "path", configPath, "error", err)
-			return err
+			return "", err
 		}
 		log.Debug("config file merged", "path", configPath)
 		if err := mergeDefaultImports(configPath, v); err != nil {
@@ -146,7 +180,7 @@ func mergeFiles(v *viper.Viper, configFilePaths []string) error {
 			basePathConfigDir = importBasePathDir
 		}
 	}
-	return nil
+	return profilesBasePathConfigDir, nil
 }
 
 // mergeConfigFromDirectories merges config files from the provided directories.

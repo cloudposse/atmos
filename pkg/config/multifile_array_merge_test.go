@@ -298,3 +298,64 @@ stacks:
 		"the profile's stacks.base_path override must be applied on top of the --config-selected "+
 			"base, matching the documented precedence in docs/prd/atmos-profiles.md")
 }
+
+// TestInitCliConfig_ProfilesBasePathResolvesAgainstDeclaringFile reproduces a bug found during a
+// field-test pass on cloudposse/atmos#2867/#2868: discoverProfileLocations resolved a relative
+// `profiles.base_path` against the FIRST --config file's directory, regardless of which file
+// actually declared it. Here, only the SECOND --config file (in a different directory) declares
+// profiles.base_path, and the profile directory only exists relative to that second file's
+// directory -- so the profile must still be found.
+func TestInitCliConfig_ProfilesBasePathResolvesAgainstDeclaringFile(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	if orig, ok := os.LookupEnv("ATMOS_PROFILE"); ok {
+		require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+		t.Cleanup(func() { require.NoError(t, os.Setenv("ATMOS_PROFILE", orig)) })
+	}
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	mainFile := filepath.Join(tempDir, "main.yaml")
+	require.NoError(t, os.WriteFile(mainFile, []byte(`
+base_path: .
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+`), 0o644))
+
+	// fragment.yaml lives in a DIFFERENT directory than main.yaml, and is the SECOND --config
+	// file. Only it declares profiles.base_path, relative to ITS OWN directory.
+	fragmentDir := filepath.Join(tempDir, "region-overrides")
+	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
+	fragmentFile := filepath.Join(fragmentDir, "fragment.yaml")
+	require.NoError(t, os.WriteFile(fragmentFile, []byte(`
+profiles:
+  base_path: ./custom-profiles
+`), 0o644))
+
+	// The profile directory only exists relative to fragmentDir, NOT relative to tempDir (where
+	// main.yaml, the first --config file, lives) -- proving resolution uses the declaring file's
+	// directory, not just the first --config file's directory.
+	profileDir := filepath.Join(fragmentDir, "custom-profiles", "test")
+	require.NoError(t, os.MkdirAll(profileDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "atmos.yaml"), []byte(`
+stacks:
+  base_path: profile-stacks
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{mainFile, fragmentFile},
+		ProfilesFromArg:         []string{"test"},
+	}
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "profile-stacks", atmosConfig.Stacks.BasePath,
+		"the profile must be found relative to fragment.yaml's directory (where profiles.base_path "+
+			"was actually declared), not main.yaml's directory (just the first --config file)")
+}

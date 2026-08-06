@@ -280,6 +280,73 @@ func TestDisplayPath(t *testing.T) {
 	}
 }
 
+// TestDisplayPath_SymlinkedCWD guards against a bug found during a field-test pass on
+// cloudposse/atmos#2867/#2868: when the working directory is reached through a symlink (e.g.
+// macOS's /tmp -> /private/tmp) AND the shell's $PWD reflects the symlinked (logical) path,
+// os.Getwd() returns that logical path (Go's documented $PWD shortcut) while config-derived
+// absolute paths (BasePathAbsolute/VendorDirAbsolutePath/WorkflowsDirAbsolutePath, resolved via
+// git-root discovery which internally calls filepath.EvalSymlinks) return the physical,
+// resolved path -- so filepath.Rel between the two silently fails, and displayPath falls back
+// to the full absolute path, defeating the fix in exactly the environments it was meant to help.
+//
+// Plain os.Chdir alone doesn't reproduce this (it doesn't touch $PWD), so $PWD is set explicitly
+// here to model what a real shell `cd` into a symlinked directory does.
+func TestDisplayPath_SymlinkedCWD(t *testing.T) {
+	tmpDir := t.TempDir()
+	realDir := filepath.Join(tmpDir, "realdir")
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+
+	symlinkPath := filepath.Join(tmpDir, "symlink")
+	if err := os.Symlink(realDir, symlinkPath); err != nil {
+		t.Skipf("Skipping symlink test: %v", err)
+	}
+
+	resolvedRealDir, err := filepath.EvalSymlinks(realDir)
+	require.NoError(t, err)
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, os.Chdir(wd)) })
+	require.NoError(t, os.Chdir(symlinkPath))
+	t.Setenv("PWD", symlinkPath)
+
+	// file is built from the RESOLVED (physical) directory, as config-derived absolute paths
+	// are (via git-root discovery's filepath.EvalSymlinks), while os.Getwd() inside displayPath
+	// will see the symlinked (logical) form because $PWD matches it.
+	file := filepath.Join(resolvedRealDir, "vendor.yaml")
+	assert.Equal(t, "vendor.yaml", displayPath(file))
+}
+
+// TestDisplayPath_SymlinkedCWD_BothLogical guards against a regression the first version of the
+// EvalSymlinks fix above introduced: when NO git-root discovery runs (e.g. base_path already
+// absolute, or no .git found), config-derived absolute paths are computed via plain
+// filepath.Abs, which -- like os.Getwd() -- respects the $PWD logical shortcut. So under a
+// symlinked cwd (e.g. macOS's /tmp) with no git repo involved, BOTH cwd and file stay
+// consistently in LOGICAL form and were already directly comparable before any EvalSymlinks
+// normalization. A fix that unconditionally resolves only cwd (not file) breaks this
+// previously-working case by making cwd physical while file stays logical.
+func TestDisplayPath_SymlinkedCWD_BothLogical(t *testing.T) {
+	tmpDir := t.TempDir()
+	realDir := filepath.Join(tmpDir, "realdir")
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+
+	symlinkPath := filepath.Join(tmpDir, "symlink")
+	if err := os.Symlink(realDir, symlinkPath); err != nil {
+		t.Skipf("Skipping symlink test: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, os.Chdir(wd)) })
+	require.NoError(t, os.Chdir(symlinkPath))
+	t.Setenv("PWD", symlinkPath)
+
+	// file is built from the SAME logical (unresolved) symlink path as cwd, simulating
+	// filepath.Abs's $PWD-shortcut behavior in the no-git-root-discovery case.
+	file := filepath.Join(symlinkPath, "vendor.yaml")
+	assert.Equal(t, "vendor.yaml", displayPath(file))
+}
+
 func TestBuiltinConfigSchemaMatchesIncludesExistingOptionalDirectories(t *testing.T) {
 	project := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(project, "atmos.d"), 0o700))

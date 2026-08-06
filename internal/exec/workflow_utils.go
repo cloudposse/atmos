@@ -1117,13 +1117,16 @@ func ExecuteDescribeWorkflows(
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		return nil, nil, nil, fmt.Errorf("%w: '%s'. Review 'workflows.base_path' in 'atmos.yaml'",
+			errUtils.ErrWorkflowDirectoryDoesNotExist, displayPath(workflowsDir))
 	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
-			atmosConfig.Workflows.BasePath, err)
+		// Report workflowsDir (the directory actually searched), not the raw, possibly-relative
+		// atmosConfig.Workflows.BasePath, which can silently differ from where Atmos looked.
+		return nil, nil, nil, fmt.Errorf("%w: '%s' defined in 'workflows.base_path' in 'atmos.yaml': %w",
+			errUtils.ErrReadDirectory, displayPath(workflowsDir), err)
 	}
 
 	for _, f := range files {

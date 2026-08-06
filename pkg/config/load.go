@@ -125,12 +125,17 @@ func ParseProfilesFromOsArgs(args []string) []string {
 	return result
 }
 
-// parseViperProfilesFromEnv handles Viper's quirky environment variable parsing for StringSlice.
-// Viper does NOT parse comma-separated environment variables correctly:
+// FixViperEnvStringSliceQuirk handles Viper's quirky environment variable parsing for
+// StringSlice flags in general -- not just --profile/ATMOS_PROFILE, which is where this was
+// first found and fixed. Viper does NOT parse comma-separated environment variables correctly:
 //   - "dev,staging,prod" → []string{"dev,staging,prod"} (single element, NOT split)
 //   - "dev staging prod" → []string{"dev", "staging", "prod"} (splits on whitespace)
 //   - " dev , staging " → []string{"dev", ",", "staging"} (splits on whitespace, keeps commas!)
-func parseViperProfilesFromEnv(profiles []string) []string {
+//
+// Callers should apply this only to values actually sourced from an environment variable (e.g.
+// after confirming via os.LookupEnv) -- CLI-flag-sourced values are already parsed correctly by
+// pflag/Cobra and must not be re-split.
+func FixViperEnvStringSliceQuirk(profiles []string) []string {
 	var parsed []string
 
 	for _, p := range profiles {
@@ -338,7 +343,7 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 
 	// Environment variable path - needs special parsing for Viper quirks.
 	if envSet && len(profiles) > 0 {
-		parsed := parseViperProfilesFromEnv(profiles)
+		parsed := FixViperEnvStringSliceQuirk(profiles)
 		if len(parsed) > 0 {
 			return parsed, "env"
 		}
@@ -405,11 +410,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// the same profile-loading/edition/final-unmarshal tail every other config source uses
 	// below, instead of returning immediately (see mergeConfigFromCLIArgs' doc comment).
 	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		configPaths, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
+		configPaths, profilesBasePathConfigDir, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
 		if err != nil {
 			return atmosConfig, err
 		}
 		atmosConfig.CliConfigPath = connectPaths(configPaths)
+		atmosConfig.ProfilesBasePathConfigDir = profilesBasePathConfigDir
 	} else {
 		// Load configuration from different sources.
 		if err := loadConfigSources(v, configAndStacksInfo); err != nil {
@@ -501,6 +507,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// This ensures relative profile paths resolve against the actual CLI config directory
 		// rather than the current working directory.
 		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+		// Same for the directory that declared profiles.base_path (if any), so
+		// discoverProfileLocations resolves it against the correct --config file's directory
+		// rather than always the first one (cloudposse/atmos#2867).
+		tempConfig.ProfilesBasePathConfigDir = atmosConfig.ProfilesBasePathConfigDir
 
 		// Load each profile in order (left-to-right precedence).
 		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
@@ -1667,6 +1677,37 @@ func importBasePathDeclaration(content []byte) (bool, string, error) {
 		return true, "", nil
 	}
 	return false, "", nil
+}
+
+// declaresProfilesBasePath reports whether the given config file content declares a top-level
+// `profiles.base_path` key, mirroring importBasePathDeclaration's approach but walking one level
+// deeper into the `profiles:` mapping. Used to track which specific --config file declared
+// profiles.base_path when multiple files are given, so a relative value resolves against that
+// file's directory instead of always the first --config file's (cloudposse/atmos#2867).
+func declaresProfilesBasePath(content []byte) (bool, error) {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return false, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return false, nil
+	}
+	for i := 0; i < len(root.Content[0].Content); i += 2 {
+		if root.Content[0].Content[i].Value != "profiles" {
+			continue
+		}
+		profilesNode := root.Content[0].Content[i+1]
+		if profilesNode.Kind != goyaml.MappingNode {
+			return false, nil
+		}
+		for j := 0; j < len(profilesNode.Content); j += 2 {
+			if profilesNode.Content[j].Value == "base_path" {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	return false, nil
 }
 
 // parseBasePathDeclaration is a seam over importBasePathDeclaration. Call sites that
