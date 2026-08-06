@@ -1,12 +1,14 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
@@ -17,6 +19,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -423,7 +426,7 @@ func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
 		},
 	}
 
-	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
@@ -444,11 +447,46 @@ func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
 		ComponentSection: map[string]any{}, // no WorkdirPathKey
 	}
 
-	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
 	assert.True(t, os.IsNotExist(statErr), ".terraform/environment must be deleted for non-workdir components")
+}
+
+func TestPrepareInitExecutionPropagatesOutputSuppression(t *testing.T) {
+	originalExecuteProvisioners := executeBeforeInitProvisioners
+	t.Cleanup(func() { executeBeforeInitProvisioners = originalExecuteProvisioners })
+	var observedSuppression atomic.Bool
+	executeBeforeInitProvisioners = func(ctx context.Context, _ provisioner.HookEvent, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ ...*provisioner.TerraformExecContext) error {
+		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
+		return nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	_, err := prepareInitExecution(provWorkdir.WithOutputSuppressed(t.Context()), &atmosConfig, &info, t.TempDir())
+	require.NoError(t, err)
+	require.True(t, observedSuppression.Load())
+}
+
+func TestResolveAndProvisionComponentPathPropagatesOutputSuppression(t *testing.T) {
+	originalProvisioner := provisionAndResolveTerraformComponentPath
+	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
+
+	var observedSuppression atomic.Bool
+	provisionAndResolveTerraformComponentPath = func(ctx context.Context, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, componentPath string) (string, bool, error) {
+		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
+		return componentPath, true, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := schema.ConfigAndStacksInfo{FinalComponent: "component"}
+
+	_, err := resolveAndProvisionComponentPath(provWorkdir.WithOutputSuppressed(t.Context()), &atmosConfig, &info)
+	require.NoError(t, err)
+	require.True(t, observedSuppression.Load())
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

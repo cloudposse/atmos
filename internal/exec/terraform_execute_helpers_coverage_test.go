@@ -372,7 +372,7 @@ func TestPrepareInitExecution_WorkdirPath_ReturnsWorkdir(t *testing.T) {
 		},
 	}
 
-	result, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, customWorkdir, result)
 }
@@ -386,7 +386,7 @@ func TestPrepareInitExecution_NoWorkdirPath_ReturnsOriginalPath(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	result, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, tmpDir, result)
 }
@@ -402,7 +402,7 @@ func TestPrepareInitExecution_EmptyWorkdirPath_ReturnsOriginalPath(t *testing.T)
 		},
 	}
 
-	result, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, tmpDir, result)
 }

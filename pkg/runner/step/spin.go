@@ -65,9 +65,14 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = spinner.ExecWithSpinner(title, title, func() error {
+	operation := func() error {
 		return h.runCommand(execCtx, opts, &stdout, &stderr)
-	})
+	}
+	if OutputSuppressed(ctx) {
+		err = operation()
+	} else {
+		err = spinner.ExecWithSpinner(title, title, operation)
+	}
 
 	return h.buildResult(stdout.String(), stderr.String(), err), err
 }

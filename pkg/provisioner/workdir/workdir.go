@@ -38,21 +38,18 @@ type Service struct {
 	hasher Hasher
 }
 
-type outputSuppressedContextKey struct{}
-
 // WithOutputSuppressed disables transient workdir provisioning output for this context.
 func WithOutputSuppressed(ctx context.Context) context.Context {
 	defer perf.Track(nil, "workdir.WithOutputSuppressed")()
 
-	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+	return provisioner.WithOutputSuppressed(ctx)
 }
 
 // OutputSuppressed reports whether transient provisioning output is disabled for ctx.
 func OutputSuppressed(ctx context.Context) bool {
 	defer perf.Track(nil, "workdir.OutputSuppressed")()
 
-	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
-	return ok
+	return provisioner.OutputSuppressed(ctx)
 }
 
 // NewService creates a new workdir service with default implementations.

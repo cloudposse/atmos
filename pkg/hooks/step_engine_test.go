@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,6 +45,18 @@ func (h *flakyHandler) Execute(context.Context, *schema.WorkflowStep, *runnerste
 type envCaptureHandler struct {
 	runnerstep.BaseHandler
 	captured *map[string]string
+}
+
+type outputSuppressionCaptureHandler struct {
+	runnerstep.BaseHandler
+	suppressed *bool
+}
+
+func (h *outputSuppressionCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.suppressed = runnerstep.OutputSuppressed(ctx)
+	return runnerstep.NewStepResult("ok"), nil
 }
 
 type hookEnvState struct {
@@ -353,6 +366,21 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
+	var suppressed bool
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-suppression-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+	})
+
+	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"})
+	ctx.Stdout = io.Discard
+
+	_, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	assert.True(t, suppressed)
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {

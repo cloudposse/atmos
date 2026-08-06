@@ -88,14 +88,19 @@ func autoProvisionBackend(
 	// Capture provisioning result to display warnings after spinner completes.
 	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
 	var result *backend.ProvisionResult
-	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	operation := func() error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
 		var createErr error
 		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext)
 		return createErr
-	})
+	}
+	if OutputSuppressed(ctx) {
+		err = operation()
+	} else {
+		err = spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
+	}
 	if err != nil {
 		return err
 	}
@@ -103,7 +108,7 @@ func autoProvisionBackend(
 	// Display warnings AFTER spinner completes to avoid concurrent output issues.
 	// The spinner runs operations in a background goroutine while animating on stderr,
 	// so any output during spinner execution would interleave and corrupt the display.
-	if result != nil {
+	if result != nil && !OutputSuppressed(ctx) {
 		for _, warning := range result.Warnings {
 			ui.Warning(warning)
 		}

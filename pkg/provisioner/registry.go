@@ -62,6 +62,23 @@ var (
 	registryMu          sync.RWMutex
 )
 
+type outputSuppressedContextKey struct{}
+
+// WithOutputSuppressed disables transient provisioner output for this context.
+func WithOutputSuppressed(ctx context.Context) context.Context {
+	defer perf.Track(nil, "provisioner.WithOutputSuppressed")()
+
+	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+}
+
+// OutputSuppressed reports whether transient provisioner output is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "provisioner.OutputSuppressed")()
+
+	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
+	return ok
+}
+
 // RegisterProvisioner registers a provisioner for a specific hook event.
 // Provisioners self-declare when they should run by specifying a hook event.
 // Returns an error if Func is nil or HookEvent is empty.

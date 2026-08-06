@@ -223,7 +223,7 @@ func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.
 	t.Cleanup(func() { dispatchAfterInitFn = originalDispatch })
 
 	var dispatched bool
-	dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+	dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, _ ...ShellCommandOption) {
 		dispatched = true
 		assert.Equal(t, "/tmp/component", componentPath)
 		assert.Equal(t, subcommandInit, info.SubCommand)
@@ -239,7 +239,7 @@ func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing
 	originalDispatch := dispatchAfterInitFn
 	t.Cleanup(func() { dispatchAfterInitFn = originalDispatch })
 
-	dispatchAfterInitFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string) {
+	dispatchAfterInitFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, ...ShellCommandOption) {
 		t.Fatal("failed init must not dispatch after.terraform.init provisioners")
 	}
 
