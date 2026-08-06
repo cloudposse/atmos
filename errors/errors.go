@@ -215,7 +215,7 @@ var (
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
-	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.

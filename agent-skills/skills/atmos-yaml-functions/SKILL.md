@@ -102,6 +102,35 @@ vars:
 The deployed upstream output supersedes the fallback automatically. Dependency metadata controls
 deployment order; it does not create state before an aggregate plan.
 
+### Reusable Mocks vs. a One-Off `//` Default
+
+The `//` default above is a per-expression fallback. For a producer component's mock outputs to be
+declared once and resolved consistently by every consumer, use the component's `mocks:` stack-config
+section together with `--use-mocks` (supported by `atmos terraform plan` and
+`atmos describe component`) instead of repeating a `//` default in every consuming expression:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      mocks:
+        vpc_id: vpc-mock1234
+        private_subnet_ids: [subnet-a, subnet-b]
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+```
+
+```shell
+atmos terraform plan app -s dev --use-mocks
+```
+
+`mocks:` is Terraform-only, never templated or YAML-function-processed, and (unlike a `//`
+default) requires the referenced component to declare `mocks:` -- with one exception: a `//`
+default in the caller's expression is still honored even when the referenced component declares
+no `mocks:` section at all, mirroring how a `//` default rescues a component with no real state.
+Do not conflate this feature with the `//`-default idiom above; they're separate mechanisms.
+
 ## `!terraform.output` -- Remote State Access
 
 Reads Terraform outputs by running `terraform output`. Requires Terraform initialization
