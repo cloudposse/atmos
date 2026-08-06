@@ -423,7 +423,7 @@ func (s *SSMStore) GetRaw(stack string, component string, key string) (string, e
 
 	ctx := context.TODO()
 
-	// Construct the full parameter name using getKey
+	// Construct the full parameter name using getKey.
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
