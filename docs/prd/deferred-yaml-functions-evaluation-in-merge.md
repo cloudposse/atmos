@@ -146,40 +146,40 @@ Instead of trying to merge YAML function strings with concrete values during the
 // DeferredValue represents a value that contains a YAML function and needs
 // to be processed after the initial merge.
 type DeferredValue struct {
-	Path       []string    // Field path (e.g., ["components", "terraform", "vpc", "vars", "config"])
-	Value      interface{} // The YAML function string or the final processed value
-	Precedence int         // Merge precedence (higher = later in import chain = higher priority)
-	IsFunction bool        // True if Value is still a YAML function string, false if processed
+  Path       []string    // Field path (e.g., ["components", "terraform", "vpc", "vars", "config"])
+  Value      interface{} // The YAML function string or the final processed value
+  Precedence int         // Merge precedence (higher = later in import chain = higher priority)
+  IsFunction bool        // True if Value is still a YAML function string, false if processed
 }
 
 // MergeContext tracks all deferred values during the merge process.
 type MergeContext struct {
-	deferredValues map[string][]*DeferredValue // Key is path joined with "."
-	precedence     int                          // Current precedence counter
+  deferredValues map[string][]*DeferredValue // Key is path joined with "."
+  precedence     int                          // Current precedence counter
 }
 
 // NewMergeContext creates a new merge context for tracking deferred values.
 func NewMergeContext() *MergeContext {
-	return &MergeContext{
-		deferredValues: make(map[string][]*DeferredValue),
-		precedence:     0,
-	}
+  return &MergeContext{
+    deferredValues: make(map[string][]*DeferredValue),
+    precedence:     0,
+  }
 }
 
 // AddDeferred adds a deferred value to the context.
 func (mc *MergeContext) AddDeferred(path []string, value interface{}) {
-	key := strings.Join(path, ".")
-	mc.deferredValues[key] = append(mc.deferredValues[key], &DeferredValue{
-		Path:       path,
-		Value:      value,
-		Precedence: mc.precedence,
-		IsFunction: true,
-	})
+  key := strings.Join(path, ".")
+  mc.deferredValues[key] = append(mc.deferredValues[key], &DeferredValue{
+    Path:       path,
+    Value:      value,
+    Precedence: mc.precedence,
+    IsFunction: true,
+  })
 }
 
 // IncrementPrecedence increases the precedence counter (call after each import).
 func (mc *MergeContext) IncrementPrecedence() {
-	mc.precedence++
+  mc.precedence++
 }
 ```
 
@@ -192,57 +192,57 @@ func (mc *MergeContext) IncrementPrecedence() {
 ```go
 // WalkAndDeferYAMLFunctions walks through a map and defers any YAML functions.
 func WalkAndDeferYAMLFunctions(ctx *MergeContext, data map[string]interface{}, basePath []string) map[string]interface{} {
-	result := make(map[string]interface{})
+  result := make(map[string]interface{})
 
-	for key, value := range data {
-		currentPath := append(basePath, key)
+  for key, value := range data {
+    currentPath := append(basePath, key)
 
-		// Check if this value is a YAML function string
-		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
-			// Defer this value
-			ctx.AddDeferred(currentPath, strVal)
-			// Replace with placeholder (empty map for map types, empty slice for slice types)
-			// For now, use nil as placeholder - will be determined by type after processing
-			result[key] = nil
-			continue
-		}
+    // Check if this value is a YAML function string
+    if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
+      // Defer this value
+      ctx.AddDeferred(currentPath, strVal)
+      // Replace with placeholder (empty map for map types, empty slice for slice types)
+      // For now, use nil as placeholder - will be determined by type after processing
+      result[key] = nil
+      continue
+    }
 
-		// Recursively process nested maps
-		if mapVal, ok := value.(map[string]interface{}); ok {
-			result[key] = WalkAndDeferYAMLFunctions(ctx, mapVal, currentPath)
-			continue
-		}
+    // Recursively process nested maps
+    if mapVal, ok := value.(map[string]interface{}); ok {
+      result[key] = WalkAndDeferYAMLFunctions(ctx, mapVal, currentPath)
+      continue
+    }
 
-		// Keep all other values as-is
-		result[key] = value
-	}
+    // Keep all other values as-is
+    result[key] = value
+  }
 
-	return result
+  return result
 }
 
 func isAtmosYAMLFunction(s string) bool {
-	if s == "" {
-		return false
-	}
+  if s == "" {
+    return false
+  }
 
-	// YAML functions processed after merging (need special handling during merge).
-	postMergeFunctions := []string{
-		"!template",
-		"!terraform.output",
-		"!terraform.state",
-		"!store.get",
-		"!store",
-		"!exec",
-		"!env",
-	}
+  // YAML functions processed after merging (need special handling during merge).
+  postMergeFunctions := []string{
+    "!template",
+    "!terraform.output",
+    "!terraform.state",
+    "!store.get",
+    "!store",
+    "!exec",
+    "!env",
+  }
 
-	for _, fn := range postMergeFunctions {
-		if strings.HasPrefix(s, fn) {
-			return true
-		}
-	}
+  for _, fn := range postMergeFunctions {
+    if strings.HasPrefix(s, fn) {
+      return true
+    }
+  }
 
-	return false
+  return false
 }
 ```
 
@@ -252,23 +252,23 @@ func isAtmosYAMLFunction(s string) bool {
 // After walking all maps and deferring YAML functions, perform normal merge
 // No changes needed - standard mergo merge will work without type conflicts
 func MergeSections(ctx *MergeContext, sections ...map[string]interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+  result := make(map[string]interface{})
 
-	// Walk each section and defer YAML functions
-	processedSections := make([]map[string]interface{}, len(sections))
-	for i, section := range sections {
-		processedSections[i] = WalkAndDeferYAMLFunctions(ctx, section, []string{})
-		ctx.IncrementPrecedence()
-	}
+  // Walk each section and defer YAML functions
+  processedSections := make([]map[string]interface{}, len(sections))
+  for i, section := range sections {
+    processedSections[i] = WalkAndDeferYAMLFunctions(ctx, section, []string{})
+    ctx.IncrementPrecedence()
+  }
 
-	// Perform normal merge (no type conflicts now)
-	for _, section := range processedSections {
-		if err := mergo.Merge(&result, section, mergo.WithOverride, mergo.WithTypeCheck); err != nil {
-			return nil, err
-		}
-	}
+  // Perform normal merge (no type conflicts now)
+  for _, section := range processedSections {
+    if err := mergo.Merge(&result, section, mergo.WithOverride, mergo.WithTypeCheck); err != nil {
+      return nil, err
+    }
+  }
 
-	return result, nil
+  return result, nil
 }
 ```
 
@@ -279,134 +279,134 @@ func MergeSections(ctx *MergeContext, sections ...map[string]interface{}) (map[s
 ```go
 // ApplyDeferredMerges processes all deferred YAML functions and applies them to the result.
 func ApplyDeferredMerges(ctx *MergeContext, result map[string]interface{}, atmosConfig schema.AtmosConfiguration) error {
-	// Process each deferred field
-	for pathKey, deferredValues := range ctx.deferredValues {
-		// Sort by precedence (lower first, so higher precedence wins in merge)
-		sort.Slice(deferredValues, func(i, j int) bool {
-			return deferredValues[i].Precedence < deferredValues[j].Precedence
-		})
+  // Process each deferred field
+  for pathKey, deferredValues := range ctx.deferredValues {
+    // Sort by precedence (lower first, so higher precedence wins in merge)
+    sort.Slice(deferredValues, func(i, j int) bool {
+      return deferredValues[i].Precedence < deferredValues[j].Precedence
+    })
 
-		// Process YAML functions to get actual values
-		for _, dv := range deferredValues {
-			if dv.IsFunction {
-				// Process the YAML function (call existing function processors)
-				processedValue, err := ProcessYAMLFunctionString(dv.Value.(string), result, atmosConfig)
-				if err != nil {
-					return fmt.Errorf("failed to process YAML function at %s: %w", pathKey, err)
-				}
-				dv.Value = processedValue
-				dv.IsFunction = false
-			}
-		}
+    // Process YAML functions to get actual values
+    for _, dv := range deferredValues {
+      if dv.IsFunction {
+        // Process the YAML function (call existing function processors)
+        processedValue, err := ProcessYAMLFunctionString(dv.Value.(string), result, atmosConfig)
+        if err != nil {
+          return fmt.Errorf("failed to process YAML function at %s: %w", pathKey, err)
+        }
+        dv.Value = processedValue
+        dv.IsFunction = false
+      }
+    }
 
-		// Merge all values for this path (respects list_merge_strategy)
-		merged, err := MergeDeferredValues(deferredValues, atmosConfig)
-		if err != nil {
-			return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
-		}
+    // Merge all values for this path (respects list_merge_strategy)
+    merged, err := MergeDeferredValues(deferredValues, atmosConfig)
+    if err != nil {
+      return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
+    }
 
-		// Apply to result at the correct path
-		if err := SetValueAtPath(result, deferredValues[0].Path, merged); err != nil {
-			return fmt.Errorf("failed to set value at %s: %w", pathKey, err)
-		}
-	}
+    // Apply to result at the correct path
+    if err := SetValueAtPath(result, deferredValues[0].Path, merged); err != nil {
+      return fmt.Errorf("failed to set value at %s: %w", pathKey, err)
+    }
+  }
 
-	return nil
+  return nil
 }
 
 // MergeDeferredValues merges all values for a single field path.
 func MergeDeferredValues(values []*DeferredValue, atmosConfig schema.AtmosConfiguration) (interface{}, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
+  if len(values) == 0 {
+    return nil, nil
+  }
 
-	// Start with first value
-	result := values[0].Value
+  // Start with first value
+  result := values[0].Value
 
-	// For simple types (string, number, bool): just override with highest precedence
-	if !isMap(result) && !isSlice(result) {
-		return values[len(values)-1].Value, nil
-	}
+  // For simple types (string, number, bool): just override with highest precedence
+  if !isMap(result) && !isSlice(result) {
+    return values[len(values)-1].Value, nil
+  }
 
-	// For slices: respect list_merge_strategy
-	if isSlice(result) {
-		return mergeSlices(values, atmosConfig.Settings.ListMergeStrategy)
-	}
+  // For slices: respect list_merge_strategy
+  if isSlice(result) {
+    return mergeSlices(values, atmosConfig.Settings.ListMergeStrategy)
+  }
 
-	// For maps: deep-merge all values
-	resultMap := result.(map[string]interface{})
-	for i := 1; i < len(values); i++ {
-		valueMap, ok := values[i].Value.(map[string]interface{})
-		if !ok {
-			// Type changed - override completely
-			return values[i].Value, nil
-		}
+  // For maps: deep-merge all values
+  resultMap := result.(map[string]interface{})
+  for i := 1; i < len(values); i++ {
+    valueMap, ok := values[i].Value.(map[string]interface{})
+    if !ok {
+      // Type changed - override completely
+      return values[i].Value, nil
+    }
 
-		if err := mergo.Merge(&resultMap, valueMap, mergo.WithOverride); err != nil {
-			return nil, err
-		}
-	}
+    if err := mergo.Merge(&resultMap, valueMap, mergo.WithOverride); err != nil {
+      return nil, err
+    }
+  }
 
-	return resultMap, nil
+  return resultMap, nil
 }
 
 // mergeSlices merges slice values according to the configured list merge strategy.
 func mergeSlices(values []*DeferredValue, strategy string) (interface{}, error) {
-	switch strategy {
-	case "replace":
-		// Default: latest value wins
-		return values[len(values)-1].Value, nil
+  switch strategy {
+  case "replace":
+    // Default: latest value wins
+    return values[len(values)-1].Value, nil
 
-	case "append":
-		// Concatenate all lists in precedence order
-		var result []interface{}
-		for _, dv := range values {
-			if slice, ok := dv.Value.([]interface{}); ok {
-				result = append(result, slice...)
-			} else {
-				// Type mismatch - use latest value
-				return dv.Value, nil
-			}
-		}
-		return result, nil
+  case "append":
+    // Concatenate all lists in precedence order
+    var result []interface{}
+    for _, dv := range values {
+      if slice, ok := dv.Value.([]interface{}); ok {
+        result = append(result, slice...)
+      } else {
+        // Type mismatch - use latest value
+        return dv.Value, nil
+      }
+    }
+    return result, nil
 
-	case "merge":
-		// Deep-merge list items by index position
-		result := values[0].Value.([]interface{})
-		for i := 1; i < len(values); i++ {
-			sourceSlice, ok := values[i].Value.([]interface{})
-			if !ok {
-				// Type mismatch - use source value
-				return values[i].Value, nil
-			}
+  case "merge":
+    // Deep-merge list items by index position
+    result := values[0].Value.([]interface{})
+    for i := 1; i < len(values); i++ {
+      sourceSlice, ok := values[i].Value.([]interface{})
+      if !ok {
+        // Type mismatch - use source value
+        return values[i].Value, nil
+      }
 
-			// Merge items up to length of source slice
-			for idx := 0; idx < len(sourceSlice) && idx < len(result); idx++ {
-				// Deep-merge if both items are maps, otherwise override
-				if srcMap, ok := sourceSlice[idx].(map[string]interface{}); ok {
-					if dstMap, ok := result[idx].(map[string]interface{}); ok {
-						if err := mergo.Merge(&dstMap, srcMap, mergo.WithOverride); err != nil {
-							return nil, err
-						}
-						result[idx] = dstMap
-						continue
-					}
-				}
-				// Override with source value
-				result[idx] = sourceSlice[idx]
-			}
+      // Merge items up to length of source slice
+      for idx := 0; idx < len(sourceSlice) && idx < len(result); idx++ {
+        // Deep-merge if both items are maps, otherwise override
+        if srcMap, ok := sourceSlice[idx].(map[string]interface{}); ok {
+          if dstMap, ok := result[idx].(map[string]interface{}); ok {
+            if err := mergo.Merge(&dstMap, srcMap, mergo.WithOverride); err != nil {
+              return nil, err
+            }
+            result[idx] = dstMap
+            continue
+          }
+        }
+        // Override with source value
+        result[idx] = sourceSlice[idx]
+      }
 
-			// Append remaining source items if source is longer
-			if len(sourceSlice) > len(result) {
-				result = append(result, sourceSlice[len(result):]...)
-			}
-		}
-		return result, nil
+      // Append remaining source items if source is longer
+      if len(sourceSlice) > len(result) {
+        result = append(result, sourceSlice[len(result):]...)
+      }
+    }
+    return result, nil
 
-	default:
-		// Unknown strategy - fall back to replace
-		return values[len(values)-1].Value, nil
-	}
+  default:
+    // Unknown strategy - fall back to replace
+    return values[len(values)-1].Value, nil
+  }
 }
 ```
 
@@ -453,15 +453,15 @@ vars:
 
 **Available strategies**:
 1. **`replace`** (default): Latest list wins (override behavior)
-   - Example: `vpc_ids: ["vpc-1"]` overrides `vpc_ids: !terraform.output vpc_ids`
+    - Example: `vpc_ids: ["vpc-1"]` overrides `vpc_ids: !terraform.output vpc_ids`
 
 2. **`append`**: Lists are concatenated in import order
-   - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
+    - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
 
 3. **`merge`**: List items are deep-merged by index position
-   - Items in source list take precedence
-   - Processes up to length of source list
-   - Remaining destination items preserved if destination is longer
+    - Items in source list take precedence
+    - Processes up to length of source list
+    - Remaining destination items preserved if destination is longer
 
 **Maps**:
 - Deep-merge all values in precedence order
@@ -510,27 +510,27 @@ settings:
 **Strategy Details**:
 
 1. **`replace`** (default):
-   - Most recent list imported wins
-   - Complete override behavior
-   - Fastest performance
-   - Example: `[1, 2]` + `[3, 4]` = `[3, 4]`
+    - Most recent list imported wins
+    - Complete override behavior
+    - Fastest performance
+    - Example: `[1, 2]` + `[3, 4]` = `[3, 4]`
 
 2. **`append`**:
-   - Lists are concatenated in import order
-   - Useful for accumulating values across imports
-   - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
+    - Lists are concatenated in import order
+    - Useful for accumulating values across imports
+    - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
 
 3. **`merge`**:
-   - List items are deep-merged by index position
-   - Items in source list take precedence
-   - Processes up to length of source list
-   - Remaining destination items preserved if destination is longer
-   - Example:
-     ```yaml
-     # Base: [{"a": 1}, {"b": 2}]
-     # Override: [{"a": 10, "c": 3}]
-     # Result: [{"a": 10, "c": 3}, {"b": 2}]
-     ```
+    - List items are deep-merged by index position
+    - Items in source list take precedence
+    - Processes up to length of source list
+    - Remaining destination items preserved if destination is longer
+    - Example:
+    ```yaml
+    # Base: [{"a": 1}, {"b": 2}]
+    # Override: [{"a": 10, "c": 3}]
+    # Result: [{"a": 10, "c": 3}, {"b": 2}]
+    ```
 
 **Interaction with YAML Functions**:
 
@@ -551,8 +551,8 @@ settings:
 vars:
   items:
     - id: 2  # With append: [{"id": 1}, {"id": 2}]
-             # With merge:  [{"id": 2}] (override first item)
-             # With replace: [{"id": 2}] (default)
+      # With merge:  [{"id": 2}] (override first item)
+      # With replace: [{"id": 2}] (default)
 ```
 
 ## Implementation Strategy
@@ -838,27 +838,27 @@ vars:
 ### Implementation Order
 
 1. **Data structures first** (`pkg/merge/deferred.go`):
-   - MergeContext
-   - DeferredValue
-   - Helper methods
+    - MergeContext
+    - DeferredValue
+    - Helper methods
 
 2. **Pre-merge detection** (`pkg/merge/merge.go`):
-   - WalkAndDeferYAMLFunctions
-   - Modify MergeSections to use context
+    - WalkAndDeferYAMLFunctions
+    - Modify MergeSections to use context
 
 3. **Post-merge application** (`internal/exec/stack_processor.go`):
-   - ApplyDeferredMerges
-   - Integration into processing pipeline
+    - ApplyDeferredMerges
+    - Integration into processing pipeline
 
 4. **Helper utilities**:
-   - SetValueAtPath (set nested values in maps)
-   - MergeDeferredValues (merge values by type)
-   - isMap (type checking)
+    - SetValueAtPath (set nested values in maps)
+    - MergeDeferredValues (merge values by type)
+    - isMap (type checking)
 
 5. **Testing**:
-   - Unit tests for each component
-   - Integration tests for end-to-end scenarios
-   - Performance benchmarks
+    - Unit tests for each component
+    - Integration tests for end-to-end scenarios
+    - Performance benchmarks
 
 ### Open Questions
 
@@ -1118,27 +1118,27 @@ Carry each section's `*merge.DeferredMergeContext` forward instead of discarding
 `ApplyDeferredMerges(..., nil)` call:
 
 1. **`internal/exec/stack_processor_merge.go`** — `mergeComponentConfigurations` returns an
-   additional `map[string]*merge.DeferredMergeContext` (keyed by section name: vars, settings, env,
-   auth, providers, required_providers, hooks, generate, test) alongside the merged component map.
-   Remove none of the existing `MergeWithDeferred` calls (they still correctly prevent type-conflict
-   crashes during the raw merge) — just stop discarding the context afterward. `processAuthConfig`
-   (`:707-728`) needs the same treatment for its second, later auth-merge pass.
+    additional `map[string]*merge.DeferredMergeContext` (keyed by section name: vars, settings, env,
+    auth, providers, required_providers, hooks, generate, test) alongside the merged component map.
+    Remove none of the existing `MergeWithDeferred` calls (they still correctly prevent type-conflict
+    crashes during the raw merge) — just stop discarding the context afterward. `processAuthConfig`
+    (`:707-728`) needs the same treatment for its second, later auth-merge pass.
 2. **`internal/exec/stack_processor_process_stacks.go`** — `processComponentsInParallel` (`:1478-1541`)
-   threads the returned context bundle alongside `comp` through `componentProcessResult` and the
-   collection loop.
+    threads the returned context bundle alongside `comp` through `componentProcessResult` and the
+    collection loop.
 3. **`internal/exec/utils.go`** — `findStacksMapCacheEntry` (`:344-348`) and `FindStacksMap`
-   (`:423-474`, and its sibling `FindStacksMapForGenerate` in `generate_adapter_funcs.go:30`) gain a
-   third dimension: `map[stack]map[componentType]map[component]map[string]*merge.DeferredMergeContext`.
-   This is a signature change to a widely-called exported function — audit every call site as part
-   of this PR, not as a follow-up.
+    (`:423-474`, and its sibling `FindStacksMapForGenerate` in `generate_adapter_funcs.go:30`) gain a
+    third dimension: `map[stack]map[componentType]map[component]map[string]*merge.DeferredMergeContext`.
+    This is a signature change to a widely-called exported function — audit every call site as part
+    of this PR, not as a follow-up.
 4. **`pkg/schema/schema.go`** — add a field to `ConfigAndStacksInfo` (`:1556`) typed `any` (not the
-   concrete `*merge.DeferredMergeContext` type), mirroring the existing `AuthManager any` field
-   (`:1608-1613`) and for the identical reason: `pkg/merge` imports `pkg/schema`
-   (`pkg/merge/deferred.go:1-7`), so a concretely-typed field would create an import cycle.
-   Type-assert at the two use sites.
+    concrete `*merge.DeferredMergeContext` type), mirroring the existing `AuthManager any` field
+    (`:1608-1613`) and for the identical reason: `pkg/merge` imports `pkg/schema`
+    (`pkg/merge/deferred.go:1-7`), so a concretely-typed field would create an import cycle.
+    Type-assert at the two use sites.
 5. Add a new (no-op for now) call site in `internal/exec/utils.go`, after `ProcessCustomYamlTags`
-   (`:1022-1035`) and before `postProcessTemplatesAndYamlFunctions` (`:1037-1039`), that will host
-   the real resolution in PR 2.
+    (`:1022-1035`) and before `postProcessTemplatesAndYamlFunctions` (`:1037-1039`), that will host
+    the real resolution in PR 2.
 
 Land behind full `atmos test --full` plus a before/after perf heatmap comparison (see Performance
 below) as the acceptance gate — this PR should be verifiably a no-op.
@@ -1146,36 +1146,36 @@ below) as the acceptance gate — this PR should be verifiably a no-op.
 ### PR 2 — The actual fix
 
 1. **`pkg/merge/merge_yaml_functions.go`** — replace the hand-rolled `postMergeFunctions` list
-   (`:22-30`) with the canonical constants already defined once in `pkg/utils/yaml_utils.go:26-63`
-   (`u.AtmosYamlFuncTemplate`, `u.AtmosYamlFuncLabels`, `u.AtmosYamlFuncLabelsKeys`,
-   `u.AtmosYamlFuncLabelsValues`, `u.AtmosYamlFuncTags`, plus the existing 7). `pkg/merge` already
-   imports `pkg/utils` as `u` (`pkg/merge/merge.go:13`); `pkg/utils` doesn't import `pkg/merge`, so no
-   cycle. This is the direct fix for the literal #2888 report and closes the "two independently
-   maintained function-recognition lists" root cause as a *class* of bug, not just for these four
-   functions. Curate deliberately: `!unset`/`!append`/`!include`/`!include.raw`/`!literal` are
-   handled by dedicated pre-merge or merge-structural mechanisms (`pkg/merge/merge.go:468-477` for
-   `!append`; parse-time resolution for `!include`/`!literal`) and must stay excluded.
+    (`:22-30`) with the canonical constants already defined once in `pkg/utils/yaml_utils.go:26-63`
+    (`u.AtmosYamlFuncTemplate`, `u.AtmosYamlFuncLabels`, `u.AtmosYamlFuncLabelsKeys`,
+    `u.AtmosYamlFuncLabelsValues`, `u.AtmosYamlFuncTags`, plus the existing 7). `pkg/merge` already
+    imports `pkg/utils` as `u` (`pkg/merge/merge.go:13`); `pkg/utils` doesn't import `pkg/merge`, so no
+    cycle. This is the direct fix for the literal #2888 report and closes the "two independently
+    maintained function-recognition lists" root cause as a *class* of bug, not just for these four
+    functions. Curate deliberately: `!unset`/`!append`/`!include`/`!include.raw`/`!literal` are
+    handled by dedicated pre-merge or merge-structural mechanisms (`pkg/merge/merge.go:468-477` for
+    `!append`; parse-time resolution for `!include`/`!literal`) and must stay excluded.
 2. **`internal/exec/stack_processor_merge.go`** — remove the now-pointless
-   `ApplyDeferredMerges(ctx, result, mergeConfig, nil)` calls at all 9 in-function call sites (they
-   currently just collapse-before-resolving; per the analysis above, keeping them as dead-weight
-   `nil` calls would keep the bug alive). The per-section contexts already flow out via PR 1's return
-   value.
+    `ApplyDeferredMerges(ctx, result, mergeConfig, nil)` calls at all 9 in-function call sites (they
+    currently just collapse-before-resolving; per the analysis above, keeping them as dead-weight
+    `nil` calls would keep the bug alive). The per-section contexts already flow out via PR 1's return
+    value.
 3. **`internal/exec/yaml_processor.go`** — add a template-aware wrapper around the existing (already
-   built, currently-unused-in-production) `ComponentYAMLProcessor`
-   (`internal/exec/yaml_processor.go:11-59`) that Go-template-renders a deferred string via
-   `ProcessTmplWithDatasources` (reusing the `componentTemplateContext` already built at
-   `internal/exec/utils.go:977-989`) before delegating to `processCustomTagsWithContext`
-   (`internal/exec/yaml_func_utils.go:476-496`). This is required so `!template` fails loudly on a
-   render error instead of silently returning unrendered `{{ }}` text — modify the existing file, no
-   new file under `internal/exec/`.
+    built, currently-unused-in-production) `ComponentYAMLProcessor`
+    (`internal/exec/yaml_processor.go:11-59`) that Go-template-renders a deferred string via
+    `ProcessTmplWithDatasources` (reusing the `componentTemplateContext` already built at
+    `internal/exec/utils.go:977-989`) before delegating to `processCustomTagsWithContext`
+    (`internal/exec/yaml_func_utils.go:476-496`). This is required so `!template` fails loudly on a
+    render error instead of silently returning unrendered `{{ }}` text — modify the existing file, no
+    new file under `internal/exec/`.
 4. **`internal/exec/utils.go`** — fill in the no-op call site from PR 1 step 5: for each section in
-   the recovered context bundle, resolve via the wrapper above and call
-   `m.ApplyDeferredMerges(sectionDctx, componentSection[sectionName], mergeConfig, processor)`,
-   reusing the same `ResolutionContext` instance Stage 3 already uses
-   (`internal/exec/yaml_func_utils.go:51`) so `!terraform.output`/`!terraform.state` cycle detection
-   stays consistent. `postProcessTemplatesAndYamlFunctions` (`:1355-1410`) already re-syncs the
-   typed `Component*Section` fields from `ComponentSection` after mutation, so no change needed
-   there.
+    the recovered context bundle, resolve via the wrapper above and call
+    `m.ApplyDeferredMerges(sectionDctx, componentSection[sectionName], mergeConfig, processor)`,
+    reusing the same `ResolutionContext` instance Stage 3 already uses
+    (`internal/exec/yaml_func_utils.go:51`) so `!terraform.output`/`!terraform.state` cycle detection
+    stays consistent. `postProcessTemplatesAndYamlFunctions` (`:1355-1410`) already re-syncs the
+    typed `Component*Section` fields from `ComponentSection` after mutation, so no change needed
+    there.
 
 ### What must NOT change
 
