@@ -270,9 +270,9 @@ func TestTemplateRendering(t *testing.T) {
 				"| Timeout | `30m0s` |",
 				"| Chart hooks enabled | `true` |",
 				"| Wait for Jobs | `true` |",
-				"| On failure | `rollback` |",
-				"| Cleanup on failure | `true` |",
-				"| Maximum history | `10` |",
+				"| On failure | `rollback` |\n" +
+					"| Cleanup on failure | `true` |\n" +
+					"| Maximum history | `10` |",
 			},
 		},
 		{
@@ -293,8 +293,8 @@ func TestTemplateRendering(t *testing.T) {
 				"| Timeout | `5m0s` |",
 				"| Chart hooks enabled | `true` |",
 				"| Wait for Jobs | `false` |",
-				"| On failure | `keep` |",
-				"| Install CRDs | `create` |",
+				"| On failure | `keep` |\n" +
+					"| Install CRDs | `create` |",
 			},
 			notContains: []string{"Maximum history"},
 		},
