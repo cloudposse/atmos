@@ -94,14 +94,11 @@ func TestStackConfigListTool_Execute_ListsAllPaths(t *testing.T) {
 	assert.Equal(t, "dev.yaml", byPath["vars.foo"]["file"])
 
 	// vars.region is only ever declared in the catalog manifest with no
-	// override. list (unlike get/set/delete) does not verify the path is
-	// literally present in the resolved file -- it reports the last
-	// provenance entry unconditionally, matching cmd/stack/config.go's
-	// provenanceFileForComponentPath -- so it is still listed, attributed to
-	// the importing manifest.
+	// override, so it must be attributed to the catalog file, not the
+	// importing manifest that merely pulled it in.
 	require.Contains(t, byPath, "vars.region")
 	assert.Equal(t, "us-east-1", byPath["vars.region"]["value"])
-	assert.Equal(t, "dev.yaml", byPath["vars.region"]["file"])
+	assert.Equal(t, "catalog/vpc.yaml", byPath["vars.region"]["file"])
 }
 
 func TestStackConfigListTool_Execute_PatternFilter(t *testing.T) {

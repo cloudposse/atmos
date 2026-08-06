@@ -27,10 +27,13 @@ atmos stack config set <path> <value> -s <stack> -c <component> [--type <type>] 
 ## Examples
 
 ```shell
-# Set the value where it currently resolves from.
+# Set the value where it currently resolves from. Component vars have no fixed
+# schema, so --type=auto (the default) infers from the value already there --
+# a bool/int stays a bool/int, not a quoted string.
 atmos stack config set vars.region us-west-2 -s plat-ue2-prod -c vpc
 
-# Typed value.
+# Explicit --type skips inference (needed for a brand-new key with nothing to
+# infer from, or to override).
 atmos stack config set settings.spacelift.workspace_enabled true --type=bool -s plat-ue2-prod -c vpc
 
 # Edit (or create the key in) a specific manifest.
@@ -53,8 +56,8 @@ atmos stack config set vars.new_flag yes --file stacks/deploy/prod.yaml -s plat-
   <dd>The stack name.</dd>
   <dt>`--component` / `-c` (string, required)</dt>
   <dd>The component name.</dd>
-  <dt>`--type` (string, default `string`)</dt>
-  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
+  <dt>`--type` (string, default `auto`)</dt>
+  <dd>How to interpret `<value>`: `auto` (infer from the type of the value already at the path, falling back to string with a warning), `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
   <dt>`--file` (string)</dt>
   <dd>Edit this manifest explicitly instead of resolving via provenance. Required when the value is not yet defined anywhere; can also be used to create new keys.</dd>
 </dl>

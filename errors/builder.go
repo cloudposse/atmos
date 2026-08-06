@@ -2,6 +2,7 @@ package errors
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -185,6 +186,44 @@ func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuil
 	return b.WithCause(fmt.Errorf(format, args...))
 }
 
+// backtickSpanPattern matches a backtick-delimited code span within a hint
+// string (e.g. "`--config <file>`").
+var backtickSpanPattern = regexp.MustCompile("`[^`]*`")
+
+// escapeHintAngleBrackets HTML-entity-encodes literal < and > in hint text
+// OUTSIDE backtick code spans. Hints are rendered as Markdown (see
+// errors/formatter.go), and a raw placeholder like "<file>" is otherwise
+// parsed as an inline HTML tag and silently stripped by the terminal
+// renderer's HTML sanitizer -- e.g. "pass --config <file>." would render as
+// "pass --config .", losing the placeholder entirely. Text already inside
+// backticks is left untouched: code spans already render literally, and
+// entity-encoding them would show the literal "&lt;" text instead of the
+// intended "<" (code spans aren't parsed for entities either). "EXAMPLE:" and
+// "TITLE:" sentinel-prefixed hints (see WithExampleFile, WithTitle) are also
+// left untouched -- examples are pre-formatted content, and titles aren't
+// placeholder-bearing prose.
+func escapeHintAngleBrackets(hint string) string {
+	if strings.HasPrefix(hint, "EXAMPLE:") || strings.HasPrefix(hint, "TITLE:") {
+		return hint
+	}
+
+	var b strings.Builder
+	last := 0
+	for _, loc := range backtickSpanPattern.FindAllStringIndex(hint, -1) {
+		b.WriteString(escapeAngleBrackets(hint[last:loc[0]]))
+		b.WriteString(hint[loc[0]:loc[1]])
+		last = loc[1]
+	}
+	b.WriteString(escapeAngleBrackets(hint[last:]))
+	return b.String()
+}
+
+func escapeAngleBrackets(s string) string {
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
 // Err finalizes and returns the enriched error.
 func (b *ErrorBuilder) Err() error {
 	if b.err == nil {
@@ -200,7 +239,7 @@ func (b *ErrorBuilder) Err() error {
 
 	// Add all hints.
 	for _, hint := range b.hints {
-		err = errors.WithHint(err, hint)
+		err = errors.WithHint(err, escapeHintAngleBrackets(hint))
 	}
 
 	// Add context if present.

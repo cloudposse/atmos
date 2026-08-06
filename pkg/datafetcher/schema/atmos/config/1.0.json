@@ -6802,7 +6802,8 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Enabled controls whether Atmos can run as an MCP server (default: false)."
         },
         "servers": {
           "anyOf": [

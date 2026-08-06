@@ -28,6 +28,10 @@ const errNotFoundFmt = "%w: %s"
 // destination does not already exist.
 const defaultFileMode os.FileMode = 0o644
 
+// trailingNewline is the terminator yqlib appends to evaluate() output, which
+// callers throughout this file trim before comparing or returning a value.
+const trailingNewline = "\n"
+
 // editPreferences are the yqlib YAML preferences used for all edit operations.
 // They favor faithful round-tripping: the document's own indent width, no
 // colors, document separators preserved, and scalars unwrapped on read.
@@ -124,7 +128,7 @@ func Query(content []byte, expr string) (string, error) {
 	if result == "" {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
-	trimmed := strings.TrimRight(result, "\n")
+	trimmed := strings.TrimRight(result, trailingNewline)
 	if trimmed == "null" && !resultIsStringScalar(content, expr) {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
@@ -139,7 +143,7 @@ func resultIsStringScalar(content []byte, expr string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.TrimRight(tag, "\n") == "!!str"
+	return strings.TrimRight(tag, trailingNewline) == "!!str"
 }
 
 // EvalFile evaluates a yq expression against a file and writes the result back
@@ -180,7 +184,7 @@ func Get(content []byte, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	trimmed := strings.TrimRight(result, "\n")
+	trimmed := strings.TrimRight(result, trailingNewline)
 
 	// yq emits "null" both for a missing key and for an explicit null value.
 	// For addressing purposes the editor treats both as "not present"; callers
@@ -190,6 +194,50 @@ func Get(content []byte, path string) (string, error) {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, path)
 	}
 	return trimmed, nil
+}
+
+// GetType reads the YAML tag of the value already at path and maps it to a
+// SetFileWithType type name (TypeBool, TypeInt, TypeFloat, TypeString, or
+// TypeNull). Returns ok=false when the path doesn't currently resolve to a
+// value (missing, or an unaddressable structural node), which callers treat
+// as "nothing to infer from".
+func GetType(content []byte, path string) (string, bool) {
+	defer perf.Track(nil, "yaml.GetType")()
+
+	yqPath, err := DotPathToYqPath(path)
+	if err != nil {
+		return "", false
+	}
+	// Confirm the path resolves to a real, present value before trusting its
+	// tag -- Get() already disambiguates "missing" from "explicit null".
+	if _, err := Get(content, path); err != nil {
+		return "", false
+	}
+	tag, err := evaluate(content, "("+yqPath+") | tag")
+	if err != nil {
+		return "", false
+	}
+	switch strings.TrimRight(tag, trailingNewline) {
+	case "!!bool":
+		return TypeBool, true
+	case "!!int":
+		return TypeInt, true
+	case "!!float":
+		return TypeFloat, true
+	default:
+		return TypeString, true
+	}
+}
+
+// GetFileType is the file-based form of GetType.
+func GetFileType(filePath, path string) (string, bool) {
+	defer perf.Track(nil, "yaml.GetFileType")()
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", false
+	}
+	return GetType(content, path)
 }
 
 // GetTyped reads the value at a path and decodes it into T.

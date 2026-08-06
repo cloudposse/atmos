@@ -100,8 +100,9 @@ func init() {
 	registerStackEditFlags(stackSetCmd)
 	registerStackEditFlags(stackDeleteCmd)
 	registerStackEditFlags(stackFormatCmd)
-	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal)")
+	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeAuto,
+		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
+			"auto infers from the existing value at the path, falling back to string.")
 }
 
 func registerStackEditFlags(c *cobra.Command) {
@@ -128,7 +129,11 @@ func runStackSet(args []string) error {
 	if err != nil {
 		return err
 	}
-	created, err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType)
+	effectiveType, resolved := effectiveStackValueType(tgt)
+	if !resolved {
+		warnIfSilentlyStoredAsString(args[1])
+	}
+	created, err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], effectiveType)
 	if err != nil {
 		return err
 	}
@@ -138,6 +143,36 @@ func runStackSet(args []string) error {
 	}
 	ui.Successf("Updated `%s` for `%s` in `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
 	return nil
+}
+
+// effectiveStackValueType resolves --type=auto (the default) to a concrete
+// type: component vars have no fixed schema to infer from (unlike `config
+// set`), so the only available signal is the type of the value already at
+// tgt.yqPath in tgt.file, if any. Resolved is false only when there's nothing
+// to infer from and atmosyaml.TypeString was used as a bare default (a
+// brand-new key) -- as opposed to a genuinely inferred string. An explicit
+// (non-auto) --type is always returned unchanged, with resolved true.
+func effectiveStackValueType(tgt *editTarget) (valType string, resolved bool) {
+	if flagType != atmosyaml.TypeAuto {
+		return flagType, true
+	}
+	if inferred, ok := atmosyaml.GetFileType(tgt.file, tgt.yqPath); ok {
+		return inferred, true
+	}
+	return atmosyaml.TypeString, false
+}
+
+// warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything
+// (effectiveStackValueType's resolved was false, i.e. a brand-new key with
+// nothing to infer from) and a value that looks like a bool or number is
+// about to be written as a literal string -- otherwise `atmos stack set
+// vars.replicas 5` silently stores the string "5", not the integer 5, with no
+// indication it happened.
+func warnIfSilentlyStoredAsString(value string) {
+	if !atmosyaml.LooksNonString(value) {
+		return
+	}
+	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because there's no existing value at this path to infer a type from. Pass --type to store it as bool, int, float, or yaml.", value)
 }
 
 func runStackDelete(args []string) error {

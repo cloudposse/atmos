@@ -397,6 +397,71 @@ func TestRunStackSet_ExplicitFile_CreatesNewPath(t *testing.T) {
 	assert.Equal(t, "a", got)
 }
 
+func TestRunStackSet_ExplicitFile_AutoInfersFromExistingValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+        replicas: 1
+        enabled: false
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+	require.NoError(t, runStackSet([]string{"vars.enabled", "true"}))
+
+	// Both must be written as unquoted YAML scalars (int/bool), not strings,
+	// because auto inferred their type from the existing values.
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "replicas: 5")
+	assert.NotContains(t, content, `replicas: "5"`)
+	assert.Contains(t, content, "enabled: true")
+	assert.NotContains(t, content, `enabled: "true"`)
+}
+
+func TestRunStackSet_ExplicitFile_AutoFallsBackToStringForNewKey(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	// vars.replicas has no existing value anywhere in this file to infer
+	// from, so auto must fall back to string.
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got)
+
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `replicas: "5"`)
+}
+
 func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)
@@ -614,4 +679,48 @@ func TestRunStackSet_ProvenanceBranch(t *testing.T) {
 	got, err := atmosyaml.GetFile("stacks/deploy/nonprod.yaml", "components.terraform.mycomponent.vars.foo")
 	require.NoError(t, err)
 	assert.Equal(t, "updated-value", got)
+}
+
+// TestRunStackSet_ProvenanceBranch_ImportOnlyValue reproduces a field-test
+// finding: "baz" is defined only in the imported catalog/mock.yaml, never
+// overridden in deploy/nonprod.yaml. PickProvenanceFile used to pick the
+// current stack file's own phantom Line:0 provenance entry over the real one
+// in the catalog file, so this previously failed with "resolves from
+// deploy/nonprod.yaml:0, but its key there is not ...". It must now resolve
+// to and edit the catalog file directly.
+func TestRunStackSet_ProvenanceBranch_ImportOnlyValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	flagComponent = "mycomponent"
+	flagStack = "nonprod"
+	flagFile = ""
+	flagType = atmosyaml.TypeString
+
+	require.NoError(t, runStackSet([]string{"vars.baz", "updated-baz"}))
+
+	got, err := atmosyaml.GetFile("stacks/catalog/mock.yaml", "components.terraform.mycomponent.vars.baz")
+	require.NoError(t, err)
+	assert.Equal(t, "updated-baz", got)
+
+	// deploy/nonprod.yaml must remain untouched -- it never defined baz.
+	_, err = atmosyaml.GetFile("stacks/deploy/nonprod.yaml", "components.terraform.mycomponent.vars.baz")
+	require.Error(t, err)
+}
+
+// TestRunStackDelete_ProvenanceBranch_ImportOnlyValue is the delete-verb
+// counterpart of TestRunStackSet_ProvenanceBranch_ImportOnlyValue -- delete via
+// provenance (no --file) for an import-only value had zero prior coverage.
+func TestRunStackDelete_ProvenanceBranch_ImportOnlyValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	flagComponent = "mycomponent"
+	flagStack = "nonprod"
+	flagFile = ""
+
+	require.NoError(t, runStackDelete([]string{"vars.baz"}))
+
+	_, err := atmosyaml.GetFile("stacks/catalog/mock.yaml", "components.terraform.mycomponent.vars.baz")
+	require.Error(t, err)
 }

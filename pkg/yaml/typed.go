@@ -2,6 +2,7 @@ package yaml
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,12 @@ import (
 // callers coerce a string argument into a typed YAML scalar (or a raw YAML
 // literal) instead of always writing a quoted string.
 const (
+	// TypeAuto infers the type: from the Atmos config schema when the path is
+	// modeled, otherwise from the type of the value already at that path (if
+	// any), otherwise string. This is the default for SetFileWithType callers
+	// (config set, stack set) -- it is never passed through to buildRHS, which
+	// only ever sees a type TypeAuto has already been resolved to.
+	TypeAuto   = "auto"
 	TypeString = "string"
 	TypeInt    = "int"
 	TypeBool   = "bool"
@@ -28,6 +35,22 @@ const (
 	// Bit size used to validate int and float values.
 	bitSize64 = 64
 )
+
+// looksNonStringPattern matches raw CLI values that read as a bool or a
+// number -- the shape a user would plausibly intend as something other than
+// a literal string.
+var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|-?[0-9]+(?:\.[0-9]+)?)$`)
+
+// LooksNonString reports whether raw looks like it was meant to be a bool or
+// number (e.g. "true", "42", "3.14") rather than a literal string. Callers use
+// this to warn when a value with this shape is about to be stored as a
+// TypeString because type inference wasn't available or --type wasn't passed
+// -- silently writing `"true"` instead of `true` is easy to miss.
+func LooksNonString(raw string) bool {
+	defer perf.Track(nil, "yaml.LooksNonString")()
+
+	return looksNonStringPattern.MatchString(strings.TrimSpace(raw))
+}
 
 // buildRHS coerces a CLI string value into a yq right-hand-side expression
 // according to valueType. An empty valueType defaults to TypeString. Plain

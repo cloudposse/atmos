@@ -153,6 +153,25 @@ func TestGetTyped(t *testing.T) {
 	assert.ErrorIs(t, err, ErrParseYAML)
 }
 
+func TestGetType(t *testing.T) {
+	typ, ok := GetType([]byte(fixtureWithComments), "vars.enabled")
+	assert.True(t, ok)
+	assert.Equal(t, TypeBool, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "vars.count")
+	assert.True(t, ok)
+	assert.Equal(t, TypeInt, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "vars.region")
+	assert.True(t, ok)
+	assert.Equal(t, TypeString, typ)
+}
+
+func TestGetType_NotFound(t *testing.T) {
+	_, ok := GetType([]byte(fixtureWithComments), "vars.does_not_exist")
+	assert.False(t, ok)
+}
+
 func TestDelete(t *testing.T) {
 	out, err := Delete([]byte(fixtureWithComments), "vars.enabled")
 	require.NoError(t, err)
@@ -227,6 +246,22 @@ func TestGetFile(t *testing.T) {
 	got, err := GetFile(file, "components.terraform.vpc.vars.cidr")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.0/16", got)
+}
+
+func TestGetFileType(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+
+	typ, ok := GetFileType(file, "vars.enabled")
+	assert.True(t, ok)
+	assert.Equal(t, TypeBool, typ)
+
+	_, ok = GetFileType(file, "vars.does_not_exist")
+	assert.False(t, ok)
+
+	_, ok = GetFileType(filepath.Join(dir, "missing.yaml"), "vars.enabled")
+	assert.False(t, ok)
 }
 
 func TestFileWrappers(t *testing.T) {

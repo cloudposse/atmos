@@ -30,7 +30,9 @@ var configGetCmd = &cobra.Command{
 
 		value, err := atmosyaml.GetFile(file, args[0])
 		if err != nil {
-			return err
+			return errUtils.Build(err).
+				WithHintf("Not found in `%s`. If it may come from a merged source (e.g. atmos.d/), check `atmos describe config -q .%s` instead.", atmosyaml.DisplayPath(file), args[0]).
+				Err()
 		}
 		return data.Writeln(value)
 	},
@@ -40,10 +42,10 @@ var configSetCmd = &cobra.Command{
 	Use:   "set <path> <value>",
 	Short: "Set a value in atmos.yaml by dot-notation path",
 	Long: `Set a value in atmos.yaml using a dot-notation path, preserving comments,
-anchors, YAML functions, and templates. The value's type (string, int, bool,
-float) is inferred from the Atmos config schema when the path matches a known
-field (e.g. mcp.enabled infers bool); pass --type explicitly to override, or
-for paths the schema doesn't model (falls back to string).`,
+anchors, YAML functions, and templates. By default (--type=auto) the value's
+type is inferred: from the Atmos config schema when the path matches a known
+field (e.g. mcp.enabled infers bool), otherwise from the type of the value
+already at that path, otherwise string. Pass --type explicitly to override.`,
 	Example: "atmos config set logs.level debug\natmos config set mcp.enabled true\natmos config set --type=yaml logs.exclude '[\"a\", \"b\"]'",
 	Args:    cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -54,7 +56,12 @@ for paths the schema doesn't model (falls back to string).`,
 			return err
 		}
 
-		created, err := atmosyaml.SetFileWithType(file, args[0], args[1], effectiveValueType(cmd, args[0]))
+		effectiveType, resolved := effectiveValueType(file, args[0])
+		if !resolved {
+			warnIfSilentlyStoredAsString(args[1])
+		}
+
+		created, err := atmosyaml.SetFileWithType(file, args[0], args[1], effectiveType)
 		if err != nil {
 			return err
 		}
@@ -67,19 +74,36 @@ for paths the schema doesn't model (falls back to string).`,
 	},
 }
 
-// effectiveValueType returns the --type flag's value when the user passed it
-// explicitly. Otherwise it infers a type from the Atmos config schema for
-// dotPath (e.g. a known bool field), falling back to the flag's default
-// (atmosyaml.TypeString) when the path isn't modeled by the schema -- most
-// commonly free-form sections like vars.
-func effectiveValueType(cmd *cobra.Command, dotPath string) string {
-	if cmd.Flags().Changed("type") {
-		return valueType
+// effectiveValueType resolves --type=auto (the default) to a concrete type:
+// first from the Atmos config schema for dotPath (e.g. a known bool field),
+// then from the type of the value already at dotPath in file (if any).
+// Resolved is false only when neither source had an answer and TypeString was
+// used as a bare default (as opposed to a genuinely inferred string) -- most
+// commonly a free-form path like vars holding a value for the first time. An
+// explicit (non-auto) --type is always returned unchanged, with resolved true.
+func effectiveValueType(file, dotPath string) (valType string, resolved bool) {
+	if valueType != atmosyaml.TypeAuto {
+		return valueType, true
 	}
 	if inferred, ok := cfg.InferValueType(dotPath); ok {
-		return inferred
+		return inferred, true
 	}
-	return valueType
+	if inferred, ok := atmosyaml.GetFileType(file, dotPath); ok {
+		return inferred, true
+	}
+	return atmosyaml.TypeString, false
+}
+
+// warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything
+// (effectiveValueType's resolved was false) and a value that looks like a
+// bool or number is about to be written as a literal string -- otherwise
+// `atmos config set settings.foo true` silently stores the string "true",
+// not the boolean, with no indication it happened.
+func warnIfSilentlyStoredAsString(value string) {
+	if !atmosyaml.LooksNonString(value) {
+		return
+	}
+	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because the path isn't recognized by the Atmos config schema and has no existing typed value to infer from. Pass --type to store it as bool, int, float, or yaml.", value)
 }
 
 var configDeleteCmd = &cobra.Command{
@@ -134,18 +158,25 @@ Atmos YAML functions, and Go templates.`,
 }
 
 func init() {
-	configSetCmd.Flags().StringVar(&valueType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal). "+
-			"Auto-inferred from the Atmos config schema when omitted and the path is recognized.")
+	configSetCmd.Flags().StringVar(&valueType, "type", atmosyaml.TypeAuto,
+		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
+			"auto infers from the Atmos config schema, then from the existing value at the path, falling back to string.")
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent
 // --config flag (first entry) acts as an explicit override; otherwise the file
-// is discovered in the current directory or git root.
+// is discovered in the current directory or git root. Unlike every other
+// Atmos command, edits can only ever target one physical file, so a
+// multi-value --config (which normally means "merge all of these") silently
+// narrows to the first entry here -- worth a warning since it's a real
+// behavior inconsistency, not just an unused extra flag value.
 func resolveConfigFile(cmd *cobra.Command) (string, error) {
 	override := ""
 	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
 		override = cfgFiles[0]
+		if len(cfgFiles) > 1 {
+			ui.Warningf("Multiple --config files given; config edit commands only target the first one (%s) -- the rest are ignored.", cfgFiles[0])
+		}
 	}
 
 	file, err := cfg.ResolveEditableConfigFile(atmosConfigPtr, override)
