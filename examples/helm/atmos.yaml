@@ -45,7 +45,7 @@ commands:
       # Template output includes weighted hooks and leaves Helm `tpl` expressions
       # in values for the chart to evaluate with its native .Values context.
       - command: >-
-          artifact=$(mktemp ./atmos-helm-template.XXXXXX.yaml);
+          artifact=$(mktemp ./atmos-helm-template.XXXXXX);
           trap 'rm -f "$artifact"' EXIT;
           atmos helm template demo -s dev --dependency-update --output="$artifact" &&
           test "$(grep -c '^  name: demo-hook-order$' "$artifact")" -eq 2 &&
