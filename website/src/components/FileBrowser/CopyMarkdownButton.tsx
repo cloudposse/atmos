@@ -3,7 +3,7 @@
  * included, to the clipboard as one Markdown document. Lets someone grab a
  * skill's complete context without installing it.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCopy, faCheck } from '@fortawesome/free-solid-svg-icons';
 import { collectMarkdownContext } from './utils';
@@ -29,6 +29,9 @@ export default function CopyMarkdownButton({
   className,
 }: CopyMarkdownButtonProps): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(resetTimeoutRef.current), []);
 
   const handleCopy = async (event: React.MouseEvent) => {
     // Cards this button sits on may be clickable themselves - never let the
@@ -42,7 +45,8 @@ export default function CopyMarkdownButton({
     try {
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API unavailable (e.g. insecure context) - button just won't confirm.
     }
