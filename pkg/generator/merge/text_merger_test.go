@@ -841,7 +841,7 @@ func TestTextMerger_GenuineChangeMatchesTheirsBlankLineAtEOF(t *testing.T) {
 }
 
 // TestTextMerger_GenuineChangeStillEndsWithTrailingNewline confirms a real
-// template addition is not short-circuited and the merged result still ends
+// template addition is actually applied and the merged result still ends
 // with a trailing newline (matching theirs), even though diff3's own join
 // never produces one.
 func TestTextMerger_GenuineChangeStillEndsWithTrailingNewline(t *testing.T) {
@@ -863,7 +863,7 @@ func TestTextMerger_GenuineChangeStillEndsWithTrailingNewline(t *testing.T) {
 
 // TestTextMerger_GenuineChangeNoTrailingNewlineInTheirs confirms the merged
 // result doesn't gain a trailing newline the template version itself doesn't
-// have — matchTrailingNewline mirrors theirs' own convention rather than
+// have — the +1/-1 cancellation reproduces theirs' own convention rather than
 // unconditionally appending one.
 func TestTextMerger_GenuineChangeNoTrailingNewlineInTheirs(t *testing.T) {
 	base := "line 1\nline 2"
@@ -876,31 +876,5 @@ func TestTextMerger_GenuineChangeNoTrailingNewlineInTheirs(t *testing.T) {
 	}
 	if strings.HasSuffix(result.Content, "\n") {
 		t.Errorf("must not gain a trailing newline theirs doesn't have, got %q", result.Content)
-	}
-}
-
-func TestMatchTrailingNewline(t *testing.T) {
-	tests := []struct {
-		name      string
-		content   string
-		reference string
-		want      string
-	}{
-		{name: "empty content unchanged", content: "", reference: "a\n", want: ""},
-		{name: "appends when reference has newline and content doesn't", content: "a", reference: "b\n", want: "a\n"},
-		{name: "no-op when content already has newline", content: "a\n", reference: "b\n", want: "a\n"},
-		{name: "no-op when reference has no newline", content: "a", reference: "b", want: "a"},
-		{name: "strips content's trailing newline when reference has none", content: "a\n", reference: "b", want: "a"},
-		{name: "matches reference's exact blank-line-at-EOF count, not just one newline", content: "a", reference: "b\n\n", want: "a\n\n"},
-		{name: "reduces content's extra trailing newlines down to reference's count", content: "a\n\n\n", reference: "b\n", want: "a\n"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchTrailingNewline(tt.content, tt.reference)
-			if got != tt.want {
-				t.Errorf("matchTrailingNewline(%q, %q) = %q, want %q", tt.content, tt.reference, got, tt.want)
-			}
-		})
 	}
 }

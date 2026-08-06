@@ -58,10 +58,21 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
+	//
+	// Each input gets one newline appended before diff3 ever sees it. diff3's
+	// line reader (bufio.Scanner) can't tell how many trailing newlines an
+	// input had — for N >= 1 trailing newlines, its join step always
+	// reconstructs exactly N-1 (it loses exactly one, regardless of how many
+	// there were; for N == 0 there's nothing to lose). Appending one newline
+	// here bumps every input's count to at least 1, so that guaranteed loss
+	// of exactly one newline cancels out and the original count survives
+	// (whichever side's content ends up dominating a given region carries
+	// its own newline count through unaffected, since the +1/-1 cancellation
+	// applies to each side independently).
 	mergeResult, err := diff3.Merge(
-		strings.NewReader(ours),
-		strings.NewReader(base),
-		strings.NewReader(theirs),
+		strings.NewReader(ours+newlineSeparator),
+		strings.NewReader(base+newlineSeparator),
+		strings.NewReader(theirs+newlineSeparator),
 		false, // Don't show base in conflict markers.
 		"Ours",
 		"Theirs",
@@ -103,35 +114,11 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
-	// diff3's line reader can't tell how many trailing newlines its input
-	// had (bufio.Scanner strips every line terminator, including the last),
-	// so its join step always collapses them — to one fewer than there
-	// really were, or to none at all, even when nothing else changed.
-	// Restore the exact trailing-newline count from theirs (the
-	// freshly-rendered template version is the most defensible reference for
-	// what the file should look like): when nothing meaningful changed,
-	// ours == theirs, so this also reconstructs ours byte-for-byte without
-	// needing a separate no-op short-circuit.
-	mergedContent = matchTrailingNewline(mergedContent, theirs)
-
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
-}
-
-// matchTrailingNewline appends a trailing newline to content when reference
-// ends with one and content doesn't. Used to restore the newline diff3's join
-// step unconditionally drops, matching whatever convention the reference
-// (the freshly-rendered template version) uses.
-func matchTrailingNewline(content, reference string) string {
-	if content == "" {
-		return content
-	}
-	trimmed := strings.TrimRight(content, newlineSeparator)
-	trailing := reference[len(strings.TrimRight(reference, newlineSeparator)):]
-	return trimmed + trailing
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
