@@ -784,8 +784,9 @@
   font-size: 1rem;
 }
 
-/* Icon-only variant (CopyMarkdownButton's iconOnly prop) - a compact circular
-   button for tight spaces like a card corner. */
+/* Icon-only variant (CopyMarkdownButton's iconOnly prop) - a compact button
+   for tight spaces like a card corner. Same translucent pill language as
+   .copyMarkdownButton/.githubButton/.filterButton, just square and unlabeled. */
 .copyMarkdownIconButton {
   display: inline-flex;
   align-items: center;
@@ -793,22 +794,24 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  background: var(--ifm-background-surface-color);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 6px;
   color: var(--ifm-color-emphasis-700);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .copyMarkdownIconButton:hover {
-  background: var(--ifm-color-emphasis-100);
-  color: var(--ifm-color-primary);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 :global(html[data-theme='dark']) .copyMarkdownIconButton {
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownIconButton:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* README Section */
