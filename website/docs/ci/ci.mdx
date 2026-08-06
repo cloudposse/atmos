@@ -22,6 +22,19 @@ repositories, and commit results back to your source of truth. Kubernetes compon
 native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
+:::note Replaces the old `cloudposse/github-action-*` Actions
+You do not need the separate [`cloudposse/github-action-atmos-terraform-*` Actions](/deprecated/github-actions)
+anymore. The `atmos` CLI now does this work:
+
+- It writes job summaries.
+- It posts status checks.
+- It sets output variables.
+- It manages planfiles.
+
+Do not use the old Actions in new workflows. Existing workflows that use them still work. New
+workflows need only `actions/checkout` and an `atmos` command, as shown below.
+:::
+
 <Experimental />
 
 ## Quick Start
