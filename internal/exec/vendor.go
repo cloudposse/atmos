@@ -11,18 +11,28 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 var (
 	ErrNoVendorSourcesFound   = errors.New("no vendor.yaml found and no component.yaml manifests were discovered under any component type")
 	ErrValidateComponentFlag  = errors.New("either '--component' or '--tags' flag can be provided, but not both")
-	ErrValidateEverythingFlag = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
+	ErrValidateEverythingFlag = errors.New("'--everything' flag cannot be combined with '--component', '--stack', '--tags', or '--labels' flags")
 	// ErrValidateComponentStackFlag guards the stack-based vendoring path (handleStackVendor):
 	// --stack resolves and vendors every component declared in the stack, so a single
 	// --component target doesn't compose with it.
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
-	ErrMissingComponent           = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+	// ErrValidateComponentLabelsFlag guards the same stack-resolution path as
+	// ErrValidateComponentStackFlag: --labels resolves a set of stack-declared components (like
+	// --stack), so a single --component target doesn't compose with it either.
+	ErrValidateComponentLabelsFlag = errors.New("either '--component' or '--labels' flag can be provided, but not both")
+	// ErrValidateTagsLabelsFlag guards two mutually exclusive selector universes: --tags filters
+	// vendor.yaml's own declared source tags (a manifest concept), while --labels filters
+	// stack-resolved component metadata.labels (a component concept, the same one --stack resolves
+	// against) -- they can't be combined into one selection.
+	ErrValidateTagsLabelsFlag = errors.New("either '--tags' or '--labels' flag can be provided, but not both")
+	ErrMissingComponent       = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 	ErrInvalidLockEnforcement = errors.New("'--lock-enforcement' must be one of: strict, warn, silent")
 	// ErrSingleComponentRequired guards the 'vendor update --pull' delegation path, where
@@ -63,8 +73,12 @@ type VendorFlags struct {
 	// Stack, when set, vendors every component declared in the stack that has its own
 	// component.yaml -- see handleStackVendor. Bypasses vendor.yaml entirely, even when one
 	// exists (checked ahead of the vendor.yaml lookup in handleVendorConfig).
-	Stack         string
-	Tags          []string
+	Stack string
+	Tags  []string
+	// Labels filters the stack-resolved component set (the same resolution --stack performs) by
+	// metadata.labels, matching ALL key=value pairs (AND). Composes with --stack (narrows further)
+	// but is a distinct concept from Tags -- see ErrValidateTagsLabelsFlag.
+	Labels        map[string]string
 	Everything    bool
 	ComponentType string
 	RefreshLock   bool
@@ -121,6 +135,9 @@ func parseVendorFlags(flags *pflag.FlagSet, atmosConfig *schema.AtmosConfigurati
 		return vendorFlags, err
 	}
 	if vendorFlags.Tags, err = parseVendorTagsFlag(flags); err != nil {
+		return vendorFlags, err
+	}
+	if vendorFlags.Labels, err = parseOptionalLabelsFlag(flags); err != nil {
 		return vendorFlags, err
 	}
 	if vendorFlags.Everything, err = flags.GetBool("everything"); err != nil {
@@ -182,6 +199,21 @@ func parseVendorTagsFlag(flags *pflag.FlagSet) ([]string, error) {
 	return strings.Split(tagsCsv, ","), nil
 }
 
+// parseOptionalLabelsFlag reads --labels (a comma-separated key=value/key:value list, parsed via
+// pkg/tags.ParseLabelsFlag -- the same parser terraform bulk selection and list commands use) for
+// callers that don't all register the flag (e.g. 'vendor update --pull' delegates to
+// parseVendorFlags with its own FlagSet), returning nil without error when the flag is absent.
+func parseOptionalLabelsFlag(flags *pflag.FlagSet) (map[string]string, error) {
+	if flags.Lookup("labels") == nil {
+		return nil, nil
+	}
+	labelsCsv, err := flags.GetString("labels")
+	if err != nil {
+		return nil, err
+	}
+	return tags.ParseLabelsFlag(labelsCsv)
+}
+
 // parseOptionalBoolFlag reads a bool flag that isn't registered on every cmd.Flags() this is
 // called with (e.g. some callers share a cmd that doesn't define "refresh-lock"), returning false
 // without error when the flag itself is absent.
@@ -229,7 +261,7 @@ func parseVendorTypeFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) error {
 // Helper function to set the default for 'everything' if no specific flags are provided.
 func setDefaultEverythingFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) {
 	if !vendorFlags.Everything && !flags.Changed("everything") &&
-		vendorFlags.Component == "" && vendorFlags.Stack == "" && len(vendorFlags.Tags) == 0 {
+		vendorFlags.Component == "" && vendorFlags.Stack == "" && len(vendorFlags.Tags) == 0 && len(vendorFlags.Labels) == 0 {
 		vendorFlags.Everything = true
 	}
 }
@@ -239,11 +271,19 @@ func validateVendorFlags(flg *VendorFlags) error {
 		return ErrValidateComponentStackFlag
 	}
 
+	if flg.Component != "" && len(flg.Labels) > 0 {
+		return ErrValidateComponentLabelsFlag
+	}
+
+	if len(flg.Tags) > 0 && len(flg.Labels) > 0 {
+		return ErrValidateTagsLabelsFlag
+	}
+
 	if flg.Component != "" && len(flg.Tags) > 0 {
 		return ErrValidateComponentFlag
 	}
 
-	if flg.Everything && (flg.Component != "" || flg.Stack != "" || len(flg.Tags) > 0) {
+	if flg.Everything && (flg.Component != "" || flg.Stack != "" || len(flg.Tags) > 0 || len(flg.Labels) > 0) {
 		return ErrValidateEverythingFlag
 	}
 
@@ -255,9 +295,11 @@ func validateVendorFlags(flg *VendorFlags) error {
 }
 
 func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags, args []string) error {
-	// --stack takes precedence over vendor.yaml -- it vendors the stack's own components
-	// (each via its component.yaml) regardless of whether a repo-wide vendor.yaml also exists.
-	if flg.Stack != "" {
+	// --stack (and/or --labels, which resolves the same stack-declared component set, scoped
+	// across all stacks when --stack is omitted) takes precedence over vendor.yaml -- it vendors
+	// the resolved components (each via its own component.yaml) regardless of whether a repo-wide
+	// vendor.yaml also exists.
+	if flg.Stack != "" || len(flg.Labels) > 0 {
 		return handleStackVendor(atmosConfig, flg)
 	}
 

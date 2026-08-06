@@ -16,12 +16,18 @@ the lock entirely.
 ## Usage
 
 ```shell
-atmos vendor clean [--component <name>] [--force] [--dry-run]
+atmos vendor clean [--component <name> | --tags <a,b> | --stack <stack> [--labels <k>=<v>]] [--force] [--dry-run]
 ```
 
 By default, `vendor clean` preserves any lock-owned file whose content doesn't match its recorded
 checksum. It refuses to run and names every such file. Pass `--force` to delete them anyway. After
 a successful clean, `vendor clean` drops the removed artifacts from `vendor.lock.yaml`.
+
+At most one selector may be given: `--component`, `--tags` (vendor.yaml's own declared source
+tags), or `--stack`/`--labels` (a stack-resolved component set, composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). Omit every
+selector to clean everything. A selector that matches nothing is an error, not a silent "clean
+everything" fallback.
 
 ## Examples
 
@@ -35,6 +41,13 @@ atmos vendor clean
 # Remove only one component's vendored files.
 atmos vendor clean --component vpc
 
+# Remove every component whose vendor.yaml source declares a given tag.
+atmos vendor clean --tags networking
+
+# Remove every component in a stack, or matching stack metadata.labels.
+atmos vendor clean --stack dev-us-west-2
+atmos vendor clean --labels tier=1
+
 # Delete lock-owned files even if they were modified since vendoring.
 atmos vendor clean --force
 ```
@@ -43,7 +56,13 @@ atmos vendor clean --force
 
 <dl>
   <dt>`--component` / `-c` (string)</dt>
-  <dd>Clean only this component. Omit to clean every artifact recorded in the lock file.</dd>
+  <dd>Clean only this component. Mutually exclusive with `--tags` and `--stack`/`--labels`.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Clean only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). Mutually exclusive with `--component` and `--stack`/`--labels`.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Clean only components belonging to the specified stack. Composes with `--labels` to narrow further. Mutually exclusive with `--component` and `--tags`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Clean only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack`. Mutually exclusive with `--component` and `--tags`.</dd>
   <dt>`--force` (boolean)</dt>
   <dd>Delete modified lock-owned files instead of refusing to run.</dd>
   <dt>`--dry-run` (boolean)</dt>

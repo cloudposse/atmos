@@ -137,6 +137,36 @@ func ResolveComponentSource(params *ResolveSourceParams) (*ResolvedSource, error
 	}, nil
 }
 
+// ListDeclaredSources returns every source declared across vendorFile (--file override, else
+// ./vendor.yaml, following imports) -- for callers that filter across a whole manifest by a
+// declared field (e.g. tags), rather than resolving one named component the way
+// ResolveComponentSource does. The returned bool mirrors VendorFilePresent: false means no vendor
+// manifest exists at all (not an error -- --tags-based selection over a component.yaml-only repo,
+// like `atmos vendor pull --tags`, simply has nothing to match against).
+func ListDeclaredSources(vendorFile string) ([]schema.AtmosVendorSource, bool, error) {
+	defer perf.Track(nil, "vendoring.ListDeclaredSources")()
+
+	resolved, ok := VendorFilePresent(vendorFile)
+	if !ok {
+		return nil, false, nil
+	}
+
+	files, err := CollectManifestFiles(resolved)
+	if err != nil {
+		return nil, true, err
+	}
+
+	var sources []schema.AtmosVendorSource
+	for _, file := range files {
+		fileSources, err := readVendorSources(file)
+		if err != nil {
+			return nil, true, err
+		}
+		sources = append(sources, fileSources...)
+	}
+	return sources, true, nil
+}
+
 // VendorFilePresent reports whether a vendor manifest is available: override if non-empty,
 // otherwise the location configured via atmos.yaml (vendor.base_path, falling back to
 // <BasePath>/vendor.yaml), matching `atmos vendor pull`'s existing resolution

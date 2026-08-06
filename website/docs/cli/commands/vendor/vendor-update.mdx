@@ -19,7 +19,7 @@ anchors, and Go templates such as `{{.Version}}` in source URLs.
 ## Usage
 
 ```shell
-atmos vendor update [--check] [--pull] [--pull-request] [--group <name>] [--component <name>]... [--tags <a,b>] [--outdated] [--component-manifests]
+atmos vendor update [--check] [--pull] [--pull-request] [--group <name>] [--component <name>]... [--tags <a,b>] [--stack <stack>] [--labels <k>=<v>] [--outdated] [--component-manifests]
 ```
 
 Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
@@ -53,6 +53,13 @@ atmos vendor update --pull
 atmos vendor update --component vpc
 atmos vendor update --component vpc --component eks
 atmos vendor update --tags networking,aws
+
+# Update every component belonging to a stack, or matching stack metadata.labels.
+# --stack/--labels resolve a component set (like `vendor pull --stack/--labels`); --tags
+# instead filters vendor.yaml's own declared source tags -- the two aren't combinable.
+atmos vendor update --stack dev-us-west-2
+atmos vendor update --labels tier=1
+atmos vendor update --stack dev-us-west-2 --labels tier=1
 
 # Show only sources with an available update.
 atmos vendor update --check --outdated
@@ -100,7 +107,11 @@ sources:
   <dt>`--component` / `-c` (string, repeatable)</dt>
   <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Update only components carrying any of these comma-separated tags.</dd>
+  <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags (a manifest concept -- see `--labels` for the component-level equivalent). Cannot be combined with `--stack`/`--labels`.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Update only components belonging to the specified stack. Composes with `--labels` to narrow further. Cannot be combined with an explicit `--component` or with `--tags`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Cannot be combined with an explicit `--component` or with `--tags`.</dd>
   <dt>`--group` (string)</dt>
   <dd>Update only the named `vendor.update.groups` selection.</dd>
   <dt>`--pull-request`</dt>

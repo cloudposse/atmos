@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/vendoring"
@@ -46,6 +47,49 @@ func (l *componentUpdaterLister) ListTags(context.Context, string) ([]string, er
 func TestNormalizeComponentSelectors(t *testing.T) {
 	assert.Nil(t, normalizeComponentSelectors(nil))
 	assert.Equal(t, []string{"vpc", "eks"}, normalizeComponentSelectors([]string{" vpc ", "[]", "", "eks"}))
+}
+
+// TestValidateUpdateSelectorFlags proves --stack/--labels reject combining with an explicitly
+// passed --component or with --tags (two distinct selector universes -- see the shared
+// resolveVendorSelectorComponents/vendorSelectorGroupCount doc comments), while allowing --stack or
+// --labels alone, or together with each other.
+func TestValidateUpdateSelectorFlags(t *testing.T) {
+	newCmd := func(componentChanged bool) *cobra.Command {
+		c := &cobra.Command{Use: "update"}
+		c.Flags().StringSlice("component", nil, "")
+		if componentChanged {
+			require.NoError(t, c.Flags().Set("component", "vpc"))
+		}
+		return c
+	}
+
+	t.Run("no stack or labels is always valid, even with --component or --tags", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(true), "", nil, []string{"networking"}))
+	})
+
+	t.Run("stack alone is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", nil, nil))
+	})
+
+	t.Run("labels alone is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "", map[string]string{"tier": "1"}, nil))
+	})
+
+	t.Run("stack and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", map[string]string{"tier": "1"}, nil))
+	})
+
+	t.Run("explicitly passed --component together with stack/labels is rejected", func(t *testing.T) {
+		err := validateUpdateSelectorFlags(newCmd(true), "dev", nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	})
+
+	t.Run("--tags together with stack/labels is rejected", func(t *testing.T) {
+		err := validateUpdateSelectorFlags(newCmd(false), "dev", nil, []string{"networking"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	})
 }
 
 func TestRunVendorUpdateDoesNotWidenEmptyGroupSelection(t *testing.T) {

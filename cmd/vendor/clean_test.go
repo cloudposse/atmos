@@ -25,6 +25,9 @@ import (
 func newVendorCleanTestCmd() *cobra.Command {
 	c := &cobra.Command{Use: "clean"}
 	c.Flags().StringP("component", "c", "", "")
+	c.Flags().String("tags", "", "")
+	c.Flags().StringP("stack", "s", "", "")
+	c.Flags().String("labels", "", "")
 	c.Flags().Bool("force", false, "")
 	c.Flags().Bool("dry-run", false, "")
 	c.Flags().String("base-path", "", "")
@@ -185,6 +188,77 @@ func TestVendorCleanCmd_ComponentFilterScopesRemoval(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, loaded.Artifacts, "artifact-first")
 	assert.Contains(t, loaded.Artifacts, "artifact-second")
+}
+
+// TestVendorCleanCmd_TagsFilterScopesRemoval proves --tags (vendor.yaml's own declared source
+// tags, matches any) resolves to the matching component name(s) and scopes removal the same way
+// --component does, leaving an untagged sibling artifact untouched.
+func TestVendorCleanCmd_TagsFilterScopesRemoval(t *testing.T) {
+	root := t.TempDir()
+	chdirTest(t, root)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+    - component: second
+      source: oci://ghcr.io/cloudposse/mock-second:{{.Version}}
+      version: v0.1.0
+      targets: ["vendor-second"]
+`), 0o644))
+
+	firstDir := filepath.Join(root, "vendor-first")
+	secondDir := filepath.Join(root, "vendor-second")
+	require.NoError(t, os.MkdirAll(firstDir, 0o755))
+	require.NoError(t, os.MkdirAll(secondDir, 0o755))
+	firstFile := filepath.Join(firstDir, "owned.txt")
+	secondFile := filepath.Join(secondDir, "owned.txt")
+	require.NoError(t, os.WriteFile(firstFile, []byte("first"), 0o644))
+	require.NoError(t, os.WriteFile(secondFile, []byte("second"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	firstFiles, err := lockfile.Inventory(firstDir)
+	require.NoError(t, err)
+	secondFiles, err := lockfile.Inventory(secondDir)
+	require.NoError(t, err)
+
+	lock := lockfile.New()
+	lock.Artifacts["artifact-first"] = lockfile.Artifact{Name: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
+	lock.Artifacts["artifact-second"] = lockfile.Artifact{Name: "second", Kind: "source", Target: "vendor-second", Files: secondFiles}
+	require.NoError(t, lockfile.Save(config, lock))
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+	err = vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, firstFile, "the tag-matched component's file must be removed")
+	assert.FileExists(t, secondFile, "an untagged component's file must be left alone")
+}
+
+// TestVendorCleanCmd_UnmatchedStackErrors proves --stack matching no components is a hard error,
+// not a silent fall-through to cleaning everything.
+func TestVendorCleanCmd_UnmatchedStackErrors(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	chdirTest(t, root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "does-not-exist"))
+
+	err := vendorCleanCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
 }
 
 // TestVendorCleanCmd_NoLockOwnedFilesIsANoop proves an empty/absent lock produces neither an

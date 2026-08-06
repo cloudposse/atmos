@@ -23,6 +23,9 @@ import (
 func newVendorVerifyTestCmd() *cobra.Command {
 	c := &cobra.Command{Use: "verify"}
 	c.Flags().StringP("component", "c", "", "")
+	c.Flags().String("tags", "", "")
+	c.Flags().StringP("stack", "s", "", "")
+	c.Flags().String("labels", "", "")
 	c.Flags().String("format", "table", "")
 	c.Flags().String("base-path", "", "")
 	c.Flags().StringSlice("config", nil, "")
@@ -150,6 +153,62 @@ func TestVendorVerifyCmd_ComponentFilterScopesResults(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "1")
+	output := plainOutput(stderr.String())
+	assert.Contains(t, output, "first")
+	assert.NotContains(t, output, "second")
+}
+
+// TestVendorVerifyCmd_TagsFilterScopesResults proves --tags (vendor.yaml's own declared source
+// tags, matches any) resolves to the matching component name(s) and scopes drift reporting the
+// same way --component does.
+func TestVendorVerifyCmd_TagsFilterScopesResults(t *testing.T) {
+	root := t.TempDir()
+	chdirTest(t, root)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+    - component: second
+      source: oci://ghcr.io/cloudposse/mock-second:{{.Version}}
+      version: v0.1.0
+      targets: ["vendor-second"]
+`), 0o644))
+
+	firstDir := filepath.Join(root, "vendor-first")
+	secondDir := filepath.Join(root, "vendor-second")
+	require.NoError(t, os.MkdirAll(firstDir, 0o755))
+	require.NoError(t, os.MkdirAll(secondDir, 0o755))
+	firstFile := filepath.Join(firstDir, "owned.txt")
+	secondFile := filepath.Join(secondDir, "owned.txt")
+	require.NoError(t, os.WriteFile(firstFile, []byte("first"), 0o644))
+	require.NoError(t, os.WriteFile(secondFile, []byte("second"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	firstFiles, err := lockfile.Inventory(firstDir)
+	require.NoError(t, err)
+	secondFiles, err := lockfile.Inventory(secondDir)
+	require.NoError(t, err)
+
+	lock := lockfile.New()
+	lock.Artifacts["artifact-first"] = lockfile.Artifact{Name: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
+	lock.Artifacts["artifact-second"] = lockfile.Artifact{Name: "second", Kind: "source", Target: "vendor-second", Files: secondFiles}
+	require.NoError(t, lockfile.Save(config, lock))
+
+	require.NoError(t, os.WriteFile(firstFile, []byte("tampered"), 0o644))
+	require.NoError(t, os.WriteFile(secondFile, []byte("tampered"), 0o644))
+
+	stderr := setupVendorUICapture(t)
+	cmd := newVendorVerifyTestCmd()
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+	err = vendorVerifyCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
 	output := plainOutput(stderr.String())
 	assert.Contains(t, output, "first")
 	assert.NotContains(t, output, "second")

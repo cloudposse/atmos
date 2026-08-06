@@ -434,6 +434,29 @@ spec:
 		"vendor update --check must honor atmos.yaml's vendor.base_path instead of only checking cwd")
 }
 
+// TestVendorUpdateCommand_UnknownStackErrors proves --stack matching no components is a hard
+// error, not a silent fall-through to a repo-wide update -- the same "selector given but matched
+// nothing must never be indistinguishable from no selector at all" bug class fixed for
+// clean/verify/diff (see resolveVendorSelectorComponents' doc comment).
+func TestVendorUpdateCommand_UnknownStackErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	chdirTest(t, tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("stack", "does-not-exist"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
 // writeComponentManifestFixture writes a "vpc" component.yaml pinned at v0.1.0 under
 // <base>/vpc/component.yaml and points ATMOS_COMPONENTS_TERRAFORM_BASE_PATH at base, so
 // DefaultComponentDirResolver resolves it without needing a real atmos.yaml.
@@ -514,6 +537,66 @@ func TestVendorDiffCommand_NeitherManifestExists(t *testing.T) {
 
 	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
 	require.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
+}
+
+// TestVendorDiffCommand_NoSelectorGiven proves --component/--tags/--stack/--labels all being unset
+// is rejected up front (a selector is required for diff, unlike clean/verify which default to
+// "everything").
+func TestVendorDiffCommand_NoSelectorGiven(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorDiffCommand_ComponentAndTagsRejected proves --component and --tags are mutually
+// exclusive selectors.
+func TestVendorDiffCommand_ComponentAndTagsRejected(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	require.NoError(t, vendorDiffCmd.Flags().Set("component", "vpc"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorDiffCommand_TagsSelectorBatchMode proves --tags resolving more than one component
+// diffs every one of them (batch mode) instead of stopping at the first failure: both "eks" and
+// "vpc" declare a non-Git oci:// source (an immediate, deterministic ErrVendorSourceNotGit with no
+// network access), and both names must appear in the joined error, proving diffManyComponents
+// actually attempted both rather than short-circuiting.
+func TestVendorDiffCommand_TagsSelectorBatchMode(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	chdirTest(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/eks"]
+`), 0o644))
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "eks")
+	assert.Contains(t, err.Error(), "vpc")
 }
 
 func TestVendorUpdateCommand_ComponentManifestFallback(t *testing.T) {

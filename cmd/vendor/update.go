@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -17,6 +18,8 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	// Aliased: this file already has a local "tags" variable (the --tags flag's parsed value).
+	pkgtags "github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
@@ -55,13 +58,61 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		// the literal "[]" in a few embedded-command test paths. Treat that
 		// representation as the empty selector users intended.
 		components = normalizeComponentSelectors(components)
+		componentType := v.GetString("type")
+		tags := splitTags(v.GetString("tags"))
+		typeChanged := cmd.Flags().Changed("type")
+
+		stack := v.GetString("stack")
+		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		if labelsErr != nil {
+			return labelsErr
+		}
+		if err := validateUpdateSelectorFlags(cmd, stack, labels, tags); err != nil {
+			return err
+		}
+		if stack != "" || len(labels) > 0 {
+			atmosConfig, cfgErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			if cfgErr != nil {
+				return cfgErr
+			}
+			resolved, resolveErr := resolveVendorStackLabelsSelector(&atmosConfig, stack, labels, componentType, typeChanged)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			if len(resolved) == 0 {
+				// A --stack/--labels selector was explicitly given but matched nothing (e.g. an
+				// unknown stack name). Falling through with an empty components would be
+				// indistinguishable from "no selector given", silently widening to a repo-wide
+				// update instead of reporting no match.
+				return errUtils.Build(errUtils.ErrInvalidArgumentError).
+					WithExplanation("No components matched the given --stack/--labels selector.").
+					Err()
+			}
+			components = resolved
+
+			// Normalize cmd's own flag state so every downstream reader (the --pull delegation to
+			// ExecuteVendorPullCmd in particular, which reuses this same cmd/FlagSet and was built
+			// around --component) sees --stack/--labels' resolution the same way it would see an
+			// equivalent --component list, without needing to know --stack/--labels exist. Mirrors
+			// pullUpdatedComponent's own flag-normalization approach below.
+			if err := resetUnchangedFlag(cmd, "stack"); err != nil {
+				return err
+			}
+			if err := resetUnchangedFlag(cmd, "labels"); err != nil {
+				return err
+			}
+			if sliceValue, ok := cmd.Flags().Lookup("component").Value.(pflag.SliceValue); ok {
+				if err := sliceValue.Replace(components); err != nil {
+					return err
+				}
+				cmd.Flags().Lookup("component").Changed = len(components) > 0
+			}
+		}
+
 		component := ""
 		if len(components) == 1 {
 			component = components[0]
 		}
-		componentType := v.GetString("type")
-		tags := splitTags(v.GetString("tags"))
-		typeChanged := cmd.Flags().Changed("type")
 		pullRequest := v.GetBool("pull-request")
 		all := v.GetBool("all")
 		group := v.GetString("group")
@@ -280,7 +331,9 @@ func init() {
 	vendorUpdateParser = flags.NewStandardParser(
 		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
-		flags.WithStringFlag("tags", "", "", "Update only components with any of these comma-separated tags"),
+		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
+		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
 		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),

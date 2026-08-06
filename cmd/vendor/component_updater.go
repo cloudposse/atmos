@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -92,6 +93,32 @@ func normalizeComponentSelectors(components []string) []string {
 		}
 	}
 	return result
+}
+
+// validateUpdateSelectorFlags rejects combinations across vendor update's four selector concepts:
+// --component (an explicit name list), --stack/--labels (both resolve a stack-declared component
+// set via ResolveVendorComponentSelector), and --tags (vendor.yaml's own declared source tags, a
+// distinct manifest concept -- see the same rationale documented on
+// internal/exec.ErrValidateTagsLabelsFlag). --stack and --labels compose with each other (--labels
+// narrows further within --stack), but neither composes with --component or --tags.
+func validateUpdateSelectorFlags(cmd *cobra.Command, stack string, labels map[string]string, sourceTags []string) error {
+	hasStackOrLabels := stack != "" || len(labels) > 0
+	if !hasStackOrLabels {
+		return nil
+	}
+	if cmd.Flags().Changed("component") {
+		return errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("--component cannot be combined with --stack or --labels.").
+			WithHint("--stack/--labels already resolve a set of components; pass just one selector.").
+			Err()
+	}
+	if len(sourceTags) > 0 {
+		return errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("--tags cannot be combined with --stack or --labels.").
+			WithHint("--tags filters vendor.yaml's own declared source tags; --stack/--labels filter stack-resolved component metadata.labels. Pass just one selector.").
+			Err()
+	}
+	return nil
 }
 
 // validateUpdateInvocation extracts the viper/cobra values validation needs into

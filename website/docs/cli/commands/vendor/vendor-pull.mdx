@@ -38,6 +38,7 @@ atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 atmos vendor pull --tags <tag1>,<tag2> [options]
 atmos vendor pull --stack <stack> [options]
+atmos vendor pull --labels <key1>=<value1>,<key2>=<value2> [options]
 ```
 
 ## Description
@@ -290,12 +291,33 @@ atmos vendor pull --stack dev-us-west-2 --dry-run
 
 Components in the stack without their own `component.yaml` are silently skipped -- not every component in a stack has to vendor this way.
 
+### Pull by Labels
+
+`--tags` and `--labels` filter two different things. `--tags` filters the tags declared directly on
+each `vendor.yaml` source (a manifest concept). `--labels` filters by each component's stack
+`metadata.labels` (a component concept) -- the same resolution `--stack` performs, and it composes
+with `--stack` to narrow further:
+
+```shell
+# Vendor every component (across all stacks) whose metadata.labels match
+atmos vendor pull --labels tier=1
+
+# Combine with --stack to narrow to one stack's matching components
+atmos vendor pull --stack dev-us-west-2 --labels tier=1
+
+# Either "=" or ":" works as the key/value separator
+atmos vendor pull --labels tier:1,cost-center:platform
+```
+
+`--labels` cannot be combined with `--component` or `--tags`.
+
 :::note
 
 When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
 
-- If `--stack` is specified, Atmos vendors every component declared in that stack that has its own `component.yaml`, regardless of whether a
-  `vendor.yaml` also exists. `--stack` cannot be combined with `--component`.
+- If `--stack` and/or `--labels` is specified, Atmos vendors every resolved component (declared in the given stack, and/or matching the given
+  `metadata.labels` across all stacks) that has its own `component.yaml`, regardless of whether a `vendor.yaml` also exists. Neither flag can be
+  combined with `--component`, and `--labels` cannot be combined with `--tags` (they filter different things -- see [Pull by Labels](#pull-by-labels)).
 
 - Otherwise, if `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the
   command against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
@@ -313,13 +335,16 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
   <dd>Atmos component to pull.</dd>
 
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
-  <dd>Only vendor components belonging to the specified stack. Vendors every component in the stack that has its own `component.yaml`, bypassing `vendor.yaml`. Cannot be combined with `--component`.</dd>
+  <dd>Only vendor components belonging to the specified stack. Vendors every resolved component that has its own `component.yaml`, bypassing `vendor.yaml`. Cannot be combined with `--component`. Composes with `--labels` to narrow further.</dd>
 
   <dt>`--everything` <em>(optional)</em></dt>
   <dd>Vendor all components.</dd>
 
   <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string.</dd>
+  <dd>Only vendor the components whose `vendor.yaml` source declares any of the specified tags (a manifest concept -- see `--labels` for the component-level equivalent).<br/>`tags` is a comma-separated values (CSV) string.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). Comma-separated `key=value` or `key:value` pairs, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component` or `--tags`; composes with `--stack`.</dd>
 
   <dt>`--type` / `-t` <em>(optional)</em></dt>
   <dd>Component type: `terraform` or `helmfile` (`terraform` is default).</dd>

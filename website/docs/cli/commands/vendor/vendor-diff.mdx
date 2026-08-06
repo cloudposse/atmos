@@ -20,6 +20,8 @@ new version.
 
 ```shell
 atmos vendor diff --component <name> [--type <type>] [--from <ref>] [--to <ref>] [--diff-file <path>]
+atmos vendor diff --tags <tag1>,<tag2> [options]
+atmos vendor diff --stack <stack> [--labels <key>=<value>] [options]
 ```
 
 `--from` defaults to the component's current pinned version and `--to` defaults to the
@@ -32,6 +34,13 @@ back to the component's own `component.yaml`/`component.yml` manifest (found und
 <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s existing precedence:
 `vendor.yaml` wins whenever it declares the component.
 
+Exactly one selector is required: `--component` for a single target, `--tags` for every
+component whose `vendor.yaml` source declares any of the given tags, or `--stack`/`--labels`
+for every component resolved from a stack (composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). When a
+selector resolves to more than one component, every match is diffed in turn under its own
+`## <component>` heading; a per-component failure doesn't stop the rest.
+
 ## Examples
 
 ```shell
@@ -43,23 +52,36 @@ atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
 
 # Restrict the diff to a single file.
 atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+
+# Diff every component whose vendor.yaml source declares a given tag.
+atmos vendor diff --tags networking
+
+# Diff every component in a stack, or matching stack metadata.labels.
+atmos vendor diff --stack dev-us-west-2
+atmos vendor diff --labels tier=1
 ```
 
 ## Flags
 
 <dl>
-  <dt>`--component` / `-c` (string, required)</dt>
-  <dd>The component to diff.</dd>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>The component to diff. Mutually exclusive with `--tags` and `--stack`/`--labels`.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Diff every component whose `vendor.yaml` source declares any of these comma-separated tags (matches any). Mutually exclusive with `--component` and `--stack`/`--labels`.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Diff every component belonging to the specified stack. Composes with `--labels` to narrow further. Mutually exclusive with `--component` and `--tags`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack`. Mutually exclusive with `--component` and `--tags`.</dd>
   <dt>`--from` (string)</dt>
-  <dd>Starting ref (tag, branch, or commit). Defaults to the current pinned version.</dd>
+  <dd>Starting ref (tag, branch, or commit). Defaults to each component's current pinned version.</dd>
   <dt>`--to` (string)</dt>
   <dd>Ending ref. Defaults to the latest tag.</dd>
   <dt>`--diff-file` (string)</dt>
   <dd>Restrict the diff to a single file path within the component.</dd>
   <dt>`--type` / `-t` (string, default `terraform`)</dt>
-  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`.</dd>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`, and to scope a `--stack`/`--labels` selection.</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
-  <dd>The vendor manifest to read the component's source from (imports are followed).</dd>
+  <dd>The vendor manifest to read sources from (imports are followed).</dd>
 </dl>
 
 :::note

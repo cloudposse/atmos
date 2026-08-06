@@ -199,11 +199,14 @@ func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 	return errors.Join(errs...)
 }
 
-// handleStackVendor implements "atmos vendor pull --stack <stack>": vendors every component
-// declared in the stack that has its own component.yaml, regardless of whether the repo also has
-// a vendor.yaml (--stack bypasses vendor.yaml entirely -- see handleVendorConfig). Many repos
-// vendor purely through per-component component.yaml manifests declared under the components a
-// stack references, with no repo-wide vendor.yaml at all.
+// handleStackVendor implements "atmos vendor pull --stack <stack>" and/or "atmos vendor pull
+// --labels <labels>": vendors every component declared in the stack (or, with --labels and no
+// --stack, across all stacks) that has its own component.yaml, regardless of whether the repo also
+// has a vendor.yaml (this path bypasses vendor.yaml entirely -- see handleVendorConfig). --labels
+// composes with --stack as a further narrowing (both resolve the same stack-declared component
+// set; --labels just filters it by metadata.labels). Many repos vendor purely through
+// per-component component.yaml manifests declared under the components a stack references, with
+// no repo-wide vendor.yaml at all.
 func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
 	defer perf.Track(atmosConfig, "exec.handleStackVendor")()
 
@@ -212,11 +215,29 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 		componentTypes = []string{flg.ComponentType}
 	}
 
-	stacksMap, err := ExecuteDescribeStacks(atmosConfig, flg.Stack, nil, componentTypes, nil, false, false, false, false, nil, nil)
+	// Labels scope the describe pass itself (the early-skip perf optimization
+	// ExecuteDescribeStacksScoped shares with `list components --labels`), so an out-of-scope
+	// stack never evaluates just to be filtered out afterward.
+	stacksMap, err := ExecuteDescribeStacksScoped(
+		atmosConfig, flg.Stack, nil, componentTypes, nil,
+		false, // ignoreMissingFiles
+		false, // processTemplates
+		false, // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+		true,  // authDisabled
+		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
+		flg.Labels,
+		DescribeStacksErrorOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to describe stack %q: %w", flg.Stack, err)
 	}
 	if len(stacksMap) == 0 {
+		if flg.Stack == "" {
+			return fmt.Errorf("%w: no stacks have components matching the given labels", errUtils.ErrStackNotFound)
+		}
 		return fmt.Errorf("%w: stack %q not found or has no components", errUtils.ErrStackNotFound, flg.Stack)
 	}
 
@@ -363,4 +384,66 @@ func componentHasVendorManifest(atmosConfig *schema.AtmosConfiguration, componen
 		return false, err
 	}
 	return true, nil
+}
+
+// ResolveVendorComponentSelector resolves --stack/--labels into a flat, deduped, sorted list of
+// component names across componentTypes. An empty stack scopes across all stacks. Reuses
+// ExecuteDescribeStacksScoped's own labelsFilter scoping (the same mechanism `list components
+// --labels` already uses) so a --labels filter never forces evaluating out-of-scope stacks.
+//
+// Unlike resolveStackVendorComponents (pull's --stack path), this does not group results by
+// component type and does not require a component.yaml to exist -- `vendor update`, `vendor diff`,
+// `vendor clean`, and `vendor verify` all key off vendor.yaml Sources[].Component by name, not by
+// component type or per-component manifest presence.
+func ResolveVendorComponentSelector(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	labels map[string]string,
+	componentTypes []string,
+) ([]string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveVendorComponentSelector")()
+
+	stacksMap, err := ExecuteDescribeStacksScoped(
+		atmosConfig, stack, nil, componentTypes, nil,
+		false, // ignoreMissingFiles
+		false, // processTemplates
+		false, // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+		true,  // authDisabled
+		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
+		labels,
+		DescribeStacksErrorOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe stacks: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	var names []string
+
+	for _, stackSection := range stacksMap {
+		componentsSection, ok := stackComponentsSection(stackSection)
+		if !ok {
+			continue
+		}
+		for _, componentType := range componentTypes {
+			typeComponents, ok := componentsSection[componentType].(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, name := range FilterAbstractComponents(typeComponents) {
+				resolved := resolveVendorComponentName(name, typeComponents[name])
+				if seen[resolved] {
+					continue
+				}
+				seen[resolved] = true
+				names = append(names, resolved)
+			}
+		}
+	}
+
+	sort.Strings(names)
+	return names, nil
 }

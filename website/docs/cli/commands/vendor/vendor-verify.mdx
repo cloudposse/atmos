@@ -16,13 +16,19 @@ non-zero when any drift is found, for use in CI.
 ## Usage
 
 ```shell
-atmos vendor verify [--component <name>] [--format table|json]
+atmos vendor verify [--component <name> | --tags <a,b> | --stack <stack> [--labels <k>=<v>]] [--format table|json]
 ```
 
 This never checks for a newer version upstream — see
 <a href="/cli/commands/vendor/update">`atmos vendor update --check`</a> for that. The `vendor
 verify` command is purely a read-only, on-disk integrity check against what's already recorded in
 the lock file: it never fetches, writes, or modifies anything.
+
+At most one selector may be given: `--component`, `--tags` (vendor.yaml's own declared source
+tags), or `--stack`/`--labels` (a stack-resolved component set, composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). Omit every
+selector to verify everything. A selector that matches nothing is an error, not a silent
+"verify everything" fallback.
 
 ## Examples
 
@@ -33,6 +39,13 @@ atmos vendor verify
 # Verify only one component.
 atmos vendor verify --component vpc
 
+# Verify every component whose vendor.yaml source declares a given tag.
+atmos vendor verify --tags networking
+
+# Verify every component in a stack, or matching stack metadata.labels.
+atmos vendor verify --stack dev-us-west-2
+atmos vendor verify --labels tier=1
+
 # Machine-readable output for CI.
 atmos vendor verify --format json
 ```
@@ -41,7 +54,13 @@ atmos vendor verify --format json
 
 <dl>
   <dt>`--component` / `-c` (string)</dt>
-  <dd>Verify only this component. Omit to verify every artifact recorded in the lock file.</dd>
+  <dd>Verify only this component. Mutually exclusive with `--tags` and `--stack`/`--labels`. Omit every selector to verify every artifact recorded in the lock file.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Verify only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). Mutually exclusive with `--component` and `--stack`/`--labels`.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Verify only components belonging to the specified stack. Composes with `--labels` to narrow further. Mutually exclusive with `--component` and `--tags`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Verify only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack`. Mutually exclusive with `--component` and `--tags`.</dd>
   <dt>`--format` (string, default `table`)</dt>
   <dd>Output format: `table` or `json`.</dd>
 </dl>

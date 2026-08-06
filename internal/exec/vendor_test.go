@@ -290,6 +290,74 @@ func TestValidateVendorFlags_Stack(t *testing.T) {
 	})
 }
 
+// TestValidateVendorFlags_Labels proves validateVendorFlags rejects --labels combined with
+// --component, --tags, or --everything (mirroring --stack's own exclusivity rules), while allowing
+// --labels on its own and together with --stack (both resolve the same stack-declared component set
+// -- --labels narrows it further, not a separate mode).
+func TestValidateVendorFlags_Labels(t *testing.T) {
+	t.Run("labels alone is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Labels: map[string]string{"tier": "1"}}))
+	})
+
+	t.Run("stack and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Labels: map[string]string{"tier": "1"}}))
+	})
+
+	t.Run("component and labels together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Component: "vpc", Labels: map[string]string{"tier": "1"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateComponentLabelsFlag)
+	})
+
+	t.Run("tags and labels together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Tags: []string{"networking"}, Labels: map[string]string{"tier": "1"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateTagsLabelsFlag)
+	})
+
+	t.Run("everything and labels together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Everything: true, Labels: map[string]string{"tier": "1"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateEverythingFlag)
+	})
+}
+
+// TestParseOptionalLabelsFlag proves parseOptionalLabelsFlag reads --labels when the calling
+// command registers it, defaults to nil without erroring when the flag isn't registered at all
+// ('vendor update --pull' delegates to parseVendorFlags with a FlagSet that doesn't define
+// "labels"), and propagates a malformed value's parse error.
+func TestParseOptionalLabelsFlag(t *testing.T) {
+	t.Run("labels flag set is read", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+		flags.String("labels", "", "")
+		require.NoError(t, flags.Set("labels", "tier=1,cost-center:platform"))
+
+		labels, err := parseOptionalLabelsFlag(flags)
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"tier": "1", "cost-center": "platform"}, labels)
+	})
+
+	t.Run("labels flag not registered at all does not error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+
+		labels, err := parseOptionalLabelsFlag(flags)
+
+		require.NoError(t, err)
+		assert.Nil(t, labels)
+	})
+
+	t.Run("malformed labels value propagates a parse error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+		flags.String("labels", "", "")
+		require.NoError(t, flags.Set("labels", "not-a-pair"))
+
+		_, err := parseOptionalLabelsFlag(flags)
+
+		require.Error(t, err)
+	})
+}
+
 // TestSetDefaultEverythingFlag_Stack proves --stack alone (like --component and --tags) suppresses
 // the "no flags given" default that otherwise sets Everything to true.
 func TestSetDefaultEverythingFlag_Stack(t *testing.T) {
