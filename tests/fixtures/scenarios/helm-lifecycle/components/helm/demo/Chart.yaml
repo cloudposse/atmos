@@ -4,3 +4,7 @@ description: A minimal local Helm chart used by the Atmos native Helm component 
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+dependencies:
+  - name: helm-test-library
+    version: 0.1.0
+    repository: file://../helm-test-library

@@ -3,25 +3,6 @@ replicaCount: 1
 image:
   repository: nginx
   tag: "latest"
-jobImage:
-  repository: busybox
-  tag: "1.36.1"
 service:
   type: ClusterIP
   port: 80
-deployment:
-  readinessDelaySeconds: 0
-  readinessGate: false
-job:
-  enabled: false
-  sleepSeconds: 0
-hooks:
-  enabled: true
-  fail: false
-  requiredDeployment: ""
-  validateDependency: false
-extraConfigMap:
-  enabled: false
-tpl:
-  source: default
-  expression: "{{ .Values.tpl.source }}"
