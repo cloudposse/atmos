@@ -10,17 +10,17 @@ every dependency reference to a command name down to the SAME already-registered
 `*cobra.Command` object and mutating its shared, live state with no isolation between dispatches:
 
 1. **Data race**: concurrent dispatches of differently-flagged references to the same command
-   (e.g. `dependencies.commands: [{name: build, flags: {env: dev}}, {name: build, flags: {env:
-   prod}}]`, taskgraph's default concurrency) raced on that one shared `PersistentFlags`/context/
-   annotations with no synchronization.
+    (e.g. `dependencies.commands: [{name: build, flags: {env: dev}}, {name: build, flags: {env:
+    prod}}]`, taskgraph's default concurrency) raced on that one shared `PersistentFlags`/context/
+    annotations with no synchronization.
 2. **Deterministic flag leakage**: even fully serialized, a reference with NO flag override
-   silently inherited whatever value a PRIOR dispatch (sharing the same command) had last `Set()`
-   -- never reset to the flag's own declared default. Reproduced 100% of the time, in either
-   dispatch order, once the race above was fixed.
+    silently inherited whatever value a PRIOR dispatch (sharing the same command) had last `Set()`
+    -- never reset to the flag's own declared default. Reproduced 100% of the time, in either
+    dispatch order, once the race above was fixed.
 3. **Hard process exit inside a single dependency's execution**: any step failure inside a
-   dependency's own run called `errUtils.CheckErrorPrintAndExit` -> `os.Exit`, killing the whole
-   process before control ever returned to `taskgraph.Run`, making its `fail:` mode handling
-   (`wait_all`/`fail_fast`/`best_effort`) completely unreachable regardless of what was declared.
+    dependency's own run called `errUtils.CheckErrorPrintAndExit` -> `os.Exit`, killing the whole
+    process before control ever returned to `taskgraph.Run`, making its `fail:` mode handling
+    (`wait_all`/`fail_fast`/`best_effort`) completely unreachable regardless of what was declared.
 
 ## Context
 
