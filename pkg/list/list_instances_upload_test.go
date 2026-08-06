@@ -6,6 +6,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -349,5 +350,55 @@ func TestUploadInstancesWithDeps_EmptyInstances(t *testing.T) {
 
 	err := uploadInstancesWithDeps(instances, mockGit, mockConfig, mockClientFactory)
 
+	assert.NoError(t, err)
+}
+
+// TestUploadInstancesWithDeps_MetadataDisabledProDebugLog exercises the metadataDisabledPro
+// debug-log branch: when a component's top-level `pro:` section would otherwise be enabled but
+// `metadata.enabled: false` overrides it, the upload payload must reflect the resolved
+// (metadata-squashed) disabled state, not the raw pro.enabled value.
+func TestUploadInstancesWithDeps_MetadataDisabledProDebugLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockGit := pkgGit.NewMockRepositoryOperations(ctrl)
+	mockConfig := pkgCfg.NewMockLoader(ctrl)
+	mockClientFactory := pro.NewMockClientFactory(ctrl)
+	mockAPIClient := pro.NewMockAPIClient(ctrl)
+
+	instances := []schema.Instance{
+		{
+			Component: "vpc",
+			Stack:     "dev",
+			Pro:       map[string]any{"enabled": true},
+			Metadata:  map[string]any{"enabled": false},
+		},
+	}
+
+	mockRepo := &git.Repository{}
+	repoInfo := pkgGit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+	atmosConfig := schema.AtmosConfiguration{}
+
+	mockGit.EXPECT().GetLocalRepo().Return(mockRepo, nil)
+	mockGit.EXPECT().GetRepoInfo(mockRepo).Return(repoInfo, nil)
+	mockConfig.EXPECT().InitCliConfig(gomock.Any(), false).Return(atmosConfig, nil)
+	mockClientFactory.EXPECT().NewClient(&atmosConfig).Return(mockAPIClient, nil)
+	mockAPIClient.EXPECT().UploadInstances(gomock.Any()).
+		Do(func(req *dtos.InstancesUploadRequest) {
+			require.Len(t, req.Instances, 1)
+			vpcPro, ok := req.Instances[0].Settings["pro"].(map[string]any)
+			require.True(t, ok, "vpc.settings.pro must be a map")
+			// metadata.enabled: false must squash pro.enabled to false in the upload payload,
+			// even though the raw pro: section says true.
+			assert.Equal(t, false, vpcPro["enabled"], "metadata.enabled: false must override pro.enabled in the upload payload")
+		}).
+		Return(nil)
+
+	err := uploadInstancesWithDeps(instances, mockGit, mockConfig, mockClientFactory)
 	assert.NoError(t, err)
 }

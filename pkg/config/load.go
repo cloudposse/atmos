@@ -597,20 +597,38 @@ func resolveProSettings(atmosConfig *schema.AtmosConfiguration) {
 	warnProSettingsDeprecatedOnce()
 
 	pro := &atmosConfig.Pro
-	if pro.BaseURL == "" {
+	resolveProDefaultedURLFields(pro, &legacy)
+	resolveProScalarFields(pro, &legacy)
+	resolveProGithubOIDC(pro, &legacy)
+	resolveProGitSTS(pro, &legacy)
+}
+
+// resolveProDefaultedURLFields falls back BaseURL/Endpoint from the legacy `settings.pro` path.
+// These two fields default directly on the top-level `pro` struct (see setDefaultConfiguration),
+// so an untouched pro.BaseURL is never "" -- it already holds AtmosProDefaultBaseUrl. Treat that
+// default value the same as empty here, or an explicit settings.pro.base_url override would never
+// be able to win. Legacy's BaseURL/Endpoint have no default of their own (only pro.* does), so an
+// empty legacy value genuinely means "the user never set settings.pro.base_url" -- guard the
+// fallback on that, or an untouched legacy struct would blank out pro's perfectly good default the
+// moment any *other* legacy field (e.g. settings.pro.token) makes resolveProSettings proceed past
+// its early return.
+func resolveProDefaultedURLFields(pro, legacy *schema.ProSettings) {
+	if (pro.BaseURL == "" || pro.BaseURL == AtmosProDefaultBaseUrl) && legacy.BaseURL != "" {
 		pro.BaseURL = legacy.BaseURL
 	}
-	if pro.Endpoint == "" {
+	if (pro.Endpoint == "" || pro.Endpoint == AtmosProDefaultEndpoint) && legacy.Endpoint != "" {
 		pro.Endpoint = legacy.Endpoint
 	}
+}
+
+// resolveProScalarFields falls back the remaining scalar top-level `pro` fields (no default of
+// their own) from the legacy `settings.pro` path whenever the top level left them unset.
+func resolveProScalarFields(pro, legacy *schema.ProSettings) {
 	if pro.Token == "" {
 		pro.Token = legacy.Token
 	}
 	if pro.WorkspaceID == "" {
 		pro.WorkspaceID = legacy.WorkspaceID
-	}
-	if pro.GithubOIDC == (schema.GithubOIDCSettings{}) {
-		pro.GithubOIDC = legacy.GithubOIDC
 	}
 	if pro.MaxPayloadBytes == 0 {
 		pro.MaxPayloadBytes = legacy.MaxPayloadBytes
@@ -618,8 +636,27 @@ func resolveProSettings(atmosConfig *schema.AtmosConfiguration) {
 	if pro.GitHubHeadRef == "" {
 		pro.GitHubHeadRef = legacy.GitHubHeadRef
 	}
-	if pro.GitSTS == (schema.GitSTSSettings{}) {
-		pro.GitSTS = legacy.GitSTS
+}
+
+// resolveProGithubOIDC merges pro.GithubOIDC field-by-field, not as a whole struct: a
+// whole-struct comparison would drop a legacy sibling field (e.g. github_oidc.request_token) as
+// soon as any single field of the same sub-struct is set at the top level.
+func resolveProGithubOIDC(pro, legacy *schema.ProSettings) {
+	if pro.GithubOIDC.RequestURL == "" {
+		pro.GithubOIDC.RequestURL = legacy.GithubOIDC.RequestURL
+	}
+	if pro.GithubOIDC.RequestToken == "" {
+		pro.GithubOIDC.RequestToken = legacy.GithubOIDC.RequestToken
+	}
+}
+
+// resolveProGitSTS merges pro.GitSTS field-by-field for the same reason as resolveProGithubOIDC.
+func resolveProGitSTS(pro, legacy *schema.ProSettings) {
+	if pro.GitSTS.GitConfigMode == "" {
+		pro.GitSTS.GitConfigMode = legacy.GitSTS.GitConfigMode
+	}
+	if pro.GitSTS.RevokeOnExit == nil {
+		pro.GitSTS.RevokeOnExit = legacy.GitSTS.RevokeOnExit
 	}
 }
 
@@ -844,9 +881,13 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("cast.recording.height", 36)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
-	// Atmos Pro defaults
-	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
-	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)
+	// Atmos Pro defaults.
+	// Deliberately seeded under the top-level `pro` key, not the deprecated `settings.pro`
+	// alias: resolveProSettings treats a zero-value `Settings.Pro` as "the user never wrote
+	// settings.pro" to decide whether to emit the deprecation notice. Defaulting the legacy
+	// struct here would make it non-zero on every run, firing that notice unconditionally.
+	v.SetDefault("pro.base_url", AtmosProDefaultBaseUrl)
+	v.SetDefault("pro.endpoint", AtmosProDefaultEndpoint)
 }
 
 // loadConfigSources loads configuration from multiple sources in priority order,

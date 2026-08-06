@@ -61,6 +61,12 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 
 // TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
+	// Isolate the XDG cache root so this test's SaveCache/LoadCache round-trip of
+	// installationId can't be corrupted by any other test or concurrently-running
+	// process (including other worktree sessions) writing to the real, shared
+	// cache.yaml at the same time. See isolateTelemetryCache's doc comment.
+	isolateTelemetryCache(t)
+
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -108,6 +114,10 @@ func TestCaptureCmdString(t *testing.T) {
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
+	// Isolate the XDG cache root; see the comment in TestCaptureCmdString and
+	// isolateTelemetryCache's doc comment for why this is required here.
+	isolateTelemetryCache(t)
+
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 

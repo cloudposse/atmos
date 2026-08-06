@@ -302,6 +302,70 @@ func TestDependenciesSchemaComponents(t *testing.T) {
 	})
 }
 
+// TestBuildDependentEntry_Pro verifies that buildDependentEntry surfaces the component's
+// top-level `pro:` section on the returned Dependent only when IncludeSettings is requested,
+// mirroring how the sibling `settings:` section is included, and that a non-map `pro:` value
+// is silently skipped rather than propagated or treated as fatal.
+func TestBuildDependentEntry_Pro(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("pro is included when IncludeSettings is true and pro is a map", func(t *testing.T) {
+		args := &DescribeDependentsArgs{IncludeSettings: true}
+		entry := &dependencyIndexEntry{
+			StackComponentName: "vpc",
+			StackComponentType: "helmfile",
+			StackName:          "dev",
+			StackComponentMap: map[string]any{
+				cfg.ProSectionName: map[string]any{
+					"drift_detection": map[string]any{"enabled": true},
+				},
+			},
+			SettingsSection: map[string]any{},
+		}
+
+		dependent := buildDependentEntry(atmosConfig, args, entry)
+
+		require.NotNil(t, dependent.Pro)
+		driftDetection, ok := dependent.Pro["drift_detection"].(map[string]any)
+		require.True(t, ok, "dependent.Pro.drift_detection must be a map")
+		assert.Equal(t, true, driftDetection["enabled"])
+	})
+
+	t.Run("pro is omitted when IncludeSettings is false", func(t *testing.T) {
+		args := &DescribeDependentsArgs{IncludeSettings: false}
+		entry := &dependencyIndexEntry{
+			StackComponentName: "vpc",
+			StackComponentType: "helmfile",
+			StackName:          "dev",
+			StackComponentMap: map[string]any{
+				cfg.ProSectionName: map[string]any{"enabled": true},
+			},
+			SettingsSection: map[string]any{},
+		}
+
+		dependent := buildDependentEntry(atmosConfig, args, entry)
+
+		assert.Nil(t, dependent.Pro)
+	})
+
+	t.Run("a non-map pro section is silently skipped, not an error", func(t *testing.T) {
+		args := &DescribeDependentsArgs{IncludeSettings: true}
+		entry := &dependencyIndexEntry{
+			StackComponentName: "vpc",
+			StackComponentType: "helmfile",
+			StackName:          "dev",
+			StackComponentMap: map[string]any{
+				cfg.ProSectionName: "not-a-map",
+			},
+			SettingsSection: map[string]any{},
+		}
+
+		dependent := buildDependentEntry(atmosConfig, args, entry)
+
+		assert.Nil(t, dependent.Pro)
+	})
+}
+
 func TestNewDescribeDependentsExec(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 

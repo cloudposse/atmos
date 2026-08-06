@@ -524,6 +524,85 @@ func TestAppendToAffected(t *testing.T) {
 		assert.Equal(t, "value1", affectedList[0].Settings["setting1"])
 	})
 
+	t.Run("should include pro when requested and present", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{}
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "test-change",
+		}
+
+		componentSection := map[string]any{
+			"settings": map[string]any{},
+			"pro": map[string]any{
+				"drift_detection": map[string]any{"enabled": true},
+			},
+		}
+
+		// Execute with includeSettings = true
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			true,
+		)
+
+		// Verify
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		require.NotNil(t, affectedList[0].Pro)
+		driftDetection, ok := affectedList[0].Pro["drift_detection"].(map[string]any)
+		require.True(t, ok, "affected.Pro.drift_detection must be a map")
+		assert.Equal(t, true, driftDetection["enabled"])
+	})
+
+	t.Run("should not include pro when the section is not a map", func(t *testing.T) {
+		// Setup
+		atmosConfig := &schema.AtmosConfiguration{}
+		componentName := "test-component"
+		stackName := "test-stack"
+		affectedList := []schema.Affected{}
+		affected := &schema.Affected{
+			Component:     componentName,
+			Stack:         stackName,
+			ComponentType: "terraform",
+			Affected:      "test-change",
+		}
+
+		componentSection := map[string]any{
+			"settings": map[string]any{},
+			"pro":      "not-a-map",
+		}
+
+		// Execute with includeSettings = true
+		err := appendToAffected(
+			atmosConfig,
+			componentName,
+			stackName,
+			&componentSection,
+			&affectedList,
+			affected,
+			false,
+			&map[string]any{},
+			true,
+		)
+
+		// Verify: a malformed pro: section is silently skipped, not an error.
+		require.NoError(t, err)
+		assert.Len(t, affectedList, 1)
+		assert.Nil(t, affectedList[0].Pro)
+	})
+
 	t.Run("should not include settings when not requested", func(t *testing.T) {
 		// Setup
 		atmosConfig := &schema.AtmosConfiguration{}

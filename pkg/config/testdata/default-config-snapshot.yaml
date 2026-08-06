@@ -18,12 +18,12 @@ docs.generate.readme.output: ./README.md
 list.error_mode: warn
 logs.file: /dev/stderr
 logs.level: Warning
+pro.base_url: https://atmos-pro.com
+pro.endpoint: api/v1
 settings.experimental: warn
 settings.inject_bitbucket_token: true
 settings.inject_github_token: true
 settings.inject_gitlab_token: true
-settings.pro.base_url: https://atmos-pro.com
-settings.pro.endpoint: api/v1
 settings.terminal.color: true
 settings.terminal.help.filter: true
 settings.terminal.no_color: false

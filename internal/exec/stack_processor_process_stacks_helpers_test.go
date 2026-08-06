@@ -793,6 +793,7 @@ func TestProcessComponentOverrides(t *testing.T) {
 		expectedError           string
 		expectedOverridesVars   map[string]any
 		expectedOverridesEnv    map[string]any
+		expectedOverridesPro    map[string]any
 		expectedOverridesCmd    string
 		expectedOverridesHooks  map[string]any
 		expectedOverridesExists bool
@@ -812,6 +813,9 @@ func TestProcessComponentOverrides(t *testing.T) {
 						cfg.EnvSectionName: map[string]any{
 							"AWS_REGION": "us-west-2",
 						},
+						cfg.ProSectionName: map[string]any{
+							"drift_detection": map[string]any{"enabled": true},
+						},
 						cfg.CommandSectionName: "tofu",
 						cfg.HooksSectionName: map[string]any{
 							"before": []any{"echo override"},
@@ -825,6 +829,9 @@ func TestProcessComponentOverrides(t *testing.T) {
 			},
 			expectedOverridesEnv: map[string]any{
 				"AWS_REGION": "us-west-2",
+			},
+			expectedOverridesPro: map[string]any{
+				"drift_detection": map[string]any{"enabled": true},
 			},
 			expectedOverridesCmd: "tofu",
 			expectedOverridesHooks: map[string]any{
@@ -874,6 +881,22 @@ func TestProcessComponentOverrides(t *testing.T) {
 			},
 			expectedError: "invalid component overrides vars section",
 		},
+		{
+			name: "invalid overrides pro section type",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ProSectionName: "invalid-string",
+					},
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			},
+			expectedError: "invalid component overrides pro section",
+		},
 	}
 
 	for _, tt := range tests {
@@ -900,6 +923,10 @@ func TestProcessComponentOverrides(t *testing.T) {
 
 				if tt.expectedOverridesEnv != nil {
 					assert.Equal(t, tt.expectedOverridesEnv, result.ComponentOverridesEnv)
+				}
+
+				if tt.expectedOverridesPro != nil {
+					assert.Equal(t, tt.expectedOverridesPro, result.ComponentOverridesPro)
 				}
 
 				if tt.expectedOverridesCmd != "" {
