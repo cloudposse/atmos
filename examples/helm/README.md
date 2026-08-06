@@ -17,14 +17,12 @@ Run the local chart workflow end to end:
 
 ```shell
 atmos validate stacks
-atmos helm template demo -s dev --dependency-update
+atmos helm template demo -s dev
 atmos emulator up kubernetes -s dev
 atmos helm diff demo -s dev --identity local-k3s
-atmos helm apply demo -s dev --identity local-k3s --dry-run
-atmos helm apply demo -s dev --identity local-k3s --on-failure=uninstall --wait=watcher --timeout=2m
+atmos helm apply demo -s dev --identity local-k3s
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
 atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
-atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
 atmos helm delete demo -s dev --identity local-k3s
 atmos emulator down kubernetes -s dev
 ```
@@ -35,7 +33,7 @@ this same lifecycle.
 ## Render (no cluster, no credentials)
 
 ```shell
-atmos helm template demo -s dev --dependency-update
+atmos helm template demo -s dev
 
 # Render the same chart through a declarative Helm repository.
 HELM_DEMO_REPO_URL=http://127.0.0.1:8080 atmos helm template demo-repo -s dev
@@ -70,20 +68,6 @@ atmos helm apply demo -s dev
 atmos emulator up kubernetes -s dev
 atmos helm apply demo -s dev --identity local-k3s
 ```
-
-The stack sets `release.wait.strategy: watcher`, `release.timeout: 4m`,
-`release.history.max: 10`, and `release.install.crds: skip` as native Helm type
-defaults. The `demo` component overrides the wait strategy to `legacy`, uses
-install uninstall-on-failure, and enables upgrade rollback with independent
-failed-upgrade cleanup. The `atmos test` workflow
-covers non-mutating apply and delete dry runs, ordinary Job waiting, chart-hook
-suppression, CRD skipping, weighted hook ordering, retained hook resources,
-install and upgrade rollback, failed-upgrade cleanup, timeout handling, and
-dependency-gated Helm releases. Rendering also verifies opt-in acquisition of a
-missing `file://` library dependency, hook manifests, and a Helm `tpl` expression
-preserved in stack values.
-The intentionally slow resources are observed
-with bounded Kubernetes readiness checks rather than fixed-delay assertions.
 
 ## Helm Repositories
 
