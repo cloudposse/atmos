@@ -71,7 +71,9 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 			return err
 		}
 		if stack != "" || len(labels) > 0 {
-			atmosConfig, cfgErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			// processStacks=true: this branch resolves components via ExecuteDescribeStacksScoped,
+			// which requires atmosConfig.StackConfigFilesAbsolutePaths to be populated.
+			atmosConfig, cfgErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 			if cfgErr != nil {
 				return cfgErr
 			}

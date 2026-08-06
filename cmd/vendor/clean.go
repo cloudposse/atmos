@@ -30,10 +30,6 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		config, err := cfg.InitCliConfig(info, false)
-		if err != nil {
-			return err
-		}
 		component, err := cmd.Flags().GetString("component")
 		if err != nil {
 			return err
@@ -52,6 +48,14 @@ var vendorCleanCmd = &cobra.Command{
 			return err
 		}
 		labels, err := pkgtags.ParseLabelsFlag(labelsCsv)
+		if err != nil {
+			return err
+		}
+		// --stack/--labels resolve components via ExecuteDescribeStacksScoped, which requires
+		// atmosConfig.StackConfigFilesAbsolutePaths to be populated -- only they need
+		// processStacks=true; --component/--tags operate on vendor.yaml/component.yaml manifests
+		// directly and don't.
+		config, err := cfg.InitCliConfig(info, stack != "" || len(labels) > 0)
 		if err != nil {
 			return err
 		}

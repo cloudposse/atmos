@@ -446,6 +446,13 @@ func TestVendorUpdateCommand_UnknownStackErrors(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(
 		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
 	), 0o644))
+	// A real (non-matching) stack file: an empty stacks dir makes FindAllStackConfigsInPathsForStack's
+	// glob match zero files, which pkg/config/utils.go treats as ErrFailedToFindImport rather than an
+	// empty result -- InitCliConfig(processStacks=true) would fail before ever reaching the
+	// --stack selector resolution this test actually targets.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform: {}\n",
+	), 0o644))
 	chdirTest(t, tmpDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 

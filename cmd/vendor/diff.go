@@ -79,7 +79,11 @@ func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error)
 		return nil, errVendorSelectorsExclusive()
 	}
 
-	atmosConfig, cfgErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// --stack/--labels resolve components via ExecuteDescribeStacksScoped, which requires
+	// atmosConfig.StackConfigFilesAbsolutePaths to be populated -- only stack/--labels need
+	// processStacks=true; --component/--tags operate on vendor.yaml/component.yaml manifests
+	// directly and don't.
+	atmosConfig, cfgErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, stack != "" || len(labels) > 0)
 	if cfgErr != nil {
 		return nil, cfgErr
 	}

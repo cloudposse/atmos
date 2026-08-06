@@ -102,9 +102,17 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	flags := cmd.Flags()
 
-	// Vendor pull never needs full stack processing (imports/inheritance/deep-merge) - it
-	// operates on vendor.yaml/component.yaml manifests directly.
-	atmosConfig, err := cfg.InitCliConfig(info, false)
+	// --component/--tags/--everything never need full stack processing (imports/inheritance/
+	// deep-merge) - they operate on vendor.yaml/component.yaml manifests directly. --stack/
+	// --labels are the exception: handleStackVendor resolves components via ExecuteDescribeStacksScoped,
+	// which requires atmosConfig.StackConfigFilesAbsolutePaths to be populated, so those two flags
+	// need processStacks=true. A cheap presence check (not the authoritative parse, which
+	// parseVendorFlags still does below) is enough to decide.
+	stackFlagVal, _ := flags.GetString("stack")
+	labelsFlagVal, _ := flags.GetString("labels")
+	needsStackProcessing := stackFlagVal != "" || labelsFlagVal != ""
+
+	atmosConfig, err := cfg.InitCliConfig(info, needsStackProcessing)
 	if err != nil {
 		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}

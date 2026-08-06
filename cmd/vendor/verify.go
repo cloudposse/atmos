@@ -64,15 +64,19 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		if err != nil {
 			return err
 		}
-		atmosConfig, err := cfg.InitCliConfig(info, false)
-		if err != nil {
-			return err
-		}
 
 		component := v.GetString("component")
 		filterTags := splitTags(v.GetString("tags"))
 		stack := v.GetString("stack")
 		labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		if err != nil {
+			return err
+		}
+		// --stack/--labels resolve components via ExecuteDescribeStacksScoped, which requires
+		// atmosConfig.StackConfigFilesAbsolutePaths to be populated -- only they need
+		// processStacks=true; --component/--tags operate on vendor.yaml/component.yaml manifests
+		// directly and don't.
+		atmosConfig, err := cfg.InitCliConfig(info, stack != "" || len(labels) > 0)
 		if err != nil {
 			return err
 		}
