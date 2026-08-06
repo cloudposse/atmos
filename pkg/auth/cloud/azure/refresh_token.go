@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // CopyAtmosRefreshTokensInto copies refresh-token entries for the given account
@@ -18,6 +19,8 @@ import (
 // without it, az fails with "Can't find token from MSAL cache" as soon as a
 // lookup misses the seeded access tokens.
 func CopyAtmosRefreshTokensInto(azCache map[string]interface{}, home, realm, homeAccountID string) {
+	defer perf.Track(nil, "pkg/auth/cloud/azure.CopyAtmosRefreshTokensInto")()
+
 	if realm == "" || homeAccountID == "" {
 		// Without a realm the Atmos cache path IS the az cache (self-copy);
 		// without a home account ID entries can't be matched safely.
