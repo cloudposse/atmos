@@ -959,3 +959,167 @@ func TestWaitForSessionProcessTimesOut(t *testing.T) {
 		t.Fatalf("expected session process wait timeout, got %v", err)
 	}
 }
+
+func TestKeySequenceCtrlAndPageModifiers(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "Ctrl+C", want: "\x03"},
+		{input: "ctrl+a", want: "\x01"},
+		{input: "PageUp", want: "\x1b[5~"},
+		{input: "pagedown", want: "\x1b[6~"},
+	}
+	for _, tt := range tests {
+		got, err := keySequence(tt.input)
+		if err != nil {
+			t.Fatalf("keySequence(%q) error: %v", tt.input, err)
+		}
+		if got != tt.want {
+			t.Fatalf("keySequence(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestKeySequenceRejectsInvalidCtrlModifier(t *testing.T) {
+	_, err := keySequence("ctrl+1")
+	if !errors.Is(err, ErrUnsupportedCastKey) {
+		t.Fatalf("expected ErrUnsupportedCastKey, got %v", err)
+	}
+}
+
+func TestRunActionDispatchesHideAndShow(t *testing.T) {
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	if err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "hide"}, &SessionOptions{}); err != nil {
+		t.Fatalf("runAction hide error: %v", err)
+	}
+	state.mu.Lock()
+	discarding := state.discardRecording
+	state.mu.Unlock()
+	if !discarding {
+		t.Fatal("expected discardRecording to be true after a hide action")
+	}
+
+	if err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "show"}, &SessionOptions{}); err != nil {
+		t.Fatalf("runAction show error: %v", err)
+	}
+	state.mu.Lock()
+	discarding = state.discardRecording
+	state.mu.Unlock()
+	if discarding {
+		t.Fatal("expected discardRecording to be false after a show action")
+	}
+}
+
+// fakeMarkerRecorder is a minimal iolib.Recorder fake that records every call
+// it receives, used to assert which stream(s) a session action writes to.
+type fakeMarkerRecorder struct {
+	mu      sync.Mutex
+	records []fakeMarkerRecord
+}
+
+type fakeMarkerRecord struct {
+	stream  string
+	content string
+}
+
+func (r *fakeMarkerRecorder) Record(stream, content string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.records = append(r.records, fakeMarkerRecord{stream: stream, content: content})
+}
+
+func TestRunActionDispatchesScreenshot(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	rec := &fakeMarkerRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "screenshot", Path: "out.png"}, &SessionOptions{})
+	if err != nil {
+		t.Fatalf("runAction screenshot error: %v", err)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.records) != 1 || rec.records[0].stream != "m" || rec.records[0].content != "out.png" {
+		t.Fatalf("unexpected recorder calls: %+v", rec.records)
+	}
+}
+
+func TestRunActionScreenshotRequiresPath(t *testing.T) {
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "screenshot"}, &SessionOptions{})
+	if !errors.Is(err, ErrScreenshotActionRequiresPath) {
+		t.Fatalf("expected ErrScreenshotActionRequiresPath, got %v", err)
+	}
+}
+
+// TestSessionStateSetDiscardKeepsWaitBufferLiveButMutesRecording proves the
+// reconciled discard design: unlike teardown's discardOutput (which mutes
+// both the recording stream and the wait-matching buffer), a mid-session
+// setDiscard(true) -- as scripted "hide" actions use -- only mutes the live
+// recording stream. The wait-matching buffer keeps updating, so a tape's
+// "Hide ... Wait ... Show" idiom (hidden setup commands followed by a Wait
+// for a prompt before Show) can still unblock its Wait.
+func TestSessionStateSetDiscardKeepsWaitBufferLiveButMutesRecording(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	rec := &fakeMarkerRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := newSessionState(ctx, reader, nil, reader.Close)
+
+	if _, err := writer.WriteString("visible output"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for visible output")
+	}
+
+	state.setDiscard(true)
+	if _, err := writer.WriteString("hidden setup output"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for hidden output")
+	}
+	_ = writer.Close()
+
+	select {
+	case err := <-state.done:
+		if err != nil {
+			t.Fatalf("session read error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for session reader")
+	}
+
+	if !outputMatches(state, "hidden setup output", nil) {
+		t.Fatal("wait-matching buffer should still observe output recorded while discardRecording is set")
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	for _, r := range rec.records {
+		if r.stream == "o" && strings.Contains(r.content, "hidden setup output") {
+			t.Fatal("live recording stream should not receive output recorded while discardRecording is set")
+		}
+	}
+}

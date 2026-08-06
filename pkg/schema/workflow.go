@@ -335,6 +335,8 @@ type WorkflowStep struct {
 
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Tape        string        `yaml:"tape,omitempty" json:"tape,omitempty" mapstructure:"tape"`                         // Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with tape_file and with steps.
+	TapeFile    string        `yaml:"tape_file,omitempty" json:"tape_file,omitempty" mapstructure:"tape_file"`          // Path to an external VHS .tape file, interpreted the same way as tape.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
