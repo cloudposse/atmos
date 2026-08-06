@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -42,7 +43,25 @@ Without --format, passes through to native terraform/tofu output command.
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/output
   https://opentofu.org/docs/cli/commands/output`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runBeforeHooks(h.BeforeTerraformOutput, cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		// Reset before any early return so the deferred hook and PostRunE read
+		// consistent state.
+		wasMultiComponentExecution = false
+
+		// On failure, run after hooks with error context. Cobra skips PostRunE on
+		// error, so this is the only place the after.terraform.output hook fires
+		// when reading outputs fails. In multi-component mode the per-component
+		// hook already fired for each component, so the global error call is
+		// suppressed to avoid double-firing.
+		defer func() {
+			if runErr != nil && !wasMultiComponentExecution {
+				runHooksOnErrorWithOutput(h.AfterTerraformOutput, cmd, args, runErr, "")
+			}
+		}()
+
 		v := viper.GetViper()
 		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
@@ -55,6 +74,14 @@ For complete Terraform/OpenTofu documentation, see:
 			return terraformRun(terraformCmd, cmd, args)
 		}
 		return outputRunWithFormat(cmd, args, format)
+	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, per-component hooks already fired inside the
+		// affected/all/query dispatch. Calling them again here would double-fire.
+		if wasMultiComponentExecution {
+			return nil
+		}
+		return runHooksWithOutput(h.AfterTerraformOutput, cmd, args, "")
 	},
 }
 

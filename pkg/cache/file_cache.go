@@ -20,7 +20,7 @@ const (
 	DefaultFilePerm = 0o644
 )
 
-// FileCache provides atomic file-based caching with platform-specific locking.
+// FileCache provides atomic file-based caching with cross-process locking.
 // It stores cached content in an XDG-compliant cache directory.
 type FileCache struct {
 	baseDir      string
@@ -194,6 +194,23 @@ func (c *FileCache) Set(key string, content []byte) error {
 
 	return c.lock.WithLock(func() error {
 		if err := c.fs.WriteFileAtomic(path, content, DefaultFilePerm); err != nil {
+			return errUtils.Build(errUtils.ErrCacheWrite).
+				WithCause(err).
+				WithContext("key", key).
+				Err()
+		}
+		return nil
+	})
+}
+
+// Delete removes a cached entry. A missing entry is treated as already deleted.
+// Like Get and Set, deletion is serialized across Atmos processes.
+func (c *FileCache) Delete(key string) error {
+	defer perf.Track(nil, "cache.FileCache.Delete")()
+
+	path := filepath.Join(c.baseDir, keyToFilename(key))
+	return c.lock.WithLock(func() error {
+		if err := c.fs.Remove(path); err != nil && !os.IsNotExist(err) {
 			return errUtils.Build(errUtils.ErrCacheWrite).
 				WithCause(err).
 				WithContext("key", key).

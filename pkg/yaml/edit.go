@@ -1,8 +1,8 @@
 package yaml
 
 import (
+	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,16 +10,11 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-// yqEditSilentLevel sits above any real slog level so yq's internal logger
-// rejects every message during editing. Mirrors pkg/utils.yqSilentLevel; the
-// editor keeps its own copy so it never depends on whatever level the query
-// path last set process-wide.
-const yqEditSilentLevel = slog.Level(1000)
 
 // errWrapFmt is the format string for wrapping a sentinel error with an
 // underlying error.
@@ -68,14 +63,21 @@ func evaluateWithOptions(content []byte, expr string, opts editOptions) (string,
 		return "", err
 	}
 
-	// Silence yq's internal diagnostics for the duration of the evaluation.
-	yqlib.GetLogger().SetLevel(yqEditSilentLevel)
+	atmosyq.InitExpressionParser()
 
 	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	// The YAML editor always wants yq's internal diagnostics silenced,
+	// regardless of Atmos's configured log level. WithEvaluationLevel keeps
+	// that level fixed for this whole call, so a concurrent Trace-configured
+	// evaluation elsewhere can't flip verbosity on mid-evaluation.
+	var result string
+	var err error
+	atmosyq.WithEvaluationLevel(atmosyq.SilentLevel, func() {
+		result, err = yqlib.NewStringEvaluator().Evaluate(expr, string(content), encoder, decoder)
+	})
 	if err != nil {
 		return "", fmt.Errorf("%w: %q: %w", ErrInvalidYAMLExpression, expr, err)
 	}
@@ -338,13 +340,65 @@ func SetFileRaw(filePath, path, rhs string) error {
 	})
 }
 
-// DeleteFile removes the value at path in a YAML file.
-func DeleteFile(filePath, path string) error {
+// DeleteFile removes the value at path in a YAML file. It returns whether a
+// value was present and removed, letting callers distinguish an actual
+// deletion from a no-op when the path was already absent.
+func DeleteFile(filePath, path string) (bool, error) {
 	defer perf.Track(nil, "yaml.DeleteFile")()
 
-	return mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
+	existed, err := fileHasPath(filePath, path)
+	if err != nil {
+		return false, err
+	}
+	if !existed {
+		return false, nil
+	}
+
+	if err := mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
 		return deleteWithOptions(content, path, opts)
-	})
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// fileHasPath reports whether path currently resolves to a value in the YAML
+// file at filePath, letting set/delete callers distinguish create-vs-update
+// and delete-vs-no-op for user-facing messaging.
+func fileHasPath(filePath, path string) (bool, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFmt, ErrReadFile, err)
+	}
+	if isEmptyDocument(content) {
+		return false, nil
+	}
+	if _, err := Get(content, path); err != nil {
+		if errors.Is(err, ErrYAMLPathNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// DisplayPath returns file relative to the current working directory for
+// user-facing display, falling back to the absolute path if the relative
+// form can't be computed (e.g. a different volume on Windows). Callers still
+// read/write the original path passed in; this only affects what's echoed
+// back to the user.
+func DisplayPath(file string) string {
+	defer perf.Track(nil, "yaml.DisplayPath")()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return file
+	}
+	rel, err := filepath.Rel(cwd, file)
+	if err != nil {
+		return file
+	}
+	return rel
 }
 
 // FormatFile normalizes a YAML file's formatting in place.

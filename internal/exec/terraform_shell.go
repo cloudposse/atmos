@@ -239,6 +239,12 @@ func executeShellLifecycle(atmosConfig *schema.AtmosConfiguration, info *schema.
 func prepareShellExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cfg *shellConfig, withSecrets bool) error {
 	defer perf.Track(atmosConfig, "exec.prepareShellExecution")()
 
+	// Shell setup also writes a Terraform varfile and can assemble TF_VAR_* values.
+	// Do not allow an inspection-only `(computed)` marker across that boundary.
+	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+		return err
+	}
+
 	// Resolve the terraform/tofu binary (config + toolchain) so init/workspace and the shell
 	// all use the correct executable.
 	resolveTerraformCommand(atmosConfig, info)

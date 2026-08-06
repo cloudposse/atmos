@@ -9,13 +9,64 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: script
+        name: start-weather-server
+        working_directory: &demo_stacks_fixture "../../.context/cast-fixtures/demo-stacks"
+        output: none
+        interpreter: python3
+        script: |
+          import os
+          import subprocess
+          import textwrap
+          import time
+          import urllib.request
+          from pathlib import Path
+
+          Path(".cast-weather-server.py").write_text(textwrap.dedent("""
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              from pathlib import Path
+
+              class Handler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      reports = {
+                          "/stockholm": "stockholm.txt",
+                          "/los-angeles": "los-angeles.txt",
+                      }
+                      report = (Path("..") / "weather" / reports.get(self.path, reports["/stockholm"])).read_text()
+                      self.send_response(200)
+                      self.send_header("Content-Type", "text/plain; charset=utf-8")
+                      self.end_headers()
+                      self.wfile.write(report.replace("\\\\033", "\\033").encode())
+
+                  def log_message(self, *args):
+                      pass
+
+              HTTPServer(("127.0.0.1", 18766), Handler).serve_forever()
+          """))
+          old = Path(".cast-weather-server.pid")
+          if old.exists():
+              try:
+                  os.kill(int(old.read_text()), 15)
+              except Exception:
+                  pass
+              old.unlink(missing_ok=True)
+          proc = subprocess.Popen(["python3", ".cast-weather-server.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          Path(".cast-weather-server.pid").write_text(str(proc.pid))
+          for _ in range(50):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:18766/weather", timeout=0.1)
+                  break
+              except OSError:
+                  time.sleep(0.1)
+          else:
+              raise RuntimeError("weather fixture did not start")
       # Warm the fixture off-camera so provider installation and workspace
       # creation noise never enters the recording (replaces the legacy sed
       # noise filters).
       - type: shell
         name: warm
         output: none
-        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        working_directory: *demo_stacks_fixture
         command: |
           atmos terraform init myapp --stack dev
           atmos terraform workspace myapp --stack dev
@@ -23,7 +74,7 @@ commands:
           atmos terraform workspace myapp --stack prod
       - type: cast
         name: deploy
-        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        working_directory: *demo_stacks_fixture
         title: Atmos Stacks
         mode: steps
         defaults:
@@ -42,7 +93,7 @@ commands:
           - type: shell
             name: deploy-dev
             output: raw
-            command: atmos terraform deploy myapp --stack dev
+            command: TF_VAR_weather_endpoint=http://127.0.0.1:18766/stockholm atmos terraform deploy myapp --stack dev
           - type: simulate
             text: "# Deploy your component to the staging environment 🚀"
           - type: simulate
@@ -50,7 +101,7 @@ commands:
           - type: shell
             name: deploy-staging
             output: raw
-            command: atmos terraform deploy myapp --stack staging
+            command: TF_VAR_weather_endpoint=http://127.0.0.1:18766/los-angeles atmos terraform deploy myapp --stack staging
           - type: simulate
             text: "# Deploy your component to the prod environment 🚀"
           - type: simulate
@@ -58,7 +109,13 @@ commands:
           - type: shell
             name: deploy-prod
             output: raw
-            command: atmos terraform deploy myapp --stack prod
+            command: TF_VAR_weather_endpoint=http://127.0.0.1:18766/los-angeles atmos terraform deploy myapp --stack prod
+      - type: shell
+        name: stop-weather-server
+        when: always
+        working_directory: *demo_stacks_fixture
+        output: none
+        command: test ! -f .cast-weather-server.pid || kill "$(cat .cast-weather-server.pid)" || true; rm -f .cast-weather-server.pid .cast-weather-server.py
       - type: shell
         name: validate
         command: atmos casts validate screengrabs demo-stacks deploy

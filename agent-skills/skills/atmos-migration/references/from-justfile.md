@@ -38,13 +38,13 @@ _clean:
 **Steps:**
 
 1. Turn the `# comment` above a recipe into the command's `description:` field. Atmos shows this
-   text in `atmos help` and `atmos <command> --help`. This replaces `just --list`.
+    text in `atmos help` and `atmos <command> --help`. This replaces `just --list`.
 2. Turn a recipe's named parameter with a default value, such as `deploy env='dev':`, into a
-   command `flags:` entry with a matching `default:` value. Inside a step, read the value as
-   `{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. See
-   [Common Problems](#-interpolation-looks-like-atmos-templates-but-is-not) below.
+    command `flags:` entry with a matching `default:` value. Inside a step, read the value as
+    `{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. See
+    [Common Problems](#-interpolation-looks-like-atmos-templates-but-is-not) below.
 3. Do not create a separate command for a `[private]` recipe. There is no `hidden` or `private`
-   field on Atmos custom commands. Put the recipe's body in a step of the command that calls it.
+    field on Atmos custom commands. Put the recipe's body in a step of the command that calls it.
 
 ```yaml
 commands:

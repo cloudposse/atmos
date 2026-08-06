@@ -40,8 +40,8 @@ tasks:
 
 1. Turn `desc:` into the command's `description:` field.
 2. Turn each entry in `cmds:` into a `type: shell` step. If the line is a `terraform` or `atmos`
-   call, use a `type: atmos` step instead, because `type: atmos` is reserved for native Atmos
-   verbs.
+    call, use a `type: atmos` step instead, because `type: atmos` is reserved for native Atmos
+    verbs.
 
 ```yaml
 commands:
@@ -142,7 +142,7 @@ them plainly that this behavior does not carry over. Then offer two honest choic
 
 1. Accept that the step always runs. This is correct for most fast build steps.
 2. Add a hash or timestamp check inside the shell step itself. This is a script the user
-   maintains. It is not a built-in Atmos feature.
+    maintains. It is not a built-in Atmos feature.
 
 ## Common Problems
 

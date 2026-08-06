@@ -114,6 +114,18 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				ProcessYamlFunctions: true,
 			},
 		},
+		{
+			name: "Set error-mode explicitly",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("error-mode", "strict")
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Format:               "json",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				ErrorMode:            "strict",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -142,6 +154,7 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			fs.String("format", "", "Format")
 			fs.String("file", "", "Output file")
 			fs.String("query", "", "Query")
+			fs.String("error-mode", "", "Error mode")
 
 			// Set flags as specified in the test case
 			tt.setFlags(fs)

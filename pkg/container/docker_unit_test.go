@@ -9,6 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildBuilderCreateArgs(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{
+			"buildx", "create", "--name", "atmos-builder", "--driver", "docker-container",
+			"--driver-opt", "image=mirror.gcr.io/moby/buildkit:buildx-stable-1",
+			"--driver-opt", "network=host",
+		},
+		buildBuilderCreateArgs(&DriverConfig{
+			Name:     "atmos-builder",
+			Provider: "docker-container",
+			Opts: map[string]string{
+				"network": "host",
+				"image":   "mirror.gcr.io/moby/buildkit:buildx-stable-1",
+			},
+		}),
+	)
+}
+
 // TestDockerRuntime_parseInspectData tests parsing of Docker inspect JSON output.
 func TestDockerRuntime_parseInspectData(t *testing.T) {
 	tests := []struct {

@@ -59,7 +59,9 @@ builds:
       # -s: strip symbol table
       # -w: strip DWARF debug info
       # Both reduce binary size and disk usage during linking.
-      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}"'
+      # Commit pins the scaffold catalog's distributable templates to this
+      # release's exact commit.
+      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}" -X "github.com/cloudposse/atmos/pkg/version.Commit={{.Commit}}"'
     flags:
       # Remove file system paths from compiled executables for reproducible builds and slightly smaller binaries.
       # This is standard practice for open-source and CI/CD builds (used by Go core team, HashiCorp, Docker, etc.).

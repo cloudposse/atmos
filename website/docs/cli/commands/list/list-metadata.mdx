@@ -49,8 +49,14 @@ This command is useful for:
   <dt>`--stack` / `-s`</dt>
   <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
 
+  <dt>`--tags`</dt>
+  <dd>Filter by component tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
   <dt>`--filter`</dt>
-  <dd>Filter expression using YQ syntax (e.g., `.enabled == true`)</dd>
+  <dd>Reserved. The flag is accepted for consistency with other `list` commands, but a YQ filter expression is <strong>not yet applied</strong> to metadata listings — use `--tags`/`--labels` (or post-process `--format json` output with an external tool) to narrow results.</dd>
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
@@ -87,16 +93,16 @@ atmos list metadata --stack '*-prod'
 atmos list metadata --stack 'plat-ue2-*'
 ```
 
-Filter by metadata fields:
+Filter by metadata fields with an external tool (the `--filter` flag is not yet applied to metadata listings):
 ```shell
 # Find all enabled components
-atmos list metadata --filter '.enabled == true'
+atmos list metadata --format json | jq '.[] | select(.enabled == true)'
 
 # Find all abstract components
-atmos list metadata --filter '.type == "abstract"'
+atmos list metadata --format json | jq '.[] | select(.type == "abstract")'
 
 # Find locked components
-atmos list metadata --filter '.locked == true'
+atmos list metadata --format json | jq '.[] | select(.locked == true)'
 ```
 
 Output in different formats:
@@ -224,8 +230,7 @@ atmos list metadata --columns "stack,component,type,enabled,locked"
 ```
 
 :::tip
-- Use `--filter` to find specific metadata patterns (e.g., locked components, abstract components)
-- Combine `--stack` (glob) with `--filter` (YQ) for precise filtering
+- Use `--tags`/`--labels` to narrow by component metadata, and `--stack` (glob) to narrow by stack
 - The `--sort` flag supports multi-column sorting for organized output
 - Metadata is component-level configuration (use [`atmos list settings`](/cli/commands/list/settings) for settings data)
 :::

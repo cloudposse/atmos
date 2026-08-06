@@ -11,6 +11,7 @@ references:
   - references/from-makefile.md
   - references/from-justfile.md
   - references/from-taskfile.md
+  - references/from-component-updater.md
 ---
 
 # Migrating to Atmos
@@ -43,39 +44,35 @@ word the user uses. If the user says "OpenTofu," write "OpenTofu" in your respon
 These principles come before your normal instincts. Read them before you propose a change to the
 user's repository.
 
-1. **Migration is optional. It is not all-or-nothing.** Atmos does not require a new file layout.
-   Point `base_path` at the user's existing layout, for example `base_path: "terraform"` or
-   `base_path: "."`. This lowers the risk of adoption. The `components/terraform/` layout is
-   still the best practice for a new repository or a fully migrated repository, because Atmos
-   supports more than one tool, such as Terraform, Helmfile, Packer, and Ansible. It is not a
-   requirement for a Terraform-only repository.
-2. **You can keep existing `.tfvars` files during migration.** Use `!include` to add them to a
-   stack. This gives the smallest disruption. Native stack YAML is still the best final state, if
-   the user wants deep-merge inheritance and richer stack composition. The user can convert to
-   YAML step by step.
-3. **Terraform code changes are not necessary.** Do not rewrite providers, backends, or modules
-   during migration. Atmos creates the files `backend.tf.json` and `*.auto.tfvars.json` when it
-   runs.
-4. **Terraform workspaces are not a problem.** If the user has environments controlled by
-   `terraform.workspace`, Atmos can map onto the existing state. Use
-   `metadata.terraform_workspace` and `workspace_key_prefix` to do this. The user does not need to
-   delete their workspace state to adopt Atmos.
-5. **Use a YAML function before you use a Gomplate datasource.** Some tasks have both options:
-   `!include` instead of `gomplate.datasources` for files, `!exec` instead of a templated shell
-   command, `!env` instead of `gomplate getenv`, and `!store` instead of a custom datasource URL.
-   Choose the YAML function first. A YAML function checks its own types. It cannot break YAML
-   parsing. It gives a clear error message. It does not require you to turn on Gomplate. See the
-   skills [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md) and
-   [atmos-templates](../atmos-templates/SKILL.md) for more detail on this choice.
-6. **Start small. Add complexity later.** Get a working `atmos terraform plan` command for the
-   user in 20 minutes. Wait to add inheritance, catalogs, and multi-account hierarchies until the
-   user has a real need for them.
-7. **Task runners are not a problem.** Atmos custom commands and workflows can replace the
-   targets, recipes, and tasks that Make, Just, and Task provide. This does not need to happen at
-   once. A Makefile, Justfile, or Taskfile can stay as a thin wrapper around `atmos` commands
-   during the migration. This is the same method used for a Terraform-wrapping Makefile,
-   described in Principle 6. The final state has each leaf target as a custom command and each
-   target chain as a workflow. Reach this state step by step.
+1. **Migration is opt-in, not all-or-nothing.** Atmos does not require a filesystem
+    reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
+    or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
+    convention is still the best-practice layout for new or fully migrated repos because Atmos
+    supports multiple toolchains (Terraform, Helmfile, Packer, Ansible); it is not a prerequisite
+    for adopting Atmos in Terraform-only repos.
+2. **Existing `.tfvars` files may be kept during migration.** Use `!include` to pull them into
+    stacks when the user wants minimal disruption. Converting values into native stack YAML remains
+    the best-practice end state when the user wants deep-merge inheritance and richer stack
+    composition, but it can happen progressively.
+3. **No Terraform code changes are required.** Don't rewrite providers, backends, or modules
+    during migration. Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
+4. **Workspaces are not the enemy.** If the user has `terraform.workspace`-driven environments,
+    Atmos can map onto their existing state via `metadata.terraform_workspace` and
+    `workspace_key_prefix`. They do not have to abandon their workspace state to adopt Atmos.
+5. **Prefer YAML functions over Gomplate datasources.** When both can express the same thing
+    (`!include` vs `gomplate.datasources` for files, `!exec` vs templated shell, `!env` vs
+    `gomplate getenv`, `!store` vs custom datasource URLs), reach for the YAML function first.
+    YAML functions are type-safe, can't break YAML parsing, produce clear errors, and don't
+    require enabling Gomplate. See the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md)
+    and [atmos-templates](../atmos-templates/SKILL.md) skills for the boundary.
+6. **Crawl → walk → run.** Get the user to a working `atmos terraform plan` in 20 minutes; defer
+    inheritance, catalogs, and multi-account hierarchies until they have a concrete need.
+7. **Task runners are not a blocker.** Atmos custom commands and workflows can replace the
+    targets, recipes, and tasks that Make, Just, and Task provide. This doesn't have to happen all
+    at once — a Makefile, Justfile, or Taskfile can stay as a thin wrapper around `atmos` commands
+    during migration, the same incremental approach described in Principle 6. The end state turns
+    each leaf target into a custom command and each target chain into a workflow, reached step by
+    step.
 
 ## Decide the Migration Shape First
 
@@ -91,6 +88,7 @@ reference file:
 | User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
 | User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
 | User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
+| `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -119,23 +117,21 @@ Use this checklist when the user wants to try Atmos on an existing repository. D
 order unless the user's setup requires it.
 
 1. **Install Atmos.** See `atmos.tools/install`.
-2. **Create `atmos.yaml`** at the root of the repository. Set `base_path` and
-   `components.terraform.base_path` to match the user's current layout. Do not ask the user to
-   move files.
-3. **Create one stack file** for one environment. Use `!include` to add an existing `.tfvars`
-   file. This avoids a rewrite:
-   ```yaml
-   # stacks/dev.yaml
-   import:
-     - _defaults
-   components:
-     terraform:
-       vpc:
-         vars: !include ../path/to/existing/dev.tfvars
-   ```
-4. **Run `atmos terraform plan vpc -s dev`**. Compare the output to the output of
-   `terraform plan -var-file=dev.tfvars` from before the migration. Confirm the two outputs
-   match.
+2. **Create `atmos.yaml`** at the repo root, pointing `base_path` and `components.terraform.base_path`
+    at the user's existing layout. Do not ask them to move files.
+3. **Create one stack file** for one environment. Use `!include` of an existing `.tfvars` file so
+    nothing has to be rewritten:
+    ```yaml
+    # stacks/dev.yaml
+    import:
+      - _defaults
+    components:
+      terraform:
+        vpc:
+          vars: !include ../path/to/existing/dev.tfvars
+    ```
+4. **Run `atmos terraform plan vpc -s dev`** and confirm output matches what `terraform plan
+    -var-file=dev.tfvars` produced before.
 
 A working example of this shape is at `examples/native-terraform/` in the Atmos repository.
 

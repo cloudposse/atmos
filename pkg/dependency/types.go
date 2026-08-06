@@ -61,4 +61,12 @@ type Filter struct {
 
 	// IncludeDependents indicates whether to include all dependents of filtered nodes.
 	IncludeDependents bool
+
+	// DependencyDepth bounds how many dependency levels IncludeDependencies
+	// pulls in, measured from the nearest filtered node (0 = unlimited).
+	DependencyDepth int
+
+	// DependentDepth bounds how many dependent levels IncludeDependents
+	// pulls in, measured from the nearest filtered node (0 = unlimited).
+	DependentDepth int
 }

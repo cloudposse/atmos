@@ -83,13 +83,25 @@ func SetWithType(content []byte, path, value, valueType string) ([]byte, error) 
 	return SetRaw(content, path, rhs)
 }
 
-// SetFileWithType assigns a typed value at path in a YAML file (atomic write).
-func SetFileWithType(filePath, path, value, valueType string) error {
+// SetFileWithType assigns a typed value at path in a YAML file (atomic
+// write). It returns whether the path was newly created (true) as opposed to
+// already existing and being updated (false), letting callers distinguish
+// the two for user-facing messaging.
+func SetFileWithType(filePath, path, value, valueType string) (bool, error) {
 	defer perf.Track(nil, "yaml.SetFileWithType")()
 
 	rhs, err := buildRHS(value, valueType)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return SetFileRaw(filePath, path, rhs)
+
+	existed, err := fileHasPath(filePath, path)
+	if err != nil {
+		return false, err
+	}
+
+	if err := SetFileRaw(filePath, path, rhs); err != nil {
+		return false, err
+	}
+	return !existed, nil
 }

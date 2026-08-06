@@ -4,6 +4,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // TestMain provides package-level test setup and teardown.
@@ -25,6 +29,29 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+
+	wroteOutput := false
+	if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+		_, _ = os.Stdout.WriteString(stdout)
+		wroteOutput = true
+	}
+	if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
+		_, _ = os.Stderr.WriteString(stderr)
+		wroteOutput = true
+	}
+	if wroteOutput {
+		os.Exit(0)
+	}
+
+	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
+	// (used throughout cmd/root.go and its helpers) don't panic or silently
+	// no-op during tests.
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		panic("cmd tests: failed to create IO context: " + err.Error())
+	}
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 
 	// Capture initial RootCmd state.
 	initialSnapshot := snapshotRootCmdState()

@@ -1,0 +1,194 @@
+{
+  "$id": "https://atmos.tools/schemas/atmosscaffoldconfig.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "atmos/v1",
+      "description": "Atmos manifest API version"
+    },
+    "kind": {
+      "const": "AtmosScaffoldConfig",
+      "description": "Atmos manifest kind"
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Author or maintainer",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Unique name of this manifest",
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "description": "Version of this manifest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "spec": {
+      "additionalProperties": false,
+      "properties": {
+        "baseRef": {
+          "description": "Git ref used as the three-way merge base",
+          "type": "string"
+        },
+        "delimiters": {
+          "description": "Template delimiters as a two-element list",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "fields": {
+          "description": "Ordered questionnaire fields",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "default": {
+                "description": "Default value"
+              },
+              "description": {
+                "description": "Longer help text shown with the prompt",
+                "type": "string"
+              },
+              "label": {
+                "description": "Short prompt label",
+                "type": "string"
+              },
+              "name": {
+                "description": "Field name used as the template variable",
+                "type": "string"
+              },
+              "options": {
+                "description": "Choices for select and multiselect fields",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "placeholder": {
+                "description": "Placeholder text for input fields",
+                "type": "string"
+              },
+              "required": {
+                "description": "Whether a value must be provided",
+                "type": "boolean"
+              },
+              "type": {
+                "description": "Prompt type",
+                "enum": [
+                  "input",
+                  "text",
+                  "string",
+                  "select",
+                  "multiselect",
+                  "confirm",
+                  "bool",
+                  "boolean"
+                ],
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "description": "Optional validation constraints for this field",
+                "properties": {
+                  "message": {
+                    "description": "Error message shown when validation fails",
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "description": "Regular expression the value must match",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "when": {
+                "additionalProperties": false,
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this field is prompted for",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ],
+                "properties": {}
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "files": {
+          "description": "Conditional generation overlay keyed by each file's discovered path",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "description": "File path as discovered in the template's file tree",
+                "type": "string"
+              },
+              "when": {
+                "additionalProperties": false,
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file is generated",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ],
+                "properties": {}
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "hooks": {
+          "description": "Step-backed hooks around generation reusing the stack-level hooks vocabulary",
+          "type": "object"
+        },
+        "source": {
+          "description": "Where the template came from (written to project records)",
+          "type": "string"
+        },
+        "values": {
+          "description": "Field values (answers) keyed by field name",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata"
+  ],
+  "title": "Atmos AtmosScaffoldConfig manifest",
+  "type": "object"
+}

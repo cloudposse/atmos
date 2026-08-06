@@ -4,6 +4,9 @@ tests:
     tty: false
     description: "Ensure the Go templates are evaluated in all Atmos sections."
     workdir: "fixtures/scenarios/stack-templates/"
+    env:
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
+      ATMOS_DESCRIBE_PROVENANCE: "false"
     command: "atmos"
     args:
       - "describe"

@@ -23,6 +23,7 @@ Most Makefiles mix all three shapes. Treat each target on its own. Then combine 
 ## Shape A: Independent Leaf Targets
 
 **Before:**
+<!-- editorconfig-checker-disable -->
 ```makefile
 .PHONY: build test lint clean help
 
@@ -41,19 +42,20 @@ lint: ## Run static analysis
 clean: ## Remove build artifacts
 	@rm -rf bin/
 ```
+<!-- editorconfig-checker-enable -->
 
 **Steps:**
 
 1. Turn each leaf target into a custom command in `atmos.yaml`. If the Makefile is large, put
-   the commands in a separate file. See
-   [Split commands across files](#split-commands-across-files) below.
+    the commands in a separate file. See
+    [Split commands across files](#split-commands-across-files) below.
 2. Turn the silent-recipe `@` prefix into the step field `output: none`.
 3. Delete the `help` target. Atmos generates the same information from each command's
-   `description:` field. Run `atmos help` or `atmos <command> --help` to see it.
+    `description:` field. Run `atmos help` or `atmos <command> --help` to see it.
 4. When one target depends on another leaf target, such as `test: build`, add a step that runs
-   the dependency's command. Do not use a `type: atmos` step to call a custom command. That step
-   type is only for native Atmos verbs, such as `terraform plan`. Use a `type: shell` step with
-   `command: atmos build` instead.
+    the dependency's command. Do not use a `type: atmos` step to call a custom command. That step
+    type is only for native Atmos verbs, such as `terraform plan`. Use a `type: shell` step with
+    `command: atmos build` instead.
 
 ```yaml
 commands:
@@ -88,31 +90,33 @@ commands:
 ## Shape B: Target Chains with Dependencies
 
 **Before:**
+<!-- editorconfig-checker-disable -->
 ```makefile
 ENV ?= dev
 
 deploy: build test ## Plan and apply the given ENV (default: dev)
 	cd terraform && terraform apply -var-file=envs/$(ENV).tfvars
 ```
+<!-- editorconfig-checker-enable -->
 
 **Steps:**
 
 1. Turn `ENV ?= dev` into a command `flags:` entry with `default: "dev"`.
 2. Turn the target order (`deploy: build test`) into steps that run in the same order. In this
-   example, the steps call the Shape A commands, one after the other.
+    example, the steps call the Shape A commands, one after the other.
 3. Check if the prerequisites are truly independent. In this example, `build` must finish before
-   `test` runs, but nothing else depends on their order relative to each other. When two
-   prerequisites do not depend on each other, use a `parallel` step with `needs:` instead of
-   listing them one after the other. See [Shape C](#shape-c-recursive-or-parallel-make) for the
-   general `parallel`/`matrix` pattern.
+    `test` runs, but nothing else depends on their order relative to each other. When two
+    prerequisites do not depend on each other, use a `parallel` step with `needs:` instead of
+    listing them one after the other. See [Shape C](#shape-c-recursive-or-parallel-make) for the
+    general `parallel`/`matrix` pattern.
 4. Move the Terraform-specific line, `terraform apply -var-file=envs/$(ENV).tfvars`, to
-   [from-native-terraform.md Shape B](from-native-terraform.md#shape-b-single-dir-with--var-file-from-a-makefile).
-   That guide shows how the Terraform side maps to stacks. Here, the line becomes a single
-   `type: atmos` step, because `terraform apply` is a native Atmos verb.
+    [from-native-terraform.md Shape B](from-native-terraform.md#shape-b-single-dir-with--var-file-from-a-makefile).
+    That guide shows how the Terraform side maps to stacks. Here, the line becomes a single
+    `type: atmos` step, because `terraform apply` is a native Atmos verb.
 5. Turn `ifeq ($(ENV),prod)` conditionals into a Go template conditional inside a custom command:
-   `{{ if eq .Flags.env "prod" }}...{{ end }}`. This is the same pattern used for `--verbose` and
-   other boolean flags. Inside a workflow, use `when: !cel 'stack == "prod"'` on the step
-   instead.
+    `{{ if eq .Flags.env "prod" }}...{{ end }}`. This is the same pattern used for `--verbose` and
+    other boolean flags. Inside a workflow, use `when: !cel 'stack == "prod"'` on the step
+    instead.
 
 ```yaml
 commands:
@@ -134,6 +138,7 @@ commands:
 ## Shape C: Recursive or Parallel Make
 
 **Before:**
+<!-- editorconfig-checker-disable -->
 ```makefile
 SERVICES := vpc eks rds
 
@@ -143,12 +148,13 @@ build-all:
 build-parallel:
 	$(MAKE) -j4 build-all
 ```
+<!-- editorconfig-checker-enable -->
 
 **Steps:**
 
 1. Turn `$(MAKE) -j` into a `parallel` step. Use `max_concurrency` to set the fan-out width.
 2. Turn `$(MAKE) -C dir target` recursion over a fixed set of directories into a `matrix` step.
-   Define a `service` axis, and call the per-service command once for each value.
+    Define a `service` axis, and call the per-service command once for each value.
 
 ```yaml
 commands:
