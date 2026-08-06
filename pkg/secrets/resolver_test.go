@@ -9,6 +9,7 @@ import (
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -148,6 +149,27 @@ func TestResolve_DefaultOnMissing(t *testing.T) {
 	got, err := Resolve(cfg, `!secret DATADOG_API_KEY | default "dev-key"`, "prod", info)
 	require.NoError(t, err)
 	assert.Equal(t, "dev-key", got)
+}
+
+func TestResolve_RawDefaultDoesNotHideUnsupportedCapability(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Get("prod", "api", "DATADOG_API_KEY").
+		Return(map[string]any{"enabled": true}, nil).
+		Times(1)
+
+	cfg, componentSection := newSecretTestConfig(mockStore)
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "prod",
+		Component:        "api",
+		ComponentSection: componentSection,
+	}
+
+	_, err := Resolve(cfg, `!secret DATADOG_API_KEY | raw | default "fallback"`, "prod", info)
+	require.ErrorIs(t, err, providers.ErrRawNotSupported)
 }
 
 // assertErr is a trivial error used to simulate a backend miss.

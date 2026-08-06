@@ -160,9 +160,9 @@ func (s *KeychainStore) GetRaw(stack string, component string, key string) (stri
 		}
 		return "", fmt.Errorf(errWrapFormatWithID, store.ErrKeychainRead, composed, err)
 	}
-	var stringValue string
-	if err := json.Unmarshal([]byte(raw), &stringValue); err == nil {
-		return stringValue, nil
+	var stringValue *string
+	if err := json.Unmarshal([]byte(raw), &stringValue); err == nil && stringValue != nil {
+		return *stringValue, nil
 	}
 	return raw, nil
 }

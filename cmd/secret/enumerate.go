@@ -67,7 +67,8 @@ func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfig
 
 // collectSecretScopeEntries traverses the describe-stacks map
 // (stack -> components -> <type> -> component -> section) and keeps the instances that declare
-// secrets, optionally narrowed to a single component. Entries are sorted by stack then component.
+// secrets, optionally narrowed to a single component. Entries are sorted by stack, component,
+// then component type so a name shared across component types has deterministic ordering.
 func collectSecretScopeEntries(stacksMap map[string]any, componentFilter string) []scopeEntry {
 	var entries []scopeEntry
 	for stackName, raw := range stacksMap {
@@ -82,7 +83,10 @@ func collectSecretScopeEntries(stacksMap map[string]any, componentFilter string)
 		if entries[i].Stack != entries[j].Stack {
 			return entries[i].Stack < entries[j].Stack
 		}
-		return entries[i].Component < entries[j].Component
+		if entries[i].Component != entries[j].Component {
+			return entries[i].Component < entries[j].Component
+		}
+		return entries[i].ComponentType < entries[j].ComponentType
 	})
 	return entries
 }
