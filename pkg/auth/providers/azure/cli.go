@@ -161,6 +161,7 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		SubscriptionID:   subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		AuthMethod:       authTypes.AzureAuthMethodCLI,
 	}
 
 	// Acquire an AKS-scoped token, for `atmos azure aks token` (best-effort,

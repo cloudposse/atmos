@@ -246,6 +246,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		TokenFilePath:      tokenFilePath,
 		FederatedToken:     federatedToken,  // Store for Azure CLI service_principal_entries.json.
 		CloudEnvironment:   p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
+		AuthMethod:         authTypes.AzureAuthMethodOIDC,
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.

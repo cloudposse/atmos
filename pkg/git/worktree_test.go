@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -297,6 +299,30 @@ func TestRemoveWorktree(t *testing.T) {
 		RemoveWorktree("", "")
 		// If we get here without panicking, the test passes.
 	})
+}
+
+func TestRemoveWorktreeDoesNotReportSuccessWhenPruneLeavesWorktreePath(t *testing.T) {
+	maxAttempts := 1
+	config := &schema.RetryConfig{MaxAttempts: &maxAttempts}
+	worktreePath := filepath.Join(t.TempDir(), "worktree")
+	require.NoError(t, os.Mkdir(worktreePath, 0o755))
+	var commands [][]string
+	run := func(_ string, args ...string) (string, error) {
+		commands = append(commands, args)
+		if args[1] == "remove" {
+			return "error: failed to delete '.git/worktrees/worktree': Invalid argument", errors.New("git worktree remove failed")
+		}
+		return "", nil
+	}
+
+	output, err := removeWorktree("repo", worktreePath, run, config)
+	require.ErrorContains(t, err, "still exists")
+	assert.Contains(t, output, "worktree remove:")
+	assert.Contains(t, output, "worktree prune:")
+	assert.Equal(t, [][]string{
+		{"worktree", "remove", "--force", worktreePath},
+		{"worktree", "prune", "--expire", "now"},
+	}, commands)
 }
 
 func TestWorktreeSubdirConstant(t *testing.T) {

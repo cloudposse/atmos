@@ -232,9 +232,9 @@ func (m *manager) identityChainRootIsAmbient(identityName string) bool {
 // deleteProviderKeyringEntries removes a provider's realm-scoped keyring entry and the
 // legacy pre-realm one, shared by LogoutProvider and LogoutAll.
 //
-// The bestEffort parameter has the same meaning as in deleteIdentityKeyringEntries: the
-// deletion was forced for an ambient provider that never writes to the keyring, so a miss
-// is the expected steady state and is logged rather than returned as a failure.
+// The bestEffort flag has the same meaning as in deleteIdentityKeyringEntries: the deletion was
+// forced for an ambient provider that never writes to the keyring, so a miss is the
+// expected steady state and is logged rather than returned as a failure.
 func (m *manager) deleteProviderKeyringEntries(providerName string, deleteKeychain, bestEffort bool) []error {
 	if !deleteKeychain {
 		log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)

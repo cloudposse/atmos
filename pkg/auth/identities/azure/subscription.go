@@ -98,31 +98,17 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		return nil, fmt.Errorf("%w: Azure subscription identity requires Azure credentials from provider", errUtils.ErrAuthenticationFailed)
 	}
 
-	// Create new credentials with subscription-specific configuration.
-	// Override subscription ID if different from provider.
-	creds := &authTypes.AzureCredentials{
-		AccessToken:        azureCreds.AccessToken,
-		TokenType:          azureCreds.TokenType,
-		Expiration:         azureCreds.Expiration,
-		TenantID:           azureCreds.TenantID,
-		SubscriptionID:     i.subscriptionID,              // Use identity's subscription.
-		Location:           i.location,                    // Use identity's location if specified.
-		GraphAPIToken:      azureCreds.GraphAPIToken,      // Preserve Graph API token from provider.
-		GraphAPIExpiration: azureCreds.GraphAPIExpiration, // Preserve Graph API token expiration.
-		KeyVaultToken:      azureCreds.KeyVaultToken,      // Preserve KeyVault API token from provider.
-		KeyVaultExpiration: azureCreds.KeyVaultExpiration, // Preserve KeyVault token expiration.
-		AKSToken:           azureCreds.AKSToken,           // Preserve AKS-scoped token from provider.
-		AKSTokenExpiration: azureCreds.AKSTokenExpiration, // Preserve AKS token expiration.
-		ClientID:           azureCreds.ClientID,           // Preserve client ID for MSAL cache format.
-		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
-		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
-		FederatedToken:     azureCreds.FederatedToken,     // Preserve federated token for Azure CLI.
-		CloudEnvironment:   azureCreds.CloudEnvironment,   // Preserve cloud environment for MSAL cache.
-	}
+	// Copy the provider credentials wholesale, then apply subscription-specific
+	// overrides. A field-by-field copy silently drops newly added fields (this
+	// lost AuthMethod/HomeAccountID and re-broke the Azure CLI cache for guest
+	// users), so keep this a struct copy.
+	credsCopy := *azureCreds
+	creds := &credsCopy
+	creds.SubscriptionID = i.subscriptionID // Use identity's subscription.
 
-	// If location not specified in identity, use provider's location.
-	if creds.Location == "" {
-		creds.Location = azureCreds.Location
+	// Use identity's location if specified; otherwise keep the provider's.
+	if i.location != "" {
+		creds.Location = i.location
 	}
 
 	log.Debug(

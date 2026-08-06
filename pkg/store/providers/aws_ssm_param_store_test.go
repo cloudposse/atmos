@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -14,59 +13,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/tests"
 )
 
-// MockSSMClient is a mock implementation of the SSMClient interface.
-type MockSSMClient struct {
-	mock.Mock
-}
-
-func (m *MockSSMClient) PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ssm.PutParameterOutput), args.Error(1)
-}
-
-func (m *MockSSMClient) GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ssm.GetParameterOutput), args.Error(1)
-}
-
-func (m *MockSSMClient) DeleteParameter(ctx context.Context, params *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ssm.DeleteParameterOutput), args.Error(1)
-}
-
-// MockSTSClient is a mock implementation of the STSClient interface.
-type MockSTSClient struct {
-	mock.Mock
-}
-
-func (m *MockSTSClient) AssumeRole(ctx context.Context, params *sts.AssumeRoleInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*sts.AssumeRoleOutput), args.Error(1)
-}
-
 func TestSSMStore_Set(t *testing.T) {
-	mockSSM := new(MockSSMClient)
-	mockSTS := new(MockSTSClient)
-	mockAssumedSSM := new(MockSSMClient)
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	mockSTS := NewMockSTSClient(ctrl)
+	mockAssumedSSM := NewMockSSMClient(ctrl)
 	stackDelimiter := "/"
 	awsConfig := &aws.Config{Region: "us-west-2"}
 
@@ -84,15 +42,16 @@ func TestSSMStore_Set(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		stack        string
-		component    string
-		key          string
-		value        interface{}
-		secret       bool
-		writeRoleArn *string
-		mockSetup    func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
-		wantErr      bool
+		name              string
+		stack             string
+		component         string
+		key               string
+		value             interface{}
+		secret            bool
+		writeRoleArn      *string
+		nilStackDelimiter bool
+		mockSetup         func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
+		wantErr           bool
 	}{
 		{
 			name:      "successful_set",
@@ -101,7 +60,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     "test-value",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
@@ -117,7 +76,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     "test-value",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					Value:     aws.String("test-value"),
 					Type:      types.ParameterTypeSecureString,
@@ -133,7 +92,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     map[string]interface{}{"key": "value"},
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-config"),
 					Value:     aws.String(`{"key":"value"}`),
 					Type:      types.ParameterTypeSecureString,
@@ -151,7 +110,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     "",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					Value:     aws.String(`""`),
 					Type:      types.ParameterTypeSecureString,
@@ -175,7 +134,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "slice-key",
 			value:     []string{"value1", "value2", "value3"},
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
 					Value:     aws.String(`["value1","value2","value3"]`),
 					Type:      types.ParameterTypeString,
@@ -190,7 +149,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "map-key",
 			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/map-key"),
 					Value:     aws.String(`{"key1":"value1","key2":42,"key3":true}`),
 					Type:      types.ParameterTypeString,
@@ -205,9 +164,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     "test-value",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, mock.MatchedBy(func(input *ssm.PutParameterInput) bool {
-					return true
-				})).Return(nil, errors.New("aws error"))
+				mockSSM.EXPECT().PutParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("aws error"))
 			},
 			wantErr: true,
 		},
@@ -218,9 +175,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     123,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, mock.MatchedBy(func(input *ssm.PutParameterInput) bool {
-					return true
-				})).Return(nil, errors.New("invalid value type"))
+				mockSSM.EXPECT().PutParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("invalid value type"))
 			},
 			wantErr: true,
 		},
@@ -232,7 +187,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     "test-value",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
@@ -248,7 +203,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     "test-value",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
@@ -266,19 +221,14 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "nil_stack_delimiter",
-			stack:     "dev/usw2/app",
-			component: "service",
-			key:       "config-key",
-			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
-					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
-					Value:     aws.String(`"test-value"`),
-					Type:      types.ParameterTypeString,
-					Overwrite: aws.Bool(true),
-				}).Return(&ssm.PutParameterOutput{}, nil)
-			},
+			name:              "nil_stack_delimiter",
+			stack:             "dev/usw2/app",
+			component:         "service",
+			key:               "config-key",
+			value:             "test-value",
+			nilStackDelimiter: true,
+			mockSetup:         func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
+			wantErr:           true,
 		},
 		{
 			name:      "complex_stack_name_with_multiple_delimiters",
@@ -287,7 +237,7 @@ func TestSSMStore_Set(t *testing.T) {
 			key:       "config-key",
 			value:     "test-value",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/prod/app/service/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
@@ -303,7 +253,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:        "test-value",
 			writeRoleArn: aws.String("arn:aws:iam::123456789012:role/write-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/write-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(&sts.AssumeRoleOutput{
@@ -314,7 +264,7 @@ func TestSSMStore_Set(t *testing.T) {
 					},
 				}, nil)
 
-				mockAssumedSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+				mockAssumedSSM.EXPECT().PutParameter(gomock.Any(), &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
@@ -330,7 +280,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:        "test-value",
 			writeRoleArn: aws.String("arn:aws:iam::123456789012:role/write-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/write-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(nil, fmt.Errorf("failed to assume role"))
@@ -341,23 +291,22 @@ func TestSSMStore_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSSM.ExpectedCalls = nil
-			mockAssumedSSM.ExpectedCalls = nil
-			mockSTS.ExpectedCalls = nil
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockSSM, mockAssumedSSM, mockSTS)
 			}
 
 			store.writeRoleArn = tt.writeRoleArn
 			store.secret = tt.secret
+			if tt.nilStackDelimiter {
+				store.stackDelimiter = nil
+			} else {
+				store.stackDelimiter = &stackDelimiter
+			}
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Set() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			mockSSM.AssertExpectations(t)
-			mockAssumedSSM.AssertExpectations(t)
-			mockSTS.AssertExpectations(t)
 		})
 	}
 }
@@ -370,31 +319,31 @@ func TestSSMStore_Has_NoDecryption(t *testing.T) {
 	param := "/test-prefix/dev/usw2/app/service/config-key"
 
 	t.Run("present_without_decryption", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
 		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
-		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+		mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 			Name:           aws.String(param),
 			WithDecryption: aws.Bool(false),
 		}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
 
 		ok, err := store.Has("dev/usw2/app", "service", "config-key")
 		require.NoError(t, err)
-		assert.True(t, ok)
-		mockSSM.AssertExpectations(t) // fails if a WithDecryption=true call was made instead.
+		assert.True(t, ok) // fails if a WithDecryption=true call was made instead.
 	})
 
 	t.Run("absent_returns_false", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
 		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
-		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+		mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 			Name:           aws.String(param),
 			WithDecryption: aws.Bool(false),
 		}).Return((*ssm.GetParameterOutput)(nil), &types.ParameterNotFound{})
 
 		ok, err := store.Has("dev/usw2/app", "service", "config-key")
 		require.NoError(t, err)
-		assert.False(t, ok)
-		mockSSM.AssertExpectations(t) // fails if GetParameter stops being called.
+		assert.False(t, ok) // fails if GetParameter stops being called.
 	})
 }
 
@@ -402,9 +351,10 @@ func TestSSMStore_Has_NoDecryption(t *testing.T) {
 // (decryption-free) existence check against the assumed-role client.
 func TestSSMStore_Has_ReadRole(t *testing.T) {
 	stackDelimiter := "/"
-	mockSSM := new(MockSSMClient)
-	mockSTS := new(MockSTSClient)
-	mockAssumedSSM := new(MockSSMClient)
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	mockSTS := NewMockSTSClient(ctrl)
+	mockAssumedSSM := NewMockSSMClient(ctrl)
 
 	store := &SSMStore{
 		client:         mockSSM,
@@ -416,7 +366,7 @@ func TestSSMStore_Has_ReadRole(t *testing.T) {
 		newSSMClient:   func(cfg aws.Config) SSMClient { return mockAssumedSSM },
 	}
 
-	mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+	mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 		RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 		RoleSessionName: aws.String("atmos-ssm-session"),
 	}).Return(&sts.AssumeRoleOutput{
@@ -426,16 +376,14 @@ func TestSSMStore_Has_ReadRole(t *testing.T) {
 			SessionToken:    aws.String("token"),
 		},
 	}, nil)
-	mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+	mockAssumedSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 		Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 		WithDecryption: aws.Bool(false),
-	}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+	}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil) // existence check ran against the assumed-role client.
 
 	ok, err := store.Has("dev/usw2/app", "service", "config-key")
 	require.NoError(t, err)
 	assert.True(t, ok)
-	mockSTS.AssertExpectations(t)
-	mockAssumedSSM.AssertExpectations(t) // existence check ran against the assumed-role client.
 }
 
 // TestSSMStore_Has_ErrorPaths covers Has's non-success branches: empty key, getKey failure,
@@ -444,39 +392,43 @@ func TestSSMStore_Has_ErrorPaths(t *testing.T) {
 	stackDelimiter := "/"
 
 	t.Run("empty_key", func(t *testing.T) {
-		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		ctrl := gomock.NewController(t)
+		store := &SSMStore{client: NewMockSSMClient(ctrl), prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
 		_, err := store.Has("dev/usw2/app", "service", "")
 		require.ErrorIs(t, err, storepkg.ErrEmptyKey)
 	})
 
 	t.Run("get_key_error_nil_delimiter", func(t *testing.T) {
 		// A nil stack delimiter makes getKey fail before any client call.
-		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: nil}
+		ctrl := gomock.NewController(t)
+		store := &SSMStore{client: NewMockSSMClient(ctrl), prefix: "/test-prefix", stackDelimiter: nil}
 		_, err := store.Has("dev/usw2/app", "service", "config-key")
 		require.ErrorIs(t, err, storepkg.ErrGetKey)
 	})
 
 	t.Run("assume_read_role_fails", func(t *testing.T) {
-		mockSTS := new(MockSTSClient)
+		ctrl := gomock.NewController(t)
+		mockSTS := NewMockSTSClient(ctrl)
 		store := &SSMStore{
-			client:         new(MockSSMClient),
+			client:         NewMockSSMClient(ctrl),
 			prefix:         "/test-prefix",
 			stackDelimiter: &stackDelimiter,
 			awsConfig:      &aws.Config{Region: "us-west-2"},
 			readRoleArn:    aws.String("arn:aws:iam::123456789012:role/read-role"),
 			newSTSClient:   func(cfg aws.Config) STSClient { return mockSTS },
-			newSSMClient:   func(cfg aws.Config) SSMClient { return new(MockSSMClient) },
+			newSSMClient:   func(cfg aws.Config) SSMClient { return NewMockSSMClient(ctrl) },
 		}
-		mockSTS.On("AssumeRole", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("boom"))
+		mockSTS.EXPECT().AssumeRole(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("boom"))
 
 		_, err := store.Has("dev/usw2/app", "service", "config-key")
 		require.ErrorIs(t, err, storepkg.ErrAssumeRole)
 	})
 
 	t.Run("other_get_parameter_error_is_wrapped", func(t *testing.T) {
-		mockSSM := new(MockSSMClient)
+		ctrl := gomock.NewController(t)
+		mockSSM := NewMockSSMClient(ctrl)
 		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
-		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+		mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 			Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 			WithDecryption: aws.Bool(false),
 		}).Return((*ssm.GetParameterOutput)(nil), errors.New("access denied"))
@@ -487,9 +439,10 @@ func TestSSMStore_Has_ErrorPaths(t *testing.T) {
 }
 
 func TestSSMStore_Get(t *testing.T) {
-	mockSSM := new(MockSSMClient)
-	mockSTS := new(MockSTSClient)
-	mockAssumedSSM := new(MockSSMClient)
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	mockSTS := NewMockSTSClient(ctrl)
+	mockAssumedSSM := NewMockSSMClient(ctrl)
 	stackDelimiter := "/"
 	awsConfig := &aws.Config{Region: "us-west-2"}
 
@@ -523,7 +476,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -540,7 +493,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "slice-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -557,7 +510,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "map-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/map-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -574,9 +527,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(input *ssm.GetParameterInput) bool {
-					return true
-				})).Return(nil, errors.New("aws error"))
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("aws error"))
 			},
 			wantErr: true,
 		},
@@ -587,7 +538,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -605,7 +556,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "",
 			key:       "config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -630,9 +581,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "non-existent-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(input *ssm.GetParameterInput) bool {
-					return true
-				})).Return(nil, &types.ParameterNotFound{})
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, &types.ParameterNotFound{})
 			},
 			wantErr: true,
 		},
@@ -642,7 +591,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "plain-text-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -660,7 +609,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "malformed-json-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -678,7 +627,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "integer-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -695,7 +644,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "float-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -712,7 +661,7 @@ func TestSSMStore_Get(t *testing.T) {
 			component: "service",
 			key:       "numeric-string-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -733,7 +682,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -753,7 +702,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -773,7 +722,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -791,7 +740,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -811,7 +760,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -831,7 +780,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -851,7 +800,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -870,7 +819,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "secret-key",
 			secret:    true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -888,7 +837,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:         "config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(&sts.AssumeRoleOutput{
@@ -899,7 +848,7 @@ func TestSSMStore_Get(t *testing.T) {
 					},
 				}, nil)
 
-				mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockAssumedSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -917,7 +866,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:         "config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(nil, fmt.Errorf("failed to assume role"))
@@ -928,9 +877,6 @@ func TestSSMStore_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSSM.ExpectedCalls = nil
-			mockAssumedSSM.ExpectedCalls = nil
-			mockSTS.ExpectedCalls = nil
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockSSM, mockAssumedSSM, mockSTS)
 			}
@@ -945,8 +891,6 @@ func TestSSMStore_Get(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("SSMStore.Get() = %v, want %v", got, tt.want)
 			}
-			mockSSM.AssertExpectations(t)
-			mockSTS.AssertExpectations(t)
 		})
 	}
 }
@@ -1254,9 +1198,10 @@ func TestSSMStore_getKey(t *testing.T) {
 }
 
 func TestSSMStore_GetKey(t *testing.T) {
-	mockSSM := new(MockSSMClient)
-	mockSTS := new(MockSTSClient)
-	mockAssumedSSM := new(MockSSMClient)
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	mockSTS := NewMockSTSClient(ctrl)
+	mockAssumedSSM := NewMockSSMClient(ctrl)
 	stackDelimiter := "/"
 	awsConfig := &aws.Config{Region: "us-west-2"}
 
@@ -1289,7 +1234,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:    "dev/usw2/app/service/secret-key",
 			secret: true,
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/secret-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1304,7 +1249,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "successful_get",
 			key:  "dev/usw2/app/service/config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1319,7 +1264,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "successful_get_slice",
 			key:  "dev/usw2/app/service/slice-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1334,7 +1279,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "successful_get_map",
 			key:  "dev/usw2/app/service/map-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/map-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1349,9 +1294,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "aws_error",
 			key:  "dev/usw2/app/service/config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(input *ssm.GetParameterInput) bool {
-					return true
-				})).Return(nil, errors.New("aws error"))
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("aws error"))
 			},
 			wantErr: true,
 		},
@@ -1365,9 +1308,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "parameter_not_found",
 			key:  "dev/usw2/app/service/non-existent-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(input *ssm.GetParameterInput) bool {
-					return true
-				})).Return(nil, &types.ParameterNotFound{})
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, &types.ParameterNotFound{})
 			},
 			wantErr: true,
 		},
@@ -1375,7 +1316,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "non-json_value",
 			key:  "dev/usw2/app/service/plain-text-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1391,7 +1332,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "malformed_json_value",
 			key:  "dev/usw2/app/service/malformed-json-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1407,7 +1348,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "integer_value",
 			key:  "dev/usw2/app/service/integer-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1422,7 +1363,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "float_value",
 			key:  "dev/usw2/app/service/float-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1437,7 +1378,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			name: "numeric_string",
 			key:  "dev/usw2/app/service/numeric-string-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1453,7 +1394,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:         "dev/usw2/app/service/config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(&sts.AssumeRoleOutput{
@@ -1464,7 +1405,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 					},
 				}, nil)
 
-				mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+				mockAssumedSSM.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
 					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
@@ -1480,7 +1421,7 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:         "dev/usw2/app/service/config-key",
 			readRoleArn: aws.String("arn:aws:iam::123456789012:role/read-role"),
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
-				mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+				mockSTS.EXPECT().AssumeRole(gomock.Any(), &sts.AssumeRoleInput{
 					RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
 					RoleSessionName: aws.String("atmos-ssm-session"),
 				}).Return(nil, fmt.Errorf("failed to assume role"))
@@ -1491,9 +1432,6 @@ func TestSSMStore_GetKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSSM.ExpectedCalls = nil
-			mockAssumedSSM.ExpectedCalls = nil
-			mockSTS.ExpectedCalls = nil
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockSSM, mockAssumedSSM, mockSTS)
 			}
@@ -1508,8 +1446,6 @@ func TestSSMStore_GetKey(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("SSMStore.GetKey() = %v, want %v", got, tt.want)
 			}
-			mockSSM.AssertExpectations(t)
-			mockSTS.AssertExpectations(t)
 		})
 	}
 }
@@ -1540,49 +1476,52 @@ func TestNewSSMStore_WithRolesAndDelimiter(t *testing.T) {
 }
 
 func TestSSMStore_assumeRole_Error(t *testing.T) {
-	mockSTS := new(MockSTSClient)
-	mockSTS.On("AssumeRole", mock.Anything, mock.Anything).Return(nil, errors.New("assume boom"))
+	ctrl := gomock.NewController(t)
+	mockSTS := NewMockSTSClient(ctrl)
+	mockSTS.EXPECT().AssumeRole(gomock.Any(), gomock.Any()).Return(nil, errors.New("assume boom"))
 
 	stackDelimiter := "/"
 	store := &SSMStore{
-		client:         new(MockSSMClient),
+		client:         NewMockSSMClient(ctrl),
 		stackDelimiter: &stackDelimiter,
 		awsConfig:      &aws.Config{Region: "us-west-2"},
 		writeRoleArn:   aws.String("arn:aws:iam::123456789012:role/test"),
 		newSTSClient:   func(_ aws.Config) STSClient { return mockSTS },
-		newSSMClient:   func(_ aws.Config) SSMClient { return new(MockSSMClient) },
+		newSSMClient:   func(_ aws.Config) SSMClient { return NewMockSSMClient(ctrl) },
 	}
 
 	err := store.Set("dev", "app", "k", "v")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to assume")
-	mockSTS.AssertExpectations(t)
 }
 
 func TestSSMStore_Set_MoreErrors(t *testing.T) {
-	newStore := func() *SSMStore {
+	newStore := func(t *testing.T) *SSMStore {
+		t.Helper()
+		ctrl := gomock.NewController(t)
 		delimiter := "/"
 		return &SSMStore{
-			client:         new(MockSSMClient),
+			client:         NewMockSSMClient(ctrl),
 			stackDelimiter: &delimiter,
 			awsConfig:      &aws.Config{Region: "us-west-2"},
 		}
 	}
 
 	t.Run("nil value", func(t *testing.T) {
-		assert.ErrorIs(t, newStore().Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+		assert.ErrorIs(t, newStore(t).Set("dev", "app", "k", nil), storepkg.ErrNilValue)
 	})
 
 	t.Run("marshal error", func(t *testing.T) {
-		assert.ErrorIs(t, newStore().Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
+		assert.ErrorIs(t, newStore(t).Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
 	})
 }
 
 func TestSSMStore_GetKey_PrefixAddsLeadingSlash(t *testing.T) {
 	delimiter := "/"
-	mockSSM := new(MockSSMClient)
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
 	// Prefix without a leading slash exercises the "/"-prepend branch.
-	mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(in *ssm.GetParameterInput) bool {
+	mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Cond(func(in *ssm.GetParameterInput) bool {
 		return *in.Name == "/myprefix/k"
 	})).Return(&ssm.GetParameterOutput{
 		Parameter: &types.Parameter{Value: aws.String(`"val"`)},
@@ -1598,7 +1537,6 @@ func TestSSMStore_GetKey_PrefixAddsLeadingSlash(t *testing.T) {
 	v, err := store.GetKey("k")
 	assert.NoError(t, err)
 	assert.Equal(t, "val", v)
-	mockSSM.AssertExpectations(t)
 }
 
 func TestBuildSSMStore_ParseError(t *testing.T) {
@@ -1606,4 +1544,48 @@ func TestBuildSSMStore_ParseError(t *testing.T) {
 		Options: map[string]interface{}{"region": []string{"x"}},
 	})
 	assert.ErrorIs(t, err, storepkg.ErrParseSSMOptions)
+}
+
+// TestSSMStore_Keys proves Keys paginates via GetParametersByPath (WithDecryption=false, no
+// kms:Decrypt needed) and strips the queried path from each returned parameter name.
+func TestSSMStore_Keys(t *testing.T) {
+	stackDelimiter := "-"
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	store := &SSMStore{client: mockSSM, prefix: "/atmos", stackDelimiter: &stackDelimiter, awsConfig: &aws.Config{Region: "us-east-1"}}
+
+	mockSSM.EXPECT().GetParametersByPath(gomock.Any(), &ssm.GetParametersByPathInput{
+		Path:           aws.String("/atmos/prod/vpc"),
+		Recursive:      aws.Bool(true),
+		WithDecryption: aws.Bool(false),
+		NextToken:      (*string)(nil),
+	}).Return(&ssm.GetParametersByPathOutput{
+		Parameters: []types.Parameter{{Name: aws.String("/atmos/prod/vpc/image_tag")}},
+		NextToken:  aws.String("page2"),
+	}, nil)
+	mockSSM.EXPECT().GetParametersByPath(gomock.Any(), &ssm.GetParametersByPathInput{
+		Path:           aws.String("/atmos/prod/vpc"),
+		Recursive:      aws.Bool(true),
+		WithDecryption: aws.Bool(false),
+		NextToken:      aws.String("page2"),
+	}).Return(&ssm.GetParametersByPathOutput{
+		Parameters: []types.Parameter{{Name: aws.String("/atmos/prod/vpc/region")}},
+	}, nil)
+
+	keys, err := store.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+}
+
+func TestSSMStore_Keys_Error(t *testing.T) {
+	stackDelimiter := "-"
+	ctrl := gomock.NewController(t)
+	mockSSM := NewMockSSMClient(ctrl)
+	store := &SSMStore{client: mockSSM, prefix: "/atmos", stackDelimiter: &stackDelimiter, awsConfig: &aws.Config{Region: "us-east-1"}}
+
+	mockSSM.EXPECT().GetParametersByPath(gomock.Any(), gomock.Any()).Return((*ssm.GetParametersByPathOutput)(nil), assert.AnError)
+
+	_, err := store.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListParameters)
 }
