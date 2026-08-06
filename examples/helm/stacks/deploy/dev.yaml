@@ -6,6 +6,12 @@ helm:
   release:
     wait:
       strategy: watcher
+    # Nested k3s runners can leave Helm's watcher blocked after release
+    # resources are gone. Live deletes use deterministic legacy waiting; the
+    # workflow still exercises watcher selection through its delete dry-run.
+    delete:
+      wait:
+        strategy: legacy
     # Leave enough headroom for nested k3s workloads on resource-constrained
     # macOS/Colima runners. Components that exercise timeout behavior override
     # this value explicitly below.
@@ -73,12 +79,6 @@ components:
       release:
         wait:
           jobs: true
-        # Helm's watcher can remain blocked after deleting a completed ordinary
-        # Job even though the release resources are already gone. Keep watcher
-        # coverage for install and use deterministic legacy cleanup here.
-        delete:
-          wait:
-            strategy: legacy
       values:
         hooks:
           enabled: false
