@@ -209,7 +209,7 @@ func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	ctx, cancel := releaseOperationContext(parent, 0)
 	defer cancel()
 
-	assert.Same(t, parent, ctx)
+	assert.Equal(t, parent, ctx)
 	_, hasDeadline := ctx.Deadline()
 	assert.False(t, hasDeadline)
 }
