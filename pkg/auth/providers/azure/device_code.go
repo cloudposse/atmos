@@ -44,6 +44,10 @@ type deviceCodeProvider struct {
 	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
 	cacheStorage   CacheStorage
 	realm          string // Credential isolation realm set by auth manager.
+	// authMethod is the AzureCredentials.AuthMethod value this provider mints
+	// (device_code, or interactive when embedded by interactiveProvider). It also
+	// selects the MSAL cache account_source label.
+	authMethod string
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
@@ -115,6 +119,7 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		clientID:       cfg.ClientID,
 		cloudEnv:       azureCloud.GetCloudEnvironment(cfg.CloudEnvironment),
 		cacheStorage:   &defaultCacheStorage{},
+		authMethod:     authTypes.AzureAuthMethodDeviceCode,
 	}, nil
 }
 
@@ -257,6 +262,7 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 		GraphExpiresAt:    tokens.graphExpiresOn,
 		KeyVaultToken:     tokens.keyVaultToken,
 		KeyVaultExpiresAt: tokens.keyVaultExpiresOn,
+		HomeAccountID:     tokens.homeAccountID,
 	}); err != nil {
 		log.Debug("Failed to update Azure CLI token cache", "error", err)
 	}
@@ -274,6 +280,10 @@ type tokenAcquisitionResult struct {
 	graphExpiresOn    time.Time
 	keyVaultExpiresOn time.Time
 	aksExpiresOn      time.Time
+	// homeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
+	// account. For guest (B2B) users the home tenant differs from p.tenantID, and
+	// the Azure CLI cache write-back must use this value to avoid duplicate accounts.
+	homeAccountID string
 }
 
 // trySilentTokenAcquisition attempts to acquire tokens silently from cached account.
@@ -310,6 +320,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 
 	result.accessToken = mgmtResult.AccessToken
 	result.expiresOn = mgmtResult.ExpiresOn
+	result.homeAccountID = account.HomeAccountID
 	log.Debug("Successfully acquired management token silently", logKeyExpiresOn, result.expiresOn)
 
 	// Try to get Graph token silently.
@@ -391,6 +402,8 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 		return result, nil
 	}
 
+	p.captureHomeAccountID(accounts, &result)
+
 	// Acquire additional API tokens for azuread and azurerm providers.
 	p.acquireAdditionalTokens(ctx, client, accounts, &result)
 
@@ -460,6 +473,33 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 	}
 }
 
+// captureHomeAccountID records the MSAL home account ID for correct Azure CLI
+// cache interop (guest users have a home tenant different from p.tenantID).
+func (p *deviceCodeProvider) captureHomeAccountID(accounts []public.Account, result *tokenAcquisitionResult) {
+	if account, err := p.findAccountForTenant(accounts); err == nil {
+		result.homeAccountID = account.HomeAccountID
+	}
+}
+
+// credentialsAuthMethod returns the AuthMethod this provider mints, defaulting
+// to device_code for instances constructed without one (e.g. in tests).
+func (p *deviceCodeProvider) credentialsAuthMethod() string {
+	if p.authMethod == "" {
+		return authTypes.AzureAuthMethodDeviceCode
+	}
+	return p.authMethod
+}
+
+// accountSource returns the MSAL cache account_source label matching this
+// provider's flow, mirroring what az itself records: "authorization_code" for
+// the interactive browser flow, "device_code" otherwise.
+func (p *deviceCodeProvider) accountSource() string {
+	if p.authMethod == authTypes.AzureAuthMethodInteractive {
+		return "authorization_code"
+	}
+	return "device_code"
+}
+
 // createCredentials creates Azure credentials from acquired tokens.
 // Currently returns nil error but signature matches GetCredentials interface.
 //
@@ -473,6 +513,8 @@ func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (
 		SubscriptionID:   p.subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
+		AuthMethod:       p.credentialsAuthMethod(),
+		HomeAccountID:    tokens.homeAccountID,
 	}
 
 	// Add Graph API token if available.

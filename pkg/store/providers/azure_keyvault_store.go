@@ -40,6 +40,10 @@ type AzureKeyVaultClient interface {
 	// without ever returning the secret value, so existence can be confirmed via the "list"
 	// permission instead of "get". Has() uses this to avoid retrieving the secret value.
 	NewListSecretPropertiesVersionsPager(name string, options *azsecrets.ListSecretPropertiesVersionsOptions) *runtime.Pager[azsecrets.ListSecretPropertiesVersionsResponse]
+	// NewListSecretPropertiesPager lists every secret's properties in the vault (metadata only,
+	// no values). Azure Key Vault has no server-side name-prefix filter, so Keys uses this to
+	// list everything and filters client-side.
+	NewListSecretPropertiesPager(options *azsecrets.ListSecretPropertiesOptions) *runtime.Pager[azsecrets.ListSecretPropertiesResponse]
 }
 
 // AzureKeyVaultStore is an implementation of the store.Store interface for Azure Key Vault.
@@ -76,6 +80,7 @@ var (
 	_ store.IdentityAwareStore = (*AzureKeyVaultStore)(nil)
 	_ store.DeletableStore     = (*AzureKeyVaultStore)(nil)
 	_ store.StatusStore        = (*AzureKeyVaultStore)(nil)
+	_ store.ListableStore      = (*AzureKeyVaultStore)(nil)
 )
 
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
@@ -458,6 +463,56 @@ func (s *AzureKeyVaultStore) Has(stack string, component string, key string) (bo
 	}
 
 	return true, nil
+}
+
+// matchSecretName reports the listed key name for a secret's properties, trimming prefix and
+// reporting false when the item has no usable ID or its name does not match prefix. Factored out
+// of Keys to keep its cyclomatic complexity within the linter's limit.
+func matchSecretName(item *azsecrets.SecretProperties, prefix string) (string, bool) {
+	if item == nil || item.ID == nil {
+		return "", false
+	}
+	name := item.ID.Name()
+	if prefix == "" {
+		return name, true
+	}
+	return strings.CutPrefix(name, prefix)
+}
+
+// Keys lists the secret names under a stack/component scope (or globally when both are empty).
+// Azure Key Vault has no server-side name-prefix filter parameter, so this lists every secret in
+// the vault and filters client-side by the normalized prefix.
+func (s *AzureKeyVaultStore) Keys(stack string, component string) ([]string, error) {
+	if s.stackDelimiter == nil {
+		return nil, store.ErrStackDelimiterNotSet
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	rawPrefix := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, AzureKeyVaultHyphen)
+	prefix := ""
+	if rawPrefix != "" {
+		prefix = s.normalizeSecretName(rawPrefix) + AzureKeyVaultHyphen
+	}
+
+	ctx := context.Background()
+	var names []string
+	pager := s.client.NewListSecretPropertiesPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFormat, store.ErrListSecretProperties, err)
+		}
+		for _, item := range page.Value {
+			if name, ok := matchSecretName(item, prefix); ok {
+				names = append(names, name)
+			}
+		}
+	}
+
+	return names, nil
 }
 
 func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {

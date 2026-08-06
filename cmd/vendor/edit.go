@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
@@ -14,8 +16,20 @@ import (
 // DefaultVendorManifest is the default vendor manifest filename.
 const DefaultVendorManifest = vendoring.DefaultVendorFile
 
-// vendorFileFlag overrides which vendor manifest to read/edit.
-var vendorFileFlag string
+// vendorFileFlagHelp is the canonical "--file" help text shared by vendor get/set and every
+// vendor config subcommand (get/set/delete/format/list), each of which registers its own
+// independent "--file" flag (see resolveVendorFileFromCmd) -- a single source of truth so the
+// wording can't drift out of sync across five-plus call sites the way componentTypeFlagHelp
+// (vendor.go) protects "--type" from the same drift.
+const vendorFileFlagHelp = "Vendor manifest file (default: ./vendor.yaml)"
+
+// vendorGetParser and vendorSetParser each own an independent "--file" flag: earlier revisions
+// shared a single package-level vendorFileFlag var between both commands, which meant setting one
+// command's flag could leak into the other's default.
+var (
+	vendorGetParser *flags.StandardParser
+	vendorSetParser *flags.StandardParser
+)
 
 // vendorGetCmd reads the pinned version of a component from the vendor
 // manifest. It is a thin alias of "vendor config get": it resolves the
@@ -30,7 +44,7 @@ var vendorGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.getRunE")()
 
-		file, err := resolveVendorFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
@@ -57,7 +71,7 @@ The source is matched by component name, so manifest ordering does not matter.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.setRunE")()
 
-		file, err := resolveVendorFile()
+		file, err := resolveVendorFileFromCmd(cmd)
 		if err != nil {
 			return err
 		}
@@ -70,17 +84,36 @@ The source is matched by component name, so manifest ordering does not matter.`,
 }
 
 func init() {
-	for _, c := range []*cobra.Command{vendorGetCmd, vendorSetCmd} {
-		c.Flags().StringVar(&vendorFileFlag, "file", "", "Vendor manifest file (default: ./vendor.yaml)")
+	vendorGetParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+	)
+	vendorGetParser.RegisterFlags(vendorGetCmd)
+	if err := vendorGetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
 	}
+
+	vendorSetParser = flags.NewStandardParser(
+		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
+	)
+	vendorSetParser.RegisterFlags(vendorSetCmd)
+	if err := vendorSetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	vendorCmd.AddCommand(vendorGetCmd)
 	vendorCmd.AddCommand(vendorSetCmd)
 }
 
-// resolveVendorFile picks the vendor manifest to operate on: the --file override,
-// otherwise ./vendor.yaml in the current directory.
-func resolveVendorFile() (string, error) {
-	return resolveVendorFileWithOverride(vendorFileFlag)
+// resolveVendorFileFromCmd picks the vendor manifest to operate on: cmd's own --file override,
+// otherwise ./vendor.yaml in the current directory. Shared by every vendor subcommand that
+// registers an independent "--file" flag (vendor get/set, vendor config get/set/delete/format/list),
+// each reading its own flag value off its own cmd rather than a shared package-level var.
+func resolveVendorFileFromCmd(cmd *cobra.Command) (string, error) {
+	file, err := cmd.Flags().GetString("file")
+	if err != nil {
+		return "", err
+	}
+	return resolveVendorFileWithOverride(file)
 }
 
 func resolveVendorFileWithOverride(file string) (string, error) {

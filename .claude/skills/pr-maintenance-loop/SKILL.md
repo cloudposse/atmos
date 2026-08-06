@@ -1,6 +1,6 @@
 ---
 name: pr-maintenance-loop
-description: "Start an hourly background loop that keeps the current branch's PR rebased, its addressed CodeRabbit threads resolved, its CI checks passing, its lint clean, and its tests passing with adequate patch coverage — working toward autonomous merge-readiness. Invoke at the start of a session on a branch with an open PR, or on explicit requests like \"set up the hourly PR loop\" / \"auto-rebase this PR\". For a one-shot run instead of a recurring loop, use the `fix-all` skill directly."
+description: "Start an hourly background loop that keeps the current branch's PR rebased, its addressed CodeRabbit threads resolved, its CI checks passing, its lint clean, its tests passing with adequate patch coverage, and its code free of architectural-smell (code-hygiene) findings — working toward autonomous merge-readiness. Invoke at the start of a session on a branch with an open PR, or on explicit requests like \"set up the hourly PR loop\" / \"auto-rebase this PR\". For a one-shot run instead of a recurring loop, use the `fix-all` skill directly."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -11,8 +11,8 @@ metadata:
 Schedules the [`fix-all`](../fix-all/SKILL.md) skill to run every hour via Claude Code's native
 `/loop` primitive (`CronCreate`/`ScheduleWakeup`) — not GitHub Actions, no new external service,
 no secrets beyond the local `git`/`gh` session already in use. All the actual check/fix logic
-(sync, CI, CodeRabbit threads, lint, coverage — the security model and audible notifications that
-govern it) lives in `fix-all`; this skill only owns the scheduling.
+(sync, CI, CodeRabbit threads, lint, coverage, code-hygiene — the security model and audible
+notifications that govern it) lives in `fix-all`; this skill only owns the scheduling.
 
 ## Known limitations (surface these, don't hide them)
 
@@ -33,12 +33,12 @@ govern it) lives in `fix-all`; this skill only owns the scheduling.
 ## Step 0 — preconditions
 
 1. `gh pr view --json number,state,mergeStateStatus` for the current branch. If there's no open
-   PR, tell the user and stop — don't create one.
+  PR, tell the user and stop — don't create one.
 2. Check whether a loop is already running this session (list scheduled jobs; look for the
-   sentinel first line `[PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]`).
-   If found for this PR, don't start a second one — report it's already active. A fresh session
-   never inherits a stale job, since the old one died with the old process, so this only guards
-   against double-starting within one session.
+  sentinel first line `[PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]`).
+  If found for this PR, don't start a second one — report it's already active. A fresh session
+  never inherits a stale job, since the old one died with the old process, so this only guards
+  against double-starting within one session.
 
 ## Step 1 — announce and start
 
@@ -69,14 +69,14 @@ This is the literal text re-enqueued every cycle via `/loop 60m`:
 [PR-MAINTENANCE-LOOP pr=#<number> repo=cloudposse/atmos started=<ts>]
 
 1. Self-expiry: if more than ~6.5 days have passed since `started=`, say so in the summary
-   (approaching the 7-day CronCreate expiry) but keep running.
+  (approaching the 7-day CronCreate expiry) but keep running.
 
 2. `gh pr view <number> --json state,mergeStateStatus`. If state != OPEN, report it and cancel
-   this recurring job — don't keep firing no-ops after merge/close.
+  this recurring job — don't keep firing no-ops after merge/close.
 
 3. Invoke the `fix-all` skill (`Skill({skill: "fix-all"})`) — it owns steps 3-10 of what used to
-   be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, and the security model /
-   audible-notification rules governing all of it.
+  be inlined here: sync, CI check, CodeRabbit threads, lint, coverage, code-hygiene, and the
+  security model / audible-notification rules governing all of it.
 
 4. Always end with a one-line cycle summary, even on the no-op path, for auditability.
 ```
