@@ -645,6 +645,39 @@ func TestProcessHelmComponentsIndexed_ValuesFileChangedOutsideComponentBasePath(
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackValuesFile)
 }
 
+func TestProcessHelmComponentsIndexed_ScalarValuesFileChanged(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := helmAtmosConfig()
+	atmosConfig.BasePath = tempDir
+
+	componentFolder := "shared-chart"
+	componentPath := filepath.Join(tempDir, "components", "helm", componentFolder)
+	valuesFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	valuesRef, err := filepath.Rel(componentPath, valuesFile)
+	require.NoError(t, err)
+
+	identical := map[string]any{
+		cfg.ComponentSectionName: componentFolder,
+		sectionNameChart:         ".",
+		sectionNameValuesF:       valuesRef,
+	}
+	helmSection := map[string]any{helmTestComponent: identical}
+	remoteStacks := helmRemoteStacksWith(identical)
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{valuesFile}, tempDir)
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, newComponentPathPatternCache(),
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, helmTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackValuesFile)
+}
+
 func TestProcessHelmComponentsIndexed_AbsoluteValuesFileChanged(t *testing.T) {
 	tempDir := t.TempDir()
 	atmosConfig := helmAtmosConfig()
