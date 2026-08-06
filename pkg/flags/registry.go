@@ -236,7 +236,7 @@ func (r *FlagRegistry) RegisterIntFlag(name, shorthand string, defaultValue int,
 //   - StringFlag → cmd.Flags().StringP()
 //   - BoolFlag → cmd.Flags().BoolP()
 //   - IntFlag → cmd.Flags().IntP()
-//   - StringSliceFlag → cmd.Flags().StringSlice()
+//   - StringSliceFlag → cmd.Flags().StringSliceP()
 func (r *FlagRegistry) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flags.FlagRegistry.RegisterFlags")()
 
@@ -262,7 +262,7 @@ func (r *FlagRegistry) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag) {
 	case *IntFlag:
 		flagSet.IntP(f.Name, f.Shorthand, f.Default, f.Description)
 	case *StringSliceFlag:
-		flagSet.StringSlice(f.Name, f.Default, f.Description)
+		flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
 	}
 }
 

@@ -3,12 +3,16 @@ package docker
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func setupTestDockerConfigDir(t *testing.T) string {
@@ -234,4 +238,122 @@ func TestConfigManager_GetConfigPath(t *testing.T) {
 
 	expectedPath := filepath.Join(tmpDir, "config.json")
 	assert.Equal(t, expectedPath, manager.GetConfigPath())
+}
+
+func TestConfigManager_WithConfigLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	tempDir := t.TempDir()
+
+	// Point configPath at a parent directory that does not exist. gofrs/flock
+	// (as vendored here) opens its lock file with O_RDONLY|O_CREATE on most
+	// platforms, so a pre-created directory at the lock path is silently
+	// flock()-able and does NOT produce an error (unlike older flock
+	// versions that opened O_RDWR). A missing parent directory, however,
+	// fails the underlying open() immediately and deterministically on every
+	// platform, giving withConfigLock a hard, non-blocking error without
+	// needing to hold a real contending lock.
+	configPath := filepath.Join(tempDir, "nonexistent-subdir", "config.json")
+
+	manager := &ConfigManager{configPath: configPath}
+
+	executed := false
+	err := manager.withConfigLock(func() error {
+		executed = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigWrite))
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
+
+// TestNewConfigManager_MkdirAllFailure verifies that a MkdirAll failure (the
+// config directory already exists as a regular file, not a directory) is
+// surfaced as ErrDockerConfigWrite instead of panicking or being silently
+// ignored.
+func TestNewConfigManager_MkdirAllFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	blockingFile := filepath.Join(tmpDir, "docker-config")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("not a directory"), 0o600))
+	t.Setenv("DOCKER_CONFIG", blockingFile)
+
+	manager, err := NewConfigManager()
+	require.Error(t, err)
+	assert.Nil(t, manager)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigWrite))
+}
+
+// TestConfigManager_LoadConfig_ReadFailure verifies the non-ENOENT
+// os.ReadFile failure branch (the config path is a directory, not a missing
+// file).
+func TestConfigManager_LoadConfig_ReadFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	require.NoError(t, os.MkdirAll(configPath, 0o700)) // Directory in place of the file.
+
+	manager := &ConfigManager{configDir: tmpDir, configPath: configPath}
+	_, err := manager.loadConfig()
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigRead))
+}
+
+// TestConfigManager_SaveConfig_WriteFailure verifies that an os.WriteFile
+// failure (a read-only config directory) is surfaced as ErrDockerConfigWrite.
+// The saveConfig method has no locking of its own (its callers wrap it in
+// withConfigLock), so it's exercised directly here.
+func TestConfigManager_SaveConfig_WriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	require.NoError(t, os.Chmod(tmpDir, 0o500)) // Read-only: blocks creating config.json.
+	t.Cleanup(func() { _ = os.Chmod(tmpDir, 0o700) })
+
+	manager := &ConfigManager{configDir: tmpDir, configPath: configPath}
+	err := manager.saveConfig(&dockerConfig{Auths: map[string]authEntry{"registry": {Auth: "dGVzdA=="}}})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigWrite))
+}
+
+// TestConfigManager_WriteAuth_LoadConfigFailureAfterLock verifies that a
+// loadConfig failure occurring *inside* the lock closure (the config path is
+// a directory, so the sibling ".lock" file still locks successfully but the
+// read itself fails) is returned by WriteAuth as-is, and is not mistaken for
+// a lock-acquisition timeout.
+func TestConfigManager_WriteAuth_LoadConfigFailureAfterLock(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	require.NoError(t, os.MkdirAll(configPath, 0o700)) // Directory in place of the file.
+
+	manager := &ConfigManager{configDir: tmpDir, configPath: configPath}
+	err := manager.WriteAuth("registry.example.com", "user", "pass")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigRead))
+	assert.False(t, errors.Is(err, errUtils.ErrDockerConfigWrite), "a read failure must not be mistaken for a lock-acquisition (write) failure")
+}
+
+// TestConfigManager_RemoveAuth_LoadConfigFailureAfterLock mirrors
+// TestConfigManager_WriteAuth_LoadConfigFailureAfterLock for RemoveAuth's own
+// loadConfig call site inside its lock closure.
+func TestConfigManager_RemoveAuth_LoadConfigFailureAfterLock(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	require.NoError(t, os.MkdirAll(configPath, 0o700)) // Directory in place of the file.
+
+	manager := &ConfigManager{configDir: tmpDir, configPath: configPath}
+	err := manager.RemoveAuth("registry.example.com")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigRead))
 }

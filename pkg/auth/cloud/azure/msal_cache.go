@@ -51,36 +51,22 @@ func (c *msalCache) Replace(ctx context.Context, u cache.Unmarshaler, hints cach
 		return err
 	}
 
-	// Acquire file lock for reading to prevent race with concurrent writes.
-	lockPath := c.cachePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(ctx, c.cachePath, func() error {
+		data, err := os.ReadFile(c.cachePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Debug("MSAL cache file does not exist, starting with empty cache", "path", c.cachePath)
+				return nil
+			}
+			return fmt.Errorf("failed to read MSAL cache: %w", err)
 		}
-	}()
-
-	// Read cache file.
-	data, err := os.ReadFile(c.cachePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.Debug("MSAL cache file does not exist, starting with empty cache", "path", c.cachePath)
-			return nil // Empty cache is OK.
+		if err := u.Unmarshal(data); err != nil {
+			log.Debug("Failed to unmarshal MSAL cache, starting fresh", "error", err)
+			return nil
 		}
-		return fmt.Errorf("failed to read MSAL cache: %w", err)
-	}
-
-	// Unmarshal into MSAL's internal format.
-	if err := u.Unmarshal(data); err != nil {
-		log.Debug("Failed to unmarshal MSAL cache, starting fresh", "error", err)
-		return nil // Corrupted cache is OK, start fresh.
-	}
-
-	log.Debug("Loaded MSAL cache from disk", "path", c.cachePath, "size", len(data))
-	return nil
+		log.Debug("Loaded MSAL cache from disk", "path", c.cachePath, "size", len(data))
+		return nil
+	})
 }
 
 // Export writes the cache from memory to disk.
@@ -96,25 +82,13 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := c.cachePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(ctx, c.cachePath, func() error {
+		if err := os.WriteFile(c.cachePath, data, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
-	}()
-
-	// Write to disk with secure permissions.
-	if err := os.WriteFile(c.cachePath, data, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write MSAL cache: %w", err)
-	}
-
-	log.Debug("Exported MSAL cache to disk", "path", c.cachePath, "size", len(data))
-	return nil
+		log.Debug("Exported MSAL cache to disk", "path", c.cachePath, "size", len(data))
+		return nil
+	})
 }
 
 // GetCachePath returns the path to the MSAL cache file.

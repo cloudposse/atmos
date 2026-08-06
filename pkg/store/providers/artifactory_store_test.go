@@ -1,0 +1,705 @@
+package providers
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
+	"github.com/jfrog/jfrog-client-go/artifactory"
+	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	rtutils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
+	"github.com/jfrog/jfrog-client-go/utils/io/content"
+	al "github.com/jfrog/jfrog-client-go/utils/log"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+)
+
+// Define log levels for testing using atmos logger constants.
+var (
+	debugLogLevel = log.DebugLevel
+	infoLogLevel  = log.InfoLevel
+	warnLogLevel  = log.WarnLevel
+	traceLogLevel = log.TraceLevel
+)
+
+// writeMockDownloadedFile replicates the download side effect that a real Artifactory download
+// would produce: it writes data to <target>/<filepath.Base(pattern)>. Wired up via DoAndReturn on
+// the generated MockArtifactoryClient's DownloadFiles expectation, since a plain gomock Return
+// value cannot also perform file I/O as a side effect.
+func writeMockDownloadedFile(target, pattern string, data []byte) (int, int, error) {
+	targetDir := target
+	filename := filepath.Base(pattern)
+
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return 0, 0, err
+	}
+
+	fullPath := filepath.Join(targetDir, filename)
+	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
+		return 0, 0, err
+	}
+
+	return 1, 0, nil
+}
+
+// newTestContentReader writes items to a temp "results" JSON file (the JFrog search response
+// shape) and returns a ContentReader over it, since content.ContentReader has no in-memory
+// constructor from a slice.
+func newTestContentReader(t *testing.T, items []rtutils.ResultItem) *content.ContentReader {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "artifactory-search-*.json")
+	require.NoError(t, err)
+	data, err := json.Marshal(map[string]any{"results": items})
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return content.NewContentReader(f.Name(), "results")
+}
+
+func TestNewArtifactoryStore(t *testing.T) {
+	tests := []struct {
+		name        string
+		options     ArtifactoryStoreOptions
+		expectError bool
+	}{
+		{
+			name: "valid configuration with access token",
+			options: ArtifactoryStoreOptions{
+				AccessToken: aws.String("test-token"),
+				Prefix:      aws.String("test-prefix"),
+				RepoName:    "test-repo",
+				URL:         "http://artifactory.example.com",
+			},
+			expectError: false,
+		},
+		{
+			name: "missing access token",
+			options: ArtifactoryStoreOptions{
+				RepoName: "test-repo",
+				URL:      "http://artifactory.example.com",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Temporarily unset environment variables
+			originalArtToken := os.Getenv("ARTIFACTORY_ACCESS_TOKEN")
+			originalJfrogToken := os.Getenv("JFROG_ACCESS_TOKEN")
+			defer func() {
+				os.Setenv("ARTIFACTORY_ACCESS_TOKEN", originalArtToken)
+				os.Setenv("JFROG_ACCESS_TOKEN", originalJfrogToken)
+			}()
+			_ = os.Unsetenv("ARTIFACTORY_ACCESS_TOKEN")
+			_ = os.Unsetenv("JFROG_ACCESS_TOKEN")
+
+			store, err := NewArtifactoryStore(tt.options)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, store)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, store)
+			}
+		})
+	}
+}
+
+func TestArtifactoryStore_getKey(t *testing.T) {
+	delimiter := "/"
+	store := &ArtifactoryStore{
+		prefix:         "prefix",
+		repoName:       "repo",
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		expected  string
+	}{
+		{
+			name:      "simple path",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/config.json",
+		},
+		{
+			name:      "nested component",
+			stack:     "dev",
+			component: "app/service",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/service/config.json",
+		},
+		{
+			name:      "multi-level stack",
+			stack:     "dev/us-west-2",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/us-west-2/app/config.json",
+		},
+		{
+			name:      "slice value",
+			stack:     "dev",
+			component: "app",
+			key:       "[]string{\"a\",\"b\"}",
+			expected:  "repo/prefix/dev/app/[]string{\"a\",\"b\"}",
+		},
+		{
+			name:      "map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]string{\"key\":\"value\"}",
+			expected:  "repo/prefix/dev/app/map[string]string{\"key\":\"value\"}",
+		},
+		{
+			name:      "nested map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]map[string]int{\"outer\":{\"inner\":42}}",
+			expected:  "repo/prefix/dev/app/map[string]map[string]int{\"outer\":{\"inner\":42}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := store.getKey(tt.stack, tt.component, tt.key)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestArtifactoryStore_Set(t *testing.T) {
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		expected  string
+	}{
+		{
+			name:      "basic",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/config.json",
+		},
+		{
+			name:      "nested component",
+			stack:     "dev",
+			component: "app/service",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/service/config.json",
+		},
+		{
+			name:      "multi-level stack",
+			stack:     "dev/us-west-2",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/us-west-2/app/config.json",
+		},
+		{
+			name:      "slice value",
+			stack:     "dev",
+			component: "app",
+			key:       "[]string{\"a\",\"b\"}",
+			expected:  "repo/prefix/dev/app/[]string{\"a\",\"b\"}",
+		},
+		{
+			name:      "map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]string{\"key\":\"value\"}",
+			expected:  "repo/prefix/dev/app/map[string]string{\"key\":\"value\"}",
+		},
+		{
+			name:      "nested map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]map[string]int{\"outer\":{\"inner\":42}}",
+			expected:  "repo/prefix/dev/app/map[string]map[string]int{\"outer\":{\"inner\":42}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
+			delimiter := "/"
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			mockClient.EXPECT().UploadFiles(
+				gomock.Cond(func(options artifactory.UploadServiceOptions) bool {
+					return options.FailFast == true
+				}),
+				gomock.Cond(func(params services.UploadParams) bool {
+					return params.Target == tt.expected && params.Flat == true
+				}),
+			).Return(1, 0, nil)
+
+			err := store.Set(tt.stack, tt.component, tt.key, []byte("test data"))
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
+	delimiter := "/"
+
+	tests := []struct {
+		name        string
+		stack       string
+		component   string
+		key         string
+		mockSetup   func(mockClient *MockArtifactoryClient)
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:      "download error",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
+					return params.Pattern == "repo/prefix/dev/app/config.json"
+				})).Return(0, 1, fmt.Errorf("download failed")) //nolint
+			},
+			expectError: true,
+			errorMsg:    "download failed",
+		},
+		{
+			name:      "no files downloaded",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Any()).Return(0, 0, nil)
+			},
+			expectError: true,
+			errorMsg:    "no files downloaded",
+		},
+		{
+			name:      "successful download",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+					func(params ...services.DownloadParams) (int, int, error) {
+						return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte(`{"test":"value"}`))
+					},
+				)
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Fresh controller + mock per subtest: gomock has no "reset expectations" API like
+			// testify's ExpectedCalls/Calls reset, so each subtest gets its own isolated mock.
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			tt.mockSetup(mockClient)
+			result, err := store.Get(tt.stack, tt.component, tt.key)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}
+
+func TestArtifactoryStore_GetKey(t *testing.T) {
+	delimiter := "/"
+
+	tests := []struct {
+		name        string
+		key         string
+		mockSetup   func(mockClient *MockArtifactoryClient)
+		expectError bool
+		// errIs, when non-nil, is matched against the returned error with errors.Is.
+		errIs error
+		// errMsg, when non-empty, is matched against the returned error with Contains.
+		errMsg   string
+		expected interface{}
+	}{
+		{
+			name:        "empty key",
+			key:         "",
+			mockSetup:   func(mockClient *MockArtifactoryClient) {},
+			expectError: true,
+			errIs:       storepkg.ErrEmptyKey,
+		},
+		{
+			name: "download error",
+			key:  "config.json",
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
+					return params.Pattern == "repo/prefix/config.json"
+				})).Return(0, 1, fmt.Errorf("download failed"))
+			},
+			expectError: true,
+			errMsg:      "download failed",
+		},
+		{
+			name: "successful download appends json extension and parses JSON",
+			// No ".json" suffix; GetKey appends it before building the repo path.
+			key: "config",
+			mockSetup: func(mockClient *MockArtifactoryClient) {
+				mockClient.EXPECT().DownloadFiles(gomock.Cond(func(params services.DownloadParams) bool {
+					return params.Pattern == "repo/prefix/config.json"
+				})).DoAndReturn(
+					func(params ...services.DownloadParams) (int, int, error) {
+						return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte(`{"test":"value"}`))
+					},
+				)
+			},
+			expectError: false,
+			// A successful download writes `{"test":"value"}`.
+			expected: map[string]interface{}{"test": "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Fresh controller + mock per subtest: gomock has no "reset expectations" API like
+			// testify's ExpectedCalls/Calls reset, so each subtest gets its own isolated mock.
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockArtifactoryClient(ctrl)
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			tt.mockSetup(mockClient)
+			result, err := store.GetKey(tt.key)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errIs != nil {
+					assert.ErrorIs(t, err, tt.errIs)
+				}
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
+	// Save the original function and restore it after the test
+	origCreateNoopLogger := createNoopLogger
+	defer func() {
+		createNoopLogger = origCreateNoopLogger
+	}()
+
+	// Save original log level and restore after test
+	originalLogLevel := log.GetLevel()
+	defer log.SetLevel(originalLogLevel)
+
+	tests := []struct {
+		name             string
+		atmosLogLevel    log.Level
+		expectNoopLogger bool
+	}{
+		{
+			name:             "Debug level uses standard logger",
+			atmosLogLevel:    debugLogLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Trace level uses standard logger",
+			atmosLogLevel:    traceLogLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Info level uses noopLogger",
+			atmosLogLevel:    infoLogLevel,
+			expectNoopLogger: true,
+		},
+		{
+			name:             "Warn level uses noopLogger",
+			atmosLogLevel:    warnLogLevel,
+			expectNoopLogger: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Track if noopLogger was created
+			noopLoggerCreated := false
+
+			// Override the factory function
+			createNoopLogger = func() al.Log {
+				noopLoggerCreated = true
+				return origCreateNoopLogger()
+			}
+
+			// Set the test log level
+			log.SetLevel(tt.atmosLogLevel)
+
+			// Create store which should trigger logging setup
+			_, err := NewArtifactoryStore(ArtifactoryStoreOptions{
+				AccessToken: aws.String("test-token"),
+				RepoName:    "test-repo",
+				URL:         "http://example.com",
+			})
+			assert.NoError(t, err)
+
+			// Verify if noopLogger was created as expected
+			assert.Equal(t, tt.expectNoopLogger, noopLoggerCreated,
+				"For log level %s, noopLogger created: %v, expected: %v",
+				tt.atmosLogLevel, noopLoggerCreated, tt.expectNoopLogger)
+		})
+	}
+}
+
+func TestGetAccessKey(t *testing.T) {
+	t.Run("explicit access token", func(t *testing.T) {
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{AccessToken: aws.String("explicit")})
+		assert.NoError(t, err)
+		assert.Equal(t, "explicit", tok)
+	})
+
+	t.Run("ARTIFACTORY_ACCESS_TOKEN env", func(t *testing.T) {
+		t.Setenv("JFROG_ACCESS_TOKEN", "")
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "art-env")
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, "art-env", tok)
+	})
+
+	t.Run("JFROG_ACCESS_TOKEN env", func(t *testing.T) {
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "")
+		t.Setenv("JFROG_ACCESS_TOKEN", "jfrog-env")
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, "jfrog-env", tok)
+	})
+
+	t.Run("missing token", func(t *testing.T) {
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "")
+		t.Setenv("JFROG_ACCESS_TOKEN", "")
+		_, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.ErrorIs(t, err, storepkg.ErrMissingArtifactoryToken)
+	})
+}
+
+func TestArtifactoryStore_getKey_NilDelimiter(t *testing.T) {
+	store := &ArtifactoryStore{prefix: "p", repoName: "r"} // stackDelimiter is nil.
+	_, err := store.getKey("dev", "app", "k")
+	assert.ErrorIs(t, err, storepkg.ErrStackDelimiterNotSet)
+}
+
+func TestArtifactoryStore_Get_Validation(t *testing.T) {
+	delimiter := "/"
+	store := &ArtifactoryStore{prefix: "p", repoName: "r", stackDelimiter: &delimiter}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		want      error
+	}{
+		{"empty stack", "", "app", "k", storepkg.ErrEmptyStack},
+		{"empty component", "dev", "", "k", storepkg.ErrEmptyComponent},
+		{"empty key", "dev", "app", "", storepkg.ErrEmptyKey},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := store.Get(tt.stack, tt.component, tt.key)
+			assert.ErrorIs(t, err, tt.want)
+		})
+	}
+}
+
+func TestArtifactoryStore_processDownloadedFile(t *testing.T) {
+	store := &ArtifactoryStore{}
+
+	t.Run("read error on missing file", func(t *testing.T) {
+		_, err := store.processDownloadedFile(t.TempDir(), "nonexistent.json")
+		assert.ErrorIs(t, err, storepkg.ErrReadFile)
+	})
+
+	t.Run("unmarshal error on non-JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.json"), []byte("not json"), 0o600))
+		_, err := store.processDownloadedFile(dir, "bad.json")
+		assert.ErrorIs(t, err, storepkg.ErrUnmarshalFile)
+	})
+
+	t.Run("valid JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "ok.json"), []byte(`{"a":1}`), 0o600))
+		result, err := store.processDownloadedFile(dir, "ok.json")
+		assert.NoError(t, err)
+		assert.Equal(t, map[string]interface{}{"a": float64(1)}, result)
+	})
+}
+
+func TestArtifactoryStore_Set_Errors(t *testing.T) {
+	delimiter := "/"
+	newStore := func(t *testing.T) (*ArtifactoryStore, *MockArtifactoryClient) {
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
+		return &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}, mc
+	}
+
+	t.Run("empty stack", func(t *testing.T) {
+		s, _ := newStore(t)
+		assert.ErrorIs(t, s.Set("", "app", "k", "v"), storepkg.ErrEmptyStack)
+	})
+
+	t.Run("empty component", func(t *testing.T) {
+		s, _ := newStore(t)
+		assert.ErrorIs(t, s.Set("dev", "", "k", "v"), storepkg.ErrEmptyComponent)
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		s, _ := newStore(t)
+		assert.ErrorIs(t, s.Set("dev", "app", "", "v"), storepkg.ErrEmptyKey)
+	})
+
+	t.Run("nil value", func(t *testing.T) {
+		s, _ := newStore(t)
+		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+	})
+
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
+		s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc} // nil delimiter.
+		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrGetKey)
+	})
+
+	t.Run("marshal error", func(t *testing.T) {
+		s, _ := newStore(t)
+		// A channel cannot be marshaled to JSON.
+		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrMarshalValue)
+	})
+
+	t.Run("upload error", func(t *testing.T) {
+		s, mc := newStore(t)
+		// A non-[]byte value exercises the json.Marshal branch before upload.
+		mc.EXPECT().UploadFiles(gomock.Any(), gomock.Any()).Return(0, 1, fmt.Errorf("upload boom"))
+		err := s.Set("dev", "app", "k", "string-value")
+		assert.ErrorIs(t, err, storepkg.ErrUploadFile)
+	})
+}
+
+func TestArtifactoryStore_GetKey_DataVariants(t *testing.T) {
+	delimiter := "/"
+
+	t.Run("empty data returns empty string", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
+		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
+		mc.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+			func(params ...services.DownloadParams) (int, int, error) {
+				return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte{})
+			},
+		)
+
+		v, err := s.GetKey("config")
+		assert.NoError(t, err)
+		assert.Equal(t, "", v)
+	})
+
+	t.Run("non-JSON data returns string", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mc := NewMockArtifactoryClient(ctrl)
+		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
+		mc.EXPECT().DownloadFiles(gomock.Any()).DoAndReturn(
+			func(params ...services.DownloadParams) (int, int, error) {
+				return writeMockDownloadedFile(params[0].Target, params[0].Pattern, []byte("plain text"))
+			},
+		)
+
+		v, err := s.GetKey("config")
+		assert.NoError(t, err)
+		assert.Equal(t, "plain text", v)
+	})
+}
+
+func TestBuildArtifactoryStore_ParseError(t *testing.T) {
+	// A slice cannot decode into the *string Prefix field.
+	_, err := buildArtifactoryStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"prefix": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseArtifactoryOptions)
+}
+
+// TestArtifactoryStore_Keys proves Keys searches with a recursive Ant-style pattern and strips
+// the store's repo+prefix segment from each match's repo-relative path.
+func TestArtifactoryStore_Keys(t *testing.T) {
+	delimiter := "-"
+	ctrl := gomock.NewController(t)
+	mc := NewMockArtifactoryClient(ctrl)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	reader := newTestContentReader(t, []rtutils.ResultItem{
+		{Repo: "r", Path: "p/prod/vpc", Name: "image_tag"},
+		{Repo: "r", Path: "p/prod/vpc", Name: "region"},
+		{Repo: "r", Path: "p/dev/vpc", Name: "image_tag"}, // Different stack: excluded.
+	})
+	mc.EXPECT().SearchFiles(gomock.Cond(func(params services.SearchParams) bool {
+		return params.Pattern == "r/p/prod/vpc/**" && params.Recursive
+	})).Return(reader, nil)
+
+	keys, err := s.Keys("prod", "vpc")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"image_tag", "region"}, keys)
+}
+
+func TestArtifactoryStore_Keys_Error(t *testing.T) {
+	delimiter := "-"
+	ctrl := gomock.NewController(t)
+	mc := NewMockArtifactoryClient(ctrl)
+	s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}
+
+	mc.EXPECT().SearchFiles(gomock.Any()).Return((*content.ContentReader)(nil), assert.AnError)
+
+	_, err := s.Keys("prod", "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, storepkg.ErrListArtifacts)
+}
