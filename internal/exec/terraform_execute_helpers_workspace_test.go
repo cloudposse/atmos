@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -223,16 +224,20 @@ func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.
 	t.Cleanup(func() { dispatchAfterInitFn = originalDispatch })
 
 	var dispatched bool
-	dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, _ ...ShellCommandOption) {
+	var dispatchOpts []ShellCommandOption
+	dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
 		dispatched = true
+		dispatchOpts = append([]ShellCommandOption(nil), opts...)
 		assert.Equal(t, "/tmp/component", componentPath)
 		assert.Equal(t, subcommandInit, info.SubCommand)
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, DryRun: true}
-	require.NoError(t, executeMainTerraformCommand(&atmosConfig, &info, []string{subcommandInit}, "/tmp/component", false))
+	ctx := provWorkdir.WithOutputSuppressed(t.Context())
+	require.NoError(t, executeMainTerraformCommand(&atmosConfig, &info, []string{subcommandInit}, "/tmp/component", false, WithProcessContext(ctx)))
 	assert.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
+	assert.True(t, provWorkdir.OutputSuppressed(shellCommandContext(dispatchOpts...)))
 }
 
 func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing.T) {
