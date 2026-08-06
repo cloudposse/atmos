@@ -115,6 +115,14 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag(cfg.CastFlagName, "", defaults.Cast, "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)"))
 	b.options = append(b.options, WithEnvVars(cfg.CastFlagName, cfg.CastEnvVarName))
 	b.options = append(b.options, WithNoOptDefValNoSpaceValue(cfg.CastFlagName, cfg.CastFlagAutoValue))
+	// The global --cast flag must not be stored at the bare "cast" Viper key:
+	// Viper treats any registered flag as shadowing every nested key under
+	// its own key (isPathShadowedInFlatMap), so a bare "cast" flag silently
+	// zeroes out unrelated nested keys like "cast.record.mode" or
+	// "cast.recording.width" whenever it's left unset. Store it at a nested
+	// leaf of its own instead, so "cast" stays free to be the map root the
+	// CastConfig schema (pkg/schema/schema.go) and other cast.* commands need.
+	b.options = append(b.options, WithViperKey(cfg.CastFlagName, "cast.target"))
 }
 
 // registerAuthenticationFlags registers authentication flags.
