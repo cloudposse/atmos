@@ -141,7 +141,7 @@ pro:
     delivers minted tokens to child `git` processes: `env` (default) injects inline
     `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` rewrites; `file` writes a `0600` gitconfig and emits an
     additive `include.path` so token values stay off the environment. Per-integration
-    `git_sts.git_config_mode` in an identity spec overrides this default.
+    `git_config_mode` in a `github/sts` integration `spec` overrides this default.
 
     - **Type:** `string`
     - **Default:** `env`
@@ -151,7 +151,7 @@ pro:
   <dd>
     Global default for whether minted `github/sts` tokens are auto-revoked at command-end in CI.
     Set `false` to keep credentials alive for a separate CI step. Per-integration
-    `git_sts.revoke_on_exit` in an identity spec overrides this default.
+    `revoke_on_exit` in a `github/sts` integration `spec` overrides this default.
 
     - **Type:** `boolean`
     - **Default:** `true`

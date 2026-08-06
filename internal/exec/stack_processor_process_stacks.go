@@ -1372,15 +1372,19 @@ func ProcessStackConfig(
 			if len(componentSettings) > 0 {
 				componentMap[cfg.SettingsSectionName] = componentSettings
 			}
-			// Merge global pro into component pro.
-			componentPro := map[string]any{}
-			for k, v := range globalProSection {
-				componentPro[k] = v
-			}
+			// Merge global pro into component pro. Uses a deep merge (mirroring the
+			// built-in component types above) rather than a shallow top-level-key copy,
+			// because `pro:` nests multi-level maps (e.g. `pull_request.opened` vs
+			// `pull_request.synchronize`) -- a shallow copy would let a component-local
+			// `pro.pull_request` with only one activity silently wipe out other
+			// globally-configured activities under the same key.
+			var componentLocalPro map[string]any
 			if pro, ok := componentMap[cfg.ProSectionName].(map[string]any); ok {
-				for k, v := range pro {
-					componentPro[k] = v
-				}
+				componentLocalPro = pro
+			}
+			componentPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, componentLocalPro})
+			if err != nil {
+				return nil, err
 			}
 			if len(componentPro) > 0 {
 				componentMap[cfg.ProSectionName] = componentPro

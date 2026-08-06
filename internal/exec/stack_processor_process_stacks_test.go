@@ -1394,6 +1394,92 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
 }
 
+// TestProcessStackConfig_CustomComponentTypeProDeepMerge verifies that a
+// custom (non-built-in) component type's own `pro:` block is deep-merged
+// with the global stack `pro:` section rather than replacing it wholesale.
+// `pro:` nests multi-level maps (e.g. `pull_request.opened` vs
+// `pull_request.synchronize`), so a shallow top-level-key merge would let a
+// component-local `pro.pull_request` with only one activity silently wipe
+// out other globally-configured activities under the same key.
+func TestProcessStackConfig_CustomComponentTypeProDeepMerge(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ProSectionName: map[string]any{
+			"enabled": true,
+			"pull_request": map[string]any{
+				"opened": map[string]any{
+					"workflows": map[string]any{"atmos-terraform-plan.yaml": map[string]any{}},
+				},
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"container": map[string]any{
+				"no-local-pro": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "no-local-pro"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "local-override"},
+					cfg.ProSectionName: map[string]any{
+						"pull_request": map[string]any{
+							"synchronize": map[string]any{
+								"workflows": map[string]any{"atmos-terraform-plan.yaml": map[string]any{}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	containerSection, ok := components["container"].(map[string]any)
+	require.True(t, ok, "container components should be present")
+
+	// A component with no local `pro:` must simply inherit the global block.
+	noLocalPro, ok := containerSection["no-local-pro"].(map[string]any)
+	require.True(t, ok, "no-local-pro component should exist")
+	noLocalProSection, ok := noLocalPro[cfg.ProSectionName].(map[string]any)
+	require.True(t, ok, "no-local-pro must have a pro section merged in from global, got: %v", noLocalPro[cfg.ProSectionName])
+	assert.Equal(t, true, noLocalProSection["enabled"])
+	pullRequest, ok := noLocalProSection["pull_request"].(map[string]any)
+	require.True(t, ok, "pull_request must be present")
+	assert.Contains(t, pullRequest, "opened", "global pull_request.opened must be inherited")
+
+	// A component with a local `pro.pull_request.synchronize` must retain the
+	// global `pro.pull_request.opened` -- not replace the whole `pull_request`
+	// map.
+	localOverride, ok := containerSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideProSection, ok := localOverride[cfg.ProSectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a pro section, got: %v", localOverride[cfg.ProSectionName])
+	assert.Equal(t, true, overrideProSection["enabled"], "component must still inherit global pro.enabled")
+	overridePullRequest, ok := overrideProSection["pull_request"].(map[string]any)
+	require.True(t, ok, "pull_request must be present")
+	assert.Contains(t, overridePullRequest, "opened", "global pull_request.opened must survive the deep merge")
+	assert.Contains(t, overridePullRequest, "synchronize", "component-local pull_request.synchronize must be preserved")
+}
+
 // componentHooks extracts the merged hooks section for a terraform component
 // from a ProcessStackConfig result. It fails the test if the component or its
 // hooks section is missing, so inheritance assertions read cleanly.

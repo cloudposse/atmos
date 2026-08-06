@@ -155,6 +155,11 @@ Pro mint short-lived GitHub App installation tokens in CI without storing long-l
   `atmos describe affected --upload` runs on `merge_group` events.
 - If drift is not dispatched, verify `pro.enabled`, `pro.drift_detection.enabled`,
   and that the instance appears in `atmos list instances --upload`.
-- If a config sets both `pro:` and `settings.pro:`, the top-level `pro:` block wins outright — it
-  is not merged with `settings.pro:`. A stray `settings.pro:` left behind after a partial migration
-  can silently override an intended `pro:` change; check both.
+- If `atmos.yaml` sets both `pro:` and `settings.pro:`, each field falls back independently: a
+  `pro.<field>` set at the top level wins; a field left unset there still falls back to
+  `settings.pro.<field>`. A stray `settings.pro:` field left behind after a partial migration can
+  still take effect for any field the top-level `pro:` block leaves unset; check both.
+- If a stack/component config sets both `pro:` and `settings.pro:`, the top-level `pro:` block wins
+  outright as a whole block — it is not merged field-by-field with `settings.pro:`. A stray
+  `settings.pro:` left behind after a partial migration is ignored entirely once a local `pro:`
+  block exists on the same component; check both.

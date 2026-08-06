@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/joho/godotenv"
@@ -546,18 +547,54 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	return atmosConfig, nil
 }
 
+// proDeprecationWarnMu guards proDeprecationWarned.
+var proDeprecationWarnMu sync.Mutex
+
+// proDeprecationWarned tracks whether the `settings.pro` deprecation notice has already been
+// logged in this process. See warnProSettingsDeprecatedOnce for why this is a manually-gated
+// latch rather than a sync.Once.
+var proDeprecationWarned bool
+
+// warnProSettingsDeprecatedOnce logs the `settings.pro` deprecation notice at most once per
+// process. LoadConfig (and therefore resolveProSettings) runs many times within a single CLI
+// invocation -- once per InitCliConfig call, and InitCliConfig is called repeatedly during stack
+// and component processing -- so without a guard the same warning is emitted on every debug-level
+// stderr capture, once per LoadConfig call.
+//
+// This intentionally does NOT use sync.Once: the very first LoadConfig call in a command often
+// runs before the CLI has synced --verbose/--logs-level into the logger, so log.Debug is a no-op
+// at that point. A plain sync.Once would still consume its single call there, silently swallowing
+// the notice for the rest of the process even once debug logging becomes active. Checking
+// log.GetLevel() first, and only latching after the message was actually eligible to print,
+// avoids that trap.
+func warnProSettingsDeprecatedOnce() {
+	if log.GetLevel() > log.DebugLevel {
+		return
+	}
+
+	proDeprecationWarnMu.Lock()
+	defer proDeprecationWarnMu.Unlock()
+	if proDeprecationWarned {
+		return
+	}
+	proDeprecationWarned = true
+	log.Debug("'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro")
+}
+
 // resolveProSettings resolves the deprecated `settings.pro` path into the top-level `pro` field.
 // The top-level field wins field-by-field whenever both are set; the deprecated path is otherwise
 // used as a fallback. Emits a deprecation notice whenever `settings.pro` is present, regardless of
 // which value wins, mirroring the existing 'settings.depends_on' deprecation notice
-// (internal/exec/describe_affected_components.go).
+// (internal/exec/describe_affected_components.go). The notice itself is logged at most once per
+// process via warnProSettingsDeprecatedOnce to avoid flooding debug output across repeated
+// LoadConfig calls.
 func resolveProSettings(atmosConfig *schema.AtmosConfiguration) {
 	legacy := atmosConfig.Settings.Pro //nolint:staticcheck // Deliberate read of the deprecated field to implement the fallback itself.
 	if legacy == (schema.ProSettings{}) {
 		return
 	}
 
-	log.Debug("'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro")
+	warnProSettingsDeprecatedOnce()
 
 	pro := &atmosConfig.Pro
 	if pro.BaseURL == "" {

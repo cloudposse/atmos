@@ -27,8 +27,8 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
 | Hand-rolled scheduled drift GitHub Actions | Atmos Pro drift detection |
 | `cloudposse/github-action-atmos-terraform-drift-*` | `pro.drift_detection` plus `atmos terraform plan --upload-status` |
-| `settings.pro` in `atmos.yaml` (CLI connection config: `base_url`/`token`/`workspace_id`/etc.) | Top-level `pro:` in `atmos.yaml` (deprecated alias, still works) |
-| `settings.pro.*` per component/stack (`enabled`/`drift_detection`/`pull_request`/`release`/`merge_group`) | Top-level `pro:` component section, a sibling of `vars:`/`metadata:`/`settings:` (deprecated alias, still works) |
+| `settings.pro` in `atmos.yaml` (CLI connection config: `base_url`/`token`/`workspace_id`/etc.) | Top-level `pro:` in `atmos.yaml` (`settings.pro` remains supported as a deprecated alias) |
+| `settings.pro.*` per component/stack (`enabled`/`drift_detection`/`pull_request`/`release`/`merge_group`) | Top-level `pro:` component section, a sibling of `vars:`/`metadata:`/`settings:` (`settings.pro` remains supported as a deprecated alias) |
 | Secret values through raw store calls | Declared `secrets.vars` plus `!secret` |
 | Legacy hook event spelling | Modern dotted lifecycle events such as `after.terraform.plan` |
 | Static GitHub tokens in URLs | Atmos Auth `github/sts` through Atmos Pro |

@@ -2,11 +2,9 @@
  DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
  DEBU  Loading toolchain registries from atmos.yaml registryCount=0
  DEBU  Successfully loaded configured registry from atmos.yaml
- DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
  DEBU  ProcessCommandLineArgs input componentType=terraform args=[]
  DEBU  After ParseFlags identity.Value="" identity.Changed=false
- DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
  DEBU  Vendor config file not found file=vendor
  DEBU  No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
  DEBU  Dry-run mode: custom detection required for component (or mixin) URI component=ipinfo uri="git::git@github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
@@ -18,6 +16,4 @@
 ✓ ipinfo (main)
 ▶ Done! Dry run completed. No components vendored
 ✓ Vendored components (success: 1)
- DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
- DEBU  'settings.pro' is deprecated, use 'pro' instead. See: https://atmos.tools/cli/configuration/settings/pro
  DEBU  Telemetry event enqueued

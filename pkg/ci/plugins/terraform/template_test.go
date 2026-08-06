@@ -500,6 +500,31 @@ func TestTemplateRendering(t *testing.T) {
 				"<sub>__Atmos Pro__ is enabled.</sub>",
 			},
 		},
+		{
+			name:         "test with pro disabled shows silver badge and disabled footer",
+			templateName: "test",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "test",
+					Result:        &plugin.OutputResult{ExitCode: 0},
+				},
+				ProEnabled: false,
+				TestResult: &plugin.TerraformTestOutputData{Total: 1, Pass: 1},
+			},
+			wantContains: []string{
+				"PRO-DISABLED-silver",
+				"https://atmos-pro.com",
+				"<sub>__Atmos Pro__ is disabled.</sub>",
+			},
+			wantNotContains: []string{
+				"PRO-ENABLED",
+				"is enabled.",
+				"/dashboard",
+			},
+		},
 	}
 
 	fs := defaultTemplates

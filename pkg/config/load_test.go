@@ -2008,29 +2008,104 @@ func TestResolveProSettings(t *testing.T) {
 	})
 
 	t.Run("legacy only, falls back field by field", func(t *testing.T) {
+		revokeOnExit := true
 		cfg := &schema.AtmosConfiguration{
 			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
-				WorkspaceID: "legacy-ws",
-				Token:       "legacy-token",
+				WorkspaceID:     "legacy-ws",
+				Token:           "legacy-token",
+				Endpoint:        "legacy/api",
+				MaxPayloadBytes: 1024,
+				GitHubHeadRef:   "legacy-branch",
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   "https://legacy.example.com/oidc",
+					RequestToken: "legacy-oidc-token",
+				},
+				GitSTS: schema.GitSTSSettings{
+					GitConfigMode: "file",
+					RevokeOnExit:  &revokeOnExit,
+				},
 			}},
 		}
 		resolveProSettings(cfg)
 		assert.Equal(t, "legacy-ws", cfg.Pro.WorkspaceID)
 		assert.Equal(t, "legacy-token", cfg.Pro.Token)
+		assert.Equal(t, "legacy/api", cfg.Pro.Endpoint)
+		assert.Equal(t, 1024, cfg.Pro.MaxPayloadBytes)
+		assert.Equal(t, "legacy-branch", cfg.Pro.GitHubHeadRef)
+		assert.Equal(t, "https://legacy.example.com/oidc", cfg.Pro.GithubOIDC.RequestURL)
+		assert.Equal(t, "legacy-oidc-token", cfg.Pro.GithubOIDC.RequestToken)
+		assert.Equal(t, "file", cfg.Pro.GitSTS.GitConfigMode)
+		require.NotNil(t, cfg.Pro.GitSTS.RevokeOnExit)
+		assert.True(t, *cfg.Pro.GitSTS.RevokeOnExit)
 	})
 
 	t.Run("both set, top-level wins per field", func(t *testing.T) {
+		legacyRevokeOnExit := true
+		topRevokeOnExit := false
 		cfg := &schema.AtmosConfiguration{
-			Pro: schema.ProSettings{WorkspaceID: "top-ws"},
+			Pro: schema.ProSettings{
+				WorkspaceID: "top-ws",
+				GitSTS:      schema.GitSTSSettings{GitConfigMode: "env", RevokeOnExit: &topRevokeOnExit},
+			},
 			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
-				WorkspaceID: "legacy-ws",
-				Token:       "legacy-token",
+				WorkspaceID:     "legacy-ws",
+				Token:           "legacy-token",
+				Endpoint:        "legacy/api",
+				MaxPayloadBytes: 1024,
+				GitHubHeadRef:   "legacy-branch",
+				GithubOIDC:      schema.GithubOIDCSettings{RequestURL: "https://legacy.example.com/oidc"},
+				GitSTS:          schema.GitSTSSettings{GitConfigMode: "file", RevokeOnExit: &legacyRevokeOnExit},
 			}},
 		}
 		resolveProSettings(cfg)
 		assert.Equal(t, "top-ws", cfg.Pro.WorkspaceID, "top-level value must not be overwritten by the legacy fallback")
 		assert.Equal(t, "legacy-token", cfg.Pro.Token, "fields unset at top level still fall back to the legacy value")
+		assert.Equal(t, "legacy/api", cfg.Pro.Endpoint, "Endpoint unset at top level falls back to legacy")
+		assert.Equal(t, 1024, cfg.Pro.MaxPayloadBytes, "MaxPayloadBytes unset at top level falls back to legacy")
+		assert.Equal(t, "legacy-branch", cfg.Pro.GitHubHeadRef, "GitHubHeadRef unset at top level falls back to legacy")
+		assert.Equal(t, "https://legacy.example.com/oidc", cfg.Pro.GithubOIDC.RequestURL, "GithubOIDC unset at top level falls back to legacy")
+		assert.Equal(t, "env", cfg.Pro.GitSTS.GitConfigMode, "GitSTS set at top level must not be overwritten by the legacy fallback")
+		require.NotNil(t, cfg.Pro.GitSTS.RevokeOnExit)
+		assert.False(t, *cfg.Pro.GitSTS.RevokeOnExit, "GitSTS set at top level must not be overwritten by the legacy fallback")
 	})
+}
+
+// TestLoadConfig_ProSettingsEnvVarPrecedence verifies that ATMOS_PRO_* environment variables
+// override both the top-level `pro.*` and the deprecated `settings.pro.*` config-file paths,
+// regardless of which one a project has set in atmos.yaml.
+func TestLoadConfig_ProSettingsEnvVarPrecedence(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "env overrides top-level pro",
+			content: "base_path: .\n" +
+				"pro:\n" +
+				"  token: file-pro-token\n",
+		},
+		{
+			name: "env overrides deprecated settings.pro",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    token: file-settings-pro-token\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(AtmosProTokenEnvVarName, "env-token")
+			tempDir := t.TempDir()
+			configPath := createTestConfig(t, tempDir, tt.content)
+			configInfo := &schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: []string{configPath},
+			}
+			cfg, err := LoadConfig(configInfo)
+			require.NoError(t, err)
+			assert.Equal(t, "env-token", cfg.Pro.Token, "ATMOS_PRO_TOKEN must override the config-file value")
+		})
+	}
 }
 
 func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
