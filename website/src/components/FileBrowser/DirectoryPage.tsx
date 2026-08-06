@@ -12,6 +12,7 @@ import CopyMarkdownButton from './CopyMarkdownButton';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import CastPlayer from '@site/src/components/CastPlayer';
+import CommandBox from '@site/src/components/CommandBox';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -50,6 +51,7 @@ export default function DirectoryPage({
   const isExampleRoot = dirData.path === exampleName;
   const showCast = isExampleRoot && !!example.cast?.file;
   const showCopyMarkdown = isExampleRoot && !!optionsData.enableCopyMarkdown;
+  const showInstallCommand = isExampleRoot && !!optionsData.installCommandTemplate;
 
   return (
     <Layout title={pageTitle}>
@@ -74,6 +76,13 @@ export default function DirectoryPage({
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          {showInstallCommand && (
+            <CommandBox
+              label={optionsData.installCommandLabel}
+              command={optionsData.installCommandTemplate.replace('{name}', exampleName)}
+            />
           )}
 
           {showCast && (

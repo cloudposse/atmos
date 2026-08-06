@@ -8,6 +8,7 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import SkillCount from '@site/src/components/SkillCount'
 
 <Intro>
 The `ai.skills` section defines custom AI skills with specialized system prompts, tool permissions,
@@ -381,7 +382,7 @@ Atmos includes 25 marketplace skills covering all aspects of infrastructure orch
 ## Custom Skill Examples
 
 :::tip Use Existing Skills First
-Atmos ships with 25 [marketplace skills](/ai/skill-marketplace) covering Terraform, stacks, components, validation, auth, templates, and more. Check the marketplace before creating custom skills - most common use cases are already covered. Reserve custom skills for organization-specific needs that marketplace skills don't address.
+Atmos ships with <SkillCount /> [official skills](/cli/commands/ai/skill) covering Terraform, stacks, components, validation, auth, templates, and more. Check the catalog before creating custom skills - most common use cases are already covered. Reserve custom skills for organization-specific needs that official skills don't address.
 :::
 
 Custom skills complement marketplace skills for organization-specific needs.
@@ -491,4 +492,4 @@ ai:
 - [AI Configuration](/cli/configuration/ai) - Configure AI providers and settings
 - [Claude Code Integration](/ai/claude-code-integration) - Use Atmos with Claude Code
 - [Tools Configuration](/cli/configuration/ai/tools) - Tool execution and permissions
-- [Skill Marketplace](/ai/skill-marketplace) - Install and share community skills
+- [`atmos ai skill`](/cli/commands/ai/skill) - Install and share community skills

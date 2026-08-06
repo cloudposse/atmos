@@ -294,7 +294,7 @@ We'd love to hear your feedback! Join the discussion in our [GitHub Discussions]
 ## Documentation
 
 - [atmos init command reference](/cli/commands/init)
-- [atmos scaffold command reference](/cli/commands/scaffold)
+- [atmos scaffold command reference](/cli/commands/scaffold/usage)
 - [Creating Custom Scaffold Templates](/cli/commands/scaffold/generate)
 - [PRD: Init Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init.md)
 - [PRD: Scaffold Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-scaffold.md)

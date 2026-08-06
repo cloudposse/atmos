@@ -105,6 +105,10 @@ export interface FileBrowserOptions {
   enableCopyMarkdown?: boolean;
   /** Renders each item's title as a code-formatted `/name`, signaling how it's invoked. */
   titleAsCode?: boolean;
+  /** Label for the per-item install command box (e.g. "Use this skill"). Unset = box hidden. */
+  installCommandLabel?: string;
+  /** Command template for the per-item install box; `{name}` is replaced with the item's directory name. */
+  installCommandTemplate?: string;
 }
 
 /**

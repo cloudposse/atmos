@@ -7,9 +7,11 @@ description: Manage AI skills including install, list, and uninstall operations
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import SkillCount from '@site/src/components/SkillCount'
 
 <Intro>
 Use this command to manage community and custom AI skills. Install skills from GitHub repositories, list installed skills, and remove skills you no longer need.
@@ -18,8 +20,7 @@ Use this command to manage community and custom AI skills. Install skills from G
 <Experimental />
 
 **See also:** [Agent Skills Directory](/ai/skills) to browse every skill |
-[AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml` |
-[Skill Marketplace](/ai/skill-marketplace) for installing community skills
+[AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml`
 
 <CastPlayer title="atmos ai skill --help" src="/casts/screengrabs/atmos-ai-skill--help.cast" static chrome />
 
@@ -43,6 +44,81 @@ atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
 
 See [Global Flags](/cli/global-flags) for details.
 :::
+
+## What Are Agent Skills?
+
+Atmos ships <SkillCount /> official agent skills that give AI coding assistants deep, accurate knowledge of Atmos
+conventions, stack configuration, Terraform orchestration, authentication, validation, and more -- browse them all in
+the [Agent Skills Directory](/ai/skills). They live in the `agent-skills/` folder at the root of the Atmos repository
+and work across Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+
+Each official skill is a self-contained package with:
+- **SKILL.md** -- The primary instruction file (under 500 lines) with YAML frontmatter metadata
+- **references/** -- Deeper reference files that the AI loads only when the task requires them
+
+Skills use a three-tier progressive disclosure pattern so AI context windows stay focused:
+
+1. **Router** (`AGENTS.md`) -- A lightweight index that maps user tasks to the right skill
+2. **Skill** (`SKILL.md`) -- Domain-specific instructions, patterns, and examples
+3. **References** (`references/*.md`) -- Detailed specifications, schemas, and command references
+
+The AI loads the router first, identifies which skill applies, loads that skill, and only pulls in reference files
+when deep detail is needed. You do **not** invoke skills manually -- your AI tool activates the right skill
+automatically based on your question. For step-by-step client setup, see
+[Configure AI Assistants](/projects/setup-editor/ai-assistants).
+
+### Official SKILL.md Format
+
+<File title="SKILL.md">
+```yaml
+---
+name: atmos-stacks
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+  category: core-config
+references:
+  - references/import-patterns.md
+  - references/inheritance-deep-merge.md
+---
+
+# Atmos Stacks
+
+Instructions for the AI assistant...
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the skill (must match the directory name).</dd>
+
+  <dt>`description`</dt>
+  <dd>Human-readable summary of what the skill teaches.</dd>
+
+  <dt>`metadata.category`</dt>
+  <dd>Groups the skill in the [Agent Skills Directory](/ai/skills) (e.g. `orchestrators`, `security`, `ci-automation`).</dd>
+
+  <dt>`references`</dt>
+  <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
+</dl>
+
+Skills build on two open standards: [AGENTS.md](https://agents.md/) for project-level AI instructions, and
+[Agent Skills](https://agentskills.io/specification) (`SKILL.md`) for packaging AI capabilities with instructions,
+references, and assets.
+
+### Contributing an Official Skill
+
+Official skills are maintained in the Atmos repository under `agent-skills/`. To contribute one:
+
+1. Follow the existing folder structure: `agent-skills/skills/<skill-name>/SKILL.md`
+2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
+3. Place detailed reference material in `references/` subdirectories
+4. Update `AGENTS.md` to include your skill in the routing table
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright`, `version`, and `category`), and optionally `references` fields
+
+New skills appear automatically in the [Agent Skills Directory](/ai/skills) -- no separate doc update needed. See the
+[Atmos Contributing Guide](/community) for general contribution guidelines.
 
 ## Usage
 
@@ -211,6 +287,172 @@ atmos ai skill uninstall skill-name --all-clients
 atmos ai skill uninstall skill-name --scope user
 ```
 
+## Creating and Publishing Your Own Skill
+
+Skills installed via `atmos ai skill install <github-url>` follow the same [Agent Skills open standard](https://agentskills.io) format -- a single SKILL.md file with YAML frontmatter and a Markdown body containing the system prompt.
+
+```
+your-skill-repo/
+├── SKILL.md             # Skill definition (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+The frontmatter declares metadata and tool access. The Markdown body is the AI system prompt.
+
+<File title="SKILL.md (abbreviated)">
+```markdown
+---
+name: terraform-expert
+display_name: "Terraform Expert"
+version: 1.0.0
+author: Cloud Posse
+description: >
+  Specialized AI skill for Terraform component development,
+  debugging, and best practices.
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+  max_version: ""
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - edit_file
+    - execute_bash
+  restricted:
+    - edit_file
+    - execute_bash
+
+capabilities:
+  - terraform-development
+  - component-architecture
+
+dependencies:
+  - terraform
+
+repository: https://github.com/yourorg/atmos-skill-terraform
+---
+
+# Skill: Terraform Expert
+
+## Role
+
+You are a specialized AI skill for Terraform component development...
+
+## Instructions
+
+[Detailed instructions for the AI skill go here]
+
+## Restrictions
+
+- Always confirm before executing destructive commands
+- Never commit secrets or credentials to code
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique skill identifier in kebab-case.</dd>
+
+  <dt>`display_name`</dt>
+  <dd>User-facing display name.</dd>
+
+  <dt>`version`</dt>
+  <dd>Semantic version (e.g., `1.2.3`).</dd>
+
+  <dt>`author`</dt>
+  <dd>Author name or organization.</dd>
+
+  <dt>`description`</dt>
+  <dd>Brief description of skill purpose.</dd>
+
+  <dt>`category`</dt>
+  <dd>One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`.</dd>
+
+  <dt>`atmos.min_version`</dt>
+  <dd>Minimum compatible Atmos version.</dd>
+
+  <dt>`tools.allowed`</dt>
+  <dd>Tools the skill can use. Tools in `restricted` require user confirmation each time.</dd>
+
+  <dt>`repository`</dt>
+  <dd>GitHub repository URL.</dd>
+</dl>
+
+### Publishing Your Skill
+
+Create a GitHub repository with a valid SKILL.md, tag a release, and share it:
+
+<Terminal title="terminal">
+```bash
+mkdir atmos-skill-terraform && cd atmos-skill-terraform
+git init
+
+# Create SKILL.md with frontmatter and prompt (see format above)
+
+git add . && git commit -m "Initial skill release"
+git remote add origin git@github.com:yourorg/atmos-skill-terraform.git
+git push -u origin main
+git tag v1.0.0 && git push origin v1.0.0
+```
+</Terminal>
+
+Share your skill in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions) and add the `atmos-skill` topic to your repository.
+
+:::tip Naming Convention
+- **Repository**: prefix with `atmos-skill-`, use kebab-case (e.g., `atmos-skill-cost-optimizer`)
+- **Skill name**: no prefix, kebab-case (e.g., `cost-optimizer`)
+- **Display name**: title case (e.g., "Cost Optimizer")
+:::
+
+## Tool Access and Security
+
+Skills declare which tools they need. Review the `tools.allowed` section before installing any skill.
+
+:::danger Review Before Installing
+**Always review skill source code on GitHub before installing skills that request:**
+- File write access (`edit_file`, `write_stack_file`, `write_component_file`)
+- Command execution (`execute_bash_command`, `execute_atmos_command`)
+:::
+
+Use the `restricted` field to require user confirmation for sensitive operations. A tool listed in both `allowed` and `restricted` means the skill can use it, but the user must approve each invocation.
+
+## Troubleshooting
+
+### Skill Not Found After Installation
+
+Skill may be disabled or the registry is corrupted. Check with `atmos ai skill list` and inspect `~/.atmos/skills/registry.json`.
+
+### Version Compatibility Error
+
+```
+Error: skill requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+Upgrade Atmos (`brew upgrade atmos`) or install an older skill version (`atmos ai skill install user/skill@v0.9.0`).
+
+### Invalid Metadata Error
+
+The skill's SKILL.md has malformed frontmatter. Report the issue to the skill author or try a different version tag.
+
+### Registry Corruption
+
+<Terminal title="terminal">
+```bash
+# Backup and reset registry
+cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
+rm ~/.atmos/skills/registry.json
+
+# Reinstall skills
+atmos ai skill install cloudposse/atmos
+```
+</Terminal>
+
 ## Related Commands
 
 <DocCardList items={[
@@ -218,5 +460,4 @@ atmos ai skill uninstall skill-name --scope user
   {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
   {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
   {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
-  {type: 'link', href: '/ai/skill-marketplace', label: 'Skill Marketplace', description: 'Browse and discover available skills'},
 ]} />

@@ -346,6 +346,10 @@ const config = {
                     {from: '/cli/commands/auth', to: '/cli/commands/auth/usage'},
                     {from: '/cli/commands/ai', to: '/cli/commands/ai/usage'},
                     {from: '/cli/commands/toolchain', to: '/cli/commands/toolchain/usage'},
+                    {from: '/cli/commands/scaffold', to: '/cli/commands/scaffold/usage'},
+                    // Agent Skills docs consolidated onto the CLI command reference
+                    {from: '/ai/agent-skills', to: '/cli/commands/ai/skill'},
+                    {from: '/ai/skill-marketplace', to: '/cli/commands/ai/skill'},
                     // Terraform source command reorganization
                     {from: '/cli/commands/terraform/terraform-source', to: '/cli/commands/terraform/source'},
                     {from: '/cli/commands/terraform/terraform-source-pull', to: '/cli/commands/terraform/source/pull'},
@@ -529,6 +533,8 @@ const config = {
                 enableCopyMarkdown: true,
                 enablePerPageMarkdown: true,
                 titleAsCode: true,
+                installCommandLabel: 'Use this skill',
+                installCommandTemplate: 'atmos ai skill install {name}',
             },
         ],
     ],

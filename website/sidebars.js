@@ -208,18 +208,10 @@ module.exports = {
                     label: 'Atmos AI',
                     link: {type: 'doc', id: 'ai/ai'},
                     items: [
-                        {
-                            type: 'category',
-                            label: 'Skills',
-                            link: {type: 'doc', id: 'ai/agent-skills'},
-                            items: [
-                                {type: 'doc', id: 'ai/skill-marketplace', label: 'Skill Marketplace'},
-                                {type: 'link', label: 'Browse the Skills Directory', href: '/ai/skills'},
-                            ]
-                        },
+                        {type: 'link', label: 'Agent Skills', href: '/ai/skills'},
+                        {type: 'doc', id: 'mcp/mcp', label: 'MCP'},
                     ]
                 },
-                {type: 'doc', id: 'mcp/mcp', label: 'MCP'},
                 {type: 'doc', id: 'pro/pro', label: 'Atmos Pro'},
                 {
                     type: 'category',

@@ -823,6 +823,12 @@ module.exports = function fileBrowserPlugin(context, options) {
     // instead of plain text, signaling how it's invoked. Defaults to false —
     // examples/gists have friendly English titles this wouldn't suit.
     titleAsCode = false,
+    // Label and command template for a per-item install command box, rendered at
+    // the top of each item's root page (e.g. "Use this skill" / "atmos ai skill
+    // install {name}"). `{name}` is replaced with the item's directory name.
+    // Default to '' so existing instances render unchanged unless opted in.
+    installCommandLabel = '',
+    installCommandTemplate = '',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -865,6 +871,8 @@ module.exports = function fileBrowserPlugin(context, options) {
           cardCtaLabel,
           enableCopyMarkdown,
           titleAsCode,
+          installCommandLabel,
+          installCommandTemplate,
         },
       };
     },
