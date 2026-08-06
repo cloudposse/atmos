@@ -340,4 +340,19 @@ func TestBaseHandler_ResolveInWorkingDirectory(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, result)
 	})
+
+	t.Run("relative working directory (no template) is anchored to process cwd", func(t *testing.T) {
+		// WorkingDirectory here is a literal relative string (no template
+		// syntax), so vars.Resolve returns it unchanged and resolveWorkingDirectory
+		// must fall through to the filepath.Abs(workDir) conversion — a distinct
+		// branch from the "already absolute" and "empty" cases exercised above.
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
 }

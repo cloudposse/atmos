@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -155,6 +156,24 @@ func TestJUnitHandler_Execute_ResolvesFilesAgainstWorkingDirectory(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "1 passed, 1 failed", result.Value)
+}
+
+func TestJUnitHandler_Execute_PropagatesWorkingDirectoryTemplateError(t *testing.T) {
+	stubJUnitCISeams(t)
+	h := &JUnitHandler{BaseHandler: NewBaseHandler(junitStepType, CategoryOutput, false)}
+	// The files pattern itself resolves fine (no template), but it is relative,
+	// so loadReport must anchor it against WorkingDirectory — whose malformed
+	// template fails during that anchoring, distinct from a bad `files` template.
+	step := &schema.WorkflowStep{
+		Name:             "report",
+		Type:             "junit",
+		Files:            []string{"reports/*.xml"},
+		WorkingDirectory: "{{ .invalid",
+	}
+
+	_, err := h.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }
 
 func TestJUnitHandler_Execute_NoMatches(t *testing.T) {
