@@ -753,128 +753,104 @@ text`,
 	}
 }
 
-// TestTextMerger_NoChangeReturnsOursByteForByte pins the fix for
-// `--update` rewriting files it didn't actually change: diff3's line reader
-// strips trailing newlines from every input (including the last line) and
-// its join step never restores one, so an unchanged file used to come back
-// missing its trailing newline. A merge that produces no real change must
-// return ours verbatim instead.
-func TestTextMerger_NoChangeReturnsOursByteForByte(t *testing.T) {
-	content := "line 1\nline 2\nline 3\n"
-
-	result, err := NewTextMerger(50).Merge(content, content, content)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if result.Content != content {
-		t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, content)
-	}
-	if result.HasConflicts {
-		t.Errorf("Unexpected conflicts in no-op merge: %d conflicts", result.ConflictCount)
-	}
-}
-
-// TestTextMerger_TheirsEqualsOursReturnsOursByteForByte covers the other
-// no-real-change shape: the template didn't change anything relative to base
-// (theirs == ours even though base differs).
-func TestTextMerger_TheirsEqualsOursReturnsOursByteForByte(t *testing.T) {
-	base := "line 1\nline 2\n"
-	oursAndTheirs := "line 1\nline 2\nline 3\n"
-
-	result, err := NewTextMerger(50).Merge(base, oursAndTheirs, oursAndTheirs)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if result.Content != oursAndTheirs {
-		t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, oursAndTheirs)
-	}
-}
-
-// TestTextMerger_UnchangedFileWithBlankLineAtEOF pins a sharper edge case
-// than a single trailing newline: diff3's line reader can't distinguish "one
-// trailing newline" from "none", but a blank line at EOF (two or more
-// trailing newlines) is different — bufio.Scanner's line splitting captures
-// the blank line as an empty element, and a naive "append one newline if
-// missing" fix (as opposed to matching the reference's exact trailing-newline
-// count) would still silently collapse this down to a single newline even
-// though nothing actually changed.
-func TestTextMerger_UnchangedFileWithBlankLineAtEOF(t *testing.T) {
+// TestTextMerger_TrailingNewlinePreservation asserts exact byte-for-byte
+// merge output, trailing-newline count included, split into merges with no
+// genuine ours/theirs divergence (result must equal the unchanged content
+// verbatim) and genuine template-only changes where ours never diverges from
+// base (result must equal theirs verbatim). See Merge's doc comment for why
+// each input gets one newline appended before diff3 runs.
+func TestTextMerger_TrailingNewlinePreservation(t *testing.T) {
 	tests := []struct {
-		name    string
-		content string
+		name   string
+		base   string
+		ours   string
+		theirs string
+		want   string
 	}{
-		{"one trailing newline", "line 1\nline 2\n"},
-		{"no trailing newline", "line 1\nline 2"},
-		{"blank line at EOF (two trailing newlines)", "line 1\nline 2\n\n"},
-		{"two blank lines at EOF (three trailing newlines)", "line 1\nline 2\n\n\n"},
-		{"internal blank line, single trailing newline", "line 1\n\nline 2\n"},
+		{
+			name:   "identical base/ours/theirs",
+			base:   "line 1\nline 2\nline 3\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "theirs equals ours though base differs",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "unchanged, one trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\n",
+			want:   "line 1\nline 2\n",
+		},
+		{
+			name:   "unchanged, no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2",
+			want:   "line 1\nline 2",
+		},
+		{
+			name:   "unchanged, blank line at EOF (two trailing newlines)",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\n\n",
+			want:   "line 1\nline 2\n\n",
+		},
+		{
+			name:   "unchanged, two blank lines at EOF (three trailing newlines)",
+			base:   "line 1\nline 2\n\n\n",
+			ours:   "line 1\nline 2\n\n\n",
+			theirs: "line 1\nline 2\n\n\n",
+			want:   "line 1\nline 2\n\n\n",
+		},
+		{
+			name:   "unchanged, internal blank line, single trailing newline",
+			base:   "line 1\n\nline 2\n",
+			ours:   "line 1\n\nline 2\n",
+			theirs: "line 1\n\nline 2\n",
+			want:   "line 1\n\nline 2\n",
+		},
+		{
+			name:   "genuine change, theirs ends with blank line at EOF",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\nline 3\n\n",
+			want:   "line 1\nline 2\nline 3\n\n",
+		},
+		{
+			name:   "genuine change, theirs keeps single trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "genuine change, theirs has no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2\nline 3",
+			want:   "line 1\nline 2\nline 3",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := NewTextMerger(50).Merge(tt.content, tt.content, tt.content)
+			result, err := NewTextMerger(50).Merge(tt.base, tt.ours, tt.theirs)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if result.Content != tt.content {
-				t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, tt.content)
+			if result.Content != tt.want {
+				t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, tt.want)
+			}
+			if result.HasConflicts {
+				t.Errorf("Unexpected conflicts: %d", result.ConflictCount)
 			}
 		})
-	}
-}
-
-// TestTextMerger_GenuineChangeMatchesTheirsBlankLineAtEOF confirms a real
-// change also restores theirs' full trailing-newline count, not just a
-// single newline, when theirs itself ends with a blank line.
-func TestTextMerger_GenuineChangeMatchesTheirsBlankLineAtEOF(t *testing.T) {
-	base := "line 1\nline 2\n\n"
-	ours := base
-	theirs := "line 1\nline 2\nline 3\n\n"
-
-	result, err := NewTextMerger(50).Merge(base, ours, theirs)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if result.Content != theirs {
-		t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, theirs)
-	}
-}
-
-// TestTextMerger_GenuineChangeStillEndsWithTrailingNewline confirms a real
-// template addition is actually applied and the merged result still ends
-// with a trailing newline (matching theirs), even though diff3's own join
-// never produces one.
-func TestTextMerger_GenuineChangeStillEndsWithTrailingNewline(t *testing.T) {
-	base := "line 1\nline 2\n"
-	ours := base
-	theirs := "line 1\nline 2\nline 3\n"
-
-	result, err := NewTextMerger(50).Merge(base, ours, theirs)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if result.Content == ours {
-		t.Fatalf("the template addition must actually be applied, got unchanged content: %q", result.Content)
-	}
-	if !strings.HasSuffix(result.Content, "\n") {
-		t.Errorf("a genuinely changed file must still end with a trailing newline, got %q", result.Content)
-	}
-}
-
-// TestTextMerger_GenuineChangeNoTrailingNewlineInTheirs confirms the merged
-// result doesn't gain a trailing newline the template version itself doesn't
-// have — the +1/-1 cancellation reproduces theirs' own convention rather than
-// unconditionally appending one.
-func TestTextMerger_GenuineChangeNoTrailingNewlineInTheirs(t *testing.T) {
-	base := "line 1\nline 2"
-	ours := base
-	theirs := "line 1\nline 2\nline 3"
-
-	result, err := NewTextMerger(50).Merge(base, ours, theirs)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if strings.HasSuffix(result.Content, "\n") {
-		t.Errorf("must not gain a trailing newline theirs doesn't have, got %q", result.Content)
 	}
 }
