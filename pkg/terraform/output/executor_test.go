@@ -20,6 +20,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -567,7 +568,11 @@ func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
 	assert.True(t, exists)
 	assert.Equal(t, "10.0.0.0/16", value)
 
-	rendered := uiOutput.String()
+	// Strip ANSI before asserting: with color forced (e.g. CI's "CI" env var),
+	// the markdown renderer emits style resets around the literal underscore
+	// in "vpc_id"/"vpc_cidr", splitting the message across multiple escape
+	// sequences without dropping or reordering any visible characters.
+	rendered := ansi.Strip(uiOutput.String())
 	assert.Contains(t, rendered, "Fetching vpc_id output from vpc in fixtures",
 		"the first cache-hit lookup must be visible")
 	assert.Contains(t, rendered, "Fetching vpc_cidr output from vpc in fixtures",

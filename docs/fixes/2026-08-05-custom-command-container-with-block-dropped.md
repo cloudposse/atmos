@@ -70,7 +70,7 @@ of what `with:` contained.
 - All three confirmed failing against the pre-fix code (`Build` nil / fake
   docker invoked with only `build -f Dockerfile .` / structs unequal) and
   passing post-fix.
-- `go build ./...`, `gofmt` — clean.
+- `go build ./...`, `gofumpt` — clean.
 - `go test ./pkg/schema/... ./pkg/config/... ./cmd/...` (full packages, not
   just the new tests) — all pass. One transient failure
   (`TestCustomCommandContainerBuildPassesWithBlockToDocker` clashing with
