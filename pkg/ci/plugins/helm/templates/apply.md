@@ -36,16 +36,12 @@
 | Chart hooks enabled | `{{ index . "chart_hooks" }}` |
 | Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
 | On failure | `{{ index . "on_failure" }}` |
-
-{{ if eq (index . "operation") "install" }}
+{{ if eq (index . "operation") "install" -}}
 | Install CRDs | `{{ index . "crds" }}` |
-
-{{ end }}
-
-{{ if eq (index . "operation") "upgrade" }}
+{{ end -}}
+{{ if eq (index . "operation") "upgrade" -}}
 | Cleanup on failure | `{{ index . "cleanup_on_failure" }}` |
 | Maximum history | `{{ index (index . "history") "max" }}` |
-
 {{ end }}
 
 {{ end }}
