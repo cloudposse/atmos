@@ -172,6 +172,28 @@ func TestResolve_RawDefaultDoesNotHideUnsupportedCapability(t *testing.T) {
 	require.ErrorIs(t, err, providers.ErrRawNotSupported)
 }
 
+func TestResolve_RawDefaultUsesFallbackOnMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Get("prod", "api", "DATADOG_API_KEY").
+		Return(nil, store.ErrResourceNotFound).
+		Times(1)
+
+	cfg, componentSection := newSecretTestConfig(mockStore)
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "prod",
+		Component:        "api",
+		ComponentSection: componentSection,
+	}
+
+	got, err := Resolve(cfg, `!secret DATADOG_API_KEY | raw | default "fallback"`, "prod", info)
+	require.NoError(t, err)
+	assert.Equal(t, "fallback", got)
+}
+
 // assertErr is a trivial error used to simulate a backend miss.
 type assertErr struct{}
 
@@ -179,21 +201,38 @@ func (assertErr) Error() string { return "not found" }
 
 // TestParseSecretArgs covers name + modifier parsing.
 func TestParseSecretArgs(t *testing.T) {
-	name, opts, err := parseSecretArgs(`!secret DB_CONFIG | raw | default "localhost"`)
-	require.NoError(t, err)
-	assert.Equal(t, "DB_CONFIG", name)
-	assert.True(t, opts.Raw)
-	require.NotNil(t, opts.Default)
-	assert.Equal(t, "localhost", *opts.Default)
+	defaultValue := "localhost"
+	tests := []struct {
+		name            string
+		input           string
+		expectedName    string
+		expectedRaw     bool
+		expectedDefault *string
+		expectedErr     error
+	}{
+		{
+			name:            "raw with default",
+			input:           `!secret DB_CONFIG | raw | default "localhost"`,
+			expectedName:    "DB_CONFIG",
+			expectedRaw:     true,
+			expectedDefault: &defaultValue,
+		},
+		{name: "compact raw", input: `!secret DB_CONFIG |raw`, expectedName: "DB_CONFIG", expectedRaw: true},
+		{name: "raw path conflict", input: `!secret DB_CONFIG | raw | path ".host"`, expectedErr: ErrInvalidSecretArgs},
+		{name: "empty name", input: "!secret ", expectedErr: ErrEmptyName},
+	}
 
-	name, opts, err = parseSecretArgs(`!secret DB_CONFIG |raw`)
-	require.NoError(t, err)
-	assert.Equal(t, "DB_CONFIG", name)
-	assert.True(t, opts.Raw)
-
-	_, _, err = parseSecretArgs(`!secret DB_CONFIG | raw | path ".host"`)
-	require.ErrorIs(t, err, ErrInvalidSecretArgs)
-
-	_, _, err = parseSecretArgs("!secret ")
-	require.ErrorIs(t, err, ErrEmptyName)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, opts, err := parseSecretArgs(tt.input)
+			if tt.expectedErr != nil {
+				require.ErrorIs(t, err, tt.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedName, name)
+			assert.Equal(t, tt.expectedRaw, opts.Raw)
+			assert.Equal(t, tt.expectedDefault, opts.Default)
+		})
+	}
 }

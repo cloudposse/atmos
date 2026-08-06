@@ -289,13 +289,9 @@ func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) 
 	return s.normalizeSecretName(baseKey), nil
 }
 
+// Set writes a value for an Atmos secret coordinate. Empty stack and component segments are
+// valid for stack-scoped and global secrets and are omitted by getKey.
 func (s *AzureKeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -365,14 +361,9 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 	return result, nil
 }
 
-// GetRaw retrieves the original Key Vault secret string without JSON decoding.
+// GetRaw retrieves the original Key Vault secret string without JSON decoding. Empty stack and
+// component segments are valid for stack-scoped and global secrets and are omitted by getKey.
 func (s *AzureKeyVaultStore) GetRaw(stack string, component string, key string) (string, error) {
-	if stack == "" {
-		return "", store.ErrEmptyStack
-	}
-	if component == "" {
-		return "", store.ErrEmptyComponent
-	}
 	if key == "" {
 		return "", store.ErrEmptyKey
 	}
@@ -410,14 +401,9 @@ func (s *AzureKeyVaultStore) getRawByName(secretName string) (string, error) {
 	return *resp.Value, nil
 }
 
-// Delete removes a secret from Azure Key Vault for the given stack, component, and key.
+// Delete removes a secret from Azure Key Vault for the given stack, component, and key. Empty
+// stack and component segments are valid for stack-scoped and global secrets.
 func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -457,12 +443,6 @@ func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) 
 // secrets have no separate "decrypt" permission distinct from "get"; the versions listing relies
 // on the "list" permission and is the lightest existence check that avoids reading the value.
 func (s *AzureKeyVaultStore) Has(stack string, component string, key string) (bool, error) {
-	if stack == "" {
-		return false, store.ErrEmptyStack
-	}
-	if component == "" {
-		return false, store.ErrEmptyComponent
-	}
 	if key == "" {
 		return false, store.ErrEmptyKey
 	}

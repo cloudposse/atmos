@@ -128,6 +128,34 @@ func TestStoreProvider_GetRawRejectsStructuredFallback(t *testing.T) {
 	require.ErrorIs(t, err, ErrRawNotSupported)
 }
 
+type rawFakeStore struct {
+	rawPayload string
+	getCalls   int
+	rawCalls   int
+}
+
+func (s *rawFakeStore) Set(_, _, _ string, _ any) error { return nil }
+func (s *rawFakeStore) Get(_, _, _ string) (any, error) {
+	s.getCalls++
+	return "decoded", nil
+}
+func (s *rawFakeStore) GetKey(_ string) (any, error) { return nil, nil }
+func (s *rawFakeStore) GetRaw(_, _, _ string) (string, error) {
+	s.rawCalls++
+	return s.rawPayload, nil
+}
+
+func TestStoreProvider_GetRawDelegatesToNativeRawStore(t *testing.T) {
+	rawStore := &rawFakeStore{rawPayload: `{"enabled":true}`}
+	p := &storeProvider{name: "app", kind: "example/raw", store: rawStore}
+
+	got, err := p.GetRaw(Coordinate{Stack: "prod", Component: "api", Key: "CONFIG"})
+	require.NoError(t, err)
+	assert.Equal(t, `{"enabled":true}`, got)
+	assert.Equal(t, 1, rawStore.rawCalls)
+	assert.Zero(t, rawStore.getCalls)
+}
+
 func TestStoreProvider_DeleteUnsupported(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

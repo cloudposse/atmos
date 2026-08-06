@@ -50,6 +50,16 @@ func (s *jsonDecodingStore) GetRaw(stack, component, key string) (string, error)
 }
 
 func TestNativeHelmSecretRawAndStructuredValuesMaskIndentedMultilineValues(t *testing.T) {
+	fixture, atmosConfig, info := prepareHelmSecretValuesFixture(t)
+	assertResolvedHelmSecretValues(t, info)
+	rendered, renderedEnv := renderHelmSecretValuesFixture(t, fixture, atmosConfig, info)
+	assert.Equal(t, serviceAccountJSON, envValue(t, renderedEnv, "SERVICE_ACCOUNT_JSON"), "Helm env.value must remain a scalar string")
+	assertMaskedHelmSecretValues(t, rendered)
+}
+
+func prepareHelmSecretValuesFixture(t *testing.T) (string, *schema.AtmosConfiguration, schema.ConfigAndStacksInfo) {
+	t.Helper()
+
 	fixture, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "helm-secret-values"))
 	require.NoError(t, err)
 	t.Chdir(fixture)
@@ -80,6 +90,11 @@ func TestNativeHelmSecretRawAndStructuredValuesMaskIndentedMultilineValues(t *te
 	info.SecretsMaskOnly = false
 	info, err = e.ProcessStacks(&atmosConfig, info, true, true, true, nil, auth.AuthManager(nil))
 	require.NoError(t, err)
+	return fixture, &atmosConfig, info
+}
+
+func assertResolvedHelmSecretValues(t *testing.T, info schema.ConfigAndStacksInfo) {
+	t.Helper()
 
 	values, ok := info.ComponentSection[cfg.ValuesSectionName].(map[string]any)
 	require.True(t, ok)
@@ -93,9 +108,18 @@ func TestNativeHelmSecretRawAndStructuredValuesMaskIndentedMultilineValues(t *te
 	assert.Equal(t, "service@example.iam.gserviceaccount.com", envValue(t, env, "CLIENT_EMAIL"))
 	assert.Equal(t, plainSecret, envValue(t, env, "PLAIN_TOKEN"))
 	assert.Equal(t, privateKey, envValue(t, env, "SIGNING_KEY"))
+}
+
+func renderHelmSecretValuesFixture(
+	t *testing.T,
+	fixture string,
+	atmosConfig *schema.AtmosConfiguration,
+	info schema.ConfigAndStacksInfo,
+) (string, []any) {
+	t.Helper()
 
 	componentPath := filepath.Join(fixture, "components", "helm", "secret-values")
-	spec, err := buildChartSpec(&atmosConfig, &info, componentPath)
+	spec, err := buildChartSpec(atmosConfig, &info, componentPath)
 	require.NoError(t, err)
 	rendered, err := renderManifest(context.Background(), spec)
 	require.NoError(t, err)
@@ -103,16 +127,18 @@ func TestNativeHelmSecretRawAndStructuredValuesMaskIndentedMultilineValues(t *te
 	objects, err := manifest.DecodeObjects([]byte(rendered))
 	require.NoError(t, err)
 	require.Len(t, objects, 1)
-	renderedEnv, found, err := unstructured.NestedSlice(objects[0].Object, "spec", "template", "spec", "containers", "0", "env")
-	if err != nil || !found {
-		// NestedSlice cannot index arrays by string; extract the container first.
-		containers, containersFound, containersErr := unstructured.NestedSlice(objects[0].Object, "spec", "template", "spec", "containers")
-		require.NoError(t, containersErr)
-		require.True(t, containersFound)
-		container := containers[0].(map[string]any)
-		renderedEnv = container["env"].([]any)
-	}
-	assert.Equal(t, serviceAccountJSON, envValue(t, renderedEnv, "SERVICE_ACCOUNT_JSON"), "Helm env.value must remain a scalar string")
+	containers, found, err := unstructured.NestedSlice(objects[0].Object, "spec", "template", "spec", "containers")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotEmpty(t, containers)
+	require.IsType(t, map[string]any{}, containers[0])
+	container := containers[0].(map[string]any)
+	require.IsType(t, []any{}, container["env"])
+	return rendered, container["env"].([]any)
+}
+
+func assertMaskedHelmSecretValues(t *testing.T, rendered string) {
+	t.Helper()
 
 	masker := iolib.GetContext().Masker()
 	t.Cleanup(func() {

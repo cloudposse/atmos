@@ -363,7 +363,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 		return err
 	}
 
-	// Construct the full parameter name using getKey
+	// Construct the full parameter name using getKey.
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
@@ -429,7 +429,7 @@ func (s *SSMStore) GetRaw(stack string, component string, key string) (string, e
 		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
-	// Assume the read role if specified
+	// Assume the read role if specified.
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
 		return "", fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
