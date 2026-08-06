@@ -53,6 +53,9 @@ type MergeResult struct {
 //   - theirs: The template's version (with template updates)
 //
 // Returns the merged content or an error if conflicts exceed threshold.
+//
+// The output also preserves each input's exact trailing-newline count; see
+// the newline-handling comment on the diff3.Merge call below for why.
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
 
