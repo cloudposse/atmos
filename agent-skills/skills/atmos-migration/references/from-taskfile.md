@@ -39,9 +39,11 @@ tasks:
 **Steps:**
 
 1. Turn `desc:` into the command's `description:` field.
-2. Turn each entry in `cmds:` into a `type: shell` step. If the line is a `terraform` or `atmos`
-    call, use a `type: atmos` step instead, because `type: atmos` is reserved for native Atmos
-    verbs.
+2. Turn each entry in `cmds:` into a `type: shell` step. If the line is a native Atmos verb, such
+    as `terraform plan` or `terraform apply`, use a `type: atmos` step instead. `type: atmos` is
+    reserved for native Atmos verbs only. If the line calls another custom command (for example
+    `atmos build`), keep it as a `type: shell` step with `command: atmos build` -- do not use
+    `type: atmos` for that.
 
 ```yaml
 commands:
@@ -99,7 +101,7 @@ commands:
             type: shell
             command: atmos lint
       - type: atmos
-        command: terraform apply infra -s dev
+        command: terraform apply terraform -s dev
 ```
 
 If the Taskfile's `deps:` list needs its own internal order, add `needs:` to the steps inside the

@@ -30,7 +30,7 @@ Your Terraform code and scripts do not need to change.
 | `deps:` (runs at the same time by default)        | A `parallel` step. Plain steps in order change the default        |
 | `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
 | `sources:` / `generates:` (freshness check)       | No direct match. Steps always run                                 |
-| `includes:` (multi-file composition)              | `atmos.d/*.yaml` + root `import:`, or separate workflow files      |
+| `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
 
 ## The Parallel-by-Default Difference
 
@@ -69,7 +69,7 @@ dependency tasks inside a [`parallel`](/workflows/steps/type/parallel) step:
                 type: shell
                 command: atmos lint
           - type: atmos
-            command: terraform apply infra -s dev
+            command: terraform apply terraform -s dev
     ```
   </TabItem>
 </Tabs>
@@ -173,12 +173,16 @@ atmos deploy --env staging
 Task's `includes:` field joins several Taskfiles into one. Atmos has two matching methods.
 Choose the one that fits what you are splitting:
 
-- To split command definitions across files, put them in files such as `atmos.d/commands.yaml`.
-  Add each file to the root config with `import:` in `atmos.yaml`. See
-  [Imports](/cli/configuration/imports).
+- To split command definitions across files, put them in files such as `atmos.d/commands.yaml` or
+  `.atmos.d/commands.yaml`. Atmos auto-discovers `atmos.d/`/`.atmos.d/` in the config directory
+  (and, as a lower-priority fallback, at the git/worktree root) -- no `import:` entry is needed
+  for this specific location. Use `import:` only when splitting across a directory Atmos does not
+  auto-discover. See [Imports](/cli/configuration/imports).
 - To split multi-step chains, use separate workflow files. Atmos workflows already live one file
-  per purpose, under `workflows.base_path` (`stacks/workflows/` by default). No extra step is
-  needed.
+  per purpose, under `workflows.base_path`. Unlike `atmos.d`/`.atmos.d`, there is no default for
+  `workflows.base_path` -- add it explicitly (for example `workflows.base_path:
+  "stacks/workflows"`) the first time your migration reaches a workflow, or `atmos workflow
+  <name>` fails with `'workflows.base_path' must be configured in 'atmos.yaml'`.
 
 ## What You Gain
 
@@ -203,7 +207,7 @@ Choose the one that fits what you are splitting:
 - [ ] Put any `deps:` chain in a `parallel` step, to keep Task's default behavior
 - [ ] Turn `vars:`/`env:` into command `flags:` (with defaults) and `env:` maps
 - [ ] Decide how to handle `sources:`/`generates:` freshness checks. Do not assume parity
-- [ ] Split `includes:` into `atmos.d/*.yaml` imports, separate workflow files, or both
+- [ ] Split `includes:` into auto-discovered `atmos.d/*.yaml` files, separate workflow files, or both
 </TaskList>
 
 ## Common Questions

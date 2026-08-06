@@ -132,7 +132,7 @@ commands:
       - type: shell
         command: atmos test
       - type: atmos
-        command: terraform apply infra -s {{ .Flags.env }}
+        command: terraform apply terraform -s {{ .Flags.env }}
 ```
 
 ## Shape C: Recursive or Parallel Make
@@ -190,9 +190,11 @@ that one step. It does not mean you should add `output: none` to every step.
 ### Split commands across files
 
 When a Makefile uses `include foo.mk` to split its content across files, split the Atmos config
-the same way. Put the extra commands in a file such as `atmos.d/commands.yaml`. Then add that
-file to the root config with `import:` in `atmos.yaml`. See
-[Imports](https://atmos.tools/cli/configuration/imports).
+the same way. Put the extra commands in a file such as `atmos.d/commands.yaml` or
+`.atmos.d/commands.yaml`. Atmos auto-discovers `atmos.d/`/`.atmos.d/` in the config directory
+(and, as a lower-priority fallback, at the git/worktree root) -- no `import:` entry is needed for
+this specific location. Use `import:` only when splitting across a directory Atmos does not
+auto-discover. See [Imports](https://atmos.tools/cli/configuration/imports).
 
 ### Complex `$(eval)` and `$(call)` macros
 

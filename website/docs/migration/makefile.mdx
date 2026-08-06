@@ -100,7 +100,7 @@ commands while you migrate.
           - type: shell
             command: atmos test
           - type: atmos
-            command: terraform apply infra -s {{ .Flags.env }}
+            command: terraform apply terraform -s {{ .Flags.env }}
     ```
   </TabItem>
 </Tabs>

@@ -96,7 +96,7 @@ only cares what the recipe does.
           - type: shell
             command: atmos test
           - type: atmos
-            command: terraform apply infra -s {{ .Flags.env }}
+            command: terraform apply terraform -s {{ .Flags.env }}
     ```
   </TabItem>
 </Tabs>
@@ -119,7 +119,7 @@ commands:
         default: "dev"
     steps:
       - type: atmos
-        command: terraform apply infra -s {{ .Flags.env }}
+        command: terraform apply terraform -s {{ .Flags.env }}
 ```
 </File>
 

@@ -42,7 +42,7 @@ _clean:
 2. Turn a recipe's named parameter with a default value, such as `deploy env='dev':`, into a
     command `flags:` entry with a matching `default:` value. Inside a step, read the value as
     `{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. See
-    [Common Problems](#-interpolation-looks-like-atmos-templates-but-is-not) below.
+    [Common Problems](#--interpolation-looks-like-atmos-templates-but-is-not) below.
 3. Do not create a separate command for a `[private]` recipe. There is no `hidden` or `private`
     field on Atmos custom commands. Put the recipe's body in a step of the command that calls it.
 
@@ -99,7 +99,7 @@ commands:
       - type: shell
         command: atmos test
       - type: atmos
-        command: terraform apply infra -s {{ .Flags.env }}
+        command: terraform apply terraform -s {{ .Flags.env }}
 ```
 
 ## Shape C: Environment and Shell Settings
