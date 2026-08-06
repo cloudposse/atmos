@@ -401,20 +401,22 @@ func createComponentStackMap(
 						},
 					}
 
-					// Find Atmos stack name
-					if atmosConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-						if err != nil {
-							return nil, err
-						}
-					} else {
-						context := cfg.GetContextFromVars(varsSection)
-						configAndStacksInfo.Context = context
-						stackName, err = cfg.GetContextPrefix(stackManifest, context, GetStackNamePattern(atmosConfig), stackManifest)
-						if err != nil {
-							return nil, err
-						}
+					// Find the Atmos stack name. Precedence matches the rest of the CLI
+					// (resolveStackName, used by `describe stacks`/`list stacks`, and
+					// processStackContextPrefix, used by `terraform plan` and friends):
+					// manifest `name:` > name_template > name_pattern > filename. Neither
+					// name_template nor name_pattern is required -- filename-based zero-config
+					// stack naming (#1934) applies here too, so `validate stacks` no longer
+					// hard-fails on a repo that every other command resolves stacks for fine.
+					if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+						configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 					}
+					var resolvedContext schema.Context
+					stackName, resolvedContext, err = resolveStackName(atmosConfig, stackManifest, getStackManifestName(stackSection), configAndStacksInfo, varsSection)
+					if err != nil {
+						return nil, err
+					}
+					configAndStacksInfo.Context = resolvedContext
 
 					_, ok = terraformComponentStackMap[componentName]
 					if !ok {
