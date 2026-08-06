@@ -256,6 +256,76 @@ func TestMergeCommandArraysPathLeafOverridesNestedAndPreservesSiblings(t *testin
 	assert.Equal(t, "Base examples", examples["description"])
 }
 
+// TestMergeMainCommandArrayDoesNotInheritUnrelatedSubcommands is a regression
+// test for a directory's own atmos.yaml `commands:` entry silently inheriting
+// a same-named command's subcommand tree (and other subcommand-referencing
+// fields, such as `default:`) from an unrelated discovered source -- for
+// example a different, outer project's git-root `.atmos.d` command that
+// happens to share a name. The mergeMainCommandArray function must treat a
+// leaf command (no `commands:` key) in the directory's own atmos.yaml as
+// fully self-contained, not as a partial override of the discovered command.
+func TestMergeMainCommandArrayDoesNotInheritUnrelatedSubcommands(t *testing.T) {
+	discovered := []interface{}{
+		map[string]interface{}{
+			"name":        "build",
+			"description": "Build and documentation commands for Atmos development",
+			"default":     "binary",
+			commandsKey: []interface{}{
+				map[string]interface{}{"name": "binary", "description": "Build the Atmos binary"},
+				map[string]interface{}{"name": "deps", "description": "Download Go module dependencies"},
+			},
+		},
+	}
+	mainCommands := []interface{}{
+		map[string]interface{}{
+			"name":        "build",
+			"description": "My own build command",
+		},
+	}
+
+	merged := mergeMainCommandArray(discovered, mainCommands)
+	require.Len(t, merged, 1)
+
+	build := requireCommandMap(t, merged, "build")
+	assert.Equal(t, "My own build command", build["description"])
+	_, hasCommands := build[commandsKey]
+	assert.False(t, hasCommands, "leaf command in the directory's own atmos.yaml must not inherit an unrelated source's subcommand tree")
+	_, hasDefault := build["default"]
+	assert.False(t, hasDefault, "leaf command must not inherit a default: pointing at a subcommand that no longer exists")
+}
+
+// TestMergeMainCommandArrayStillComposesWhenSecondOptsIn verifies
+// mergeMainCommandArray's strict mode only replaces a colliding command
+// outright when the directory's own atmos.yaml command omits `commands:`
+// entirely. When it explicitly defines `commands:` (opting into extending a
+// shared command tree, e.g. via `.atmos.d` fragments within the same
+// project), the normal deep-merge behavior still applies.
+func TestMergeMainCommandArrayStillComposesWhenSecondOptsIn(t *testing.T) {
+	discovered := []interface{}{
+		map[string]interface{}{
+			"name": "casts",
+			commandsKey: []interface{}{
+				map[string]interface{}{"name": "setup", "description": "Base setup"},
+			},
+		},
+	}
+	mainCommands := []interface{}{
+		map[string]interface{}{
+			"name": "casts",
+			commandsKey: []interface{}{
+				map[string]interface{}{"name": "generate", "description": "Local generate"},
+			},
+		},
+	}
+
+	merged := mergeMainCommandArray(discovered, mainCommands)
+	require.Len(t, merged, 1)
+
+	casts := requireCommandMap(t, merged, "casts")
+	findCommandMap(t, casts[commandsKey], "setup")
+	findCommandMap(t, casts[commandsKey], "generate")
+}
+
 // TestNormalizeCommandArraySkipsNilEntries verifies that normalizeCommandArray
 // drops nil command entries (normalizeCommandDefinition returns cmd unchanged
 // when it's not a map, and nil normalizes to nil, which must be skipped).
@@ -290,18 +360,18 @@ func TestNormalizeCommandDefinitionWithoutName(t *testing.T) {
 func TestMergeCommandDefinitionsNonMapOperands(t *testing.T) {
 	t.Run("first is not a map", func(t *testing.T) {
 		second := map[string]interface{}{"name": "second"}
-		result := mergeCommandDefinitions("not-a-map", second)
+		result := mergeCommandDefinitions("not-a-map", second, false)
 		assert.Equal(t, second, result)
 	})
 
 	t.Run("second is not a map", func(t *testing.T) {
 		first := map[string]interface{}{"name": "first"}
-		result := mergeCommandDefinitions(first, "not-a-map")
+		result := mergeCommandDefinitions(first, "not-a-map", false)
 		assert.Equal(t, "not-a-map", result)
 	})
 
 	t.Run("both are not maps", func(t *testing.T) {
-		result := mergeCommandDefinitions(42, "second-value")
+		result := mergeCommandDefinitions(42, "second-value", false)
 		assert.Equal(t, "second-value", result)
 	})
 }

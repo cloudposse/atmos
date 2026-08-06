@@ -1315,9 +1315,13 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		finalCommands = mergeCommandArrays(finalCommands, importedCommands)
 	}
 
-	// Add main, with main overriding all others on duplicates
+	// Add main, with main overriding all others on duplicates. Strict: the
+	// directory's own atmos.yaml is authoritative for any command name it
+	// defines directly, so it must not inherit a same-named command's
+	// subcommands from a discovered default (e.g. an unrelated ancestor
+	// project's git-root .atmos.d) just because it doesn't repeat `commands:`.
 	if mainCommands != nil {
-		finalCommands = mergeCommandArrays(finalCommands, mainCommands)
+		finalCommands = mergeMainCommandArray(finalCommands, mainCommands)
 	}
 
 	tempViper.Set(commandsKey, finalCommands)
@@ -1927,7 +1931,29 @@ func overlayProfileSettings(v *viper.Viper, settings map[string]any, prefix stri
 // When duplicates exist based on name, the second parameter takes precedence (override behavior).
 // This ensures local commands can override imported/remote commands.
 func mergeCommandArrays(first, second interface{}) []interface{} {
-	return mergeNormalizedCommandArrays(normalizeCommandArray(first), normalizeCommandArray(second))
+	return mergeNormalizedCommandArrays(normalizeCommandArray(first), normalizeCommandArray(second), false)
+}
+
+// mergeMainCommandArray merges commands gathered from `.atmos.d`/imports (first)
+// against a directory's own inline atmos.yaml `commands:` block (second). Unlike
+// mergeCommandArrays, when second's definition of a command omits a nested
+// `commands:` key, the merged result has none either -- it does not silently
+// inherit a same-named command's subcommand tree from first. That matters when
+// first was discovered from a git-root `.atmos.d` belonging to a different,
+// unrelated outer project (e.g. this directory has no `.git` of its own and sits
+// inside someone else's monorepo): the directory's own atmos.yaml is authoritative
+// for any command name it defines directly, so a coincidental name collision with
+// an ancestor's `.atmos.d` command must not graft that command's subcommands on.
+//
+// Composing multiple `.atmos.d`/import fragments of the SAME project still goes
+// through the lenient mergeCommandArrays (see mergeConfigFile and
+// processConfigImportsAndReapply's default/imported-commands step): a fragment
+// that omits `commands:` there is expected to preserve another fragment's
+// subcommands, which is how "Split commands across files" (see the
+// atmos-migration skill) is meant to work. Only the boundary between discovered
+// defaults and the directory's own complete atmos.yaml uses strict mode.
+func mergeMainCommandArray(first, second interface{}) []interface{} {
+	return mergeNormalizedCommandArrays(normalizeCommandArray(first), normalizeCommandArray(second), true)
 }
 
 func normalizeCommandArray(commands interface{}) []interface{} {
@@ -1942,7 +1968,7 @@ func normalizeCommandArray(commands interface{}) []interface{} {
 		if normalized == nil {
 			continue
 		}
-		result = mergeNormalizedCommandArrays(result, []interface{}{normalized})
+		result = mergeNormalizedCommandArrays(result, []interface{}{normalized}, false)
 	}
 
 	return result
@@ -2010,7 +2036,14 @@ func normalizeCommandDefinition(cmd interface{}) interface{} {
 	return current
 }
 
-func mergeNormalizedCommandArrays(first, second []interface{}) []interface{} {
+// mergeNormalizedCommandArrays merges two already-normalized command arrays by
+// name, later entries overriding earlier ones. The strict flag is forwarded to
+// mergeCommandDefinitions for every name collision -- see mergeMainCommandArray
+// for what it changes and why. Every current caller passes an already-deduped
+// `first`/`second` (normalizeCommandArray or a prior merge step already
+// resolved same-source collisions), so strict only takes effect at the
+// first-vs-second boundary, which is the boundary it is meant for.
+func mergeNormalizedCommandArrays(first, second []interface{}, strict bool) []interface{} {
 	// Build a map of commands by name, with later entries overriding earlier ones.
 	commandMap := make(map[string]interface{})
 	var orderedNames []string
@@ -2031,7 +2064,7 @@ func mergeNormalizedCommandArrays(first, second []interface{}) []interface{} {
 			// Store or merge the command. Nested command groups are merged
 			// recursively so imports can extend a shared command tree.
 			if existing, exists := commandMap[name]; exists {
-				commandMap[name] = mergeCommandDefinitions(existing, cmd)
+				commandMap[name] = mergeCommandDefinitions(existing, cmd, strict)
 			} else {
 				commandMap[name] = cmd
 			}
@@ -2055,13 +2088,28 @@ func mergeNormalizedCommandArrays(first, second []interface{}) []interface{} {
 	return result
 }
 
-func mergeCommandDefinitions(first, second interface{}) interface{} {
+// mergeCommandDefinitions deep-merges two command definitions that share a
+// name, second's fields taking precedence. When strict is true and second
+// does not itself define a nested `commands:` key, second is treated as a
+// complete, standalone leaf command: it replaces first outright instead of
+// being field-merged with it. A field-by-field merge would otherwise leave
+// dangling references into first's dropped `commands:` tree (for example a
+// `default:` naming a subcommand that no longer exists once `commands:` is
+// gone), so strict mode does not partially merge here at all -- see
+// mergeMainCommandArray for why this distinction exists. When second does
+// define `commands:`, or strict is false, the normal field-by-field merge
+// runs and nested `commands:` arrays are deep-merged if both sides have one.
+func mergeCommandDefinitions(first, second interface{}, strict bool) interface{} {
 	firstMap, ok := first.(map[string]interface{})
 	if !ok {
 		return second
 	}
 	secondMap, ok := second.(map[string]interface{})
 	if !ok {
+		return second
+	}
+
+	if _, secondHasCommands := secondMap[commandsKey]; strict && !secondHasCommands {
 		return second
 	}
 
@@ -2072,6 +2120,7 @@ func mergeCommandDefinitions(first, second interface{}) interface{} {
 	for key, value := range firstMap {
 		merged[key] = value
 	}
+
 	for key, value := range secondMap {
 		if key == commandsKey {
 			if existing, ok := merged[key]; ok {
