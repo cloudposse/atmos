@@ -15,11 +15,20 @@ was invoked, e.g. `atmos vendor pull`).
 **If no target was given, default to the change introduced on the current branch** rather than
 asking. Resolve the actual pull-request base branch when one is available
 (`gh pr view --json baseRefName -q .baseRefName` for the current branch), falling back to the
-repository's default branch (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`, or
-`origin/main`/`main` if `gh` isn't available) when no PR exists yet. Do NOT use the upstream
-tracking branch (`@{u}`) as the base — for a normal feature branch that tracks
-`origin/<same-branch-name>`, diffing against its own upstream produces an empty or near-empty
-diff, not the PR's actual changes, once the branch has been pushed. Then inspect the FULL set of
+repository's default branch (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`)
+when no PR exists yet. Do NOT use the upstream tracking branch (`@{u}`) as the base — for a normal
+feature branch that tracks `origin/<same-branch-name>`, diffing against its own upstream produces
+an empty or near-empty diff, not the PR's actual changes, once the branch has been pushed.
+
+A branch NAME from `gh` (e.g. `main`) is not guaranteed to be a usable git ref in THIS checkout —
+shallow clones, detached HEADs, and worktrees with a narrow fetch refspec can have the name
+without the commits. Before running any diff, verify the base actually resolves here
+(`git rev-parse --verify --quiet <candidate>^{commit}`), trying in order: `origin/<resolved-name>`,
+`<resolved-name>`, `origin/main`, `main` — take the first that verifies. If `gh` itself isn't
+available or returns nothing, skip straight to the `origin/main`/`main` candidates. If NONE of
+these resolve, stop and ask the user which base to diff against — do not run `git diff <base>...`
+against an unverified ref and let it fail with a confusing git error. Once a real base is
+confirmed, inspect the FULL set of
 changes relative to that base — content, not just a file-list summary: `git diff <base>...HEAD`
 (the full patch, not `--stat`, since `--stat` only shows file names and line counts, not what
 those lines actually do) for committed history; `git diff HEAD` for any staged/unstaged changes
@@ -30,9 +39,9 @@ implementation file can otherwise go completely unread. Read the actual content 
 untracked file this turns up, the same as any diff hunk. Derive the test target from all of
 that — the CLI command(s), flag(s), config option(s), or subsystem the changed files implement —
 and state explicitly what you inferred and why before proceeding to Phase 1. Only fall back to
-asking the user if there's truly nothing changed (clean worktree, base equals HEAD, no untracked
-files) or the changes span multiple unrelated features with no coherent single target (ask which
-one to focus on, don't silently pick one).
+asking the user if no candidate base ref resolves at all, there's truly nothing changed (clean
+worktree, base equals HEAD, no untracked files), or the changes span multiple unrelated features
+with no coherent single target (ask which one to focus on, don't silently pick one).
 
 Goal: catch "vibe-coded slop" — behavior that looks fine in code review but breaks or misleads a
 real user — not to re-run what automated tests already cover. Anticipate plausible user
