@@ -207,6 +207,7 @@ See `references/commands-reference.md` for the full command/flag reference. Comm
 
 ```bash
 atmos toolchain install [tool@version]      # Bootstrap/cache warm, or ad-hoc install
+atmos toolchain update [tool...]            # Update pinned tools to newest available version
 atmos toolchain uninstall <tool@version>    # Remove installed tool
 atmos toolchain add/remove/set/get <tool>   # Manage .tool-versions entries
 atmos toolchain search/info/list/which      # Discovery and inspection
