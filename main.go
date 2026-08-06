@@ -63,6 +63,22 @@ func run() (exitCode int) {
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
+	// A generated toolchain proxy invokes this executable under a command name
+	// such as "ls". Dispatch it before generic flag handling so "ls --version"
+	// reaches the proxied tool rather than Atmos's --version handler.
+	if handled, err := cmd.TryRunToolchainProxy(os.Args); handled {
+		if err != nil {
+			if code, ok := silentExitCode(err); ok {
+				return code
+			}
+			errUtils.CaptureError(err)
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+			return errUtils.GetExitCode(err)
+		}
+		return 0
+	}
+
 	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
 	// This eliminates the need for os.Exit in PersistentPreRun, making tests work with Go 1.25.
 	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).

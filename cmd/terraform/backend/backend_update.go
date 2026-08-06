@@ -23,12 +23,24 @@ versioning, encryption, and public access blocking to match secure defaults.`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+		v := viper.GetViper()
+		if err := updateParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 		result, err := updateParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
 
-		return executeProvisionCommandWithValues(result.Component, result.Stack, result.Identity.Value())
+		stack := result.Stack
+		if stack == "" {
+			stack = getCommandFlagStack(cmd)
+		}
+		if stack == "" {
+			stack = v.GetString("stack")
+		}
+		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
+		return executeProvisionCommandWithValues(result.Component, stack, identity)
 	},
 }
 

@@ -4,7 +4,13 @@
 $ atmos ai skill install atmos-terraform
 ```
 
-- Install all Atmos agent skills
+- Install every bundled skill at once (offline, no network)
+
+```
+$ atmos ai skill install
+```
+
+- Install all Atmos agent skills from the GitHub repository instead of the embedded catalog
 
 ```
 $ atmos ai skill install cloudposse/atmos
@@ -32,4 +38,34 @@ $ atmos ai skill install cloudposse/atmos --force
 
 ```
 $ atmos ai skill install cloudposse/atmos --yes
+```
+
+- Install to a custom directory (e.g. for VS Code/Copilot, skips auto-distribution)
+
+```
+$ atmos ai skill install atmos-terraform --path .github/skills
+```
+
+- Distribute the skill to a specific AI client
+
+```
+$ atmos ai skill install atmos-terraform --client vscode
+```
+
+- Distribute the skill to every supported AI client
+
+```
+$ atmos ai skill install atmos-terraform --all-clients
+```
+
+- Distribute into each client's personal, user-level skill directory instead of the project
+
+```
+$ atmos ai skill install atmos-terraform --scope user
+```
+
+- Alias for --scope user
+
+```
+$ atmos ai skill install atmos-terraform --global
 ```

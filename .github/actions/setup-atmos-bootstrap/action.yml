@@ -1,0 +1,44 @@
+name: "Set up Atmos bootstrap with retry"
+description: "Installs the released Atmos CLI with bounded retries for transient GitHub Releases failures"
+
+inputs:
+  atmos-version:
+    description: "Atmos version to install for bootstrapping repository-local Atmos Build commands"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: install-atmos-first-attempt
+      name: Set up Atmos (attempt 1 of 3)
+      continue-on-error: true
+      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+      with:
+        atmos-version: ${{ inputs.atmos-version }}
+        install-wrapper: false
+
+    - name: Wait before retry
+      if: steps.install-atmos-first-attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 5
+
+    - id: install-atmos-second-attempt
+      name: Set up Atmos (attempt 2 of 3)
+      if: steps.install-atmos-first-attempt.outcome == 'failure'
+      continue-on-error: true
+      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+      with:
+        atmos-version: ${{ inputs.atmos-version }}
+        install-wrapper: false
+
+    - name: Wait before final retry
+      if: steps.install-atmos-second-attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 15
+
+    - name: Set up Atmos (attempt 3 of 3)
+      if: steps.install-atmos-second-attempt.outcome == 'failure'
+      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+      with:
+        atmos-version: ${{ inputs.atmos-version }}
+        install-wrapper: false

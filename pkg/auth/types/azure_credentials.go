@@ -40,7 +40,27 @@ type AzureCredentials struct {
 	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
 	// Used to select correct endpoints when writing MSAL cache entries.
 	CloudEnvironment string `json:"cloud_environment,omitempty"`
+	// AuthMethod records which provider kind minted these credentials
+	// (AzureAuthMethodCLI, AzureAuthMethodDeviceCode, AzureAuthMethodOIDC).
+	// Credentials that originated from the Azure CLI must not be written back
+	// into the CLI's own cache files.
+	AuthMethod string `json:"auth_method,omitempty"`
+	// HomeAccountID is the MSAL home account identifier ("{home-oid}.{home-tenant-id}").
+	// For guest (B2B) users the home tenant differs from the tenant being accessed;
+	// deriving the value from the target tenant instead creates a duplicate Azure CLI
+	// cache Account entry with the same username, which breaks every az command
+	// (https://github.com/Azure/azure-cli/issues/20168). Populated by providers that
+	// receive it from MSAL.
+	HomeAccountID string `json:"home_account_id,omitempty"`
 }
+
+// Azure credential auth methods (values of AzureCredentials.AuthMethod).
+const (
+	AzureAuthMethodCLI         = "cli"
+	AzureAuthMethodDeviceCode  = "device_code"
+	AzureAuthMethodInteractive = "interactive"
+	AzureAuthMethodOIDC        = "oidc"
+)
 
 // IsExpired returns true if the credentials are expired.
 // This implements the ICredentials interface.

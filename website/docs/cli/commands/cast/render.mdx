@@ -24,7 +24,9 @@ atmos cast render <input.cast> [--gif <file>] [--mp4 <file>] [--html <file>] [--
 
 At least one output flag is required.
 
-The animated formats (GIF, MP4) replay the recording over time and require external tools (`agg`, and `ffmpeg` for MP4). The static formats (HTML, ASCII, PNG, JPEG) are rendered natively by Atmos with no external dependencies: the recording's output is laid out on a terminal cell grid, and the final content is emitted in the requested format.
+The animated formats (GIF, MP4) replay the recording over time. Atmos automatically installs the required managed renderers the first time you use them: `asciinema/agg` for GIF and `asciinema/agg` plus FFmpeg for MP4. The static formats (HTML, ASCII, PNG, JPEG) are rendered natively by Atmos with no external dependencies: the recording's output is laid out on a terminal cell grid, and the final content is emitted in the requested format.
+
+MP4 rendering first produces a GIF with `agg`, then converts it with FFmpeg. This preserves `agg`'s terminal-rendering quality, but the MP4 can retain GIF palette constraints such as a 256-color palette.
 
 ASCII output is a durable, diffable artifact: it is cheap to commit to git and can be consumed directly by other tooling (such as Atmos Pro) without an asciicast player.
 
@@ -39,10 +41,10 @@ ASCII output is a durable, diffable artifact: it is cheap to commit to git and c
 
 <dl>
   <dt>`--gif`</dt>
-  <dd>Write animated GIF output to this path (requires `agg`).</dd>
+  <dd>Write animated GIF output to this path. Atmos installs the managed `agg` renderer automatically on first use.</dd>
 
   <dt>`--mp4`</dt>
-  <dd>Write MP4 output to this path (requires `agg` and `ffmpeg`).</dd>
+  <dd>Write MP4 output to this path. Atmos installs the managed `agg` and FFmpeg renderers automatically on first use.</dd>
 
   <dt>`--html`</dt>
   <dd>Write a static HTML fragment of the final terminal content to this path. The fragment contains inline-styled `<span>` elements suitable for embedding inside a `<pre>` block.</dd>

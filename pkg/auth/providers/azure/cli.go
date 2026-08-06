@@ -108,11 +108,22 @@ func (p *cliProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies authTypes.AmbientProvider. This provider shells out to
+// `az account get-access-token` on every call, so the principal it returns is whatever
+// the ambient `az login` state currently points at, and the token is short-lived.
+// Persisting it would let the auth manager replay a stale principal after the user runs
+// `az login` as a different account (the Azure analogue of issue #2695), so the manager
+// must never cache credentials for chains rooted at this provider.
+func (p *cliProvider) IsAmbient() bool {
+	return true
+}
+
 // Authenticate performs Azure CLI authentication.
 func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.cliProvider.Authenticate")()
 
-	log.Debug("Authenticating with Azure CLI",
+	log.Debug(
+		"Authenticating with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 	)
@@ -148,9 +159,11 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		SubscriptionID:   subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		AuthMethod:       authTypes.AzureAuthMethodCLI,
 	}
 
-	log.Debug("Successfully authenticated with Azure CLI",
+	log.Debug(
+		"Successfully authenticated with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", subscriptionID,

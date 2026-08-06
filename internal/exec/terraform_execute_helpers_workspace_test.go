@@ -200,7 +200,8 @@ func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
 		DryRun:           false,
 	}
 
-	execErr := executeMainTerraformCommand(&atmosConfig, &info,
+	execErr := executeMainTerraformCommand(
+		&atmosConfig, &info,
 		[]string{"-test.run=^$"}, // no test matches → exits 0 normally, but env overrides
 		"",                       // component path: current dir
 		false,                    // uploadStatusFlag
@@ -209,9 +210,46 @@ func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
 
 	// Verify the error is wrapped as ExitCodeError (the contract of ExecuteShellCommand).
 	var exitCodeErr errUtils.ExitCodeError
-	require.True(t,
+	require.True(
+		t,
 		errors.As(execErr, &exitCodeErr),
 		"error must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr,
 	)
 	assert.Equal(t, 1, exitCodeErr.Code, "ExitCodeError.Code must be 1")
+}
+
+func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.T) {
+	originalDispatch := dispatchAfterInitFn
+	t.Cleanup(func() { dispatchAfterInitFn = originalDispatch })
+
+	var dispatched bool
+	dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+		dispatched = true
+		assert.Equal(t, "/tmp/component", componentPath)
+		assert.Equal(t, subcommandInit, info.SubCommand)
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, DryRun: true}
+	require.NoError(t, executeMainTerraformCommand(&atmosConfig, &info, []string{subcommandInit}, "/tmp/component", false))
+	assert.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
+}
+
+func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing.T) {
+	originalDispatch := dispatchAfterInitFn
+	t.Cleanup(func() { dispatchAfterInitFn = originalDispatch })
+
+	dispatchAfterInitFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string) {
+		t.Fatal("failed init must not dispatch after.terraform.init provisioners")
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       subcommandInit,
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+	require.Error(t, executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false))
 }

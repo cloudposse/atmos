@@ -1,15 +1,17 @@
 #!/usr/bin/env sh
 set -eu
 
-# Run from the repo (or worktree) root regardless of the caller's cwd. Resolved
-# via git rather than atmos's !repo-root YAML tag so this script has no
-# dependency on the atmos version invoking it -- the "build" custom command is
-# also used to self-host the very first build with an older bootstrap binary
-# that may predate newer YAML tags.
+# Run from the repo (or worktree) root regardless of the caller's cwd. This is
+# a standalone script as well as an Atmos custom-command entrypoint, so it
+# resolves its own working directory.
 cd "$(git rev-parse --show-toplevel)"
 
 target="${1:-${ATMOS_BUILD_TARGET:-default}}"
 version="${2:-${ATMOS_BUILD_VERSION:-test}}"
+# Full commit SHA, so the scaffold catalog can pin distributable templates to
+# the exact commit this binary was built from (works from any pushed branch,
+# not just tagged releases). Empty when not building from a git checkout.
+commit="$(git rev-parse HEAD 2>/dev/null || true)"
 
 case "$target" in
   default)
@@ -56,14 +58,14 @@ mkdir -p build
 
 if [ -n "$goos" ] && [ -n "$goarch" ]; then
   GOOS="$goos" GOARCH="$goarch" go build -o "$output" -v \
-    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version' -X 'github.com/cloudposse/atmos/pkg/version.Commit=$commit'"
 elif [ -n "$goos" ]; then
   GOOS="$goos" go build -o "$output" -v \
-    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version' -X 'github.com/cloudposse/atmos/pkg/version.Commit=$commit'"
 elif [ -n "$goarch" ]; then
   GOARCH="$goarch" go build -o "$output" -v \
-    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version' -X 'github.com/cloudposse/atmos/pkg/version.Commit=$commit'"
 else
   go build -o "$output" -v \
-    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+    -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version' -X 'github.com/cloudposse/atmos/pkg/version.Commit=$commit'"
 fi

@@ -44,7 +44,8 @@ Think of each demo folder as representing an example of a standalone repository.
 13. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
 14. ├── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
 15. ├── remote-stack-imports/     # Import stack configurations from remote URLs (HTTP, Git, S3, GCS).
-16. └── gitops/                   # Manage Git repositories as Atmos artifacts for GitOps workflows.
+16. ├── gitops/                   # Manage Git repositories as Atmos artifacts for GitOps workflows.
+17. └── backend-provisioning/     # Manage a Terraform state backend directly with `atmos terraform backend` (create/update/delete), against a local AWS emulator.
 ```
 
 ## Playground

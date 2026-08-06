@@ -40,14 +40,14 @@ you can get without hand-writing either.
 ## Two Paths: Interpret or Hand-Migrate
 
 1. **Interpret as-is** -- point `tape:`/`tape_file:` (or `atmos cast record`) straight at an
-   existing `.tape` file. Zero rewrite for tapes that only use directives in the "mapped" or
-   "cosmetic" categories below. This is the fastest path and the right default.
+    existing `.tape` file. Zero rewrite for tapes that only use directives in the "mapped" or
+    "cosmetic" categories below. This is the fastest path and the right default.
 2. **Hand-migrate to native `steps:`/session actions** -- rewrite the tape's on-camera commands as
-   `type: simulate` + `type: shell`/`type: atmos` pairs (`mode: steps`) or `write`/`wait` session
-   actions (`mode: session`). Do this when you want per-step names for observability, want to
-   interleave real Atmos-native step types the tape can't express (structured error handling,
-   `type: require`, `type: toast`), or when a tape mixes `mode: steps`-legal and session-only
-   directives and you want to keep the steps-legal parts under `mode: steps` deliberately.
+    `type: simulate` + `type: shell`/`type: atmos` pairs (`mode: steps`) or `write`/`wait` session
+    actions (`mode: session`). Do this when you want per-step names for observability, want to
+    interleave real Atmos-native step types the tape can't express (structured error handling,
+    `type: require`, `type: toast`), or when a tape mixes `mode: steps`-legal and session-only
+    directives and you want to keep the steps-legal parts under `mode: steps` deliberately.
 
 Both paths can coexist: interpret a tape unmodified today, hand-migrate later only if you outgrow
 it.

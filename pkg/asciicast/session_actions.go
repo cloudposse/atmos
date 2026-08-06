@@ -32,8 +32,24 @@ func runAction(ctx context.Context, input *syncWriter, state *sessionState, acti
 	case "show":
 		state.setDiscard(false)
 		return nil
+	default:
+		return runCallbackAction(action)
+	}
+}
+
+// runCallbackAction dispatches session actions that don't drive the PTY
+// directly: a recorder-only marker ("screenshot") or a caller-supplied
+// callback ("simulate"). Split out of runAction to keep its cyclomatic
+// complexity within limits.
+func runCallbackAction(action *SessionAction) error {
+	switch action.Type {
 	case "screenshot":
 		return runScreenshotAction(action)
+	case "simulate":
+		if action.Fn == nil {
+			return ErrSimulateActionMissingCallback
+		}
+		return action.Fn()
 	default:
 		return fmt.Errorf("%w: %q", ErrUnknownSessionAction, action.Type)
 	}

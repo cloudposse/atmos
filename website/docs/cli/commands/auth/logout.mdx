@@ -117,6 +117,14 @@ Successfully logged out from 4 identities
    browser session.
 ```
 
+### Logout by Tags
+
+```shell
+atmos auth logout --tags production
+```
+
+This removes credentials for every identity and provider tagged with any of the given tags, using the same confirmation flow as `--all`. This is useful when you want to log out of an entire environment (e.g. everything tagged `production`) without listing each identity individually.
+
 ### Logout from Specific Provider
 
 ```shell
@@ -260,6 +268,27 @@ Understanding what gets removed:
 Without `--keychain`, logout preserves your stored credentials (IAM user keys, service account creds) for instant re-authentication. It only clears session data (AWS SSO tokens, temporary credentials).
 :::
 
+:::note Ambient Providers
+Some providers re-resolve the active principal from ambient state on every login rather than
+holding credentials of their own:
+
+<dl>
+  <dt>`gcp/adc`</dt>
+  <dd>Application Default Credentials — `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or the metadata server.</dd>
+
+  <dt>`azure/cli`</dt>
+  <dd>Your Azure CLI session, from `az login`.</dd>
+
+  <dt>`gcp/workload-identity-federation`, `azure/oidc`, `github/oidc`</dt>
+  <dd>The configured OIDC token source.</dd>
+</dl>
+
+These have nothing to preserve in the keychain, so logout always clears their entries whether
+or not you pass `--keychain`. Nothing is lost — the next `atmos auth login` re-resolves from
+the source above. Logout also does not fail when there is no entry to remove, which is the
+normal state for these providers.
+:::
+
 :::danger Permanent Deletion
 Using `--keychain` permanently deletes credentials from your system keychain. You'll need to re-enter IAM user access keys or re-authenticate service accounts when logging in again.
 :::
@@ -294,6 +323,11 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
 
   <dt>`--provider`</dt>
   <dd>Logout from a specific provider instead of an identity. Clears session data for all identities using this provider. Combine with `--keychain` to also remove stored credentials.</dd>
+
+  <dt>`--tags`</dt>
+  <dd>
+    Logout from every provider and identity matching any of the given tags (comma-separated): `--tags=production`. Providers and identities are tagged via an optional `tags: [...]` list in `atmos.yaml`. Uses the same confirmation flow as `--all`. Combine with `--keychain` to also remove stored credentials.
+  </dd>
 
   <dt>`--keychain`</dt>
   <dd>
