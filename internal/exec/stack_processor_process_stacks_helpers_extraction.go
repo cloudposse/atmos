@@ -64,15 +64,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			log.Warn("component 'pro' section must be a map, ignoring it",
 				"error", fmt.Errorf("%w: 'components.%s.%s.pro' in the file '%s'", errUtils.ErrInvalidComponentPro, opts.ComponentType, opts.Component, opts.StackName))
 		} else {
-			result.ComponentPro = componentPro
-			// Strict-decode as a validation-only side channel: catches an unrecognized key
-			// (e.g. "enable" instead of "enabled") the same way `atmos validate stacks`
-			// would via JSON Schema, without requiring that separate command to have been
-			// run first. Non-fatal for the same reason as the type check above -- ComponentPro
-			// stays the raw map either way, so downstream resolution is unaffected.
+			// Strict-decode before assigning: catches an unrecognized key (e.g. "enable"
+			// instead of "enabled") the same way `atmos validate stacks` would via JSON
+			// Schema, without requiring that separate command to have been run first.
+			// Discarding the raw map on failure (rather than assigning it anyway) matters --
+			// downstream resolution ignores unknown keys, so a `pro: {enable: false}` typo
+			// would otherwise silently fall through to Pro's enabled-by-default behavior,
+			// the opposite of what the user wrote. Non-fatal for the same reason as the type
+			// check above: one component's typo must not abort sibling components.
 			if _, err := schema.DecodeComponentPro(componentPro); err != nil {
 				log.Warn("component 'pro' section has an unrecognized field, check for a typo (e.g. 'enable' instead of 'enabled')",
 					"component", opts.Component, "type", opts.ComponentType, "file", opts.StackName, "error", err)
+			} else {
+				result.ComponentPro = componentPro
 			}
 		}
 	}

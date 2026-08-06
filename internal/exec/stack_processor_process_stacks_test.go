@@ -1635,10 +1635,11 @@ func TestProcessStackConfig_MalformedComponentProDoesNotBlockSiblings(t *testing
 
 // TestProcessStackConfig_ProSectionUnknownKeyDoesNotBlockProcessing guards against a typo'd
 // pro: key (e.g. "enable" instead of "enabled") having any fatal effect. schema.DecodeComponentPro
-// rejects the unknown key so a warning gets logged (see extractComponentSections), but that must
-// stay a warning, not an error -- and the raw pro: map must still pass through unchanged so
-// pro.ResolveSection's existing default-enabled-unless-explicit-false behavior is unaffected by
-// this validation-only side channel.
+// rejects the unknown key so a warning gets logged (see extractComponentSections), and that must
+// stay a warning, not an error. But the invalid raw map must also be discarded rather than passed
+// through: pro.ResolveSection ignores unrecognized keys, so a passed-through `{enable: false}`
+// would silently resolve to Pro's default-enabled behavior -- the opposite of the user's evident
+// intent to disable it.
 func TestProcessStackConfig_ProSectionUnknownKeyDoesNotBlockProcessing(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -1680,9 +1681,8 @@ func TestProcessStackConfig_ProSectionUnknownKeyDoesNotBlockProcessing(t *testin
 	require.True(t, ok, "terraform components should be present")
 	typo, ok := terraformSection["typo"].(map[string]any)
 	require.True(t, ok, "typo component should still resolve")
-	proSection, ok := typo[cfg.ProSectionName].(map[string]any)
-	require.True(t, ok, "raw pro: map must still pass through despite the unrecognized key")
-	assert.Equal(t, map[string]any{"enable": false}, proSection, "the strict decode is validation-only and must not mutate or strip the raw section")
+	_, hasPro := typo[cfg.ProSectionName]
+	assert.False(t, hasPro, "an invalid pro: map must be discarded, not passed through as if it enabled Pro by default")
 }
 
 // componentHooks extracts the merged hooks section for a terraform component
