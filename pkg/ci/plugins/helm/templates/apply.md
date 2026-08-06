@@ -28,6 +28,8 @@
 
 {{ else }}
 
+{{ if eq (index . "operation") "install" }}
+
 | Field | Value |
 | --- | --- |
 | Operation | `{{ index . "operation" }}` |
@@ -36,12 +38,21 @@
 | Chart hooks enabled | `{{ index . "chart_hooks" }}` |
 | Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
 | On failure | `{{ index . "on_failure" }}` |
-{{ if eq (index . "operation") "install" -}}
 | Install CRDs | `{{ index . "crds" }}` |
-{{ end -}}
-{{ if eq (index . "operation") "upgrade" -}}
+
+{{ else }}
+
+| Field | Value |
+| --- | --- |
+| Operation | `{{ index . "operation" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
+| Timeout | `{{ index . "timeout" }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
+| Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
+| On failure | `{{ index . "on_failure" }}` |
 | Cleanup on failure | `{{ index . "cleanup_on_failure" }}` |
 | Maximum history | `{{ index (index . "history") "max" }}` |
+
 {{ end }}
 
 {{ end }}
