@@ -16,8 +16,8 @@ value there still resolves against the process cwd exactly as before.
 
 ## Context
 
-This builds on the fix shipped earlier on this branch (`osterman/fix-archive-step-workdir`, PR
-#2880): `pkg/runner/step/handler_base.go`'s `BaseHandler.ResolveInWorkingDirectory` anchors step
+This builds on the fix shipped earlier on this branch (`osterman/fix-archive-step-workdir`, PR #2880):
+`pkg/runner/step/handler_base.go`'s `BaseHandler.ResolveInWorkingDirectory` anchors step
 fields (`source`, `path`, `files`, `context`, ...) to `step.WorkingDirectory`. That fix left one gap:
 when `step.WorkingDirectory` itself was an explicit, non-empty, non-absolute string, it was always
 treated as CWD-relative via `filepath.Abs`, with no distinction based on the string's shape.
