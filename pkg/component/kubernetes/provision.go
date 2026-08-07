@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 
 	// Blank import registers the "git" provision target kind so it is available
 	// for delivery whenever Kubernetes components are executed.
@@ -62,6 +63,7 @@ func deliverApply(
 	}); err != nil {
 		return nil, err
 	}
+	ui.Successf("delivered %d Kubernetes object(s) to %q", len(objects), selected.Name)
 	return objectsToResults("delivered", objects), nil
 }
 
