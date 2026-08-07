@@ -1,0 +1,255 @@
+---
+title: Migrating from Makefiles
+sidebar_position: 4
+sidebar_label: From Makefiles
+description: How to migrate from Makefiles to Atmos
+id: makefile
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+A Makefile gives your team an ad-hoc way to run build, test, and deploy tasks. Atmos gives you
+the same capability as a native, documented feature: custom commands and workflows. Your
+Terraform code, scripts, and other tools do not need to change. Atmos replaces only the
+Makefile's targets and recipes. You can keep the Makefile as a thin wrapper around `atmos`
+commands while you migrate.
+</Intro>
+
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/agent-skills) for details.
+:::
+
+## Key Concepts at a Glance
+
+| Makefile concept                                | Atmos equivalent                                         |
+|--------------------------------------------------|------------------------------------------------------------|
+| `.PHONY` target, no dependencies                  | [Custom command](/cli/configuration/commands)               |
+| `VAR ?= default`, `$(VAR)`                        | Command `flags:` with a `default:`                          |
+| `target: dep1 dep2` (dependency order)            | Steps in order, or a `parallel` step with `needs:`           |
+| Recipe shell lines (`@`-silenced, tab-indented)    | Steps (`type: shell`, `output: none`)                        |
+| `ifeq (...)` conditional                          | Go template `{{ if }}` in a command, or `when:` in a workflow |
+| `$(MAKE) -j`, `$(MAKE) -C dir`                    | `parallel` / `matrix` steps                                  |
+| Self-documenting `help` target (`awk`-parsed)     | Free: `atmos help` and each command's `description:`         |
+
+## Before and After
+
+<Tabs>
+  <TabItem value="before" label="Before (Makefile)">
+    ```makefile
+    .PHONY: build test lint clean deploy
+
+    ENV ?= dev
+
+    build:
+    	go build -o bin/handler ./cmd/handler
+
+    test: build
+    	go test ./...
+
+    lint:
+    	golangci-lint run ./...
+
+    clean:
+    	@rm -rf bin/
+
+    deploy: build test
+    	cd terraform && terraform apply -var-file=envs/$(ENV).tfvars
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (atmos.yaml)">
+    ```yaml
+    commands:
+      - name: build
+        description: Compile the deployable artifact
+        steps:
+          - type: shell
+            command: go build -o bin/handler ./cmd/handler
+
+      - name: test
+        description: Run unit tests
+        steps:
+          - type: shell
+            command: atmos build
+          - type: shell
+            command: go test ./...
+
+      - name: lint
+        description: Run static analysis
+        steps:
+          - type: shell
+            command: golangci-lint run ./...
+
+      - name: clean
+        description: Remove build artifacts
+        steps:
+          - type: shell
+            command: rm -rf bin/
+            output: none
+
+      - name: deploy
+        description: Plan and apply the given environment (default dev)
+        flags:
+          - name: env
+            shorthand: e
+            default: "dev"
+        steps:
+          - type: shell
+            command: atmos build
+          - type: shell
+            command: atmos test
+          - type: atmos
+            command: terraform apply infra -s {{ .Flags.env }}
+    ```
+  </TabItem>
+</Tabs>
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
+actually name the component.
+
+## Independent Targets Become Custom Commands
+
+Turn each `.PHONY` target that has no dependency into its own
+[custom command](/cli/configuration/commands). In the example above, these are `build`, `test`,
+`lint`, and `clean`. Give each command a `description:`. Then `atmos help` shows the same
+information as a hand-written, `awk`-parsed `help` target, so you can delete that target. Turn
+`VAR ?= default` into a `flags:` entry with a matching `default:`.
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+```
+</File>
+
+<Terminal>
+```bash
+atmos build
+```
+</Terminal>
+
+## Target Chains Become Workflows
+
+A `type: atmos` step runs the `atmos` binary itself, so it can call any atmos command, a native
+verb such as `terraform apply` or another custom command such as `build`. To reuse a command
+from another command or workflow step, prefer `type: atmos` with `command: build` over
+`type: shell` with `command: atmos build`: `type: atmos` auto-applies `-s <stack>` from the
+step's `stack:` field and renders through Atmos's structured step output.
+
+If the Makefile's `deploy` target also selects a Terraform environment, for example through
+`-var-file=envs/$(ENV).tfvars`, that part is a Terraform migration step, not a Make migration
+step. See [Migrating from Native Terraform](/migration/native-terraform) for how the Terraform
+side maps to stacks and `.tfvars` files.
+
+## Parallel and Recursive Make Become `parallel` and `matrix`
+
+`$(MAKE) -j` runs independent targets at the same time. It maps to a
+[`parallel`](/workflows/steps/type/parallel) step. `$(MAKE) -C dir target` runs the same target
+across a fixed set of directories. It maps to a [`matrix`](/workflows/steps/type/matrix) step:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build-all
+    description: Build every service
+    steps:
+      - name: build-services
+        type: matrix
+        matrix:
+          service: [vpc, eks, rds]
+        max_concurrency: 4
+        steps:
+          - type: shell
+            command: atmos build --service {{ .matrix.service }}
+```
+</File>
+
+## What Stays the Same
+
+- **Your Terraform code, scripts, and CLIs.** Atmos wraps them. It does not replace them.
+- **Environment variables you already export.** Move them into a command or step `env:` map.
+- **The Makefile itself, for a while.** Keep it as a thin wrapper around `atmos` commands until
+  your team is ready. Then remove it, once each leaf target and chain has become a command or a
+  workflow.
+
+One gap to state directly: a target that skips work based on file timestamps has no match in
+Atmos. Atmos steps always run. If this caching matters to your build, plan for it. Do not assume
+it carries over on its own.
+
+## What You Gain
+
+- **One command for discovery.** Run `atmos help` to list every command. Run
+  `atmos <command> --help` to see its flags and arguments. A Makefile has no built-in match for
+  this. It needs a hand-written, `awk`-parsed `help` target instead.
+- **One consistent interface.** Every custom command uses the same flag and argument syntax.
+  A Makefile has no fixed convention. Each target can parse its own variables in its own way.
+- **More than 30 built-in step types.** Atmos ships step types for shell commands, orchestration
+  (`parallel`, `matrix`, `wait`), user prompts (`confirm`, `choose`, `input`), and output
+  (`table`, `markdown`, `toast`). See [Step Types](/workflows/steps/type) for the full list. A
+  plain Makefile recipe has none of this. You would write it yourself, in shell.
+- **Interactive commands.** A step such as `confirm` or `choose` can pause a command and ask the
+  user a question. A Makefile recipe cannot do this without a custom shell script.
+- **Automatic tool installation.** A command can list the tools it needs under
+  `dependencies.tools`. Atmos installs the correct version before the command runs. See
+  [Toolchain Configuration](/cli/configuration/toolchain). A Makefile has no built-in match for
+  this. The user must install each tool by hand, or write a separate setup script.
+
+## Migration Checklist
+
+<TaskList>
+- [ ] List every Makefile target. Mark each one as independent, or part of a chain
+- [ ] Turn independent targets into custom commands in `atmos.yaml`
+- [ ] Turn `VAR ?= default` variables into command `flags:` with defaults
+- [ ] Turn dependency chains into steps in order, or into a workflow
+- [ ] Replace `$(MAKE) -j`/`-C` with `parallel`/`matrix` steps
+- [ ] Delete any hand-written `help` target. `atmos help` replaces it
+- [ ] Keep the Makefile as a thin wrapper during the transition, if you want one
+- [ ] Confirm no target depends on file-timestamp caching before you remove it
+</TaskList>
+
+## Common Questions
+
+<FAQItem question="Do I have to delete my Makefile?">
+No. It can stay as a thin wrapper around `atmos` commands during a step-by-step migration. Each
+leaf target should become a custom command over time. Each dependency chain should become a
+workflow. There is no fixed deadline for this.
+</FAQItem>
+
+<FAQItem question="What happens to targets that skip work based on file timestamps?">
+There is no direct match in Atmos. Atmos steps always run. If a target relies on file timestamps
+to skip slow work, plan for that change directly. Do not assume the behavior stays the same.
+</FAQItem>
+
+<FAQItem question="Can one custom command call another?">
+Yes, through either step type: `type: atmos` with `command: <other-command-name>`, or
+`type: shell` with `command: atmos <other-command-name>`. Prefer `type: atmos` — it auto-applies
+`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not.
+</FAQItem>
+
+<FAQItem question="What if I use Just or Task instead of Make?">
+See [Migrating from Justfiles](/migration/justfile) or
+[Migrating from Taskfile.yml](/migration/taskfile).
+</FAQItem>
+
+<FAQItem question="What if my Makefile also selects a Terraform environment?">
+See [Migrating from Native Terraform](/migration/native-terraform) for that part of the
+migration. This guide covers only the `make` orchestration layer.
+</FAQItem>

@@ -27,6 +27,12 @@ type LinePrefixWriter struct {
 	prefix  string
 	w       stdio.Writer
 	buffer  []byte
+	// pending holds the already-prefixed, already-normalized suffix of a line
+	// that a prior write to w left unwritten (a short write or a write error
+	// after n > 0 bytes). It is retried byte-for-byte before any new line, so
+	// bytes w already accepted are never re-sent and the line's prefix is
+	// never re-applied.
+	pending []byte
 }
 
 // NewLinePrefixWriter creates a writer that prefixes every rendered line with
@@ -78,14 +84,14 @@ func (w *LinePrefixWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Flush writes any trailing partial line.
+// Flush writes any trailing partial line, plus any complete lines still buffered.
 func (w *LinePrefixWriter) Flush() error {
 	defer perf.Track(nil, "io.LinePrefixWriter.Flush")()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if len(w.buffer) == 0 {
+	if len(w.buffer) == 0 && len(w.pending) == 0 {
 		return nil
 	}
 
@@ -99,15 +105,20 @@ func (w *LinePrefixWriter) Flush() error {
 		return nil
 	}
 	line := append([]byte(nil), w.buffer...)
-	if err := w.writeLine(line); err != nil {
-		return err
-	}
 	w.buffer = w.buffer[:0]
-	return nil
+	return w.writeLineLocked(line)
 }
 
-// flushCompleteLinesLocked writes buffered complete lines while w.mu and w.writeMu are held.
+// flushCompleteLinesLocked writes any pending suffix left over from a prior
+// short or failed write, then any buffered complete lines, while w.mu and
+// w.writeMu are held. It leaves any trailing partial line buffered for a
+// later Write or Flush.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
+	if len(w.pending) > 0 {
+		if err := w.writePendingLocked(); err != nil {
+			return err
+		}
+	}
 	for {
 		idx := lineEndIndex(w.buffer)
 		if idx < 0 {
@@ -118,30 +129,50 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 			end++
 		}
 		line := append([]byte(nil), w.buffer[:end]...)
-		if err := w.writeLine(line); err != nil {
+		w.buffer = w.buffer[end:]
+		if err := w.writeLineLocked(line); err != nil {
 			return err
 		}
-		w.buffer = w.buffer[end:]
 	}
 }
 
-// writeLine writes one already-delimited line with the configured prefix.
-// Callers must hold w.writeMu.
-func (w *LinePrefixWriter) writeLine(line []byte) error {
+// writeLineLocked writes one already-delimited raw line with the configured
+// prefix. If the underlying write is short or fails after n > 0 bytes, the
+// unwritten encoded suffix is kept in w.pending (not w.buffer) so a later
+// call retries exactly those bytes, without re-applying the prefix or
+// resending bytes w already accepted. Callers must hold w.writeMu.
+func (w *LinePrefixWriter) writeLineLocked(line []byte) error {
 	if w.w == nil {
 		return nil
 	}
 
-	line = bytes.ReplaceAll(line, crlfBytes, lfBytes)
-	line = bytes.ReplaceAll(line, crBytes, lfBytes)
+	normalized := bytes.ReplaceAll(line, crlfBytes, lfBytes)
+	normalized = bytes.ReplaceAll(normalized, crBytes, lfBytes)
 
 	if w.prefix == "" {
-		_, err := w.w.Write(line)
+		w.pending = normalized
+	} else {
+		w.pending = append([]byte(w.prefix), normalized...)
+	}
+	return w.writePendingLocked()
+}
+
+// writePendingLocked writes w.pending to the underlying writer, retaining
+// only the unwritten suffix if the write is short or fails. A nil-error
+// short write (n < len(w.pending) with err == nil) is treated as
+// stdio.ErrShortWrite so callers still see and retry it. The caller must
+// already hold w.writeMu.
+func (w *LinePrefixWriter) writePendingLocked() error {
+	n, err := w.w.Write(w.pending)
+	if err == nil && n < len(w.pending) {
+		err = stdio.ErrShortWrite
+	}
+	if err != nil {
+		w.pending = append([]byte(nil), w.pending[n:]...)
 		return err
 	}
-
-	_, err := stdio.WriteString(w.w, w.prefix+string(line))
-	return err
+	w.pending = nil
+	return nil
 }
 
 // lineEndIndex returns the first complete line-ending byte position or -1 when absent.

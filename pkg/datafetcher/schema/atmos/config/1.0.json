@@ -3259,6 +3259,20 @@
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Hidden excludes the command from `atmos --help` / `atmos \u003cgroup\u003e --help` subcommand\nlistings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while\nleaving it fully runnable: `atmos \u003cname\u003e ...` still executes it directly, and\n`atmos \u003cname\u003e --help` still renders its own help when invoked explicitly. Use for\nhelper commands meant to be called by other commands or run manually for debugging,\nanalogous to Just's `[private]` recipes or Task's `internal: true` tasks."
+        },
         "identity": {
           "anyOf": [
             {

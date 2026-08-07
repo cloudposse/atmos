@@ -57,6 +57,16 @@ func TestNormalizeHelpTopicArgs(t *testing.T) {
 			expectedChange: true,
 		},
 		{
+			name:           "hidden topic",
+			args:           []string{"terraform", "plan", "--help=hidden"},
+			expectedArgs:   []string{"terraform", "plan", "--help"},
+			expectedTopic:  helpTopicHidden,
+			expectedRaw:    "hidden",
+			expectedValid:  true,
+			expectedSet:    true,
+			expectedChange: true,
+		},
+		{
 			name:           "uppercase topic",
 			args:           []string{"terraform", "plan", "--help=USAGE"},
 			expectedArgs:   []string{"terraform", "plan", "--help"},
@@ -151,6 +161,42 @@ func TestTopicHelpRendering_AllIncludesGlobalFlags(t *testing.T) {
 	assert.Contains(t, output, "--local")
 	assert.Contains(t, output, "GLOBAL FLAGS")
 	assert.Contains(t, output, "--global")
+}
+
+func testHelpCommandWithHiddenChild(t *testing.T) *cobra.Command {
+	t.Helper()
+
+	parent := &cobra.Command{Use: "parent", Short: "parent command"}
+	visible := &cobra.Command{Use: "visible", Short: "a visible child", Run: func(cmd *cobra.Command, args []string) {}}
+	hidden := &cobra.Command{Use: "secret", Short: "a hidden child", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}}
+	parent.AddCommand(visible, hidden)
+
+	return parent
+}
+
+func TestTopicHelpRendering_HiddenShowsOnlyHiddenSubcommands(t *testing.T) {
+	output := renderTopicHelpForTest(t, helpTopicRequest{topic: helpTopicHidden, explicit: true, valid: true}, testHelpCommandWithHiddenChild(t))
+
+	assert.Contains(t, output, "HIDDEN COMMANDS")
+	assert.Contains(t, output, "secret")
+	assert.Contains(t, output, "a hidden child")
+	assert.NotContains(t, output, "visible")
+	assert.NotContains(t, output, "a visible child")
+}
+
+func TestTopicHelpRendering_HiddenWithNoHiddenSubcommandsShowsMessage(t *testing.T) {
+	output := renderTopicHelpForTest(t, helpTopicRequest{topic: helpTopicHidden, explicit: true, valid: true}, testHelpCommand(t))
+
+	assert.Contains(t, output, "has no hidden subcommands")
+	assert.NotContains(t, output, "HIDDEN COMMANDS")
+}
+
+func TestTopicHelpRendering_DefaultHintMentionsHiddenWhenPresent(t *testing.T) {
+	output := renderTopicHelpForTest(t, helpTopicRequest{valid: true}, testHelpCommandWithHiddenChild(t))
+
+	// Match "help=hidden" rather than "--help=hidden": word-wrapping in the rendered hint
+	// can split the leading "--" onto the previous line at narrower terminal widths.
+	assert.Contains(t, output, "help=hidden")
 }
 
 func TestTopicHelpRendering_RootDefaultFiltersPersistentGlobals(t *testing.T) {

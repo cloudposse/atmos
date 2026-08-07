@@ -398,6 +398,53 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 	})
 }
 
+// hiddenSubcommands returns cmd's direct subcommands that are marked Hidden, in Commands() order.
+// This includes both `hidden: true` custom commands and any hidden built-in commands.
+func hiddenSubcommands(cmd *cobra.Command) []*cobra.Command {
+	var hidden []*cobra.Command
+	for _, c := range cmd.Commands() {
+		if c.Hidden {
+			hidden = append(hidden, c)
+		}
+	}
+	return hidden
+}
+
+// printHiddenCommands prints the list of hidden subcommands for the `--help=hidden` topic.
+// Unlike printAvailableCommands, this shows ONLY commands excluded from ordinary help output
+// (via `hidden: true` on a custom command, or a hidden built-in) -- the inverse listing, for
+// discovering what a bare `--help` deliberately omits.
+func printHiddenCommands(ctx *helpRenderContext, cmd *cobra.Command) {
+	defer perf.Track(nil, "cmd.printHiddenCommands")()
+
+	hidden := hiddenSubcommands(cmd)
+	if len(hidden) == 0 {
+		fmt.Fprintln(ctx.writer, ctx.styles.muted.Render(fmt.Sprintf("%s has no hidden subcommands.", cmd.CommandPath())))
+		return
+	}
+
+	parentExperimental := isExperimentalCommand(cmd)
+
+	var mdRenderer *markdown.Renderer
+	if ctx.atmosConfig != nil {
+		mdRenderer, _ = markdown.NewTerminalMarkdownRenderer(*ctx.atmosConfig)
+	}
+
+	maxCmdWidth := 0
+	for _, c := range hidden {
+		if width := calculateCommandWidth(c, parentExperimental); width > maxCmdWidth {
+			maxCmdWidth = width
+		}
+	}
+
+	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("HIDDEN COMMANDS"))
+	fmt.Fprintln(ctx.writer)
+	for _, c := range hidden {
+		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer, parentExperimental)
+	}
+	fmt.Fprintln(ctx.writer)
+}
+
 // getConfigAliases returns all available config alias commands.
 func getConfigAliases(cmd *cobra.Command) []*cobra.Command {
 	var aliases []*cobra.Command

@@ -1,0 +1,231 @@
+---
+title: Migrating from Justfiles
+sidebar_position: 5
+sidebar_label: From Justfiles
+description: How to migrate from Justfiles to Atmos
+id: justfile
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+A Justfile gives your team an ad-hoc way to run build, test, and deploy tasks, through named
+recipes. Atmos gives you the same capability as a native, documented feature: custom commands
+and workflows. Just's named parameters with default values map more directly onto Atmos flags
+and arguments than Make's or Task's syntax does, so this migration is direct. Your Terraform
+code and scripts do not need to change. Atmos replaces only the Justfile's recipes.
+</Intro>
+
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/agent-skills) for details.
+:::
+
+## Why Some Teams Choose Just Over Make
+
+Just recipes do not need tab indentation, the way Make recipes do. A recipe's parameters are
+named and typed, instead of set through implicit `$(VAR)` substitution. Neither point changes the
+migration to Atmos. A custom command does not care how the source tool formatted its recipes. It
+only cares what the recipe does.
+
+## Key Concepts at a Glance
+
+| Justfile concept                                          | Atmos equivalent                                              |
+|----------------------------------------------------------|-----------------------------------------------------------------|
+| `recipe param='default':`                                  | Command `flags:`/`arguments:` with a `default:`                  |
+| `recipe: dep1 dep2` (recipe dependency)                     | Steps in order, or a `parallel` step with `needs:`                |
+| `# comment` above a recipe                                  | Command `description:` (replaces `just --list`)                   |
+| `export VAR := value`                                       | Command or step `env:` map                                        |
+| `set dotenv-load`                                           | `env: !include .env` on the command, workflow, or step             |
+| `set shell := [...]`                                        | Per-step `type: script` with `interpreter:`                       |
+| `[private]` recipe                                          | Command `hidden: true`                                            |
+| `{{ }}` interpolation                                       | `{{ .Flags.<name> }}` / `{{ .Arguments.<name> }}` (a different tool) |
+
+## Before and After
+
+<Tabs>
+  <TabItem value="before" label="Before (justfile)">
+    ```just
+    set dotenv-load := true
+
+    export AWS_REGION := "us-east-1"
+
+    # Build the deployable artifact
+    build:
+        go build -o bin/handler ./cmd/handler
+
+    # Run tests (builds first)
+    test: build
+        go test ./...
+
+    # Deploy to the given environment (defaults to dev)
+    deploy env='dev': build test
+        cd terraform && terraform apply -var-file=envs/{{env}}.tfvars
+
+    [private]
+    _clean:
+        rm -rf bin/
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (atmos.yaml)">
+    ```yaml
+    commands:
+      - name: build
+        description: Build the deployable artifact
+        env:
+          AWS_REGION: us-east-1
+        steps:
+          - type: shell
+            command: go build -o bin/handler ./cmd/handler
+
+      - name: test
+        description: Run tests (builds first)
+        steps:
+          - type: shell
+            command: atmos build
+          - type: shell
+            command: go test ./...
+
+      - name: deploy
+        description: Deploy to the given environment (defaults to dev)
+        flags:
+          - name: env
+            shorthand: e
+            default: "dev"
+        steps:
+          - type: shell
+            command: atmos test
+          - type: atmos
+            command: terraform apply infra -s {{ .Flags.env }}
+    ```
+  </TabItem>
+</Tabs>
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
+actually name the component.
+
+## Named Parameters Become Flags and Arguments
+
+Just's `recipe param='default':` syntax maps directly to Atmos `flags:` (or `arguments:` for a
+positional value), each with a matching `default:`. Read the value inside a step as
+`{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. It is a different template engine
+that runs at a different time.
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to the given environment
+    flags:
+      - name: env
+        shorthand: e
+        default: "dev"
+    steps:
+      - type: atmos
+        command: terraform apply infra -s {{ .Flags.env }}
+```
+</File>
+
+<Terminal>
+```bash
+atmos deploy --env staging
+```
+</Terminal>
+
+## Recipe Dependencies Become Steps
+
+A recipe dependency, such as `deploy: build test`, gets the same treatment as a Makefile target
+chain. See [Migrating from Makefiles](/migration/makefile) for the general method, including when
+to use a `parallel` step instead of plain steps in order.
+
+## `[private]` Recipes and Environment Settings
+
+Set `hidden: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
+`default:` target, or from another command's steps), but it's excluded from `atmos --help`
+listings and completion suggestions — matching a `[private]` recipe's behavior in `just --list`.
+Reserve inlining the logic into a caller's step for a helper that's genuinely single-caller and
+has no reason to be invoked on its own.
+
+Atmos loads `.env` files natively with `env: !include .env`. Atmos parses the dotenv format
+(including `export VAR=value`, comments, quoting, and `${VAR}` expansion) and merges the result
+into the command, workflow, or step `env:` map:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the deployable artifact
+    env: !include .env
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+```
+</File>
+
+If the `.env` file holds secrets rather than plain configuration, prefer Atmos's store or secrets
+integration instead of a plaintext `.env` file.
+
+## What You Gain
+
+- **A larger set of built-in step types.** A Justfile recipe runs shell commands only. Atmos
+  adds step types for orchestration (`parallel`, `matrix`, `wait`), user prompts (`confirm`,
+  `choose`, `input`), and output (`table`, `markdown`, `toast`), with more than 30 types in
+  total. See [Step Types](/workflows/steps/type) for the full list.
+- **Interactive commands.** A step such as `confirm` or `choose` can pause a command and ask the
+  user a question. A Justfile recipe cannot do this without a custom shell script.
+- **Automatic tool installation.** A command can list the tools it needs under
+  `dependencies.tools`. Atmos installs the correct version before the command runs. See
+  [Toolchain Configuration](/cli/configuration/toolchain). A Justfile has no built-in match for
+  this.
+- **One interface across every command.** `just --list` shows recipe names and parameters.
+  Atmos adds `atmos <command> --help` with the same flag and argument format for every command,
+  plus typed flags, shorthands, and defaults enforced by Atmos itself.
+
+## Migration Checklist
+
+<TaskList>
+- [ ] List every Justfile recipe. Mark each one as independent, or part of a chain
+- [ ] Turn recipe parameters with defaults into command `flags:`/`arguments:`
+- [ ] Turn recipe dependencies into steps in order, or into a workflow
+- [ ] Turn `export VAR := value` into `env:` maps
+- [ ] Replace `set dotenv-load` with `env: !include .env` (or a store/secrets integration for secret values)
+- [ ] Mark `[private]` recipes as `hidden: true` custom commands
+- [ ] Stop relying on `just --list`. `atmos help` replaces it
+</TaskList>
+
+## Common Questions
+
+<FAQItem question="Can I keep .env loading with set dotenv-load?">
+Yes. Use `env: !include .env` on the command, workflow, or step. Atmos parses the dotenv file
+natively and merges its values into `env:`. Reserve Atmos's store or secrets integration for
+values that are actually secret, since a plain `.env` file is not encrypted.
+</FAQItem>
+
+<FAQItem question="What replaces [private] recipes?">
+Set `hidden: true` on the custom command. It stays fully runnable, including as a `default:`
+target or from another command's steps, but disappears from `atmos --help` listings and
+completion suggestions.
+</FAQItem>
+
+<FAQItem question="Does {{ }} interpolation carry over as-is?">
+No. Just's `{{ var }}` and Atmos's `{{ .Flags.var }}` both use Go templates, but they are
+different engines. Change each reference to `{{ .Flags.<name> }}` or `{{ .Arguments.<name> }}`.
+</FAQItem>
+
+<FAQItem question="What if I use Make or Task instead of Just?">
+See [Migrating from Makefiles](/migration/makefile) or
+[Migrating from Taskfile.yml](/migration/taskfile).
+</FAQItem>

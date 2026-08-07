@@ -480,10 +480,11 @@ func createCustomCommand(
 	parentCommand *cobra.Command,
 ) (*cobra.Command, error) {
 	customCommand := &cobra.Command{
-		Use:   commandConfig.Name,
-		Short: commandConfig.Description,
-		Long:  commandConfig.Description,
-		Args:  customCommandArgsValidator(commandConfig),
+		Use:    commandConfig.Name,
+		Short:  commandConfig.Description,
+		Long:   commandConfig.Description,
+		Hidden: commandConfig.Hidden,
+		Args:   customCommandArgsValidator(commandConfig),
 		Annotations: map[string]string{
 			annotationCustomCommand: annotationValueTrue,
 		},

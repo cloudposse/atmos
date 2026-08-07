@@ -15,6 +15,17 @@ import TaskList from '@site/src/components/TaskList'
 Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. Atmos can adopt that workspace-backed state while moving environment configuration into explicit stack files.
 </Intro>
 
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/agent-skills) for details.
+:::
+
 ## How Workspaces Fit With Atmos
 
 Workspaces are a valid way to organize Terraform state. When migrating to Atmos, the important shift is making configuration explicit in stacks while preserving the state layout that already works for your team.
