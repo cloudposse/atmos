@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -797,6 +799,37 @@ func TestFindAllStackConfigsInPathsForStack_GenuineGlobError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
 		"a genuine glob syntax error must not be reported as ErrNoStackManifestsFound")
+}
+
+// TestResolveStackGlobMatches_ErrorUsesFailingPattern guards against a bug found during a
+// review pass on cloudposse/atmos#2867/#2868: the original pattern-resolution loop discarded
+// every pattern's own error and, once no matches were found across all of them, only ever
+// retried patterns[0] to decide whether a genuine error had occurred -- silently losing a real
+// error from any pattern after the first. The fixed version checks each pattern's error inline
+// and reports it with that exact pattern (not a hardcoded patterns[0]) in context.
+func TestResolveStackGlobMatches_ErrorUsesFailingPattern(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "nonexistent-resolve-stack-glob-matches")
+	atmosConfig := &schema.AtmosConfiguration{StacksBaseAbsolutePath: dir}
+
+	// An extension is present so this exercises resolveStackGlobMatches with a single pattern
+	// (no getStackFilePatterns expansion), isolating exactly which pattern the error names.
+	pattern := filepath.Join(dir, "[invalid.yaml")
+	_, err := resolveStackGlobMatches(atmosConfig, pattern)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrFailedToFindImport),
+		"a genuine glob syntax error must not be reported as ErrFailedToFindImport")
+
+	// WithContext attaches structured context via errors.WithSafeDetails (for verbose
+	// render/Sentry), not errors.WithDetail -- read it back via GetAllSafeDetails.
+	var contextBlob string
+	for _, payload := range ckerrors.GetAllSafeDetails(err) {
+		for _, d := range payload.SafeDetails {
+			contextBlob += d + " "
+		}
+	}
+	assert.Contains(t, contextBlob, pattern,
+		"the error context must name the actual failing pattern, not a hardcoded patterns[0]")
 }
 
 // TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack
