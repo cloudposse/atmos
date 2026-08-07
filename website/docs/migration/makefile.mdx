@@ -21,6 +21,17 @@ Makefile's targets and recipes. You can keep the Makefile as a thin wrapper arou
 commands while you migrate.
 </Intro>
 
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/agent-skills) for details.
+:::
+
 ## Key Concepts at a Glance
 
 | Makefile concept                                | Atmos equivalent                                         |
@@ -132,10 +143,11 @@ atmos build
 
 ## Target Chains Become Workflows
 
-A step cannot call another custom command through `type: atmos`. That step type is only for
-native Atmos verbs, such as `terraform plan` or `terraform apply`. To reuse a command from
-another command or workflow step, call it directly with `type: shell` and
-`command: atmos build`.
+A `type: atmos` step runs the `atmos` binary itself, so it can call any atmos command, a native
+verb such as `terraform apply` or another custom command such as `build`. To reuse a command
+from another command or workflow step, prefer `type: atmos` with `command: build` over
+`type: shell` with `command: atmos build`: `type: atmos` auto-applies `-s <stack>` from the
+step's `stack:` field and renders through Atmos's structured step output.
 
 If the Makefile's `deploy` target also selects a Terraform environment, for example through
 `-var-file=envs/$(ENV).tfvars`, that part is a Terraform migration step, not a Make migration
@@ -222,9 +234,9 @@ to skip slow work, plan for that change directly. Do not assume the behavior sta
 </FAQItem>
 
 <FAQItem question="Can one custom command call another?">
-Yes, but not through `type: atmos`. That step type is only for native Atmos verbs, such as
-`terraform plan`. To call another custom command, use a `type: shell` step with
-`command: atmos <other-command-name>`.
+Yes, through either step type: `type: atmos` with `command: <other-command-name>`, or
+`type: shell` with `command: atmos <other-command-name>`. Prefer `type: atmos` — it auto-applies
+`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not.
 </FAQItem>
 
 <FAQItem question="What if I use Just or Task instead of Make?">

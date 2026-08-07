@@ -29,6 +29,36 @@ Run a nested subcommand by chaining the names:
 atmos list stacks
 ```
 
+## Loading Environment Variables from a Dotenv File
+
+A command's `env:` field accepts [`!include`](/functions/yaml/include) to load values directly
+from a `.env` file, instead of listing each variable inline:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy the application
+    env: !include .env
+    steps:
+      - atmos terraform apply app -s {{ .Arguments.stack }}
+```
+
+Use a YAML merge key to combine dotenv values with inline overrides:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy the application
+    env:
+      <<: !include .env
+      AWS_REGION: us-east-2
+    steps:
+      - atmos terraform apply app -s {{ .Arguments.stack }}
+```
+
+See [Environment Variables](/cli/configuration/env#including-dotenv-files) for the full dotenv
+`!include` behavior, including merging multiple files and precedence rules.
+
 ## Path-Based Names
 
 When intermediate command levels only exist to spell out the command path, you can put the full path in `name` instead of writing nested `commands` arrays:

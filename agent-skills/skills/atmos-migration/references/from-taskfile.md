@@ -44,6 +44,10 @@ tasks:
     reserved for native Atmos verbs only. If the line calls another custom command (for example
     `atmos build`), keep it as a `type: shell` step with `command: atmos build` -- do not use
     `type: atmos` for that.
+3. Set `hidden: true` on a command created from an `internal: true` task. It runs normally
+    (`atmos <name> ...`, as a `default:` target, or from another command's steps) but is excluded
+    from `atmos --help` listings and completion suggestions. Only inline the task's body into a
+    caller's step when it is genuinely single-caller logic with no reason to be invoked on its own.
 
 ```yaml
 commands:
@@ -177,3 +181,6 @@ State it directly. Do not gloss over it.
   default concurrency.
 - Do not describe `require`/`assert` as a freshness or caching check. It only checks that
   something exists.
+- Do not turn every `internal: true` task into its own discoverable command by default. If it is
+  called from only one task, inline it into that caller's step. If it needs to be called from
+  more than one task, or invoked directly for debugging, make it a `hidden: true` custom command.

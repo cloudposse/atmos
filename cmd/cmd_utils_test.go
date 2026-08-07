@@ -2398,6 +2398,147 @@ func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T)
 	assert.Equal(t, "1", string(got))
 }
 
+func TestCreateCustomCommandHidden(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("hidden command is excluded from help listings", func(t *testing.T) {
+		parentCmd := &cobra.Command{Use: "atmos"}
+		hiddenCmd, err := createCustomCommand(atmosConfig, &schema.Command{
+			Name:        "helper",
+			Description: "hidden helper",
+			Hidden:      true,
+		}, parentCmd)
+		require.NoError(t, err)
+		assert.True(t, hiddenCmd.Hidden)
+		assert.False(t, hiddenCmd.IsAvailableCommand(), "a hidden command must not report as available for help listings")
+	})
+
+	t.Run("unset hidden keeps the command visible", func(t *testing.T) {
+		parentCmd := &cobra.Command{Use: "atmos"}
+		visibleCmd, err := createCustomCommand(atmosConfig, &schema.Command{
+			Name:        "visible",
+			Description: "visible command",
+		}, parentCmd)
+		require.NoError(t, err)
+		assert.False(t, visibleCmd.Hidden)
+		assert.True(t, visibleCmd.IsAvailableCommand())
+	})
+}
+
+func TestHiddenCommandStillExecutesDirectly(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	sentinelFile := filepath.Join(workDir, "sentinel.txt")
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "hidden-helper",
+		Description:      "a hidden helper command",
+		Hidden:           true,
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:    "write-sentinel",
+			Type:    schema.TaskTypeShell,
+			Command: `printf %s "ran" > sentinel.txt`,
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	hiddenCmd := findSubcommand(parentCmd, "hidden-helper")
+	require.NotNil(t, hiddenCmd)
+	require.True(t, hiddenCmd.Hidden)
+	require.False(t, hiddenCmd.IsAvailableCommand())
+
+	// Hidden must not gate execution: invoking it directly still runs its steps.
+	hiddenCmd.PreRun(hiddenCmd, nil)
+	hiddenCmd.Run(hiddenCmd, nil)
+
+	got, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(got))
+}
+
+func TestNestedCommandVisibilityIsIndependentOfParent(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	parentCmd := &cobra.Command{Use: "atmos"}
+
+	commands := []schema.Command{
+		{
+			Name:        "hidden-parent",
+			Description: "hidden parent with a visible child",
+			Hidden:      true,
+			Commands: []schema.Command{
+				{Name: "visible-child", Description: "visible child of a hidden parent"},
+			},
+		},
+		{
+			Name:        "visible-parent",
+			Description: "visible parent with a hidden child",
+			Commands: []schema.Command{
+				{Name: "hidden-child", Description: "hidden child of a visible parent", Hidden: true},
+			},
+		},
+	}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+
+	hiddenParent := findSubcommand(parentCmd, "hidden-parent")
+	require.NotNil(t, hiddenParent)
+	assert.True(t, hiddenParent.Hidden)
+	visibleChild := findSubcommand(hiddenParent, "visible-child")
+	require.NotNil(t, visibleChild)
+	assert.False(t, visibleChild.Hidden, "a visible child must stay visible even though its parent is hidden")
+
+	visibleParent := findSubcommand(parentCmd, "visible-parent")
+	require.NotNil(t, visibleParent)
+	assert.False(t, visibleParent.Hidden)
+	hiddenChild := findSubcommand(visibleParent, "hidden-child")
+	require.NotNil(t, hiddenChild)
+	assert.True(t, hiddenChild.Hidden, "a hidden child must stay hidden even though its parent is visible")
+}
+
+func TestDefaultDispatchToHiddenChildStillExecutes(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	sentinelFile := filepath.Join(workDir, "sentinel.txt")
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:        "wrapper",
+		Description: "visible wrapper whose default action is a hidden helper",
+		Default:     "helper",
+		Commands: []schema.Command{
+			{
+				Name:             "helper",
+				Description:      "hidden implementation",
+				Hidden:           true,
+				WorkingDirectory: workDir,
+				Steps: []schema.Task{{
+					Name:    "write-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "ran" > sentinel.txt`,
+				}},
+			},
+		},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	wrapperCmd := findSubcommand(parentCmd, "wrapper")
+	require.NotNil(t, wrapperCmd)
+
+	wrapperCmd.Run(wrapperCmd, nil)
+
+	got, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(got))
+}
+
 func TestFindTypedValue(t *testing.T) {
 	tests := []struct {
 		name          string

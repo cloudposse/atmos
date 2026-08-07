@@ -207,9 +207,11 @@ language.
 
 - Do not build file-timestamp or `.PHONY` caching as an Atmos feature. It does not exist. State
   this directly instead of dropping the behavior without comment.
-- Do not turn every private or helper recipe into its own discoverable command. There is no
-  `hidden` or `private` field on custom commands. Put the helper logic in a step inside the
-  command or workflow that needs it.
+- Do not turn every private or helper target into its own discoverable command by default. If the
+  helper is called from only one recipe, put its logic in a step inside the command or workflow
+  that needs it. If it needs to be called from more than one recipe, or invoked directly for
+  debugging, make it a custom command with `hidden: true` instead -- it stays runnable but is
+  excluded from `atmos --help` listings and completion suggestions.
 - Do not treat "wrap `atmos` commands in the Makefile" as the final state. It is a valid bridge
   during early migration, as shown in Shape B, step 4. Leaf targets should become custom
   commands. Target chains should become workflows.

@@ -30,7 +30,14 @@ type Command struct {
 	Steps    Tasks     `yaml:"steps" json:"steps" mapstructure:"steps"`
 	Commands []Command `yaml:"commands" json:"commands" mapstructure:"commands"`
 	Verbose  bool      `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
-	Identity string    `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Hidden excludes the command from `atmos --help` / `atmos <group> --help` subcommand
+	// listings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while
+	// leaving it fully runnable: `atmos <name> ...` still executes it directly, and
+	// `atmos <name> --help` still renders its own help when invoked explicitly. Use for
+	// helper commands meant to be called by other commands or run manually for debugging,
+	// analogous to Just's `[private]` recipes or Task's `internal: true` tasks.
+	Hidden   bool   `yaml:"hidden,omitempty" json:"hidden,omitempty" mapstructure:"hidden"`
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 // CommandArgument defines a positional argument for a custom command.

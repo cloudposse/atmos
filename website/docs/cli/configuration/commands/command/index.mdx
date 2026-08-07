@@ -85,4 +85,7 @@ atmos deploy vpc -s plat-ue2-prod
 
   <dt>`verbose`</dt>
   <dd>Set to `true` to print verbose execution output for the command. Defaults to `false`.</dd>
+
+  <dt>`hidden`</dt>
+  <dd>Set to `true` to exclude the command from `atmos --help` listings and completion suggestions while keeping it directly runnable (`atmos <name> ...`) and its own `--help` output intact. Defaults to `false`. List a parent's hidden subcommands with `atmos <parent> --help=hidden`.</dd>
 </dl>

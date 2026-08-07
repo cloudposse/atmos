@@ -21,6 +21,17 @@ and arguments than Make's or Task's syntax does, so this migration is direct. Yo
 code and scripts do not need to change. Atmos replaces only the Justfile's recipes.
 </Intro>
 
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/agent-skills) for details.
+:::
+
 ## Why Some Teams Choose Just Over Make
 
 Just recipes do not need tab indentation, the way Make recipes do. A recipe's parameters are
@@ -36,9 +47,9 @@ only cares what the recipe does.
 | `recipe: dep1 dep2` (recipe dependency)                     | Steps in order, or a `parallel` step with `needs:`                |
 | `# comment` above a recipe                                  | Command `description:` (replaces `just --list`)                   |
 | `export VAR := value`                                       | Command or step `env:` map                                        |
-| `set dotenv-load`                                           | No built-in match. Add a step, or use a store                     |
+| `set dotenv-load`                                           | `env: !include .env` on the command, workflow, or step             |
 | `set shell := [...]`                                        | Per-step `type: script` with `interpreter:`                       |
-| `[private]` recipe                                          | No match. Put the logic in a step instead                         |
+| `[private]` recipe                                          | Command `hidden: true`                                            |
 | `{{ }}` interpolation                                       | `{{ .Flags.<name> }}` / `{{ .Arguments.<name> }}` (a different tool) |
 
 ## Before and After
@@ -137,12 +148,30 @@ to use a `parallel` step instead of plain steps in order.
 
 ## `[private]` Recipes and Environment Settings
 
-There is no `hidden` or `private` field on Atmos custom commands. Put a `[private]` recipe's
-logic in a step of the command that calls it. Do not create a separate command for it.
+Set `hidden: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
+`default:` target, or from another command's steps), but it's excluded from `atmos --help`
+listings and completion suggestions — matching a `[private]` recipe's behavior in `just --list`.
+Reserve inlining the logic into a caller's step for a helper that's genuinely single-caller and
+has no reason to be invoked on its own.
 
-`set dotenv-load` has no confirmed native `.env`-loading feature in Atmos. Do not assume it does.
-Either add a step that loads the `.env` file directly, or, if the values are secrets, use Atmos's
-store or secrets integration instead.
+Atmos loads `.env` files natively with `env: !include .env`. Atmos parses the dotenv format
+(including `export VAR=value`, comments, quoting, and `${VAR}` expansion) and merges the result
+into the command, workflow, or step `env:` map:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the deployable artifact
+    env: !include .env
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+```
+</File>
+
+If the `.env` file holds secrets rather than plain configuration, prefer Atmos's store or secrets
+integration instead of a plaintext `.env` file.
 
 ## What You Gain
 
@@ -167,21 +196,23 @@ store or secrets integration instead.
 - [ ] Turn recipe parameters with defaults into command `flags:`/`arguments:`
 - [ ] Turn recipe dependencies into steps in order, or into a workflow
 - [ ] Turn `export VAR := value` into `env:` maps
-- [ ] Decide how to replace `set dotenv-load`: an explicit step, or a store
-- [ ] Put `[private]` recipes into the steps of the commands that call them
+- [ ] Replace `set dotenv-load` with `env: !include .env` (or a store/secrets integration for secret values)
+- [ ] Mark `[private]` recipes as `hidden: true` custom commands
 - [ ] Stop relying on `just --list`. `atmos help` replaces it
 </TaskList>
 
 ## Common Questions
 
 <FAQItem question="Can I keep .env loading with set dotenv-load?">
-Not on its own. Atmos has no confirmed native match for this feature. Add a step that loads the
-`.env` file, or use Atmos's store or secrets integration instead of a plain `.env` file.
+Yes. Use `env: !include .env` on the command, workflow, or step. Atmos parses the dotenv file
+natively and merges its values into `env:`. Reserve Atmos's store or secrets integration for
+values that are actually secret, since a plain `.env` file is not encrypted.
 </FAQItem>
 
 <FAQItem question="What replaces [private] recipes?">
-There is no `hidden` or `private` field on a custom command. Put the helper logic in a step
-inside the command or workflow that uses it, instead of exposing it as its own command.
+Set `hidden: true` on the custom command. It stays fully runnable, including as a `default:`
+target or from another command's steps, but disappears from `atmos --help` listings and
+completion suggestions.
 </FAQItem>
 
 <FAQItem question="Does {{ }} interpolation carry over as-is?">

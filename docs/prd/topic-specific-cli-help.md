@@ -2,7 +2,7 @@
 
 ## Status: Implemented
 
-**Last Updated**: 2026-07-06
+**Last Updated**: 2026-08-06
 
 ## Overview
 
@@ -14,6 +14,7 @@ The v1 topic set is intentionally small:
 - `--help=usage` shows only usage and embedded usage examples.
 - `--help=flags` shows command-specific flags, excluding inherited/global flags.
 - `--help=all` shows the full help page, including inherited/global flags.
+- `--help=hidden` shows only the command's hidden subcommands (custom commands with `hidden: true`, or a hidden built-in) -- the commands every other topic, including `--help=all`, omits.
 
 ## Motivation
 
@@ -78,13 +79,25 @@ atmos terraform plan --help=all
 
 Shows the complete help page, including inherited/global flags.
 
+Hidden subcommands:
+
+```shell
+atmos wrapper --help=hidden
+```
+
+Shows only the command's directly hidden subcommands (custom commands with `hidden: true`, plus any
+hidden built-ins), formatted the same as an ordinary command listing. Shows a one-line "has no hidden
+subcommands" message instead of an empty section when there are none. Default help includes a hint for
+`--help=hidden` only on commands that actually have a hidden subcommand, so the hint doesn't clutter
+help output for the common case.
+
 Unknown topic:
 
 ```shell
 atmos terraform plan --help=advanced
 ```
 
-Exits non-zero and lists valid topics: `usage`, `flags`, `all`.
+Exits non-zero and lists valid topics: `usage`, `flags`, `all`, `hidden`.
 
 ## Implementation Notes
 
@@ -97,6 +110,7 @@ Exits non-zero and lists valid topics: `usage`, `flags`, `all`.
   - `usage`: usage and examples.
   - `flags`: command-specific flags and compatibility flags.
   - `all`: current full help.
+  - `hidden`: only the command's hidden direct subcommands, or a "no hidden subcommands" message.
 - For the root command, filter root persistent flags from default and `--help=flags` output because they are global flags even though Cobra exposes them as local root flags.
 
 ## Acceptance Criteria
@@ -105,5 +119,7 @@ Exits non-zero and lists valid topics: `usage`, `flags`, `all`.
 - `atmos <command> --help=usage` excludes flags and includes usage examples when present.
 - `atmos <command> --help=flags` excludes inherited/global flags.
 - `atmos <command> --help=all` includes inherited/global flags.
+- `atmos <command> --help=hidden` shows only hidden direct subcommands, and never a command that's
+  already visible in the default listing.
 - `atmos <command> --help=<unknown>` exits non-zero and lists valid topics.
 - Existing `-h`, bare `--help`, and pager behavior continue to work.

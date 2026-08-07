@@ -43,8 +43,10 @@ _clean:
     command `flags:` entry with a matching `default:` value. Inside a step, read the value as
     `{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. See
     [Common Problems](#--interpolation-looks-like-atmos-templates-but-is-not) below.
-3. Do not create a separate command for a `[private]` recipe. There is no `hidden` or `private`
-    field on Atmos custom commands. Put the recipe's body in a step of the command that calls it.
+3. Set `hidden: true` on a command created from a `[private]` recipe. It runs normally
+    (`atmos <name> ...`, as a `default:` target, or from another command's steps) but is excluded
+    from `atmos --help` listings and completion suggestions. Only inline the recipe's body into a
+    caller's step when it is genuinely single-caller logic with no reason to be invoked on its own.
 
 ```yaml
 commands:
@@ -115,10 +117,10 @@ export AWS_REGION := "us-east-1"
 **Steps:**
 
 - Turn `export VAR := value` into a command or step `env:` map.
-- Atmos has no confirmed built-in feature that matches `set dotenv-load`. Do not claim it does.
-  Add a step that loads the `.env` file directly, or, if the values are secrets, use Atmos's
-  store or secrets integration instead of a plain `.env` file. Ask the user which option fits
-  their case.
+- `set dotenv-load` maps to `env: !include .env` on the command, workflow, or step. Atmos parses
+  the dotenv file natively (including `export VAR=value`, comments, quoting, and `${VAR}`
+  expansion) and merges the result into `env:`. If the values are secrets rather than plain
+  config, use Atmos's store or secrets integration instead of a plaintext `.env` file.
 - `set shell := [...]` changes the shell for every recipe in the Justfile. Atmos has no matching
   command-level setting. Use `type: script` with an explicit `interpreter:` field on the one step
   that needs a different interpreter.
@@ -128,6 +130,7 @@ commands:
   - name: build
     description: Build the deployable artifact
     env:
+      <<: !include .env
       AWS_REGION: us-east-1
     steps:
       - type: shell
@@ -143,18 +146,24 @@ run in different tools at different times. Do not copy Just interpolation syntax
 YAML. Change each reference to the matching `{{ .Flags.<name> }}` or
 `{{ .Arguments.<name> }}` form.
 
-### `[private]` recipes have no equivalent field
+### `[private]` recipes map to `hidden: true`
 
-There is no `hidden` or `private` field in the custom command schema. Put a private helper
-recipe's logic in a step inside the command or workflow that calls it. Do not create a separate
-command just to hide it from `--list` or `--help`.
+The custom command schema has a `hidden: true` field. It excludes the command from `atmos --help`
+listings and completion suggestions while leaving it fully runnable -- directly, as a `default:`
+target, or from another command's steps. This is the direct equivalent of a `[private]` recipe,
+and it covers cases plain step-inlining cannot: a helper called from more than one recipe, or one
+a user invokes by name for manual debugging.
+
+Only inline a `[private]` recipe's logic into a caller's step when it is genuinely single-caller
+and has no reason to be invoked on its own -- in that case a separate `hidden` command is just
+unnecessary indirection.
 
 If a `[private]` recipe is never called by any public recipe (an orphaned helper, not a
-dependency), there is no public recipe to fold its steps into. Do not create a public `atmos`
-command just to preserve it -- that changes its visibility, which is the opposite of what
-`[private]` meant. Confirm with the user whether the recipe is still needed at all; if it is,
-ask where its logic should live (its own step inside whichever command ends up needing it, or a
-short script the user maintains separately) rather than migrating it by default.
+dependency), `hidden: true` no longer forces the same discovery you'd get from step-inlining --
+it would just as quietly hide dead code as reachable helper code. Confirm with the user whether
+the recipe is still needed at all before migrating it; if it is, ask whether it should become a
+`hidden` command, a step inside whichever command ends up needing it, or a short script the user
+maintains separately.
 
 ### Command echo differs between `just` and Atmos
 
@@ -165,14 +174,17 @@ command's side effects match the original recipe, but the terminal output will l
 by side. Tell the user this if they compare `just <recipe>` output to `atmos <command>` output
 directly; it is a visible difference, not a bug.
 
-### Confirm `set dotenv-load` and `set shell` with the user
+### Confirm `set shell` with the user; `dotenv-load` has a direct replacement
 
-Do not drop either setting without comment. Ask the user if the behavior matters to their
-workflow, such as loading secrets or using non-default shell syntax. Then pick the correct
-replacement for their case.
+`set dotenv-load` maps directly to `env: !include .env` -- no confirmation needed unless the
+`.env` file holds secrets, in which case ask whether to use Atmos's store or secrets integration
+instead. `set shell` has no command-level equivalent; ask the user if a non-default shell matters
+to their workflow, then apply `type: script` with `interpreter:` to the specific steps that need
+it.
 
 ## What Not To Do
 
 - Do not assume `{{ }}` means the same thing after you move it into Atmos YAML.
-- Do not invent a `hidden` or `private` command field. It does not exist.
-- Do not drop `dotenv-load` or `set shell` behavior without telling the user.
+- Do not invent a visibility value beyond the documented `hidden: true` boolean (no "public"/"private" enum, no partial visibility).
+- Do not drop `set shell` behavior without telling the user; `dotenv-load` maps directly to
+  `env: !include .env`, so it does not need the same case-by-case confirmation.
