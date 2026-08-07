@@ -25,9 +25,9 @@ const (
 	SymbolComputed = "∴"
 
 	// Rendering constants.
-	defaultSeparatorWidth = 60 // Width of separator lines
-	commentSpaceNeeded    = 60 // Space needed for provenance comments
-	maxLineLength         = 10 // Buffer subtracted from comment column
+	defaultSeparatorWidth = 60 // Width of separator lines.
+	commentSpaceNeeded    = 60 // Space needed for provenance comments.
+	maxLineLength         = 10 // Buffer subtracted from comment column.
 
 	// String constants used repeatedly.
 	pathSeparator = "."

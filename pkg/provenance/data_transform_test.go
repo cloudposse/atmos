@@ -104,6 +104,36 @@ func TestFilterEmptySectionsKeepsComponentSections(t *testing.T) {
 	}
 }
 
+// TestFilterEmptySectionsKeepsArrayElementSections is a regression test for
+// the array-element form of the same prefixed-path lookup: a provenance path
+// like "components.terraform.app.vars[0].foo" must also be recognized as
+// belonging to the "vars" section, not just the dot-nested form.
+func TestFilterEmptySectionsKeepsArrayElementSections(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("components.terraform.app.vars[0].foo", m.ProvenanceEntry{
+		File: "dev.yaml", Line: 5, Type: m.ProvenanceTypeInline, Depth: 1,
+	})
+
+	data := map[string]any{
+		"vars":    []any{map[string]any{"foo": "bar"}},
+		"backend": map[string]any{},
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	if _, ok := filteredMap["vars"]; !ok {
+		t.Errorf("expected 'vars' to survive filtering (has provenance under an array-element path), but it was dropped: %v", filteredMap)
+	}
+	if _, ok := filteredMap["backend"]; ok {
+		t.Errorf("expected empty 'backend' (no provenance recorded) to be filtered out, but it survived: %v", filteredMap)
+	}
+}
+
 // TestFilterEmptySectionsNilContextKeepsEverything verifies the documented
 // behavior that a nil MergeContext (provenance tracking disabled) keeps every
 // top-level key rather than filtering anything.
