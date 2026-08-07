@@ -284,6 +284,9 @@ func createInstance(stackName, componentName, componentType string, componentCon
 	if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
 		instance.Settings = settings
 	}
+	if proSection, ok := componentConfigMap["pro"].(map[string]any); ok {
+		instance.Pro = proSection
+	}
 	if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
 		instance.Vars = vars
 	}
@@ -305,100 +308,25 @@ func createInstance(stackName, componentName, componentType string, componentCon
 	return instance
 }
 
-// Stack-section keys used when collapsing the Atmos Pro enabled hierarchy.
-const (
-	proSettingsKey    = "pro"
-	enabledKey        = "enabled"
-	driftDetectionKey = "drift_detection"
-)
+// proSettingsKey is the upload-payload wrapper key for the resolved pro section.
+const proSettingsKey = "pro"
 
-// metadataEnabled reports whether a component's metadata marks it enabled.
-// Mirrors isComponentEnabled (internal/exec/component_utils.go): a component is
-// enabled by default; only an explicit metadata.enabled: false disables it.
-func metadataEnabled(metadata map[string]any) bool {
-	if enabled, ok := metadata[enabledKey].(bool); ok {
-		return enabled
-	}
-	return true
-}
-
-// proSettingEnabled reads settings.pro.enabled, defaulting to true.
-// Only an explicit boolean false disables; a missing or non-boolean value
-// (e.g. the string "true") defaults to true, matching the Atmos Pro server-side
-// default. The caller is responsible for confirming a pro block exists.
-func proSettingEnabled(pro map[string]any) bool {
-	if enabled, ok := pro[enabledKey].(bool); ok {
-		return enabled
-	}
-	return true
-}
-
-// driftSettingEnabled reads settings.pro.drift_detection.enabled, defaulting to
-// false. Only an explicit boolean true enables drift detection.
-// The drift block is normalized with sanitizeForJSON first: nested YAML maps can
-// arrive as map[interface{}]interface{}, which would otherwise fail the
-// map[string]any assertion and read as "no drift block".
-func driftSettingEnabled(pro map[string]any) bool {
-	drift, ok := sanitizeForJSON(pro[driftDetectionKey]).(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, ok := drift[enabledKey].(bool)
-	return ok && enabled
-}
-
-// effectiveEnabledState collapses the enabled hierarchy
-// metadata.enabled > settings.pro.enabled > settings.pro.drift_detection.enabled.
-// An outer disable forces all inner levels off, so the single signal Atmos Pro
-// persists already reflects the component's resolved state:
-//
-//	proEnabled   = metadata.enabled && pro.enabled                     (both default true)
-//	driftEnabled = proEnabled       && pro.drift_detection.enabled     (drift defaults false)
-//
-// A missing pro block means the instance is not Pro-enabled (and therefore not
-// drift-enabled). This is the single source of truth shared by both the upload
-// payload (extractProSettings) and the success-toast counts, so the two can
-// never diverge.
-func effectiveEnabledState(settings, metadata map[string]any) (proEnabled, driftEnabled bool) {
-	// Normalize with sanitizeForJSON first: the pro subtree parsed from YAML can
-	// be map[interface{}]interface{}, which would otherwise fail the
-	// map[string]any assertion and incorrectly read as "no pro block".
-	pro, ok := sanitizeForJSON(settings[proSettingsKey]).(map[string]any)
-	if !ok {
-		return false, false
-	}
-	proEnabled = metadataEnabled(metadata) && proSettingEnabled(pro)
-	driftEnabled = proEnabled && driftSettingEnabled(pro)
-	return proEnabled, driftEnabled
-}
-
-// metadataDisabledPro reports whether metadata.enabled: false is the reason an
-// otherwise Pro-enabled instance is uploaded as disabled. It is true only when
-// the pro block itself would be enabled (pro.enabled true or defaulted) but
-// metadata.enabled is explicitly false, i.e. the higher-precedence metadata
-// disable overrides pro.enabled to false in the upload payload. Used only for a
-// debug log so operators can trace why a component is uploaded as disabled.
-func metadataDisabledPro(settings, metadata map[string]any) bool {
-	pro, ok := sanitizeForJSON(settings[proSettingsKey]).(map[string]any)
-	if !ok {
-		return false
-	}
-	return proSettingEnabled(pro) && !metadataEnabled(metadata)
-}
-
-// isProEnabled reports whether an instance is effectively Atmos Pro enabled,
-// honoring the metadata.enabled > pro.enabled precedence.
+// isProEnabled reports whether an instance is effectively Atmos Pro enabled, honoring the
+// metadata.enabled > pro.enabled precedence (pro.EffectiveEnabledState). Resolves the top-level
+// pro: section against the deprecated settings.pro: alias first (pro.ResolveSection).
 func isProEnabled(instance *schema.Instance) bool {
-	proEnabled, _ := effectiveEnabledState(instance.Settings, instance.Metadata)
+	resolved := pro.ResolveSection(instance.Pro, instance.Settings)
+	proEnabled, _ := pro.EffectiveEnabledState(resolved, instance.Metadata)
 	return proEnabled
 }
 
 // isDriftEnabled reports whether an instance is effectively drift-enabled.
 // Drift requires the instance to be effectively Pro-enabled, so an outer
 // metadata.enabled: false or pro.enabled: false disables drift regardless of
-// settings.pro.drift_detection.enabled.
+// pro.drift_detection.enabled.
 func isDriftEnabled(instance *schema.Instance) bool {
-	_, driftEnabled := effectiveEnabledState(instance.Settings, instance.Metadata)
+	resolved := pro.ResolveSection(instance.Pro, instance.Settings)
+	_, driftEnabled := pro.EffectiveEnabledState(resolved, instance.Metadata)
 	return driftEnabled
 }
 
@@ -521,7 +449,7 @@ func uploadInstancesWithDeps(
 	// Sensitive data (vars, env, backend) never leaves this boundary.
 	uploadInstances := make([]dtos.UploadInstance, len(instances))
 	for i, inst := range instances {
-		if metadataDisabledPro(inst.Settings, inst.Metadata) {
+		if metadataDisabledPro(inst.Pro, inst.Settings, inst.Metadata) {
 			log.Debug("Overriding pro.enabled to false for upload: metadata.enabled is false",
 				KeyComponent, inst.Component, KeyStack, inst.Stack)
 		}
@@ -529,7 +457,7 @@ func uploadInstancesWithDeps(
 			Component:     inst.Component,
 			Stack:         inst.Stack,
 			ComponentType: inst.ComponentType,
-			Settings:      extractProSettings(inst.Settings, inst.Metadata),
+			Settings:      extractProSettings(inst.Pro, inst.Settings, inst.Metadata),
 		}
 	}
 
@@ -1001,73 +929,41 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	return nil
 }
 
-// extractProSettings extracts only the "pro" key from a settings map for upload.
-// Returns nil if settings is nil or has no "pro" key.
-// Sanitizes nested maps to ensure JSON compatibility (converting
-// map[interface{}]interface{} from YAML to map[string]interface{}).
+// extractProSettings resolves the effective pro section (top-level proSection, falling back to
+// the deprecated settings.pro alias -- see pro.ResolveSection) and shapes it for upload.
+// Returns nil if neither is present.
 //
 // Before upload it collapses the enabled hierarchy
 // (metadata.enabled > pro.enabled > drift_detection.enabled) so the values
 // Atmos Pro persists already reflect any outer disable. Atmos Pro's ingestion
 // contract has no `metadata` field, so a component disabled via
 // `metadata.enabled: false` would otherwise be uploaded as enabled and keep
-// getting dispatched for drift detection. The collapse runs on the sanitized
+// getting dispatched for drift detection. The collapse runs on the resolved
 // copy, so the source instance (used by the toast counts) is never mutated.
-func extractProSettings(settings, metadata map[string]any) map[string]any {
-	if settings == nil {
+func extractProSettings(proSection, settings, metadata map[string]any) map[string]any {
+	resolved := pro.ResolveSection(proSection, settings)
+	if resolved == nil {
 		return nil
 	}
 
-	pro, hasPro := settings[proSettingsKey]
-	if !hasPro {
-		return nil
-	}
-
-	sanitized := sanitizeForJSON(pro)
-
-	// When pro is not a map (malformed config, e.g. a stray string), there is
-	// nothing to collapse; pass it through unchanged.
-	proMap, ok := sanitized.(map[string]any)
-	if !ok {
-		return map[string]any{proSettingsKey: sanitized}
-	}
-
-	proEnabled, driftEnabled := effectiveEnabledState(settings, metadata)
-	proMap[enabledKey] = proEnabled
+	proEnabled, driftEnabled := pro.EffectiveEnabledState(resolved, metadata)
+	resolved["enabled"] = proEnabled
 	// Only override an existing drift_detection block. When none exists, Atmos
 	// Pro already defaults drift to false, so synthesizing one adds noise.
-	if drift, ok := proMap[driftDetectionKey].(map[string]any); ok {
-		drift[enabledKey] = driftEnabled
+	if drift, ok := resolved["drift_detection"].(map[string]any); ok {
+		drift["enabled"] = driftEnabled
 	}
 
-	return map[string]any{proSettingsKey: proMap}
+	return map[string]any{proSettingsKey: resolved}
 }
 
-// sanitizeForJSON recursively converts map[interface{}]interface{} to
-// map[string]interface{} for JSON compatibility.
-func sanitizeForJSON(v any) any {
-	switch val := v.(type) {
-	case map[interface{}]interface{}:
-		m := make(map[string]interface{}, len(val))
-		for k, v := range val {
-			m[fmt.Sprintf("%v", k)] = sanitizeForJSON(v)
-		}
-		return m
-	case map[string]interface{}:
-		m := make(map[string]interface{}, len(val))
-		for k, v := range val {
-			m[k] = sanitizeForJSON(v)
-		}
-		return m
-	case []interface{}:
-		s := make([]interface{}, len(val))
-		for i, v := range val {
-			s[i] = sanitizeForJSON(v)
-		}
-		return s
-	default:
-		return v
-	}
+// metadataDisabledPro reports whether metadata.enabled: false is the reason an otherwise
+// Pro-enabled instance is uploaded as disabled, after resolving the top-level pro: section
+// against the deprecated settings.pro: alias. Used only for a debug log so operators can trace
+// why a component is uploaded as disabled.
+func metadataDisabledPro(proSection, settings, metadata map[string]any) bool {
+	resolved := pro.ResolveSection(proSection, settings)
+	return pro.MetadataDisabledPro(resolved, metadata)
 }
 
 // executeMatrixFormat handles the matrix output format for list instances.

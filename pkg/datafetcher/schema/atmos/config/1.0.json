@@ -1937,7 +1937,9 @@
         "pro": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ProSettings"
+              "$ref": "#/$defs/ProSettings",
+              "deprecated": true,
+              "x-atmos-replacement": "pro"
             },
             {
               "type": "null"
@@ -1946,7 +1948,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Atmos Pro integration settings"
+          "description": "Deprecated: this was moved to top-level Atmos config"
         },
         "telemetry": {
           "anyOf": [
@@ -15981,6 +15983,20 @@
           "$ref": "#/$defs/yamlFunction"
         }
       ]
+    },
+    "pro": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProSettings"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ],
+      "description": "Pro is the Atmos Pro CLI connection config. Settings.Pro is a deprecated alias\nresolved into this field at config-load time (pkg/config/load.go resolveProSettings)."
     },
     "container": {
       "anyOf": [

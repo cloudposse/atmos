@@ -69,7 +69,7 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
 
   <dt>`--upload`</dt>
-  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Every real (non-abstract) instance is uploaded — including disabled ones, so Atmos Pro can show them as disabled rather than losing track of them. Before upload, Atmos collapses the enabled hierarchy (`metadata.enabled` &gt; `settings.pro.enabled` &gt; `settings.pro.drift_detection.enabled`), so the uploaded values already reflect any outer disable.</dd>
+  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Every real (non-abstract) instance is uploaded — including disabled ones, so Atmos Pro can show them as disabled rather than losing track of them. Before upload, Atmos collapses the enabled hierarchy (`metadata.enabled` &gt; `pro.enabled` &gt; `pro.drift_detection.enabled`), so the uploaded values already reflect any outer disable.</dd>
 
   <dt>`--output-file` / `-o`</dt>
   <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
@@ -163,34 +163,35 @@ The upload includes **every real (non-abstract) instance**, regardless of whethe
 Before upload, Atmos collapses the enabled hierarchy so the values it sends already reflect any outer disable:
 
 ```
-metadata.enabled  >  settings.pro.enabled  >  settings.pro.drift_detection.enabled
+metadata.enabled  >  pro.enabled  >  pro.drift_detection.enabled
 ```
 
-An outer disable always wins: a component disabled with `metadata.enabled: false` is uploaded as `settings.pro.enabled: false` and `settings.pro.drift_detection.enabled: false`, so Atmos Pro never dispatches it for drift detection.
+An outer disable always wins: a component disabled with `metadata.enabled: false` is uploaded as `pro.enabled: false` and `pro.drift_detection.enabled: false`, so Atmos Pro never dispatches it for drift detection.
+
+`pro:` is a top-level component section (a sibling of `vars:`/`metadata:`/`settings:`).
+`settings.pro:` is a deprecated alias — Atmos still reads it, but an explicit `pro:` block takes
+whole-block precedence when both are set.
 
 ```yaml
 components:
   terraform:
     vpc:
-      settings:
-        pro:
-          enabled: true            # Uploaded as enabled
-          drift_detection:
-            enabled: true          # Uploaded with drift enabled
+      pro:
+        enabled: true            # Uploaded as enabled
+        drift_detection:
+          enabled: true          # Uploaded with drift enabled
     app:
-      settings:
-        pro:
-          enabled: false           # Uploaded as disabled
+      pro:
+        enabled: false           # Uploaded as disabled
     db:
       # No pro config — uploaded as disabled
     monitoring:
       metadata:
         enabled: false             # Disabled component…
-      settings:
-        pro:
-          enabled: true
-          drift_detection:
-            enabled: true          # …collapsed to enabled:false, drift:false before upload
+      pro:
+        enabled: true
+        drift_detection:
+          enabled: true          # …collapsed to enabled:false, drift:false before upload
 ```
 
 On completion, the command reports a tally:
@@ -199,7 +200,7 @@ On completion, the command reports a tally:
 Successfully uploaded 4 instances to Atmos Pro API (1 enabled, 3 disabled, 1 drift enabled).
 ```
 
-The tally reflects the **effective** state — the same values that are uploaded. The `drift enabled` count requires the instance to be effectively Pro-enabled, so an instance with `settings.pro.enabled: false` (or `metadata.enabled: false`) is never counted as drift-enabled even if `settings.pro.drift_detection.enabled: true`.
+The tally reflects the **effective** state — the same values that are uploaded. The `drift enabled` count requires the instance to be effectively Pro-enabled, so an instance with `pro.enabled: false` (or `metadata.enabled: false`) is never counted as drift-enabled even if `pro.drift_detection.enabled: true`.
 
 If the repository has no instances at all, the command prints `No instances found; nothing to upload.` and exits successfully.
 
@@ -387,7 +388,7 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 - Use `--format tree --provenance` to visualize component import hierarchies
 - Use the `--filter` flag for complex filtering with YQ syntax
 - Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
-- The `--upload` flag sends every real instance to Atmos Pro; the effective `settings.pro.enabled` (collapsed from `metadata.enabled` &gt; `pro.enabled`) is included in the payload so Atmos Pro shows enabled vs. disabled state
+- The `--upload` flag sends every real instance to Atmos Pro; the effective `pro.enabled` (collapsed from `metadata.enabled` &gt; `pro.enabled`) is included in the payload so Atmos Pro shows enabled vs. disabled state
 - Use `--format json` or `--format yaml` for programmatic processing
 :::
 

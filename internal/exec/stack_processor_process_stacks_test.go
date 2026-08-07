@@ -42,6 +42,13 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidSettingsSection,
 		},
 		{
+			name: "invalid pro section type",
+			config: map[string]any{
+				cfg.ProSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidProSection,
+		},
+		{
 			name: "invalid env section type",
 			config: map[string]any{
 				cfg.EnvSectionName: "invalid-not-a-map",
@@ -118,6 +125,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				},
 			},
 			expectedError: errUtils.ErrInvalidTerraformSettings,
+		},
+		{
+			name: "invalid terraform pro type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.ProSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformPro,
 		},
 		{
 			name: "invalid terraform env type",
@@ -210,6 +226,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidHelmfileSettings,
 		},
 		{
+			name: "invalid helmfile pro type",
+			config: map[string]any{
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.ProSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidHelmfilePro,
+		},
+		{
 			name: "invalid helmfile env type",
 			config: map[string]any{
 				cfg.HelmfileSectionName: map[string]any{
@@ -253,6 +278,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				},
 			},
 			expectedError: errUtils.ErrInvalidPackerSettings,
+		},
+		{
+			name: "invalid packer pro type",
+			config: map[string]any{
+				cfg.PackerSectionName: map[string]any{
+					cfg.ProSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidPackerPro,
 		},
 		{
 			name: "invalid packer env type",
@@ -316,6 +350,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				cfg.AnsibleSectionName: "invalid-not-a-map",
 			},
 			expectedError: errUtils.ErrInvalidAnsibleSection,
+		},
+		{
+			name: "invalid ansible pro type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.ProSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsiblePro,
 		},
 		{
 			name: "invalid components.ansible type",
@@ -1029,6 +1072,57 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
 			},
 		},
+		{
+			// Stack-global `terraform.pro:` must flow into a component with no local
+			// pro: of its own, and deep-merge (not replace) with a component that
+			// declares its own pro: keys -- mirroring how terraform.settings behaves.
+			name: "config with terraform pro section merged into components",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.ProSectionName: map[string]any{
+						"enabled":         true,
+						"drift_detection": map[string]any{"enabled": true},
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+						"eks": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "eks"},
+							// Component-local pro overrides only "enabled", the
+							// inherited drift_detection block must survive.
+							cfg.ProSectionName: map[string]any{"enabled": false},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+				require.True(t, ok, "result must contain a components section")
+				terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+				require.True(t, ok, "result must contain terraform components")
+
+				vpc, ok := terraform["vpc"].(map[string]any)
+				require.True(t, ok, "vpc component must exist")
+				vpcPro, ok := vpc[cfg.ProSectionName].(map[string]any)
+				require.True(t, ok, "vpc must inherit the stack-global terraform.pro section, got: %v", vpc[cfg.ProSectionName])
+				assert.Equal(t, true, vpcPro["enabled"])
+				vpcDrift, ok := vpcPro["drift_detection"].(map[string]any)
+				require.True(t, ok, "drift_detection must be present")
+				assert.Equal(t, true, vpcDrift["enabled"])
+
+				eks, ok := terraform["eks"].(map[string]any)
+				require.True(t, ok, "eks component must exist")
+				eksPro, ok := eks[cfg.ProSectionName].(map[string]any)
+				require.True(t, ok, "eks must have a pro section, got: %v", eks[cfg.ProSectionName])
+				assert.Equal(t, false, eksPro["enabled"], "component-local pro.enabled must win over the global value")
+				eksDrift, ok := eksPro["drift_detection"].(map[string]any)
+				require.True(t, ok, "component-local pro override must not drop the inherited drift_detection block")
+				assert.Equal(t, true, eksDrift["enabled"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1069,6 +1163,7 @@ func TestProcessStackConfig_HelmErrorPaths(t *testing.T) {
 		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
 		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
 		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid pro type", map[string]any{cfg.ProSectionName: "x"}, errUtils.ErrInvalidProSection},
 		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
 		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
 		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
@@ -1125,6 +1220,7 @@ func TestProcessStackConfig_KubernetesErrorPaths(t *testing.T) {
 		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
 		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
 		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid pro type", map[string]any{cfg.ProSectionName: "x"}, errUtils.ErrInvalidProSection},
 		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
 		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
 		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
@@ -1392,6 +1488,201 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 		"team":   "platform",
 	}, overrideMetadata["labels"], "custom component's own metadata must deep-merge with global on nested maps: local wins on conflicting keys, non-conflicting keys from both sides are retained")
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
+}
+
+// TestProcessStackConfig_CustomComponentTypeProDeepMerge verifies that a
+// custom (non-built-in) component type's own `pro:` block is deep-merged
+// with the global stack `pro:` section rather than replacing it wholesale.
+// `pro:` nests multi-level maps (e.g. `pull_request.opened` vs
+// `pull_request.synchronize`), so a shallow top-level-key merge would let a
+// component-local `pro.pull_request` with only one activity silently wipe
+// out other globally-configured activities under the same key.
+func TestProcessStackConfig_CustomComponentTypeProDeepMerge(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ProSectionName: map[string]any{
+			"enabled": true,
+			"pull_request": map[string]any{
+				"opened": map[string]any{
+					"workflows": map[string]any{"atmos-terraform-plan.yaml": map[string]any{}},
+				},
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"container": map[string]any{
+				"no-local-pro": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "no-local-pro"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "local-override"},
+					cfg.ProSectionName: map[string]any{
+						"pull_request": map[string]any{
+							"synchronize": map[string]any{
+								"workflows": map[string]any{"atmos-terraform-plan.yaml": map[string]any{}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	containerSection, ok := components["container"].(map[string]any)
+	require.True(t, ok, "container components should be present")
+
+	// A component with no local `pro:` must simply inherit the global block.
+	noLocalPro, ok := containerSection["no-local-pro"].(map[string]any)
+	require.True(t, ok, "no-local-pro component should exist")
+	noLocalProSection, ok := noLocalPro[cfg.ProSectionName].(map[string]any)
+	require.True(t, ok, "no-local-pro must have a pro section merged in from global, got: %v", noLocalPro[cfg.ProSectionName])
+	assert.Equal(t, true, noLocalProSection["enabled"])
+	pullRequest, ok := noLocalProSection["pull_request"].(map[string]any)
+	require.True(t, ok, "pull_request must be present")
+	assert.Contains(t, pullRequest, "opened", "global pull_request.opened must be inherited")
+
+	// A component with a local `pro.pull_request.synchronize` must retain the
+	// global `pro.pull_request.opened` -- not replace the whole `pull_request`
+	// map.
+	localOverride, ok := containerSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideProSection, ok := localOverride[cfg.ProSectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a pro section, got: %v", localOverride[cfg.ProSectionName])
+	assert.Equal(t, true, overrideProSection["enabled"], "component must still inherit global pro.enabled")
+	overridePullRequest, ok := overrideProSection["pull_request"].(map[string]any)
+	require.True(t, ok, "pull_request must be present")
+	assert.Contains(t, overridePullRequest, "opened", "global pull_request.opened must survive the deep merge")
+	assert.Contains(t, overridePullRequest, "synchronize", "component-local pull_request.synchronize must be preserved")
+}
+
+// TestProcessStackConfig_MalformedComponentProDoesNotBlockSiblings guards against a regression
+// where a malformed `pro:` value (e.g. a string instead of a map) on one component aborted
+// processing for every other component in the same manifest file, even though the downstream
+// pro.ResolveSection already treats a non-map `pro:` as absent -- extraction must not error
+// before that logic gets a chance to run.
+func TestProcessStackConfig_MalformedComponentProDoesNotBlockSiblings(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"malformed": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "malformed"},
+					cfg.ProSectionName:  "yes", // Malformed: a string, not a map.
+				},
+				"innocent": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "innocent"},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err, "a malformed pro: on one component must not fail processing for the whole file")
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraformSection, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "terraform components should be present")
+
+	// The sibling component, which never touched `pro:`, must resolve normally.
+	innocent, ok := terraformSection["innocent"].(map[string]any)
+	require.True(t, ok, "innocent component should exist and have resolved despite its sibling's malformed pro:")
+	assert.Equal(t, map[string]any{"name": "innocent"}, innocent[cfg.VarsSectionName])
+
+	// The offending component itself must still resolve -- just without a usable pro: section.
+	malformed, ok := terraformSection["malformed"].(map[string]any)
+	require.True(t, ok, "malformed component should still resolve")
+	assert.Nil(t, malformed[cfg.ProSectionName], "malformed pro: must be dropped, not passed through")
+}
+
+// TestProcessStackConfig_ProSectionUnknownKeyDoesNotBlockProcessing guards against a typo'd
+// pro: key (e.g. "enable" instead of "enabled") having any fatal effect. schema.DecodeComponentPro
+// rejects the unknown key so a warning gets logged (see extractComponentSections), and that must
+// stay a warning, not an error. But the invalid raw map must also be discarded rather than passed
+// through: pro.ResolveSection ignores unrecognized keys, so a passed-through `{enable: false}`
+// would silently resolve to Pro's default-enabled behavior -- the opposite of the user's evident
+// intent to disable it.
+func TestProcessStackConfig_ProSectionUnknownKeyDoesNotBlockProcessing(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"typo": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "typo"},
+					cfg.ProSectionName: map[string]any{
+						"enable": false, // Typo: meant "enabled".
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err, "an unrecognized pro: key must not fail processing")
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraformSection, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "terraform components should be present")
+	typo, ok := terraformSection["typo"].(map[string]any)
+	require.True(t, ok, "typo component should still resolve")
+	_, hasPro := typo[cfg.ProSectionName]
+	assert.False(t, hasPro, "an invalid pro: map must be discarded, not passed through as if it enabled Pro by default")
 }
 
 // componentHooks extracts the merged hooks section for a terraform component

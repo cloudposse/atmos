@@ -30,6 +30,52 @@ type GithubOIDCSettings struct {
 	RequestToken string `yaml:"request_token,omitempty" json:"request_token,omitempty" mapstructure:"request_token"`
 }
 
+// ComponentProSettings is the per-component/stack Atmos Pro config: drift detection and
+// GitHub-event workflow dispatch. This is the top-level `pro:` component section.
+// `settings.pro.*` is a deprecated alias resolved by pro.ResolveSection: an explicit `pro:`
+// block takes whole-block precedence over `settings.pro:` when both are set.
+type ComponentProSettings struct {
+	Enabled        *bool                   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	DriftDetection *DriftDetectionSettings `yaml:"drift_detection,omitempty" json:"drift_detection,omitempty" mapstructure:"drift_detection"`
+	PullRequest    *PullRequestDispatch    `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
+	Release        *ReleaseDispatch        `yaml:"release,omitempty" json:"release,omitempty" mapstructure:"release"`
+	MergeGroup     *MergeGroupDispatch     `yaml:"merge_group,omitempty" json:"merge_group,omitempty" mapstructure:"merge_group"`
+}
+
+// DriftDetectionSettings is the per-stack opt-in for Atmos Pro drift detection.
+type DriftDetectionSettings struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// WorkflowDispatchSpec is a single GitHub Actions workflow to dispatch, keyed by workflow
+// filename in a WorkflowDispatchList. Atmos does not interpret Inputs; they are passed through
+// unchanged in the upload payload and templated server-side by Atmos Pro.
+type WorkflowDispatchSpec struct {
+	Inputs map[string]string `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+}
+
+// WorkflowDispatchList maps a workflow file name to its dispatch spec.
+type WorkflowDispatchList map[string]WorkflowDispatchSpec
+
+// PullRequestDispatch configures workflow dispatch for pull-request lifecycle activities.
+type PullRequestDispatch struct {
+	Opened      WorkflowDispatchList `yaml:"opened,omitempty" json:"opened,omitempty" mapstructure:"opened"`
+	Synchronize WorkflowDispatchList `yaml:"synchronize,omitempty" json:"synchronize,omitempty" mapstructure:"synchronize"`
+	Reopened    WorkflowDispatchList `yaml:"reopened,omitempty" json:"reopened,omitempty" mapstructure:"reopened"`
+	// Merged is synthesized by Atmos Pro from pull_request.closed events with merged: true.
+	Merged WorkflowDispatchList `yaml:"merged,omitempty" json:"merged,omitempty" mapstructure:"merged"`
+}
+
+// ReleaseDispatch configures workflow dispatch for GitHub release activities.
+type ReleaseDispatch struct {
+	Published WorkflowDispatchList `yaml:"published,omitempty" json:"published,omitempty" mapstructure:"published"`
+}
+
+// MergeGroupDispatch configures workflow dispatch for GitHub merge-queue checks.
+type MergeGroupDispatch struct {
+	ChecksRequested WorkflowDispatchList `yaml:"checks_requested,omitempty" json:"checks_requested,omitempty" mapstructure:"checks_requested"`
+}
+
 // StackLockActionParams holds the parameters for stack lock/unlock operations.
 type StackLockActionParams struct {
 	Method  string `yaml:"method,omitempty" json:"method,omitempty" mapstructure:"method"`

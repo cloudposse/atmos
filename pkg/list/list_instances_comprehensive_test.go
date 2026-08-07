@@ -94,6 +94,7 @@ func TestCreateInstance(t *testing.T) {
 	t.Run("component with all sections", func(t *testing.T) {
 		config := map[string]any{
 			"settings": map[string]any{"key": "value"},
+			"pro":      map[string]any{"drift_detection": map[string]any{"enabled": true}},
 			"vars":     map[string]any{"var": "value"},
 			"env":      map[string]any{"env": "value"},
 			"backend":  map[string]any{"backend": "value"},
@@ -105,6 +106,7 @@ func TestCreateInstance(t *testing.T) {
 		assert.Equal(t, "stack1", result.Stack)
 		assert.Equal(t, "terraform", result.ComponentType)
 		assert.Equal(t, map[string]any{"key": "value"}, result.Settings)
+		assert.Equal(t, map[string]any{"drift_detection": map[string]any{"enabled": true}}, result.Pro)
 		assert.Equal(t, map[string]any{"var": "value"}, result.Vars)
 		assert.Equal(t, map[string]any{"env": "value"}, result.Env)
 		assert.Equal(t, map[string]any{"backend": "value"}, result.Backend)
@@ -114,6 +116,7 @@ func TestCreateInstance(t *testing.T) {
 	t.Run("component with invalid section types", func(t *testing.T) {
 		config := map[string]any{
 			"settings": "invalid",
+			"pro":      "invalid",
 			"vars":     "invalid",
 			"env":      "invalid",
 			"backend":  "invalid",
@@ -123,6 +126,7 @@ func TestCreateInstance(t *testing.T) {
 		assert.NotNil(t, result)
 		// Should have empty maps for invalid sections.
 		assert.Empty(t, result.Settings)
+		assert.Nil(t, result.Pro, "a non-map pro section must be silently skipped, leaving Pro nil")
 		assert.Empty(t, result.Vars)
 		assert.Empty(t, result.Env)
 		assert.Empty(t, result.Backend)

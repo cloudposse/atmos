@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-prod-stable)
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-prod-stable)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-prod-stable" />Plan: 0 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>
@@ -19,3 +19,5 @@ atmos terraform plan stable -s prod
 
 ---
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

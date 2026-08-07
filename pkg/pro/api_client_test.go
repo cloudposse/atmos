@@ -70,16 +70,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -110,16 +108,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -168,16 +164,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -214,16 +208,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -250,16 +242,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -304,16 +294,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}
@@ -339,16 +327,14 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		// Create AtmosConfiguration with Pro settings populated from environment
 		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
+			Pro: schema.ProSettings{
+				BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+				Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+				Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+				WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+					RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
 				},
 			},
 		}

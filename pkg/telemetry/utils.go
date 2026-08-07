@@ -87,7 +87,7 @@ func atmosProWorkspaceID() string {
 		return ""
 	}
 
-	return atmosConfig.Settings.Pro.WorkspaceID
+	return atmosConfig.Pro.WorkspaceID
 }
 
 // captureCmdString captures telemetry for a command string with the given error.

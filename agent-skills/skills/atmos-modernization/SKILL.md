@@ -1,9 +1,9 @@
 ---
 name: atmos-modernization
-description: "Atmos Modernization: migrate deprecated or legacy Atmos patterns to current names, Native CI, Atmos Pro drift detection, dependencies.components, name_template, and declared secrets"
+description: "Atmos Modernization: migrate deprecated or legacy Atmos patterns to current names, Native CI, Atmos Pro drift detection, settings.pro to top-level pro, dependencies.components, name_template, and declared secrets"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Atmos Modernization
@@ -26,7 +26,9 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
 | Hand-rolled scheduled drift GitHub Actions | Atmos Pro drift detection |
-| `cloudposse/github-action-atmos-terraform-drift-*` | `settings.pro.drift_detection` plus `atmos terraform plan --upload-status` |
+| `cloudposse/github-action-atmos-terraform-drift-*` | `pro.drift_detection` plus `atmos terraform plan --upload-status` |
+| `settings.pro` in `atmos.yaml` (CLI connection config: `base_url`/`token`/`workspace_id`/etc.) | Top-level `pro:` in `atmos.yaml` (`settings.pro` remains supported as a deprecated alias) |
+| `settings.pro.*` per component/stack (`enabled`/`drift_detection`/`pull_request`/`release`/`merge_group`) | Top-level `pro:` component section, a sibling of `vars:`/`metadata:`/`settings:` (`settings.pro` remains supported as a deprecated alias) |
 | Secret values through raw store calls | Declared `secrets.vars` plus `!secret` |
 | Legacy hook event spelling | Modern dotted lifecycle events such as `after.terraform.plan` |
 | Static GitHub tokens in URLs | Atmos Auth `github/sts` through Atmos Pro |
@@ -109,14 +111,14 @@ configuration and staged migration, use the vendoring
 
 ## Drift Direction
 
-Atmos Pro is the product path for drift detection. Enable drift per stack/component:
+Atmos Pro is the product path for drift detection. Enable drift per stack/component using the
+top-level `pro:` component section (`settings.pro:` is a deprecated alias):
 
 ```yaml
-settings:
-  pro:
+pro:
+  enabled: true
+  drift_detection:
     enabled: true
-    drift_detection:
-      enabled: true
 ```
 
 Then upload plan status:

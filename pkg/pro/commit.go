@@ -89,7 +89,7 @@ func ExecuteCommit(atmosConfig *schema.AtmosConfiguration, message, comment, add
 func resolveBranch(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	var branch string
 	if atmosConfig != nil {
-		branch = atmosConfig.Settings.Pro.GitHubHeadRef
+		branch = atmosConfig.Pro.GitHubHeadRef
 	}
 
 	if branch == "" {
@@ -110,12 +110,12 @@ func resolveBranch(atmosConfig *schema.AtmosConfiguration) (string, error) {
 // of letting the request fail deep in the OIDC exchange.
 func validateAuth(atmosConfig *schema.AtmosConfiguration) error {
 	// Static token is sufficient.
-	if atmosConfig.Settings.Pro.Token != "" {
+	if atmosConfig.Pro.Token != "" {
 		return nil
 	}
 
 	// OIDC path: need both OIDC env vars + workspace ID.
-	oidc := atmosConfig.Settings.Pro.GithubOIDC
+	oidc := atmosConfig.Pro.GithubOIDC
 	if oidc.RequestURL == "" || oidc.RequestToken == "" {
 		return errUtils.Build(errUtils.ErrNotInGitHubActions).
 			WithHint("Atmos Pro authenticates via GitHub OIDC — run this command from a GitHub Actions workflow with `id-token: write` permission.").
@@ -124,7 +124,7 @@ func validateAuth(atmosConfig *schema.AtmosConfiguration) error {
 			Err()
 	}
 
-	if atmosConfig.Settings.Pro.WorkspaceID == "" {
+	if atmosConfig.Pro.WorkspaceID == "" {
 		return errUtils.Build(errUtils.ErrOIDCWorkspaceIDRequired).
 			WithHint("Set ATMOS_PRO_WORKSPACE_ID to your Atmos Pro workspace ID.").
 			WithHint("Find your workspace ID in the Atmos Pro dashboard: https://app.atmos-pro.com").

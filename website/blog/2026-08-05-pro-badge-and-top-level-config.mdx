@@ -1,0 +1,77 @@
+---
+slug: pro-badge-and-top-level-config
+title: "See Atmos Pro Status Right on the PR, Not Buried in Config"
+authors: [osterman]
+tags: [feature, atmos-pro]
+---
+
+A pull request lands, Native CI posts its plan summary, and you're left guessing whether
+this particular component is even being tracked by Atmos Pro. Drift detection, workflow
+dispatch, stack locking — is it on for this stack, or did someone forget the block in a
+mixin three imports away? The only way to find out was to go dig through `settings.pro` in
+the stack config, which is also where the CLI's own connection to Atmos Pro lived, mixed in
+under a generic `settings:` bag alongside dozens of unrelated options.
+
+<!--truncate-->
+
+## The Problem
+
+Two separate things both went by `settings.pro`, and neither was easy to find. In
+`atmos.yaml`, `settings.pro.workspace_id`/`token`/`base_url` configured how the CLI talks to
+the Atmos Pro API — connection config for a top-level `atmos pro` command, nested three
+levels deep under `settings:`. In a stack manifest, `settings.pro.enabled`/`drift_detection`/
+`pull_request` controlled whether *that* component was tracked at all, with no visual
+indicator anywhere that the setting had taken effect. A CI plan comment showed resource
+changes in detail but said nothing about Pro.
+
+## The Fix
+
+Native CI's `plan`, `apply`, and `test` PR comments now include a Pro status badge in the
+same row as the other result badges: green `PRO-ENABLED` linking straight to your
+[Atmos Pro dashboard](https://atmos-pro.com/dashboard) when the component is tracked, silver
+`PRO-DISABLED` linking to [atmos-pro.com](https://atmos-pro.com) when it isn't. It reflects
+the exact same effective state Atmos Pro itself dispatches drift detection and workflow runs
+from, so what you see on the PR is what's actually happening server-side.
+
+Both `settings.pro` locations are also promoted to a top-level `pro:` key. In `atmos.yaml`,
+it's a sibling of `auth:`, `docs:`, and `ci:` — matching that `atmos pro` is a top-level
+command, not a `settings` sub-feature. In stack manifests, `pro:` is now a first-class
+component section, a sibling of `vars:`, `metadata:`, and `settings:`, with real schema
+validation instead of being swallowed by `settings`'s catch-all `additionalProperties`.
+`settings.pro` keeps working as a deprecated alias in both places — nothing breaks, and an
+explicit top-level `pro:` block takes precedence if you have both.
+
+## How to Use It
+
+Configure the CLI's connection to Atmos Pro at the top level of `atmos.yaml`:
+
+```yaml
+pro:
+  workspace_id: "your-workspace-id"
+```
+
+Enable drift detection and workflow dispatch per component/stack the same way:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      pro:
+        enabled: true
+        drift_detection:
+          enabled: true
+```
+
+Run a plan through Native CI and the PR comment now shows the badge automatically — no
+extra configuration needed:
+
+```shell
+atmos terraform plan vpc -s prod
+```
+
+## Get Involved
+
+Move a `settings.pro` block to the top-level `pro:` form when you touch that stack next, or
+leave it as-is — both keep working. Tell us what else you'd like the CI comment to surface
+next to the Pro badge. Open an issue or start a discussion at
+[github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

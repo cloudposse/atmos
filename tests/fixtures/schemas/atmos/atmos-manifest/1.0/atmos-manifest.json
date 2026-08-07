@@ -28,6 +28,9 @@
     "settings": {
       "$ref": "#/definitions/settings"
     },
+    "pro": {
+      "$ref": "#/definitions/pro"
+    },
     "locals": {
       "$ref": "#/definitions/locals"
     },
@@ -413,6 +416,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "pro": {
+              "$ref": "#/definitions/pro"
+            },
             "locals": {
               "$ref": "#/definitions/locals"
             }
@@ -444,6 +450,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "pro": {
+              "$ref": "#/definitions/pro"
             },
             "locals": {
               "$ref": "#/definitions/locals"
@@ -544,6 +553,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "pro": {
+              "$ref": "#/definitions/pro"
+            },
             "locals": {
               "$ref": "#/definitions/locals"
             },
@@ -608,6 +620,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "pro": {
+              "$ref": "#/definitions/pro"
             },
             "locals": {
               "$ref": "#/definitions/locals"
@@ -675,6 +690,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "pro": {
+              "$ref": "#/definitions/pro"
+            },
             "locals": {
               "$ref": "#/definitions/locals"
             },
@@ -718,6 +736,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "pro": {
+              "$ref": "#/definitions/pro"
             },
             "locals": {
               "$ref": "#/definitions/locals"
@@ -784,6 +805,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "pro": {
+              "$ref": "#/definitions/pro"
             },
             "locals": {
               "$ref": "#/definitions/locals"
@@ -914,6 +938,11 @@
             "depends_on": {
               "$ref": "#/definitions/depends_on"
             },
+            "pro": {
+              "$ref": "#/definitions/pro",
+              "deprecated": true,
+              "x-atmos-replacement": "pro"
+            },
             "spacelift": {
               "$ref": "#/definitions/spacelift"
             },
@@ -927,6 +956,108 @@
           "required": []
         }
       ]
+    },
+    "pro": {
+      "title": "pro",
+      "description": "Atmos Pro drift detection and GitHub-event workflow dispatch for this component/stack. settings.pro is a deprecated alias; an explicit pro: block takes precedence.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch for Atmos Pro on this component or stack. Defaults to true when a pro: block is present."
+            },
+            "drift_detection": {
+              "type": "object",
+              "description": "Per-stack opt-in for Atmos Pro drift detection.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable Atmos Pro drift detection for this stack. Defaults to false."
+                }
+              }
+            },
+            "pull_request": {
+              "$ref": "#/definitions/pro_pull_request"
+            },
+            "release": {
+              "$ref": "#/definitions/pro_release"
+            },
+            "merge_group": {
+              "$ref": "#/definitions/pro_merge_group"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "pro_workflow_dispatch_list": {
+      "title": "pro_workflow_dispatch_list",
+      "description": "Maps a GitHub Actions workflow file name to the inputs to dispatch it with.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "description": "Workflow inputs. Values are templated server-side by Atmos Pro (e.g. {{ .atmos_component }}).",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "pro_pull_request": {
+      "title": "pro_pull_request",
+      "description": "Workflow dispatch for pull-request lifecycle activities.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "opened": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list"
+        },
+        "synchronize": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list"
+        },
+        "reopened": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list"
+        },
+        "merged": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list",
+          "description": "Synthesized by Atmos Pro from pull_request.closed events with merged: true."
+        }
+      }
+    },
+    "pro_release": {
+      "title": "pro_release",
+      "description": "Workflow dispatch for GitHub release activities.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "published": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list"
+        }
+      }
+    },
+    "pro_merge_group": {
+      "title": "pro_merge_group",
+      "description": "Workflow dispatch for GitHub merge-queue checks.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checks_requested": {
+          "$ref": "#/definitions/pro_workflow_dispatch_list"
+        }
+      }
     },
     "validation": {
       "title": "validation",
@@ -1229,6 +1360,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "pro": {
+              "$ref": "#/definitions/pro"
             },
             "providers": {
               "$ref": "#/definitions/providers"

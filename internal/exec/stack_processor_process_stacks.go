@@ -108,6 +108,7 @@ func ProcessStackConfig(
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
+	globalProSection := map[string]any{}
 	globalEnvSection := map[string]any{}
 	globalGenerateSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
@@ -123,6 +124,7 @@ func ProcessStackConfig(
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
+	terraformPro := map[string]any{}
 	terraformEnv := map[string]any{}
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
@@ -133,6 +135,7 @@ func ProcessStackConfig(
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
+	helmfilePro := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
 	helmfileAuth := map[string]any{}
@@ -140,6 +143,7 @@ func ProcessStackConfig(
 
 	packerVars := map[string]any{}
 	packerSettings := map[string]any{}
+	packerPro := map[string]any{}
 	packerEnv := map[string]any{}
 	packerCommand := ""
 	packerAuth := map[string]any{}
@@ -147,6 +151,7 @@ func ProcessStackConfig(
 
 	ansibleVars := map[string]any{}
 	ansibleSettings := map[string]any{}
+	ansiblePro := map[string]any{}
 	ansibleEnv := map[string]any{}
 	ansibleCommand := ""
 	ansibleAuth := map[string]any{}
@@ -154,6 +159,7 @@ func ProcessStackConfig(
 
 	kubernetesVars := map[string]any{}
 	kubernetesSettings := map[string]any{}
+	kubernetesPro := map[string]any{}
 	kubernetesEnv := map[string]any{}
 	kubernetesCommand := ""
 	kubernetesAuth := map[string]any{}
@@ -169,6 +175,7 @@ func ProcessStackConfig(
 
 	helmVars := map[string]any{}
 	helmSettings := map[string]any{}
+	helmPro := map[string]any{}
 	helmEnv := map[string]any{}
 	helmCommand := ""
 	helmAuth := map[string]any{}
@@ -205,6 +212,13 @@ func ProcessStackConfig(
 		globalSettingsSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.ProSectionName]; ok {
+		globalProSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidProSection, stackName)
 		}
 	}
 
@@ -360,6 +374,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalTerraformSection[cfg.ProSectionName]; ok {
+		terraformPro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformPro, stackName)
+		}
+	}
+
+	globalAndTerraformPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, terraformPro})
+	if err != nil {
+		return nil, err
+	}
+
 	if i, ok := globalTerraformSection[cfg.EnvSectionName]; ok {
 		terraformEnv, ok = i.(map[string]any)
 		if !ok {
@@ -504,6 +530,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalHelmfileSection[cfg.ProSectionName]; ok {
+		helmfilePro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfilePro, stackName)
+		}
+	}
+
+	globalAndHelmfilePro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, helmfilePro})
+	if err != nil {
+		return nil, err
+	}
+
 	if i, ok := globalHelmfileSection[cfg.EnvSectionName]; ok {
 		helmfileEnv, ok = i.(map[string]any)
 		if !ok {
@@ -574,6 +612,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalPackerSection[cfg.ProSectionName]; ok {
+		packerPro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerPro, stackName)
+		}
+	}
+
+	globalAndPackerPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, packerPro})
+	if err != nil {
+		return nil, err
+	}
+
 	if i, ok := globalPackerSection[cfg.EnvSectionName]; ok {
 		packerEnv, ok = i.(map[string]any)
 		if !ok {
@@ -640,6 +690,18 @@ func ProcessStackConfig(
 	}
 
 	globalAndAnsibleSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, ansibleSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalAnsibleSection[cfg.ProSectionName]; ok {
+		ansiblePro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsiblePro, stackName)
+		}
+	}
+
+	globalAndAnsiblePro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, ansiblePro})
 	if err != nil {
 		return nil, err
 	}
@@ -734,6 +796,18 @@ func ProcessStackConfig(
 	}
 
 	globalAndKubernetesSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, kubernetesSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ProSectionName]; ok {
+		kubernetesPro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidProSection, stackName)
+		}
+	}
+
+	globalAndKubernetesPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, kubernetesPro})
 	if err != nil {
 		return nil, err
 	}
@@ -868,6 +942,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalHelmSection[cfg.ProSectionName]; ok {
+		helmPro, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidProSection, stackName)
+		}
+	}
+
+	globalAndHelmPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, helmPro})
+	if err != nil {
+		return nil, err
+	}
+
 	if i, ok := globalHelmSection[cfg.EnvSectionName]; ok {
 		helmEnv, ok = i.(map[string]any)
 		if !ok {
@@ -955,6 +1041,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists:        checkBaseComponentExists,
 					GlobalVars:                      globalAndTerraformVars,
 					GlobalSettings:                  globalAndTerraformSettings,
+					GlobalPro:                       globalAndTerraformPro,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
 					GlobalSecrets:                   globalSecretsSection,
@@ -1004,6 +1091,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists: checkBaseComponentExists,
 					GlobalVars:               globalAndHelmfileVars,
 					GlobalSettings:           globalAndHelmfileSettings,
+					GlobalPro:                globalAndHelmfilePro,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
 					GlobalSecrets:            globalSecretsSection,
@@ -1044,6 +1132,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists: checkBaseComponentExists,
 					GlobalVars:               globalAndPackerVars,
 					GlobalSettings:           globalAndPackerSettings,
+					GlobalPro:                globalAndPackerPro,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
 					GlobalSecrets:            globalSecretsSection,
@@ -1084,6 +1173,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists: checkBaseComponentExists,
 					GlobalVars:               globalAndAnsibleVars,
 					GlobalSettings:           globalAndAnsibleSettings,
+					GlobalPro:                globalAndAnsiblePro,
 					GlobalEnv:                globalAndAnsibleEnv,
 					GlobalAuth:               globalAndAnsibleAuth,
 					GlobalSecrets:            globalSecretsSection,
@@ -1132,6 +1222,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists:   checkBaseComponentExists,
 					GlobalVars:                 globalAndKubernetesVars,
 					GlobalSettings:             globalAndKubernetesSettings,
+					GlobalPro:                  globalAndKubernetesPro,
 					GlobalEnv:                  globalAndKubernetesEnv,
 					GlobalAuth:                 globalAndKubernetesAuth,
 					GlobalDependencies:         globalAndKubernetesDependencies,
@@ -1187,6 +1278,7 @@ func ProcessStackConfig(
 					CheckBaseComponentExists:   checkBaseComponentExists,
 					GlobalVars:                 globalAndHelmVars,
 					GlobalSettings:             globalAndHelmSettings,
+					GlobalPro:                  globalAndHelmPro,
 					GlobalEnv:                  globalAndHelmEnv,
 					GlobalAuth:                 globalAndHelmAuth,
 					GlobalDependencies:         globalAndHelmDependencies,
@@ -1279,6 +1371,23 @@ func ProcessStackConfig(
 			}
 			if len(componentSettings) > 0 {
 				componentMap[cfg.SettingsSectionName] = componentSettings
+			}
+			// Merge global pro into component pro. Uses a deep merge (mirroring the
+			// built-in component types above) rather than a shallow top-level-key copy,
+			// because `pro:` nests multi-level maps (e.g. `pull_request.opened` vs
+			// `pull_request.synchronize`) -- a shallow copy would let a component-local
+			// `pro.pull_request` with only one activity silently wipe out other
+			// globally-configured activities under the same key.
+			var componentLocalPro map[string]any
+			if pro, ok := componentMap[cfg.ProSectionName].(map[string]any); ok {
+				componentLocalPro = pro
+			}
+			componentPro, err := m.Merge(atmosConfig, []map[string]any{globalProSection, componentLocalPro})
+			if err != nil {
+				return nil, err
+			}
+			if len(componentPro) > 0 {
+				componentMap[cfg.ProSectionName] = componentPro
 			}
 			// Merge global env into component env.
 			componentEnv := map[string]any{}

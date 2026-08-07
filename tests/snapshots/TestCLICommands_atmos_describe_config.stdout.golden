@@ -202,8 +202,6 @@
     "AtmosGitlabToken": "",
     "GitlabToken": "",
     "pro": {
-      "base_url": "https://atmos-pro.com",
-      "endpoint": "api/v1",
       "github_oidc": {},
       "git_sts": {}
     },
@@ -290,6 +288,12 @@
     "keyring": {},
     "providers": null,
     "identities": null
+  },
+  "pro": {
+    "base_url": "https://atmos-pro.com",
+    "endpoint": "api/v1",
+    "github_oidc": {},
+    "git_sts": {}
   },
   "container": {
     "runtime": {

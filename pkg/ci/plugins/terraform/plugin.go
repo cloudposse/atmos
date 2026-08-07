@@ -11,7 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 
 	ci "github.com/cloudposse/atmos/pkg/ci"
@@ -139,7 +141,24 @@ func (p *Plugin) buildTemplateContext(
 	// Return extended context with terraform-specific fields.
 	tfCtx := NewTemplateContext(baseCtx, tfData)
 	tfCtx.TestResult = testData
+	tfCtx.ProEnabled = isComponentProEnabled(info)
 	return tfCtx, nil
+}
+
+// isComponentProEnabled reports whether the component this CI run is for is effectively
+// Atmos Pro enabled, for the PR-comment badge. Resolves the top-level `pro:` component
+// section against the deprecated `settings.pro:` alias (pro.ResolveSection), honoring the
+// same metadata.enabled > pro.enabled precedence used by drift dispatch and
+// `atmos list instances --upload` (pro.EffectiveEnabledState) -- all three signals must never
+// diverge.
+func isComponentProEnabled(info *schema.ConfigAndStacksInfo) bool {
+	var proSection map[string]any
+	if info.ComponentSection != nil {
+		proSection, _ = info.ComponentSection[cfg.ProSectionName].(map[string]any)
+	}
+	resolved := pro.ResolveSection(proSection, info.ComponentSettingsSection)
+	proEnabled, _ := pro.EffectiveEnabledState(resolved, info.ComponentMetadataSection)
+	return proEnabled
 }
 
 // getOutputVariables returns CI output variables for a command.

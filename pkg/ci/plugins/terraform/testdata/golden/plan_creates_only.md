@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-dev-us-east-1-vpc)
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-dev-us-east-1-vpc)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-dev-us-east-1-vpc" />Plan: 3 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>
@@ -26,3 +26,5 @@ atmos terraform plan vpc -s dev-us-east-1
 + aws_subnet.b
 ```
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

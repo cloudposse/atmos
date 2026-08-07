@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#destroy-prod-legacy)
+[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#destroy-prod-legacy)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 
 > [!CAUTION]
 > **Terraform will delete resources!**
@@ -28,3 +28,5 @@ atmos terraform plan legacy -s prod
 - aws_instance.old[1]
 ```
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

@@ -34,6 +34,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 		expectedError       string
 		expectedVars        map[string]any
 		expectedSettings    map[string]any
+		expectedPro         map[string]any
 		expectedEnv         map[string]any
 		expectedBackendType string
 		expectBaseComponent string
@@ -43,6 +44,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			baseComponentConfig: &schema.BaseComponentConfig{
 				BaseComponentVars:     map[string]any{},
 				BaseComponentSettings: map[string]any{},
+				BaseComponentPro:      map[string]any{},
 				BaseComponentEnv:      map[string]any{},
 			},
 			allComponentsMap: map[string]any{
@@ -53,6 +55,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 					},
 					"settings": map[string]any{
 						"enabled": true,
+					},
+					"pro": map[string]any{
+						"drift_detection": map[string]any{"enabled": true},
 					},
 					"backend_type": "s3",
 				},
@@ -67,6 +72,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			expectedSettings: map[string]any{
 				"enabled": true,
 			},
+			expectedPro: map[string]any{
+				"drift_detection": map[string]any{"enabled": true},
+			},
 			expectedBackendType: "s3",
 			expectBaseComponent: "base",
 		},
@@ -75,6 +83,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			baseComponentConfig: &schema.BaseComponentConfig{
 				BaseComponentVars:     map[string]any{},
 				BaseComponentSettings: map[string]any{},
+				BaseComponentPro:      map[string]any{},
 				BaseComponentEnv:      map[string]any{},
 			},
 			allComponentsMap: map[string]any{
@@ -91,6 +100,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 					"settings": map[string]any{
 						"enabled": true,
 					},
+					"pro": map[string]any{
+						"enabled": true,
+					},
 				},
 			},
 			component:     "test",
@@ -103,6 +115,9 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			expectedSettings: map[string]any{
 				"enabled": true,
 			},
+			expectedPro: map[string]any{
+				"enabled": true,
+			},
 			expectBaseComponent: "base2",
 		},
 		{
@@ -110,6 +125,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			baseComponentConfig: &schema.BaseComponentConfig{
 				BaseComponentVars:     map[string]any{},
 				BaseComponentSettings: map[string]any{},
+				BaseComponentPro:      map[string]any{},
 				BaseComponentEnv:      map[string]any{},
 			},
 			allComponentsMap: map[string]any{
@@ -119,6 +135,24 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			stack:         "test-stack",
 			baseComponent: "base",
 			expectedError: "invalid base component config",
+		},
+		{
+			name: "invalid-base-component-pro-type",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentPro:      map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"pro": "invalid-not-a-map",
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedError: "invalid pro section",
 		},
 	}
 
@@ -157,6 +191,10 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 
 			if tt.expectedSettings != nil {
 				assert.Equal(t, tt.expectedSettings, tt.baseComponentConfig.BaseComponentSettings)
+			}
+
+			if tt.expectedPro != nil {
+				assert.Equal(t, tt.expectedPro, tt.baseComponentConfig.BaseComponentPro)
 			}
 
 			if tt.expectedEnv != nil {

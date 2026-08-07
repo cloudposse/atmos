@@ -129,7 +129,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 						Component:     inst.Component,
 						Stack:         inst.Stack,
 						ComponentType: inst.ComponentType,
-						Settings:      extractProSettings(inst.Settings, inst.Metadata),
+						Settings:      extractProSettings(inst.Pro, inst.Settings, inst.Metadata),
 					}
 				}
 				dto := dtos.InstancesUploadRequest{Instances: uploadDeps}

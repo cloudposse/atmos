@@ -5,7 +5,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // extractComponentSections extracts all component sections (vars, settings, env, etc.).
@@ -47,6 +49,34 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 				if !ok {
 					return fmt.Errorf("%w: 'components.%s.%s.settings.spacelift' in the file '%s'", errUtils.ErrInvalidSpaceLiftSettings, opts.ComponentType, opts.Component, opts.StackName)
 				}
+			}
+		}
+	}
+
+	// Extract pro section. Unlike vars/settings/env above, a malformed `pro:` value is not
+	// fatal to the whole file: pro.ResolveSection already treats a non-map `pro:` as absent
+	// (falling back to `settings.pro` or disabling Pro for this component), and that's the
+	// only consumer of ComponentPro. Erroring here would abort processing for every other
+	// component in the same manifest file over one component's unrelated typo.
+	if i, ok := opts.ComponentMap[cfg.ProSectionName]; ok {
+		componentPro, ok := i.(map[string]any)
+		if !ok {
+			log.Warn("component 'pro' section must be a map, ignoring it",
+				"error", fmt.Errorf("%w: 'components.%s.%s.pro' in the file '%s'", errUtils.ErrInvalidComponentPro, opts.ComponentType, opts.Component, opts.StackName))
+		} else {
+			// Strict-decode before assigning: catches an unrecognized key (e.g. "enable"
+			// instead of "enabled") the same way `atmos validate stacks` would via JSON
+			// Schema, without requiring that separate command to have been run first.
+			// Discarding the raw map on failure (rather than assigning it anyway) matters --
+			// downstream resolution ignores unknown keys, so a `pro: {enable: false}` typo
+			// would otherwise silently fall through to Pro's enabled-by-default behavior,
+			// the opposite of what the user wrote. Non-fatal for the same reason as the type
+			// check above: one component's typo must not abort sibling components.
+			if _, err := schema.DecodeComponentPro(componentPro); err != nil {
+				log.Warn("component 'pro' section has an unrecognized field, check for a typo (e.g. 'enable' instead of 'enabled')",
+					"component", opts.Component, "type", opts.ComponentType, "file", opts.StackName, "error", err)
+			} else {
+				result.ComponentPro = componentPro
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1944,6 +1946,278 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ParseProfilesFromEnvString(tt.envValue)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestLoadConfig_ProSettingsBackwardCompat(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    schema.ProSettings
+	}{
+		{
+			name: "legacy settings.pro only",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    workspace_id: legacy-ws\n" +
+				"    base_url: https://legacy.example.com\n",
+			want: schema.ProSettings{WorkspaceID: "legacy-ws", BaseURL: "https://legacy.example.com"},
+		},
+		{
+			name: "top-level pro only",
+			content: "base_path: .\n" +
+				"pro:\n" +
+				"  workspace_id: top-ws\n" +
+				"  base_url: https://top.example.com\n",
+			want: schema.ProSettings{WorkspaceID: "top-ws", BaseURL: "https://top.example.com"},
+		},
+		{
+			name: "both set, top-level wins",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    workspace_id: legacy-ws\n" +
+				"    base_url: https://legacy.example.com\n" +
+				"pro:\n" +
+				"  workspace_id: top-ws\n",
+			// base_url is only set on the legacy side, so it still falls back per-field.
+			want: schema.ProSettings{WorkspaceID: "top-ws", BaseURL: "https://legacy.example.com"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := createTestConfig(t, tempDir, tt.content)
+			configInfo := &schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: []string{configPath},
+			}
+			cfg, err := LoadConfig(configInfo)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want.WorkspaceID, cfg.Pro.WorkspaceID)
+			assert.Equal(t, tt.want.BaseURL, cfg.Pro.BaseURL)
+		})
+	}
+}
+
+// TestLoadConfig_ProDefaultsDoNotLeakIntoLegacySettings guards against a regression where
+// seeding pro.base_url/pro.endpoint defaults under the deprecated `settings.pro.*` viper keys
+// made `Settings.Pro` non-zero on every run, which in turn made resolveProSettings emit the
+// `settings.pro` deprecation notice unconditionally -- even for a config that never touched
+// `settings.pro` at all. Defaults must land on the top-level `pro.*` struct only.
+func TestLoadConfig_ProDefaultsDoNotLeakIntoLegacySettings(t *testing.T) {
+	// GitHubHeadRef binds to the real GITHUB_HEAD_REF env var (pkg/config/load.go), which
+	// GitHub Actions sets on every pull_request-triggered run. Left alone, that makes
+	// Settings.Pro non-zero in CI even though this test's fixture never touches settings.pro,
+	// failing the exact-zero-value assertion below only in CI, never locally.
+	t.Setenv("GITHUB_HEAD_REF", "")
+
+	tempDir := t.TempDir()
+	configPath := createTestConfig(t, tempDir, "base_path: .\n")
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+
+	cfg, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, schema.ProSettings{}, cfg.Settings.Pro, //nolint:staticcheck // asserting the deprecated field stays zero-valued.
+		"Settings.Pro must remain zero-valued when the config file never sets settings.pro, "+
+			"or resolveProSettings will treat defaults as user-authored legacy config")
+	assert.Equal(t, AtmosProDefaultBaseUrl, cfg.Pro.BaseURL, "top-level pro.base_url must still get its default")
+	assert.Equal(t, AtmosProDefaultEndpoint, cfg.Pro.Endpoint, "top-level pro.endpoint must still get its default")
+}
+
+// TestLoadConfig_ProBaseURLDefaultSurvivesUnrelatedLegacyField guards against a regression where
+// resolveProSettings's BaseURL/Endpoint fallback unconditionally copied legacy.BaseURL over
+// pro.BaseURL whenever the top level still held just its own default -- but legacy.BaseURL has no
+// default of its own, so if the user set some *other* settings.pro field (e.g. token) without
+// setting settings.pro.base_url, the fallback copied an empty string in and blanked out pro's
+// perfectly good default.
+func TestLoadConfig_ProBaseURLDefaultSurvivesUnrelatedLegacyField(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := createTestConfig(t, tempDir, "base_path: .\n"+
+		"settings:\n"+
+		"  pro:\n"+
+		"    token: legacy-token\n") // Does not set settings.pro.base_url/endpoint.
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+
+	cfg, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, "legacy-token", cfg.Pro.Token, "the field the user actually set must still fall back")
+	assert.Equal(t, AtmosProDefaultBaseUrl, cfg.Pro.BaseURL, "base_url must keep its default, not be blanked out by an unset legacy field")
+	assert.Equal(t, AtmosProDefaultEndpoint, cfg.Pro.Endpoint, "endpoint must keep its default, not be blanked out by an unset legacy field")
+}
+
+func TestResolveProSettings(t *testing.T) {
+	t.Run("no legacy settings, top-level untouched", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{Pro: schema.ProSettings{WorkspaceID: "top-ws"}}
+		resolveProSettings(cfg)
+		assert.Equal(t, "top-ws", cfg.Pro.WorkspaceID)
+	})
+
+	t.Run("legacy only, falls back field by field", func(t *testing.T) {
+		revokeOnExit := true
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
+				WorkspaceID:     "legacy-ws",
+				Token:           "legacy-token",
+				Endpoint:        "legacy/api",
+				MaxPayloadBytes: 1024,
+				GitHubHeadRef:   "legacy-branch",
+				GithubOIDC: schema.GithubOIDCSettings{
+					RequestURL:   "https://legacy.example.com/oidc",
+					RequestToken: "legacy-oidc-token",
+				},
+				GitSTS: schema.GitSTSSettings{
+					GitConfigMode: "file",
+					RevokeOnExit:  &revokeOnExit,
+				},
+			}},
+		}
+		resolveProSettings(cfg)
+		assert.Equal(t, "legacy-ws", cfg.Pro.WorkspaceID)
+		assert.Equal(t, "legacy-token", cfg.Pro.Token)
+		assert.Equal(t, "legacy/api", cfg.Pro.Endpoint)
+		assert.Equal(t, 1024, cfg.Pro.MaxPayloadBytes)
+		assert.Equal(t, "legacy-branch", cfg.Pro.GitHubHeadRef)
+		assert.Equal(t, "https://legacy.example.com/oidc", cfg.Pro.GithubOIDC.RequestURL)
+		assert.Equal(t, "legacy-oidc-token", cfg.Pro.GithubOIDC.RequestToken)
+		assert.Equal(t, "file", cfg.Pro.GitSTS.GitConfigMode)
+		require.NotNil(t, cfg.Pro.GitSTS.RevokeOnExit)
+		assert.True(t, *cfg.Pro.GitSTS.RevokeOnExit)
+	})
+
+	t.Run("both set, top-level wins per field", func(t *testing.T) {
+		legacyRevokeOnExit := true
+		topRevokeOnExit := false
+		cfg := &schema.AtmosConfiguration{
+			Pro: schema.ProSettings{
+				WorkspaceID: "top-ws",
+				GitSTS:      schema.GitSTSSettings{GitConfigMode: "env", RevokeOnExit: &topRevokeOnExit},
+			},
+			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
+				WorkspaceID:     "legacy-ws",
+				Token:           "legacy-token",
+				Endpoint:        "legacy/api",
+				MaxPayloadBytes: 1024,
+				GitHubHeadRef:   "legacy-branch",
+				GithubOIDC:      schema.GithubOIDCSettings{RequestURL: "https://legacy.example.com/oidc"},
+				GitSTS:          schema.GitSTSSettings{GitConfigMode: "file", RevokeOnExit: &legacyRevokeOnExit},
+			}},
+		}
+		resolveProSettings(cfg)
+		assert.Equal(t, "top-ws", cfg.Pro.WorkspaceID, "top-level value must not be overwritten by the legacy fallback")
+		assert.Equal(t, "legacy-token", cfg.Pro.Token, "fields unset at top level still fall back to the legacy value")
+		assert.Equal(t, "legacy/api", cfg.Pro.Endpoint, "Endpoint unset at top level falls back to legacy")
+		assert.Equal(t, 1024, cfg.Pro.MaxPayloadBytes, "MaxPayloadBytes unset at top level falls back to legacy")
+		assert.Equal(t, "legacy-branch", cfg.Pro.GitHubHeadRef, "GitHubHeadRef unset at top level falls back to legacy")
+		assert.Equal(t, "https://legacy.example.com/oidc", cfg.Pro.GithubOIDC.RequestURL, "GithubOIDC unset at top level falls back to legacy")
+		assert.Equal(t, "env", cfg.Pro.GitSTS.GitConfigMode, "GitSTS set at top level must not be overwritten by the legacy fallback")
+		require.NotNil(t, cfg.Pro.GitSTS.RevokeOnExit)
+		assert.False(t, *cfg.Pro.GitSTS.RevokeOnExit, "GitSTS set at top level must not be overwritten by the legacy fallback")
+	})
+
+	t.Run("GithubOIDC and GitSTS merge per field, not as whole structs", func(t *testing.T) {
+		revokeOnExit := true
+		cfg := &schema.AtmosConfiguration{
+			Pro: schema.ProSettings{
+				GithubOIDC: schema.GithubOIDCSettings{RequestURL: "https://top.example.com/oidc"},
+				GitSTS:     schema.GitSTSSettings{GitConfigMode: "env"},
+			},
+			Settings: schema.AtmosSettings{Pro: schema.ProSettings{
+				GithubOIDC: schema.GithubOIDCSettings{RequestToken: "legacy-oidc-token"},
+				GitSTS:     schema.GitSTSSettings{RevokeOnExit: &revokeOnExit},
+			}},
+		}
+		resolveProSettings(cfg)
+		// A single field set on one side of a sub-struct must not block fallback for a
+		// sibling field left unset -- e.g. setting only github_oidc.request_url at the top
+		// level must not drop a github_oidc.request_token that only exists under settings.pro.
+		assert.Equal(t, "https://top.example.com/oidc", cfg.Pro.GithubOIDC.RequestURL, "top-level field must win")
+		assert.Equal(t, "legacy-oidc-token", cfg.Pro.GithubOIDC.RequestToken, "sibling field must still fall back to legacy")
+		assert.Equal(t, "env", cfg.Pro.GitSTS.GitConfigMode, "top-level field must win")
+		require.NotNil(t, cfg.Pro.GitSTS.RevokeOnExit)
+		assert.True(t, *cfg.Pro.GitSTS.RevokeOnExit, "sibling field must still fall back to legacy")
+	})
+}
+
+// TestWarnProSettingsDeprecatedOnce_FiresAtDebugLevel exercises warnProSettingsDeprecatedOnce's
+// actual notice-emission path (the mutex-guarded latch past the log.GetLevel() gate), not just
+// the early-return-when-not-Debug guard. This is the exact path the manually-gated latch (see the
+// function's doc comment) was designed to get right, so silence here would hide a real
+// regression, not just a defensive branch.
+func TestWarnProSettingsDeprecatedOnce_FiresAtDebugLevel(t *testing.T) {
+	proDeprecationWarnMu.Lock()
+	originalWarned := proDeprecationWarned
+	proDeprecationWarned = false
+	proDeprecationWarnMu.Unlock()
+	t.Cleanup(func() {
+		proDeprecationWarnMu.Lock()
+		proDeprecationWarned = originalWarned
+		proDeprecationWarnMu.Unlock()
+	})
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetReportTimestamp(false)
+	testLogger.SetLevel(log.DebugLevel)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{Pro: schema.ProSettings{WorkspaceID: "legacy-ws"}},
+	}
+	resolveProSettings(cfg)
+	assert.Contains(t, buffer.String(), "'settings.pro' is deprecated", "the notice must actually be logged once Debug level is active")
+
+	// A second call within the same process must not log the notice again.
+	buffer.Reset()
+	resolveProSettings(cfg)
+	assert.Empty(t, buffer.String(), "the notice must only fire once per process")
+}
+
+// TestLoadConfig_ProSettingsEnvVarPrecedence verifies that ATMOS_PRO_* environment variables
+// override both the top-level `pro.*` and the deprecated `settings.pro.*` config-file paths,
+// regardless of which one a project has set in atmos.yaml.
+func TestLoadConfig_ProSettingsEnvVarPrecedence(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "env overrides top-level pro",
+			content: "base_path: .\n" +
+				"pro:\n" +
+				"  token: file-pro-token\n",
+		},
+		{
+			name: "env overrides deprecated settings.pro",
+			content: "base_path: .\n" +
+				"settings:\n" +
+				"  pro:\n" +
+				"    token: file-settings-pro-token\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(AtmosProTokenEnvVarName, "env-token")
+			tempDir := t.TempDir()
+			configPath := createTestConfig(t, tempDir, tt.content)
+			configInfo := &schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: []string{configPath},
+			}
+			cfg, err := LoadConfig(configInfo)
+			require.NoError(t, err)
+			assert.Equal(t, "env-token", cfg.Pro.Token, "ATMOS_PRO_TOKEN must override the config-file value")
 		})
 	}
 }

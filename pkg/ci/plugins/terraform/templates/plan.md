@@ -31,6 +31,9 @@
 {{- else }}[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-{{$target}})
 {{- end }}
 {{- end }}
+{{- if .ProEnabled }}[![pro](https://shields.io/badge/PRO-ENABLED-success?style=for-the-badge)](https://atmos-pro.com/dashboard)
+{{- else }}[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
+{{- end }}
 
 {{- if .HasDestroy }}
 
@@ -133,3 +136,5 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 {{- end }}
 {{- end }}
 {{- end }}
+
+<sub>__Atmos Pro__ is {{ if .ProEnabled }}enabled{{ else }}disabled{{ end }}.</sub>

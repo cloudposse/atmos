@@ -98,9 +98,6 @@ settings:
   inject_github_token: true
   inject_bitbucket_token: true
   inject_gitlab_token: true
-  pro:
-    base_url: https://atmos-pro.com
-    endpoint: api/v1
   telemetry:
     enabled: true
     endpoint: https://us.i.posthog.com
@@ -137,6 +134,9 @@ auth:
   realm: <hash>
   providers: {}
   identities: {}
+pro:
+  base_url: https://atmos-pro.com
+  endpoint: api/v1
 container:
   runtime:
     auto_start: true

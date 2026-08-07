@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
-[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-plat-ue2-sandbox-foobar)
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-plat-ue2-sandbox-foobar)[![pro](https://shields.io/badge/PRO-DISABLED-silver?style=for-the-badge)](https://atmos-pro.com)
 <details><summary><a id="result-plat-ue2-sandbox-foobar" />No changes. Your infrastructure matches the configuration.</summary>
 
 <br/>
@@ -19,3 +19,5 @@ atmos terraform plan foobar -s plat-ue2-sandbox
 
 ---
 </details>
+
+<sub>__Atmos Pro__ is disabled.</sub>

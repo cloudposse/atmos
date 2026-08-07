@@ -55,6 +55,10 @@ type TerraformTemplateContext struct {
 
 	// AtmosVersion is the running Atmos CLI version, used to cache-bust the CI badge image.
 	AtmosVersion string
+
+	// ProEnabled reports whether this component is effectively Atmos Pro enabled, driving the
+	// PR-comment Pro badge (green/enabled vs. silver/disabled).
+	ProEnabled bool
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.

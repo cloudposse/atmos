@@ -312,7 +312,7 @@ func TestResolveBranch(t *testing.T) {
 
 	t.Run("valid branch returns branch", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
-		cfg.Settings.Pro.GitHubHeadRef = "feature/test"
+		cfg.Pro.GitHubHeadRef = "feature/test"
 		branch, err := resolveBranch(cfg)
 		require.NoError(t, err)
 		assert.Equal(t, "feature/test", branch)
@@ -320,7 +320,7 @@ func TestResolveBranch(t *testing.T) {
 
 	t.Run("invalid branch returns error", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
-		cfg.Settings.Pro.GitHubHeadRef = "feature branch"
+		cfg.Pro.GitHubHeadRef = "feature branch"
 		_, err := resolveBranch(cfg)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrBranchInvalid)
@@ -573,9 +573,9 @@ func TestSubmitCommit_Success(t *testing.T) {
 	defer server.Close()
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.BaseURL = server.URL
-	atmosConfig.Settings.Pro.Endpoint = "api"
+	atmosConfig.Pro.Token = "test-token"
+	atmosConfig.Pro.BaseURL = server.URL
+	atmosConfig.Pro.Endpoint = "api"
 
 	changes := &dtos.CommitChanges{
 		Additions: []dtos.CommitFileAddition{
@@ -602,9 +602,9 @@ func TestSubmitCommit_APIError(t *testing.T) {
 	defer server.Close()
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.BaseURL = server.URL
-	atmosConfig.Settings.Pro.Endpoint = "api"
+	atmosConfig.Pro.Token = "test-token"
+	atmosConfig.Pro.BaseURL = server.URL
+	atmosConfig.Pro.Endpoint = "api"
 
 	changes := &dtos.CommitChanges{
 		Additions: []dtos.CommitFileAddition{
@@ -627,10 +627,10 @@ func TestExecuteCommit_HappyPath(t *testing.T) {
 		runGit(t, dir, "add", "main.tf")
 
 		atmosConfig := &schema.AtmosConfiguration{}
-		atmosConfig.Settings.Pro.Token = "test-token"
-		atmosConfig.Settings.Pro.BaseURL = server.URL
-		atmosConfig.Settings.Pro.Endpoint = "api"
-		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
+		atmosConfig.Pro.Token = "test-token"
+		atmosConfig.Pro.BaseURL = server.URL
+		atmosConfig.Pro.Endpoint = "api"
+		atmosConfig.Pro.GitHubHeadRef = "feature/test"
 
 		err := ExecuteCommit(atmosConfig, "test commit", "", "", false)
 		require.NoError(t, err)
@@ -667,8 +667,8 @@ func TestExecuteCommit_ValidationErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{}
-			atmosConfig.Settings.Pro.Token = "test-token"
-			atmosConfig.Settings.Pro.GitHubHeadRef = tc.branch
+			atmosConfig.Pro.Token = "test-token"
+			atmosConfig.Pro.GitHubHeadRef = tc.branch
 
 			err := ExecuteCommit(atmosConfig, tc.message, "", "", false)
 			require.Error(t, err)
@@ -682,8 +682,8 @@ func TestExecuteCommit_NoChanges(t *testing.T) {
 
 	withTempGitRepo(t, func(_ string) {
 		atmosConfig := &schema.AtmosConfiguration{}
-		atmosConfig.Settings.Pro.Token = "test-token"
-		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
+		atmosConfig.Pro.Token = "test-token"
+		atmosConfig.Pro.GitHubHeadRef = "feature/test"
 
 		err := ExecuteCommit(atmosConfig, "test commit", "", "", false)
 		require.NoError(t, err)
@@ -693,15 +693,15 @@ func TestExecuteCommit_NoChanges(t *testing.T) {
 func TestValidateAuth(t *testing.T) {
 	t.Run("static token is sufficient", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
-		cfg.Settings.Pro.Token = "test-token"
+		cfg.Pro.Token = "test-token"
 		require.NoError(t, validateAuth(cfg))
 	})
 
 	t.Run("valid OIDC config", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
-		cfg.Settings.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
-		cfg.Settings.Pro.GithubOIDC.RequestToken = "gha-token"
-		cfg.Settings.Pro.WorkspaceID = "ws-123"
+		cfg.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
+		cfg.Pro.GithubOIDC.RequestToken = "gha-token"
+		cfg.Pro.WorkspaceID = "ws-123"
 		require.NoError(t, validateAuth(cfg))
 	})
 
@@ -714,8 +714,8 @@ func TestValidateAuth(t *testing.T) {
 
 	t.Run("OIDC without workspace ID", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
-		cfg.Settings.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
-		cfg.Settings.Pro.GithubOIDC.RequestToken = "gha-token"
+		cfg.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
+		cfg.Pro.GithubOIDC.RequestToken = "gha-token"
 		err := validateAuth(cfg)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrOIDCWorkspaceIDRequired)

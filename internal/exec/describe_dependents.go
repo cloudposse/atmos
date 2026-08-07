@@ -435,6 +435,9 @@ func buildDependentEntry(
 
 	if args.IncludeSettings {
 		dependent.Settings = e.SettingsSection
+		if proSection, ok := e.StackComponentMap[cfg.ProSectionName].(map[string]any); ok {
+			dependent.Pro = proSection
+		}
 	}
 
 	return dependent

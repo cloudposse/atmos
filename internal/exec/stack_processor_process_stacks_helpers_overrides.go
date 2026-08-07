@@ -17,6 +17,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	// Initialize overrides with small capacity hints (overrides are typically sparse).
 	result.ComponentOverridesVars = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesSettings = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesPro = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesEnv = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesSecrets = make(map[string]any, componentOverridesCapacity)
@@ -59,6 +60,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 			return fmt.Errorf("%w: 'components.%s.%s.overrides.settings' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesSettings, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentOverridesSettings = componentOverridesSettings
+	}
+
+	// Extract pro overrides.
+	if i, ok := componentOverrides[cfg.ProSectionName]; ok {
+		componentOverridesPro, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.pro' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesPro, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesPro = componentOverridesPro
 	}
 
 	// Extract env overrides.

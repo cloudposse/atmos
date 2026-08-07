@@ -433,7 +433,7 @@ func TestExtractProSettings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := extractProSettings(tc.settings, tc.metadata)
+			got := extractProSettings(nil, tc.settings, tc.metadata)
 			pro := proMap(t, got)
 
 			enabled, ok := pro["enabled"].(bool)
@@ -454,24 +454,89 @@ func TestExtractProSettings(t *testing.T) {
 // TestExtractProSettingsEdgeCases covers nil/absent/malformed inputs.
 func TestExtractProSettingsEdgeCases(t *testing.T) {
 	t.Run("nil settings returns nil", func(t *testing.T) {
-		assert.Nil(t, extractProSettings(nil, nil))
+		assert.Nil(t, extractProSettings(nil, nil, nil))
 	})
 
 	t.Run("no pro key returns nil", func(t *testing.T) {
-		assert.Nil(t, extractProSettings(map[string]any{"spacelift": map[string]any{}}, nil))
+		assert.Nil(t, extractProSettings(nil, map[string]any{"spacelift": map[string]any{}}, nil))
 	})
 
-	t.Run("non-map pro passes through unchanged", func(t *testing.T) {
-		got := extractProSettings(map[string]any{"pro": "invalid"}, nil)
-		require.NotNil(t, got)
-		assert.Equal(t, "invalid", got["pro"])
+	t.Run("non-map pro is treated as absent", func(t *testing.T) {
+		// A non-map "pro" value (malformed config, e.g. a stray string) can't be
+		// resolved to a pro section with an enabled/drift_detection state, so
+		// pro.ResolveSection treats it the same as absent rather than passing
+		// the garbage value through unvalidated.
+		got := extractProSettings(nil, map[string]any{"pro": "invalid"}, nil)
+		assert.Nil(t, got)
 	})
 
 	t.Run("no drift_detection block is not synthesized", func(t *testing.T) {
-		got := extractProSettings(map[string]any{"pro": map[string]any{"enabled": true}}, nil)
+		got := extractProSettings(nil, map[string]any{"pro": map[string]any{"enabled": true}}, nil)
 		pro := proMap(t, got)
 		_, hasDrift := pro["drift_detection"]
 		assert.False(t, hasDrift, "drift_detection should not be synthesized when absent")
+	})
+}
+
+// TestProSectionPrecedence verifies the top-level `pro:` component section takes whole-block
+// precedence over the deprecated `settings.pro:` alias, that either alone still resolves
+// correctly (backward compatibility), and that both directions of isolation hold: the result
+// reflects only the winning section and mutating one input doesn't leak into the other's
+// effective state.
+func TestProSectionPrecedence(t *testing.T) {
+	t.Run("only top-level pro: is used when settings.pro: is absent", func(t *testing.T) {
+		instance := &schema.Instance{
+			Pro:      map[string]any{"enabled": true},
+			Settings: map[string]any{},
+		}
+		assert.True(t, isProEnabled(instance))
+	})
+
+	t.Run("only settings.pro: is used when top-level pro: is absent (legacy)", func(t *testing.T) {
+		instance := &schema.Instance{
+			Settings: map[string]any{"pro": map[string]any{"enabled": true}},
+		}
+		assert.True(t, isProEnabled(instance))
+	})
+
+	t.Run("both set: top-level pro: wins, whole block, not merged", func(t *testing.T) {
+		instance := &schema.Instance{
+			// Top-level says disabled.
+			Pro: map[string]any{"enabled": false},
+			// Legacy says enabled with drift on -- must be fully ignored, not merged in.
+			Settings: map[string]any{"pro": map[string]any{
+				"enabled":         true,
+				"drift_detection": map[string]any{"enabled": true},
+			}},
+		}
+		assert.False(t, isProEnabled(instance), "top-level pro: must win outright")
+		assert.False(t, isDriftEnabled(instance), "legacy drift_detection must not leak through when top-level pro: wins")
+	})
+
+	t.Run("both set: extractProSettings upload payload reflects only the winning top-level section", func(t *testing.T) {
+		got := extractProSettings(
+			map[string]any{"enabled": true},
+			map[string]any{"pro": map[string]any{"enabled": false, "drift_detection": map[string]any{"enabled": true}}},
+			nil,
+		)
+		pro := proMap(t, got)
+		assert.Equal(t, true, pro["enabled"], "upload payload must reflect the winning top-level pro:, not the legacy settings.pro:")
+		_, hasDrift := pro["drift_detection"]
+		assert.False(t, hasDrift, "drift_detection from the losing legacy section must not appear in the payload")
+	})
+
+	t.Run("mutating settings after resolution does not affect an already-resolved top-level result", func(t *testing.T) {
+		settings := map[string]any{"pro": map[string]any{"enabled": true}}
+		instance := &schema.Instance{
+			Pro:      map[string]any{"enabled": true},
+			Settings: settings,
+		}
+		assert.True(t, isProEnabled(instance))
+
+		// Mutate the legacy settings after the fact -- since top-level pro: won, this
+		// must have no effect on the instance's resolved state.
+		settings["pro"].(map[string]any)["enabled"] = false
+		assert.True(t, isProEnabled(instance), "resolved state must not be affected by later mutation of the losing legacy section")
 	})
 }
 
@@ -484,7 +549,7 @@ func TestExtractProSettingsIsolation(t *testing.T) {
 	}}
 	metadata := map[string]any{"enabled": false}
 
-	got := extractProSettings(settings, metadata)
+	got := extractProSettings(nil, settings, metadata)
 	pro := proMap(t, got)
 
 	// The collapse must not have mutated the source settings.
@@ -567,7 +632,7 @@ func TestMetadataDisabledPro(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.expected, metadataDisabledPro(tc.settings, tc.metadata))
+			assert.Equal(t, tc.expected, metadataDisabledPro(nil, tc.settings, tc.metadata))
 		})
 	}
 }
