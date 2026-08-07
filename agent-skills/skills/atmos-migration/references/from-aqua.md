@@ -46,14 +46,17 @@ packages:
 **Recipe:**
 
 1. Add the `toolchain:` block to `atmos.yaml`. A `registries:` entry with `type: standard` maps
-    to a `toolchain.registries[]` entry with `type: aqua`. Omit `source` to use the public
-    registry.
+    to a `toolchain.registries[]` entry with `type: aqua`. Carry over the `ref:` pin from
+    `aqua.yaml` -- an unpinned registry can change under you the same way an unpinned `ref: main`
+    would.
     ```yaml
     toolchain:
       versions_file: .tool-versions
       registries:
         - name: aqua
           type: aqua
+          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          ref: v4.0.0
           priority: 10
     ```
 2. Convert each `packages:` entry to a `.tool-versions` line. The common `name: owner/repo@version`
@@ -112,16 +115,20 @@ policies:
 
 1. Add the custom registry as a second `toolchain.registries[]` entry. Use `source` for the
     registry location, and `ref` to pin a version. Atmos accepts `ref` only when `source` is a
-    `github.com` URL.
+    `github.com` URL. Pin `ref` to a tag or commit SHA, not a branch -- a branch like `main` is
+    mutable and can change what gets installed without any change to `atmos.yaml`.
     ```yaml
     toolchain:
       registries:
         - name: internal
           type: aqua
           source: https://github.com/myorg/my-registry/tree/main
+          ref: v1.2.0
           priority: 100
         - name: aqua
           type: aqua
+          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          ref: v4.0.0
           priority: 10
     ```
 2. Replace the `checksum:` block with `toolchain.verification`:
@@ -133,8 +140,11 @@ policies:
         verifier_install: auto
     ```
 3. Drop `aqua-policy.yaml`. Atmos has no trust or policy step. See "Common Gotchas" below.
-4. Do not migrate `aqua-checksums.json`. Atmos manages its own lockfile,
-    `toolchain.lock.yaml`, and writes it automatically. No manual step is needed.
+4. Do not migrate `aqua-checksums.json`. Atmos manages its own lockfile, `toolchain.lock.yaml`.
+    Whether it writes that lockfile automatically depends on the project's edition: unpinned or
+    newer projects get it by default, with no configuration needed. A project whose `atmos.yaml`
+    pins an edition dated before `2026-08-05` keeps the old opt-in behavior and must set
+    `toolchain.use_lock_file: true` explicitly to get the same automatic lockfile.
 5. Check the migration the same way as Shape A.
 
 ## CLI Command Mapping

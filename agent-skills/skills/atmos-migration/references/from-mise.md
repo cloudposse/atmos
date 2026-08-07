@@ -156,7 +156,7 @@ experimental = true
 | `mise current` | `atmos toolchain get [tool]` | Shows the version set in `.tool-versions` |
 | `mise which <tool>` | `atmos toolchain which <tool>` | Shows the path to the tool binary |
 | `mise uninstall <tool>@<version>` | `atmos toolchain uninstall <tool>@<version>` | Removes one installed version |
-| `mise prune` | `atmos toolchain clean` | Atmos removes all installed tools and the cache, not just unused versions. |
+| `mise prune` | No direct equivalent | Atmos has no command that removes only unused versions. |
 | `mise exec <tool>@<version> -- <command>` | `atmos toolchain exec <tool>@<version> -- <command>` | Runs one command with a pinned tool version |
 | `mise run <task>` | `atmos <command>` | Runs the migrated custom command |
 | `mise env` | `atmos toolchain env` | Prints PATH and env settings for the shell |

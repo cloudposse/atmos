@@ -81,7 +81,7 @@ different reference:
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
-| mise config (`mise.toml`, `.mise.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
+| mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
