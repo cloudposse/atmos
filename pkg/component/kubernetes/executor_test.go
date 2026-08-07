@@ -663,7 +663,13 @@ func TestRunOperationApplyGateSkippedWhenValidateDisabled(t *testing.T) {
 
 // TestRunOperationApplyPropagatesValidateSectionError verifies apply fails
 // closed and never contacts the cluster when the component's "validate"
-// section is present but not a bool (e.g. a quoted "false").
+// section is present but not a bool (e.g. a quoted "false"). The object uses
+// an invalid name ("Bad_Name") so the assertion actually proves precedence:
+// with a structurally valid object, both "validate-section resolved first"
+// and "structural check first, but this object happens to pass" would return
+// the same error, so that wouldn't catch a regression that reorders the two
+// checks. An invalid name means only "validate-section resolved first" can
+// still produce ErrKubernetesValidateSectionInvalid.
 func TestRunOperationApplyPropagatesValidateSectionError(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })
@@ -672,7 +678,7 @@ func TestRunOperationApplyPropagatesValidateSectionError(t *testing.T) {
 		return nil, nil
 	}
 
-	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "Bad_Name", "")}
 	_, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
@@ -687,7 +693,8 @@ func TestRunOperationApplyPropagatesValidateSectionError(t *testing.T) {
 // TestRunOperationValidatePropagatesValidateSectionError mirrors
 // TestRunOperationApplyPropagatesValidateSectionError for the validate
 // operation: an invalid "validate" section must fail closed rather than
-// silently defaulting to enabled or disabled.
+// silently defaulting to enabled or disabled. Uses the same invalid-name
+// object for the same precedence-proving reason (see the comment above).
 func TestRunOperationValidatePropagatesValidateSectionError(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })
@@ -696,7 +703,7 @@ func TestRunOperationValidatePropagatesValidateSectionError(t *testing.T) {
 		return nil, nil
 	}
 
-	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "Bad_Name", "")}
 	_, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
