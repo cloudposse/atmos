@@ -1,0 +1,22 @@
+# Flags common wordy phrases in favor of a plain-language equivalent.
+# ASD-STE100 favors approved, simple words over complex synonyms; this list
+# is a small, generic plain-language substitution set of our own choosing,
+# not a reproduction of the ASD-STE100 controlled dictionary.
+extends: substitution
+message: "Prefer '%s' instead of '%s' for simpler technical writing."
+level: suggestion
+ignorecase: true
+swap:
+  in order to: to
+  prior to: before
+  subsequent to: after
+  utilize: use
+  utilization: use
+  a number of: some
+  in the event that: if
+  at this point in time: now
+  due to the fact that: because
+  is able to: can
+  are able to: can
+  for the purpose of: to
+  with regard to: about

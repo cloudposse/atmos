@@ -6,17 +6,21 @@ authors: [osterman]
 tags: [dx, core]
 ---
 
-Atmos now builds itself through a first-class Atmos command:
+Every long-lived repository ends up with a Makefile that only a couple of people fully understand. The targets accumulate cross-compilation flags, output paths, and CI glue, and the only way to learn what a build actually does is to read the recipe. Atmos now builds itself through a first-class Atmos command instead:
 
 ```bash
 atmos build --target linux
 ```
 
-We replaced the old Make-based build and CI entrypoints with Atmos custom commands to improve the developer experience and dogfood our own workflow engine. Build and test workflows now expose the flags developers actually care about, such as the target platform, while Atmos owns the shell details, cross-compilation wiring, output paths, and CI glue behind the command.
-
 <!--truncate-->
 
-## What Changed
+## The Problem
+
+Make was the entrypoint for every development loop in this repository: build the binary, run the tests, lint the changed files, regenerate the website screengrabs. Make is good at wiring shell commands together, but it is a poor command-line interface. Finding out which targets exist means reading the file, and the knobs contributors care about, such as the target platform or the test mode, sit in the recipes next to output paths and cross-compilation details. CI reached the same targets through another layer of glue.
+
+## The Fix
+
+We replaced the old Make-based build and CI entrypoints with Atmos custom commands to improve the developer experience and dogfood our own workflow engine. Build and test workflows now expose the flags developers actually care about, such as the target platform, while Atmos owns the shell details, cross-compilation wiring, output paths, and CI glue behind the command.
 
 The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
 
@@ -28,7 +32,11 @@ The repository's development commands now live in `.atmos.d/` command groups ins
 
 Makefiles remain only as migration guards. If someone runs an old target, the Makefile exits and points them to the Atmos command that replaced it.
 
-## A Cleaner Command Surface
+This is dogfooding in the useful sense: Atmos exercises its own custom command engine for the daily loops that maintain Atmos. That gives contributors one command vocabulary locally and in CI, and it gives us immediate feedback when custom commands need to become better.
+
+It also removes a layer. CI now calls grouped Atmos commands such as `atmos build deps`, `atmos build --target linux`, and `atmos test acceptance --cover`. The screengrab workflow calls `atmos screengrabs all`. The install script has its own Linux, macOS, and Windows smoke test, so the installer path gets exercised directly too.
+
+## How to Use It
 
 The result is intentionally plain. The repository now has command groups that read like the workflows contributors actually run:
 
@@ -42,14 +50,10 @@ atmos screengrabs all
 
 This keeps the developer contract narrow. The command can grow flags like `--target` without forcing every contributor or CI job to understand the lower-level build minutia. Atmos handles the parsing, defaults, and orchestration once, and every caller gets the same behavior.
 
-## Why It Matters
-
-This is dogfooding in the useful sense: Atmos exercises its own custom command engine for the daily loops that maintain Atmos. That gives contributors one command vocabulary locally and in CI, and it gives us immediate feedback when custom commands need to become better.
-
-It also removes a layer. CI now calls grouped Atmos commands such as `atmos build deps`, `atmos build --target linux`, and `atmos test acceptance --cover`. The screengrab workflow calls `atmos screengrabs all`. The install script has its own Linux, macOS, and Windows smoke test, so the installer path gets exercised directly too.
-
-## Try the Pattern
-
 If you are maintaining a repo with an aging Makefile, `.atmos.d/` is a good place to split the command surface by concern. Keep project configuration in `atmos.yaml`; keep operational commands in grouped files such as `.atmos.d/build.yaml`, `.atmos.d/test.yaml`, and `.atmos.d/lint.yaml`.
 
 For the general command schema, see the [custom commands documentation](/cli/configuration/commands). For a smaller standalone example, browse the [custom commands example](/examples/custom-commands).
+
+## Get Involved
+
+If you move a repository off Make this way, we want to hear which command groups you end up with and where the custom command engine got in your way. Share what you built or [open an issue](https://github.com/cloudposse/atmos/issues).

@@ -23,7 +23,7 @@ So what's the right approach? It depends. We've documented these strategies as *
 
 The new documentation provides a complete framework for understanding and implementing version management in Atmos, including:
 
-### 🎯 Clear Strategy Recommendations
+### Clear Strategy Recommendations
 
 **[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** is our recommended default pattern. This trunk-based approach:
 
@@ -32,7 +32,7 @@ The new documentation provides a complete framework for understanding and implem
 - **Enables easy previews** to see change impacts across dependent environments
 - **Supports rapid iteration** with confident, frequent deployments
 
-### 📚 Comprehensive Pattern Documentation
+### Comprehensive Pattern Documentation
 
 All version management patterns are fully documented under a unified [Version Management](/design-patterns/version-management) section:
 
@@ -56,7 +56,7 @@ Within Continuous Version Deployment, choose how to organize component folders:
 
 **[Vendoring Component Versions](/design-patterns/version-management/vendoring-components)** - Automate copying component versions from external sources with manifest tracking. Works with any deployment strategy.
 
-### 💡 When to Use Each Pattern
+### When to Use Each Pattern
 
 The documentation includes clear guidance on choosing the right pattern for your organization:
 
@@ -72,7 +72,7 @@ The documentation includes clear guidance on choosing the right pattern for your
 - You're comfortable with cherry-picking and merge strategies
 - You want version control to represent current vs. desired state
 
-### 🛠️ Practical Improvements
+### Practical Improvements
 
 Throughout the documentation, you'll find:
 
@@ -82,7 +82,7 @@ Throughout the documentation, you'll find:
 - **Stack-level base_path alternative** - DRY alternative to repeating metadata.component paths
 - **Anti-patterns section** - Learn what to avoid (vendoring to same path, inconsistent conventions, etc.)
 
-### 📊 Comparison Tables
+### Comparison Tables
 
 Quick-reference tables help you understand trade-offs:
 

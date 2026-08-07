@@ -8,11 +8,19 @@ tags: [feature]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks — built to enable GitOps workflows where you need to commit artifacts to a source of truth: deployment repos consumed by Argo CD or Flux, provider lock files, rendered manifests. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new `atmos git` command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
+GitOps runs on a simple premise: something renders artifacts, commits them to a repository, and something else reconciles from there. The second half is a solved problem — Argo CD and Flux do it well. The first half is almost always shell glue: a script that renders manifests into a deployment repo, commits them, loses a push race, and then discovers the runner has no Git identity configured. Atmos already owned the rendering, the lifecycle events, and the credentials. Now it owns the Git operations between them.
 
 <!--truncate-->
 
-## What Changed
+:::note Experimental
+Git support is experimental. The commands and configuration described here work, but the surface may change based on what we learn from real pipelines.
+:::
+
+## The Problem
+
+Consider a problem every Terraform team hits: CI runs `terraform init`, the provider lock file (`.terraform.lock.hcl`) changes — a provider was upgraded, or hashes for a new platform were added — and that change silently drifts because nothing commits it back. The same shape recurs everywhere artifacts are generated and need to land in a repository: rendered manifests for a deployment repo, generated configuration, anything a pipeline produces that the next run expects to find committed. Each team writes the same script to close the loop, and each script gets the edge cases wrong in its own way.
+
+## The Fix
 
 A new top-level `git` section in `atmos.yaml` declares managed repositories by logical name:
 
@@ -39,9 +47,9 @@ On top of that foundation:
 - **Local Git hook shims** — `atmos git hooks install` wires `.git/hooks/*` (pre-commit, commit-msg, ...) to Atmos workflows and custom commands, replacing Husky-style glue.
 - **Native CI checkout** — in GitHub Actions with `ci.enabled: true`, a bare `atmos git clone` infers the current repository from CI metadata and clones it into the workspace, replacing `actions/checkout`. GitHub STS credentials flow to every Git subprocess automatically via `GIT_CONFIG_*`.
 
-## Why This Matters
+## Safety, Credentials, and Caching
 
-GitOps workflows have always needed glue: scripts to render manifests into deployment repos, commit them, handle push races, and wire up credentials. Atmos already owned rendering, lifecycle events, and credentials — now it owns the Git operations between them:
+The edge cases those hand-written scripts get wrong are handled once, in one place:
 
 - **Safety rules are centralized.** Fast-forward-only pulls, no force pushes ever, path-scoped commits that refuse to touch unrelated dirty files, and automatic retry-with-rebase when a concurrent publisher wins the push race.
 - **Commits work in CI out of the box.** Author identity is injected per invocation (no `user.name` configuration on runners), and commit signing is configurable per repository.
@@ -53,7 +61,7 @@ Atmos owns the **publishing side** of GitOps: render → diff → commit → pus
 
 ## How to Use It
 
-A real problem every Terraform team hits: CI runs `terraform init`, the provider lock file (`.terraform.lock.hcl`) changes — a provider was upgraded, or hashes for a new platform were added — and that change silently drifts because nothing commits it back. With the `git` hook kind, Atmos commits it after apply:
+Take the lock file drift from above. With the `git` hook kind, Atmos commits it after apply:
 
 ```yaml
 components:
@@ -132,4 +140,4 @@ Same declarative model as the rest of `atmos git`: the repository, its identity,
 
 ## Get Involved
 
-This is the foundation of a larger GitOps story — pull-request-based publishing for protected branches and Kubernetes deployment-repository provisioning are next. Read the PRD in `docs/prd/git-ops.md`, try it out, and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).
+This is the foundation of a larger GitOps story — pull-request-based publishing for protected branches and Kubernetes deployment-repository provisioning are next. While the feature is experimental, the pipelines you point it at are the best evidence of what it still gets wrong, so tell us at [our issue tracker](https://github.com/cloudposse/atmos/issues).

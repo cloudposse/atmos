@@ -3,18 +3,23 @@ slug: unified-task-runner
 title: "Unified Task Runner for Custom Commands"
 date: 2026-01-02T12:00:00.000Z
 authors: [osterman]
-tags: [feature]
+tags: [core]
 ---
 
-Custom commands now support structured task syntax with per-step configuration including timeouts, retry logic, working directories, and authentication identities.
+A custom command step used to be a string, which meant every property a step might need had to be smuggled into the shell. A timeout became `timeout 30s ...`. A working directory became `cd /app/infra && ...`. Retrying a flaky upload became a loop nobody wanted to read. The step syntax could express what to run and nothing about how to run it.
+
+Steps can now be structured, carrying timeouts, working directories, retries, and an authentication identity as configuration instead of shell.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
 
-We've introduced a new `pkg/runner` package that provides a unified task execution layer for custom commands. This enables structured syntax alongside the existing simple string syntax:
+Custom commands and workflows grew up separately in Atmos, and their steps diverged. Workflow steps had accumulated real structure; custom command steps were still a list of strings. The result was two vocabularies for the same idea, and a ceiling on what a custom command could express without reaching for shell tricks that are hard to read and harder to make portable across platforms.
 
-**Simple syntax (still works):**
+## The Fix
+
+The string form still works, unchanged:
+
 ```yaml
 commands:
   - name: hello
@@ -23,7 +28,8 @@ commands:
       - "echo Goodbye!"
 ```
 
-**New structured syntax:**
+A step can instead be a mapping, with its properties named:
+
 ```yaml
 commands:
   - name: deploy
@@ -37,7 +43,8 @@ commands:
         working_directory: /app/infra
 ```
 
-**Mixed syntax:**
+Both forms coexist inside one command's step list, so an existing command can adopt structure only where it needs it:
+
 ```yaml
 commands:
   - name: build
@@ -49,7 +56,17 @@ commands:
       - "echo Build complete!"
 ```
 
-**With retry for flaky operations:**
+## How to Use It
+
+A structured step accepts `timeout` and `working_directory` as above, plus:
+
+- `retry` — with `max_attempts`, `initial_delay`, and `max_delay` for backoff.
+- `type` — `shell` by default, or `atmos` to run an Atmos command directly.
+- `stack` — the stack an `atmos`-type step targets.
+- `identity` — the authentication identity the step runs under.
+
+Retrying a flaky upload, without a loop:
+
 ```yaml
 commands:
   - name: sync
@@ -62,7 +79,8 @@ commands:
           max_delay: 30s
 ```
 
-**Using atmos commands with identity:**
+Running an Atmos command against a specific stack under a specific identity — the case that made multi-account deployment commands awkward before:
+
 ```yaml
 commands:
   - name: deploy-all
@@ -75,26 +93,16 @@ commands:
         timeout: 15m
 ```
 
-## Why This Matters
+Full reference: [Custom Commands documentation](/cli/configuration/commands).
 
-This change lays the groundwork for unifying custom commands and workflows under a shared execution model. The new `Task` type supports:
+## Where the Code Lives
 
-- **Timeouts** - Prevent runaway commands with per-step time limits
-- **Working directories** - Execute steps in specific directories
-- **Task types** - `shell` (default) for shell commands, `atmos` for atmos CLI commands with stack support
-- **Retry configuration** - Built-in retry support with configurable attempts and backoff delays
-- **Identity** - Per-step authentication identity for multi-account deployments
-- **Stack** - Specify which stack to use for `atmos` type commands
+The `Task` and `Tasks` types are in `pkg/schema/task.go`. The mixed syntax comes from `Tasks.UnmarshalYAML`, which inspects each sequence element: a scalar becomes a `Task` with `Command` set and `Type` defaulted to shell, and a mapping is decoded field by field. For configuration that arrives through Viper rather than `yaml.v3`, `TasksDecodeHook()` provides the equivalent mapstructure hook, registered in the decode chain in `pkg/config/load.go`.
 
-## For Contributors
+Execution is not a separate path. `Task.ToWorkflowStep()` converts a task into a `schema.WorkflowStep`, and the custom command call site in `cmd/cmd_utils.go` hands that step to the shared step handler registry in `pkg/runner/step/`. Handlers there implement `StepHandler` (`Execute`, `Validate`, `RequiresTTY`), and they are the same handlers workflows use — which was the point of the change. `TaskFromWorkflowStep()` converts in the other direction.
 
-The new `pkg/runner` package provides:
+Adding a step type means writing a handler and calling `Register()` from its `init()`, the pattern every file in `pkg/runner/step/` follows. The new type becomes available to custom commands and workflows at the same time.
 
-- `Task` and `Tasks` types with flexible YAML unmarshaling
-- `CommandRunner` interface for testable command execution
-- `Run()` and `RunAll()` functions with context-based timeout enforcement
-- Full mapstructure decode hook support for Viper integration
+## Get Involved
 
-This is an internal architectural improvement with full backward compatibility for existing custom command configurations.
-
-For more details, see the [Custom Commands documentation](/cli/configuration/commands).
+Existing custom command configurations are unaffected. If a step property you need is missing from the structured form, ask for it at https://github.com/cloudposse/atmos/issues

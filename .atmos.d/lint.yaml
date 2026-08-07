@@ -109,3 +109,63 @@ commands:
             set -eu
             command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
             lychee --config lychee.toml --root-dir "$PWD" '**/*.md'
+
+      - name: docs
+        description: Lint technical docs prose (Atmos writing style, via vale)
+        # Phase 1 (see docs/prd/technical-writing-standard-ste100.md): kept as its
+        # own subcommand rather than folded into `lint changed`, so the existing
+        # `atmos lint --changed` / `make lint` pipeline is unaffected while the
+        # ruleset is still informational (.vale.ini MinAlertLevel = suggestion).
+        flags:
+          - name: changed
+            type: bool
+            description: Lint only files changed from origin/main
+            default: false
+        dependencies:
+          tools:
+            vale: "3.16.0"
+        steps:
+          - type: shell
+            command: |
+              set -eu
+              # Anchor to the repo root explicitly rather than trusting cwd: some
+              # containerized CI runners (Native CI's ghcr.io/cloudposse/atmos image)
+              # do not start `type: shell` steps inside $GITHUB_WORKSPACE, which makes
+              # a plain `git diff` fail with "Not a git repository".
+              repo_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+              cd "$repo_root"
+              git config --global --add safe.directory "$repo_root" 2>/dev/null || true
+              if [ "{{ .Flags.changed }}" = "true" ]; then
+                # Single-ref diff (not origin/main...HEAD) so staged-but-uncommitted
+                # files are included -- required for the pre-commit hook to see the
+                # file that is about to be committed. --diff-filter=ACMR excludes
+                # deleted files: passing a deleted path to `vale` doesn't error,
+                # it silently falls through to reading stdin and reports a
+                # misleading "0 errors ... in stdin" for a file that no longer
+                # exists.
+                # Single `*`, not `**`, in every pathspec below. A git pathspec
+                # is not a shell glob: `*` already matches `/`, so 'docs/prd/*.md'
+                # covers nested PRDs such as docs/prd/flag-handling/. The `**`
+                # form is worse here, not better -- it requires at least one
+                # intermediate directory, so 'website/docs/**/*.mdx' silently
+                # skipped website/docs/experimental.mdx and unreleased.mdx.
+                # (.vale.ini keeps `**` because Vale uses gobwas/glob, where a
+                # single `*` does NOT cross `/` and `**` DOES match zero
+                # directories -- the opposite of git on both counts. Verified:
+                # vale lints website/docs/experimental.mdx via its `**` section.
+                # Different engine, different semantics. Do not "fix" one to
+                # match the other.)
+                if ! files=$(git diff --name-only --diff-filter=ACMR origin/main -- 'docs/prd/*.md' 'website/docs/*.md' 'website/docs/*.mdx' 'website/blog/*.md' 'website/blog/*.mdx' 2>&1); then
+                  echo "Warning: could not determine changed docs via git diff, skipping (Phase 1 is non-blocking):" >&2
+                  echo "$files" >&2
+                  exit 0
+                fi
+              else
+                files="docs/prd website/docs website/blog"
+              fi
+              if [ -z "$files" ]; then
+                echo "No changed docs to lint."
+                exit 0
+              fi
+              # shellcheck disable=SC2086
+              vale --config=.vale.ini $files

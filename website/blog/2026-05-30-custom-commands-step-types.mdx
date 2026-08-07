@@ -1,34 +1,34 @@
 ---
 slug: custom-commands-step-types
-title: "Introducing 25+ Interactive Step Types for Workflows and Custom Commands"
+title: "Interactive Step Types for Workflows and Custom Commands"
 authors: [osterman]
 tags: [feature, dx]
 date: 2026-05-30
 ---
 
-Atmos now includes 25+ interactive step types for both workflows and custom commands. Build interactive CLI wizards, collect user input, display rich output, and control execution flow—all directly in your `atmos.yaml` without external scripts.
+Every team eventually writes the deploy script that asks a few questions before it does anything dangerous. Which environment? Are you sure? The questions themselves are trivial, but answering them in a shell script means `read -p` loops, a dependency on `gum` or `fzf` for anything nicer, and a pile of ANSI escapes to make the output legible. Half the logic ends up in YAML and half in a script nobody wants to maintain. Atmos workflows and custom commands can now do the whole thing in one place.
 
 <!--truncate-->
 
-## What's New
+## The Problem
 
-We've built a unified execution engine (`pkg/runner`) that powers both workflows and custom commands with the same rich step types:
+Interactive prompts have never been the hard part of a deployment script. Keeping them next to the deployment is.
+
+A workflow that needs a confirmation has to shell out. That shell step needs a prompt library installed on every machine that runs it, or it degrades to a bare `read` that cannot show a list, filter options, or validate anything. Whatever the user typed then has to make it back into the workflow, which usually means an environment variable and a comment explaining the convention. Custom commands had the same gap. The usual escape hatch — a standalone wrapper script checked into the repository — keeps the prompts and the logic together, but it never appears in `atmos help`, so nobody outside the team that wrote it finds it.
+
+## The Fix
+
+Workflows and custom commands share one set of step types, so a prompt, a spinner, a table, and a `terraform apply` are all steps in the same list:
 
 - **Interactive**: `input`, `confirm`, `choose`, `filter`, `file`, `write`
-- **UI Messages**: `success`, `info`, `warn`, `error`, `markdown`
+- **Status messages**: `toast`, `markdown`
 - **Output**: `spin`, `table`, `pager`, `format`, `join`, `style`, `linebreak`, `log`
 - **Terminal**: `alert`, `title`, `clear`, `env`, `exit`
 - **Command**: `shell`, `atmos`
 
-The `shell` and `atmos` types continue to work exactly as before—this is purely additive.
+Status messages are one step type, not four. Use `type: toast` and pick the styling with `level: success`, `info`, `warn`, or `error`. For a message that belongs in the log stream rather than on screen, `type: log` takes the same `level` field and writes through the Atmos logger.
 
-## Why This Matters
-
-Previously, building interactive CLI experiences required shell scripts and external tools like `gum` or `fzf`. Now you can create guided deployment wizards, configuration tools, and interactive runbooks natively in Atmos.
-
-**For workflows:** Define multi-step automation with user prompts, confirmations, and rich feedback.
-
-**For custom commands:** Users discover your interactive commands via `atmos help` and get a polished experience.
+The `shell` and `atmos` types continue to work exactly as before — this is purely additive.
 
 ## How to Use It
 
@@ -53,7 +53,8 @@ workflows:
         type: atmos
         command: terraform apply vpc -s {{ .steps.env.value }}
 
-      - type: success
+      - type: toast
+        level: success
         content: "Deployment to {{ .steps.env.value }} completed!"
 ```
 
@@ -73,7 +74,8 @@ commands:
         default: dev
 
       - name: prod_warning
-        type: warn
+        type: toast
+        level: warn
         content: "You are about to deploy to PRODUCTION!"
 
       - name: confirm
@@ -86,11 +88,12 @@ commands:
         command: terraform apply vpc -s {{ .steps.env.value }}
 
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Deployment to {{ .steps.env.value }} completed!"
 ```
 
-Run with: `atmos deploy-wizard`
+Run with: `atmos deploy-wizard`. Because it is a real command, it also shows up in `atmos help`.
 
 ### Multi-Select Components
 
@@ -147,7 +150,8 @@ commands:
         options: [low, medium, high, critical]
         default: medium
 
-      - type: success
+      - type: toast
+        level: success
         content: |
           Ticket created:
           Title: {{ .steps.title.value }}
@@ -163,8 +167,8 @@ Access previous step results using Go templates:
 - `{{ .steps.<name>.metadata.<key> }}` - Metadata like `exit_code`, `stdout`, `stderr`
 - `{{ .env.<VAR> }}` - Environment variables
 
+For the complete step type reference, see the [custom commands documentation](/cli/configuration/commands/steps#extended-step-types) and the [workflows documentation](/workflows/steps/type).
+
 ## Get Involved
 
-For the complete step types reference, see the [Custom Commands documentation](/cli/configuration/commands/steps#extended-step-types) and [Workflows documentation](/workflows/steps/type).
-
-Have feedback or ideas? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join our [Slack community](https://slack.cloudposse.com).
+Tell us which prompts and outputs you are still writing shell for, at [our issue tracker](https://github.com/cloudposse/atmos/issues) or in [Slack](https://slack.cloudposse.com/).

@@ -1,7 +1,7 @@
 ---
 slug: introducing-chdir-flag
-title: 'Introducing --chdir: Simplify Your Multi-Repo Workflows'
-sidebar_label: Introducing --chdir Flag
+title: 'Run Atmos Against Another Directory with --chdir'
+sidebar_label: The --chdir Flag
 authors:
   - osterman
 tags:
@@ -11,7 +11,7 @@ date: 2025-10-19T00:00:00.000Z
 release: v1.195.0
 ---
 
-We're excited to announce a new global flag that makes working with Atmos across multiple repositories and directories significantly easier: `--chdir` (or `-C` for short).
+Working across more than one repository means a lot of `cd`. You change into the infrastructure repo to check a stack, change back to the tooling repo, and every automation script picks up two extra lines that have nothing to do with the work it is trying to do. Tools like `git` and `make` solved this a long time ago with `-C`. Atmos now has the same flag.
 
 <!--truncate-->
 
@@ -30,11 +30,9 @@ Previously, you had to either:
 - Modify your `PATH` or use absolute paths to atmos binaries
 - Copy binaries to specific locations
 
-## The Solution
+## The Fix
 
-The new `--chdir` flag (and its short form `-C`) changes Atmos's working directory **before** any other operations, including configuration loading. This mirrors the familiar behavior of tools like `git -C` and `make -C`.
-
-### Basic Usage
+The `--chdir` flag (and its short form `-C`) changes Atmos's working directory **before** any other operations, including configuration loading. This mirrors the familiar behavior of tools like `git -C` and `make -C`.
 
 ```bash
 # Long form
@@ -47,33 +45,57 @@ atmos -C /infra terraform plan vpc -s prod
 atmos --chdir=../other-repo list components
 ```
 
-### Development Workflow
+The flag is available starting in Atmos v1.195.0.
 
-Testing a development build against your infrastructure is now trivial:
+## How to Use It
 
-```bash
-# Build your changes
-make build
+### Development and Automation
 
-# Point the dev binary at your infrastructure repo
-./build/atmos -C ~/projects/my-infrastructure describe stacks
-
-# No need to change directories or modify PATH
-./build/atmos -C ~/projects/my-infrastructure terraform plan vpc -s dev
-```
-
-### CI/CD Pipelines
-
-Your CI/CD workflows become cleaner and more explicit:
+The same substitution covers a development build pointed at a real repo, a CI/CD job whose checkout is elsewhere, and a script that lives in your tools repo but operates on infrastructure. In each case `-C <dir>` replaces the surrounding `cd`:
 
 ```bash
-# Before: Manual directory management
+# Before: manual directory management
 cd /infrastructure
 atmos terraform plan vpc -s prod
 cd -
 
-# After: Explicit and clear
+# After: explicit and clear
 atmos -C /infrastructure terraform plan vpc -s prod
+```
+
+```bash
+#!/bin/bash
+# The script stays in your tools repo while operating on infrastructure
+
+INFRA_DIR="/path/to/infrastructure"
+
+echo "Validating stacks..."
+atmos -C "$INFRA_DIR" validate stacks
+
+echo "Checking for drift..."
+atmos -C "$INFRA_DIR" terraform plan vpc -s prod --detailed-exitcode
+
+echo "Generating documentation..."
+atmos -C "$INFRA_DIR" docs generate
+```
+
+A development build works the same way, without installing it or touching `PATH`:
+
+```bash
+make build
+./build/atmos -C ~/projects/my-infrastructure describe stacks
+```
+
+### Multi-Repo Infrastructure Management
+
+```bash
+# Check production infrastructure
+atmos -C ~/projects/prod-infra describe affected
+
+# Compare with staging
+atmos -C ~/projects/staging-infra describe affected
+
+# All without leaving your current directory
 ```
 
 ### Environment Variable Support
@@ -142,48 +164,6 @@ atmos --base-path=/custom/location terraform plan vpc -s prod
 atmos -C /infra --base-path=./custom terraform plan vpc -s prod
 ```
 
-## Real-World Examples
-
-### Multi-Repo Infrastructure Management
-
-```bash
-# Check production infrastructure
-atmos -C ~/projects/prod-infra describe affected
-
-# Compare with staging
-atmos -C ~/projects/staging-infra describe affected
-
-# All without leaving your current directory
-```
-
-### Development and Testing
-
-```bash
-# Test local changes against test environment
-./build/atmos -C ~/infra terraform plan vpc -s test
-
-# Once satisfied, use installed version for production
-atmos -C ~/infra terraform apply vpc -s prod
-```
-
-### Automated Scripts
-
-```bash
-#!/bin/bash
-# Script can stay in your tools repo while operating on infrastructure
-
-INFRA_DIR="/path/to/infrastructure"
-
-echo "Validating stacks..."
-atmos -C "$INFRA_DIR" validate stacks
-
-echo "Checking for drift..."
-atmos -C "$INFRA_DIR" terraform plan vpc -s prod --detailed-exitcode
-
-echo "Generating documentation..."
-atmos -C "$INFRA_DIR" docs generate
-```
-
 ## Error Handling
 
 Atmos provides clear error messages when things go wrong:
@@ -202,9 +182,7 @@ The `--chdir` flag works consistently across:
 
 Both absolute and relative paths work as expected on all platforms, with proper path separator handling.
 
-## Technical Details
-
-For those interested in the implementation:
+## Precedence and Resolution Order
 
 - **Execution order**: `--chdir` → config loading → `--base-path` resolution → command execution
 - **Path resolution**: Relative paths are resolved from the current working directory
@@ -212,36 +190,11 @@ For those interested in the implementation:
 - **Environment variable**: `ATMOS_CHDIR` follows the same precedence rules as other Atmos env vars
 - **Flag precedence**: CLI flag > environment variable > current directory
 
-## Getting Started
-
-The `--chdir` flag is available starting in Atmos vX.X.X. To start using it:
-
-```bash
-# Upgrade to the latest version
-brew upgrade atmos  # macOS
-# or download from GitHub releases
-
-# Start using the flag immediately
-atmos --chdir=/your/infra describe stacks
-
-# Or set it as an environment variable for your session
-export ATMOS_CHDIR=/your/infra
-```
-
-## Conclusion
-
-The `--chdir` flag is a small addition that makes a big difference in daily workflows. It removes friction from multi-repo operations, development workflows, and automation scripts.
-
-We designed it to feel natural if you've used similar flags in other tools (`git -C`, `make -C`, `tar -C`), while integrating seamlessly with Atmos's existing flag system.
-
-Try it out and let us know what you think! We'd love to hear how you're using it in your workflows.
-
-## Resources
+## Reference
 
 - [Global Flags Documentation](/cli/global-flags)
 - [Atmos CLI Reference](/cli/commands)
-- [GitHub Repository](https://github.com/cloudposse/atmos)
 
----
+## Get Involved
 
-*Have feedback or questions? Join our [Slack community](https://slack.cloudposse.com/) or [open an issue on GitHub](https://github.com/cloudposse/atmos/issues).*
+Tell us how `-C` fits into your multi-repo setup, either at [our issue tracker](https://github.com/cloudposse/atmos/issues) or in [Slack](https://slack.cloudposse.com/).

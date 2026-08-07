@@ -8,7 +8,7 @@ tags: [feature]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos now supports declarative file generation for Terraform components via the new `generate` section in stack configuration.
+A Terraform component is rarely just Terraform. There is a `.tool-versions` pinning the binary, a `terragrunt.hcl` shim left over from a migration that is still half finished, a `locals.tf` whose contents differ per environment. Those files have to sit next to the component, and they have to agree with the stack configuration that drives it. Keeping them in agreement has meant a generator script or a habit of remembering. The `generate` section moves them into the stack manifest instead.
 
 <!--truncate-->
 
@@ -18,9 +18,15 @@ See it in action:
 
 [View the full example](/examples/generate-files)
 
-## What Changed
+## The Problem
 
-A new `generate` section can be defined at multiple levels to declaratively specify files that should be generated alongside your Terraform components. This extends Atmos's existing pattern of generating backend configuration files to support arbitrary auxiliary files.
+Atmos already generates the one auxiliary file everybody needs: the backend configuration. Every other file that belongs beside a component was somebody else's problem.
+
+That covers more ground than it sounds like. Teams generate `.tool-versions` files so the right Terraform version is picked up in the component directory. Teams migrating off Terragrunt generate `terragrunt.hcl` shims so both tools can drive the same root module during the transition. Teams with per-environment constants generate a `locals.tf`. In each case the source of truth for the contents already lives in the stack manifest, and the file gets written by a wrapper script that has to be kept in step with it.
+
+## The Fix
+
+A `generate` section declares the files that should exist alongside a component. Map values are serialized according to the file extension; string values are rendered as Go templates with access to the component context.
 
 ```yaml
 # Level 1: Global level (applies to all components)
@@ -28,18 +34,24 @@ generate:
   "global-context.json":
     level: "global"
 
-# Level 2: Component type level (applies to all terraform components)
 terraform:
+  # Level 2: Component type level (applies to all terraform components)
   generate:
     "terraform-context.json":
       level: "terraform-type"
 
-# Level 3-4: Base component and component levels
+  # Level 5: Overrides level (highest priority, file-scoped)
+  overrides:
+    generate:
+      "override-context.json":
+        level: "overrides"
+
 components:
   terraform:
     vpc:
       vars:
         environment: prod
+      # Level 4: Component level
       generate:
         # Map values are serialized based on file extension
         locals.tf:
@@ -50,16 +62,7 @@ components:
         README.md: |
           # VPC Component
           Environment: {{ .vars.environment }}
-
-# Level 5: Overrides level (highest priority, file-scoped)
-terraform:
-  overrides:
-    generate:
-      "override-context.json":
-        level: "overrides"
 ```
-
-### Key Features
 
 - **Extension-aware serialization**: `.json`, `.yaml`, `.yml` files are serialized in their respective formats; `.tf` and `.hcl` files generate valid HCL
 - **Go template support**: String values are processed as Go templates with full access to component context
@@ -72,12 +75,6 @@ terraform:
 - **CLI integration**: New `atmos terraform generate files` command with `--all`, `--dry-run`, and `--clean` flags
 - **Auto-generation**: Enable `auto_generate_files: true` in `atmos.yaml` to automatically generate files during terraform commands
 - **Clean integration**: Generated files are automatically cleaned up by `atmos terraform clean`
-
-## Why This Matters
-
-Teams often need to generate auxiliary configuration files that accompany their Terraform components—files like `.tool-versions`, `terragrunt.hcl` shims for gradual migration, or environment-specific locals. Previously, this required external tooling or manual maintenance.
-
-The `generate` section brings this capability directly into Atmos's declarative configuration model, maintaining the principle that your infrastructure configuration should be fully described in YAML and reproducible from stack manifests.
 
 ## How to Use It
 
@@ -115,7 +112,8 @@ components:
     auto_generate_files: true
 ```
 
+The [generate files documentation](/cli/commands/terraform/generate/files) covers the remaining configuration options.
+
 ## Get Involved
 
-- Review the [generate files section documentation](/cli/commands/terraform/generate/files) for detailed configuration options
-- Share feedback or report issues on [GitHub](https://github.com/cloudposse/atmos/issues)
+Tell us which files you are still writing by hand next to your components, and open an issue at https://github.com/cloudposse/atmos/issues.

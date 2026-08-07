@@ -14,10 +14,10 @@ development progress.
 ## Core Responsibilities
 
 1. **Update milestone statuses inside `initiatives[].milestones[]`** when features ship — never promote a
-   milestone into `featured[]`.
+  milestone into `featured[]`.
 2. **Link milestones to changelog entries** when announcements are published — but only for user-visible
-   changes (see "No Changelog Posts for Internal-Only Refactors" below). For the post itself, use the
-   `changelog` skill; this skill only owns the `roadmap.js` link.
+  changes (see "No Changelog Posts for Internal-Only Refactors" below). For the post itself, use the
+  `changelog` skill; this skill only owns the `roadmap.js` link.
 3. **Add new milestones** as development plans evolve.
 4. **Update progress percentages** based on milestone completion.
 5. **Add new quarters** as time progresses.
@@ -50,8 +50,14 @@ achievements (complexity reduction, test coverage improvements, function decompo
 etc.).
 
 **Test:** If a user upgrading Atmos would see no change in behavior, output, errors, performance, or available
-commands/flags, do not write a changelog post. Refactors are visible in PR descriptions and `git log`; that is
-sufficient.
+commands/flags, do not write a *user-facing* changelog post. Refactors are visible in PR descriptions and
+`git log`; that is usually sufficient.
+
+**The one exception is a `core` post.** `core` is contributor-facing: an architectural change a contributor
+needs in order to navigate the codebase can be published as a `core`-tagged post even with no user-visible
+effect. That is not a loophole for the refactors above — a coverage bump or a complexity reduction still gets
+no post. The question is whether a contributor would be worse off without it. The `changelog` skill owns that
+decision; see its "Which audience, which rules" table.
 
 Engineering wins like "function refactored to 100% coverage" or "complexity reduced 247→10" can still be
 milestones inside the `quality` initiative on the roadmap — but **without** a `changelog:` field, and without
@@ -223,25 +229,25 @@ When adding a new strategic initiative:
 ## Workflow for Updates
 
 1. **Identify what changed**
-   - New feature shipped? → Update milestone status
-   - New changelog published? → Link milestone to changelog
-   - New quarter started? → Update quarter statuses
-   - New work planned? → Add milestones
+  - New feature shipped? → Update milestone status
+  - New changelog published? → Link milestone to changelog
+  - New quarter started? → Update quarter statuses
+  - New work planned? → Add milestones
 
 2. **Edit `website/src/data/roadmap.js`**
-   - Make targeted changes
-   - Recalculate progress percentages
+  - Make targeted changes
+  - Recalculate progress percentages
 
 3. **Verify the build**
-   ```bash
-   cd website && npm run build
-   ```
+  ```bash
+    cd website && npm run build
+  ```
 
 4. **Preview if needed**
-   ```bash
-   cd website && npm run start
-   # Visit http://localhost:3000/roadmap
-   ```
+  ```bash
+    cd website && npm run start
+    # Visit http://localhost:3000/roadmap
+  ```
 
 ## Auditing Roadmap Accuracy
 

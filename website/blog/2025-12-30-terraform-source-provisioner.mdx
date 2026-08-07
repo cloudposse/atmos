@@ -8,7 +8,7 @@ tags: [feature]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos now supports just-in-time (JIT) vendoring of components directly from stack configuration using the top-level `source` field. This works for **Terraform**, **Helmfile**, and **Packer** components. Declare component sources inline without requiring separate `component.yaml` files—components are automatically downloaded on first use.
+Vendoring pulls a copy of somebody else's module into your own repository, so the code you run is code you can read. It stops working cleanly the moment two environments need two different versions of the same module: the copy on disk can only be one of them, and the file recording where it came from sits apart from the configuration that uses it. A top-level `source` field on a component addresses both. Declare where the component comes from alongside the rest of its configuration, for **Terraform**, **Helmfile**, and **Packer** components, and Atmos downloads it the first time you use it.
 
 <!--truncate-->
 
@@ -18,9 +18,17 @@ See it in action:
 
 [View the full example](/examples/source-provisioning)
 
-## What Changed
+## The Problem
 
-We've added automatic JIT source provisioning and new `source` command groups for terraform, helmfile, and packer. When you run any command, Atmos automatically provisions the component source if the directory doesn't exist:
+Previously, vendoring components required maintaining separate `component.yaml` files alongside your stack configuration. This created maintenance overhead and made it harder to:
+
+1. **Version per environment** - Different environments often need different component versions
+2. **Keep configuration colocated** - Source information was separated from component configuration
+3. **Vendor on demand** - Components had to be pre-vendored before use
+
+## The Fix
+
+We've added automatic just-in-time (JIT) source provisioning and new `source` command groups for terraform, helmfile, and packer. When you run any command, Atmos automatically provisions the component source if the directory doesn't exist:
 
 ```yaml
 components:
@@ -71,14 +79,6 @@ The new commands are available for each component type:
 - `atmos packer source list`
 - `atmos packer source describe`
 - `atmos packer source delete`
-
-## Why This Matters
-
-Previously, vendoring components required maintaining separate `component.yaml` files alongside your stack configuration. This created maintenance overhead and made it harder to:
-
-1. **Version per environment** - Different environments often need different component versions
-2. **Keep configuration colocated** - Source information was separated from component configuration
-3. **Vendor on demand** - Components had to be pre-vendored before use
 
 With `source`, you can now:
 
@@ -181,7 +181,7 @@ The source provisioner uses go-getter and supports:
 
 ## Combining with Workdir Isolation
 
-The `source` provisioner works seamlessly with the [workdir provisioner](/changelog/component-workdir-isolation) for concurrent operations across all component types (terraform, helmfile, and packer). When both are enabled, you get the best of both worlds:
+The `source` provisioner works with the [workdir provisioner](/changelog/component-workdir-isolation) for concurrent operations across all component types (terraform, helmfile, and packer). When both are enabled:
 
 1. **Source provisioner** vendors the component from a remote location
 2. **Workdir provisioner** creates an isolated execution directory
@@ -271,8 +271,10 @@ project/
     └── prod.yaml
 ```
 
-## Get Involved
-
-We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.
+## Documentation
 
 For more details, see the source documentation for [terraform](/cli/commands/terraform/source), [helmfile](/cli/commands/helmfile/source), and [packer](/cli/commands/packer/source), as well as the [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) design pattern.
+
+## Get Involved
+
+Tell us how source-based versioning holds up against your own vendoring workflow, or ask for a source type we do not cover yet, by [opening an issue](https://github.com/cloudposse/atmos/issues).

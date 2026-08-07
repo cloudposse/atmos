@@ -1,40 +1,42 @@
 ---
 slug: function-registry-package
-title: "New pkg/function Package for Format-Agnostic Function Registry"
+title: "One Registry Behind Every Atmos Function"
 date: 2025-12-22T12:00:00.000Z
 authors: [osterman]
 tags: [core]
 ---
 
-Introduces `pkg/function/`, a new format-agnostic function registry that consolidates YAML function handlers into a reusable package.
+Atmos configuration is full of small deferred computations: read an environment variable here, pull a Terraform output there, splice in a file somewhere else. Each of those functions grew up attached to the YAML parser, with its own rules about when it runs and what it can see. Every Atmos function now resolves through a single shared registry instead, with one set of rules for all of them.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
 
-This release adds foundational packages for modular function handling:
+Function execution was tangled up with YAML parsing. A function was not really a function you could call from anywhere — it was a special case in the code that reads YAML files. That coupling had consequences you could feel. Functions were tied to one configuration format, so nothing learned in YAML carried over to any other format. Adding a function meant reaching into the parsing logic. And because each handler was its own island, there was no single place that answered the question of when a given function runs.
 
-- **`pkg/function/`**: Format-agnostic function registry with handlers for all YAML functions (`!env`, `!exec`, `!terraform.output`, `!store.get`, `!literal`, etc.)
-- **`pkg/yaml/`**: YAML-specific utilities for position tracking and error handling
-- **`pkg/aws/identity/`**: Consolidated AWS identity caching (moved from `internal/aws_utils`)
+## The Fix
 
-## Why This Matters
+Every Atmos function now resolves through one registry that knows nothing about the format the function was written in. The registry handles lookup by name or by alias, is safe to use concurrently, and groups functions by the phase in which they are evaluated. Adding a function no longer means changing how configuration is parsed, which is also the groundwork for supporting functions in configuration formats beyond YAML, and eventually for functions supplied by plugins rather than built in.
 
-The function registry separates concerns between format-specific parsing (YAML, HCL, JSON) and format-agnostic function execution. This enables:
+The `!aws.*` functions also resolve your identity once per run and reuse it, so a stack with many `!aws.*` calls no longer repeats that lookup for every function.
 
-- **Code Reuse**: Single registry used across all configuration formats
-- **Extensibility**: New functions can be added without modifying core parsing logic
-- **Testing**: Interface-driven design with dependency injection for better testability
-- **Plugin Architecture**: Foundation for future plugin support
+## Where the Code Lives
 
-## Technical Details
+Three packages carry this, and knowing which one to reach for is most of the work:
 
-Functions are organized by execution phase:
-- **PreMerge**: `!env`, `!exec`, `!random`, `!template`, `!include`, `!literal`
-- **PostMerge**: `!terraform.output`, `!terraform.state`, `!store.get`, `!aws.*`
+- `pkg/function/` holds the registry itself and a handler for every function. This is where a new function goes.
+- `pkg/yaml/` keeps what is genuinely YAML-specific: position tracking, and the error reporting that points at a line and column.
+- `pkg/aws/identity/` holds the shared identity cache the `!aws.*` handlers use. It replaces the per-call caching that used to live in `internal/aws_utils`.
 
-The registry provides thread-safe registration, lookup by name or alias, and phase-based filtering.
+The split is the point. If you are adding a function, you should not have to touch the parser; if you are fixing a YAML parse error, you should not have to read function code.
+
+## What Does Not Change
+
+Nothing changes in your stacks. Every function keeps the name, alias, and behavior it already had. What is worth knowing is the phase each function runs in, because that is what determines the configuration it sees:
+
+- **Pre-merge**, evaluated before stack layers are deep-merged: `!env`, `!exec`, `!random`, `!template`, `!include`, `!literal`
+- **Post-merge**, evaluated after the final configuration is assembled: `!terraform.output`, `!terraform.state`, `!store.get`, `!aws.*`
 
 ## Get Involved
 
-This is preparatory work for broader YAML processing refactoring. Contributions and feedback are welcome at [github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).
+This is preparatory work for a broader rework of how Atmos processes configuration. If you rely on a function behaving a particular way in either phase, say so before that rework lands by [opening an issue](https://github.com/cloudposse/atmos/issues).

@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Most components in a stack share the same cost center label or the same compliance-scope tag. `vars`, `env`, and `settings` can all be declared once at the stack level and inherited by every component. `metadata` couldn't — every component had to repeat the same `labels`/`tags`, and a `metadata:` block placed at the top of a stack file was silently ignored.
+Most components in a stack share the same cost center label or the same compliance-scope tag. The `vars`, `env`, and `settings` sections can all be declared once at the stack level and inherited by every component. The `metadata` section couldn't — every component had to repeat the same `labels`/`tags`, and a `metadata:` block placed at the top of a stack file was silently ignored.
 
 Stack manifests can now declare stack-wide metadata defaults that every component inherits, with the component's own `metadata:` still free to override them.
 
@@ -68,4 +68,4 @@ metadata:
 
 ## Get Involved
 
-Stack-wide metadata covers the fields that behave like shared defaults today. If there's another `metadata` field you'd want to set once for a whole stack, open an issue with your use case.
+Stack-wide metadata covers the fields that behave like shared defaults today. If there's another `metadata` field you'd want to set once for a whole stack, [open an issue](https://github.com/cloudposse/atmos/issues) with your use case.

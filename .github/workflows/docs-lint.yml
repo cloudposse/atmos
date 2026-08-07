@@ -1,0 +1,43 @@
+name: Docs Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/prd/**.md'
+      - 'website/docs/**.md'
+      - 'website/docs/**.mdx'
+      - 'website/blog/**.md'
+      - 'website/blog/**.mdx'
+      - '.vale.ini'
+      - '.vale/**'
+      - '.atmos.d/lint.yaml'
+      - '.atmos.d/toolchain.yaml'
+      - '.tool-versions'
+
+jobs:
+  vale:
+    name: Lint docs prose (vale)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Native CI: run the same `atmos lint docs --changed` command used locally
+    # and in the pre-commit hook, inside the Atmos container image. No
+    # third-party vale/reviewdog action; the Atmos toolchain installs vale.
+    # Pinned to the latest published release (not atmos-pro.yaml's older
+    # 1.215.0 pin) - bump as new Atmos releases ship.
+    container:
+      image: ghcr.io/cloudposse/atmos:1.224.1
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Phase 1 (docs/prd/technical-writing-standard-ste100.md): .vale.ini
+      # MinAlertLevel = suggestion, so this reports findings without failing
+      # the check. Promote to blocking in a later phase once the ruleset's
+      # false-positive rate is validated against real PRs.
+      - name: Lint changed docs
+        run: atmos lint docs --changed

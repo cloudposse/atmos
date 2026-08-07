@@ -1,0 +1,29 @@
+# Flags long sentences. ASD-STE100 recommends short sentences (roughly 20
+# words for instructions, 25-30 for descriptions) so a sentence has one
+# meaning and is easy to scan. This is a paraphrase of that principle, not
+# a copy of the ASD-STE100 specification text.
+#
+# Uses the `occurrence` extension point (word-count based) rather than a
+# raw regex, matching the approach in Vale's official Microsoft style
+# package (github.com/errata-ai/Microsoft, MIT-licensed), which also
+# settled on a 30-word threshold -- looser than our earlier 25-word regex
+# and empirically produces less noise on naturally-flowing PRD prose
+# without losing signal on genuinely long, multi-idea sentences.
+#
+# The word count is a rough proxy, not the actual rule. A 30-word sentence
+# that states one connected idea, with its clauses joined by plain
+# connectors ("and", "so", "because"), can read more clearly than the same
+# idea chopped into three fragments. Do not split a flagged sentence just to
+# clear this suggestion -- split it only if it actually holds more than one
+# idea, or if removing a clause makes it easier to follow.
+#
+# This is the one rule in the set where a finding is genuinely advisory.
+# Mechanical sentence-splitting is what flattened this standard's own PRD
+# once already (see its v1.0.1 changelog entry), so the message below asks
+# for a judgment call. Active voice does not get the same latitude.
+extends: occurrence
+message: "Long sentence (%d words). If it holds more than one idea, consider splitting it. If it is one connected idea, the length alone is not a defect."
+level: suggestion
+scope: sentence
+max: 30
+token: \b(\w+)\b

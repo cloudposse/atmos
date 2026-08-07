@@ -1,6 +1,6 @@
 ---
 slug: terraform-command-documentation
-title: Comprehensive Documentation for Terraform Commands
+title: Which Flags Belong to Atmos, and Which Go Straight to Terraform
 date: 2025-11-24T12:00:00.000Z
 authors:
   - osterman
@@ -9,73 +9,72 @@ tags:
 release: v1.200.0
 ---
 
-We've added comprehensive documentation for all 35 Terraform commands in Atmos, making it easier to understand how to orchestrate Terraform with stack-based configurations. Each command now has dedicated documentation with usage examples, arguments, flags, and integration details.
+Running `atmos terraform plan vpc -s dev` is not the same as running `terraform plan`. Atmos resolves the
+component, generates the varfile and backend configuration for that stack, adds flags of its own, and then hands
+the rest through to Terraform. Most of the time that is invisible and welcome — until you need to know whether
+`-out` is yours to set, what `--skip-planfile` actually skips, or which of the flags in a command you copied off a
+Terraform page will survive the trip. Every `atmos terraform` subcommand now has its own reference page that says
+so explicitly.
 
 <!--truncate-->
 
-## What's New
+## The Problem
 
-Every `atmos terraform` command now has its own documentation page with:
+A wrapper around a well-documented tool inherits an awkward gap. The Terraform documentation describes flags that
+Atmos may intercept, rewrite, or supply for you. The Atmos documentation described the orchestration model but not
+the per-command surface. Anyone working out where one ended and the other began was reading source, running
+`--help`, or guessing.
 
-- **Command overview** - What the command does and when to use it
-- **Usage examples** - Real-world scenarios and patterns
-- **Arguments** - Required and optional command arguments
-- **Flags** - Available command-line flags and options
-- **Stack integration** - How the command works with stack configurations
+The gap shows up in ordinary places. Atmos writes a planfile by default with a name derived from the stack context,
+which means `-out` behaves differently than you would expect from Terraform alone. Multi-component flags like
+`--all`, `--affected`, and `--query` have no Terraform equivalent at all. And `--stack` is required for a reason
+that only makes sense once you know Atmos generates the variables and backend config from it.
 
-## Core Commands
+## The Fix
 
-Essential Terraform workflow commands are now fully documented:
+Each `atmos terraform` subcommand has a dedicated page covering what the command does with stack configuration
+before Terraform ever runs, which flags Atmos owns, and which pass through untouched. Arguments and flags are
+written as definition lists rather than tables, so a flag's description has room for the caveats, the config
+equivalent in `atmos.yaml`, and a worked example. Pages also embed a recording of the command's `--help` output,
+so you can see the real thing without leaving the page.
+
+## How to Use It
+
+Start from the command you are about to run.
+
+### Core commands
 
 - **[terraform plan](/cli/commands/terraform/plan)** - Generate execution plans with stack context
 - **[terraform apply](/cli/commands/terraform/apply)** - Apply infrastructure changes
 - **[terraform deploy](/cli/commands/terraform/deploy)** - Combined init, plan, and apply workflow
 - **[terraform destroy](/cli/commands/terraform/destroy)** - Destroy infrastructure safely
 
-## Advanced Commands
-
-Documentation for advanced Terraform operations:
+### Generated files and metadata
 
 - **[terraform generate backend](/cli/commands/terraform/generate/backend)** - Generate backend configurations
 - **[terraform generate varfile](/cli/commands/terraform/generate/varfile)** - Generate variable files from stack configs
 - **[terraform metadata](/cli/commands/terraform/metadata)** - Extract component metadata
 
-## State Management
-
-Complete documentation for Terraform state operations:
+### State management
 
 - **[terraform state](/cli/commands/terraform/state)** - Advanced state manipulation
 - **[terraform import](/cli/commands/terraform/import)** - Import existing resources
 - **[terraform workspace](/cli/commands/terraform/workspace)** - Manage Terraform workspaces
 
-## Development Commands
-
-Commands for Terraform module development and testing:
+### Development commands
 
 - **[terraform fmt](/cli/commands/terraform/fmt)** - Format Terraform code
 - **[terraform validate](/cli/commands/terraform/validate)** - Validate configuration syntax
 - **[terraform test](/cli/commands/terraform/test)** - Run Terraform tests
 - **[terraform console](/cli/commands/terraform/console)** - Interactive console for debugging
 
-## Browse All Commands
-
-View the complete list of Terraform commands:
+### Everything else
 
 - **[Terraform command reference](/cli/commands/terraform/usage)** - Full command listing
 - **[Global flags](/cli/global-flags)** - Flags available to all commands
 - **[Stack configuration](/stacks)** - How stacks integrate with Terraform
 
-## Visual Documentation
-
-Each command page includes:
-
-- **Syntax-highlighted code examples** - With your configured theme
-- **Terminal output screenshots** - Showing real command execution
-- **Table of arguments and flags** - Quick reference for all options
-
 ## Get Involved
 
-Found missing details or have suggestions for improving the documentation?
-
-- [Open an issue](https://github.com/cloudposse/atmos/issues/new) on GitHub
-- Share feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+If a page leaves you unsure whether a flag is handled by Atmos or forwarded to Terraform, that is a documentation
+bug and we want to hear about it. [Open an issue on GitHub](https://github.com/cloudposse/atmos/issues).

@@ -8,11 +8,20 @@ tags: [feature]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos now supports importing stack configurations from remote URLs. Reference shared configurations from GitHub, S3, GCS, or any HTTP endpoint directly in your stack files.
+Shared configuration wants to live in one place, but a stack file could only import from the repository it sat in — so the same defaults got copied into every repository that needed them, and drifted from there. Stack imports now accept remote URLs: GitHub, S3, GCS, or any HTTP endpoint, referenced directly from the stack file.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
+
+Teams often need to share stack configurations across multiple repositories or organizations. Previously, this required vendoring shared configs or maintaining copies in each repository. Now you can reference shared configurations directly from their source:
+
+- **Central catalogs**: Maintain organization-wide defaults in a single repository
+- **Version pinning**: Reference specific versions with Git refs (`?ref=v1.0.0`)
+- **Cross-team sharing**: Import configurations from other teams without duplication
+- **External standards**: Pull in compliance or security baselines from external sources
+
+## The Fix
 
 Stack imports now support remote URLs alongside local file paths. The import syntax remains the same, but Atmos detects remote URLs and downloads them automatically using go-getter:
 
@@ -27,18 +36,9 @@ import:
   - s3::https://s3.amazonaws.com/my-bucket/configs/base.yaml
 ```
 
-## Why This Matters
-
-Teams often need to share stack configurations across multiple repositories or organizations. Previously, this required vendoring shared configs or maintaining copies in each repository. Now you can reference shared configurations directly from their source:
-
-- **Central catalogs**: Maintain organization-wide defaults in a single repository
-- **Version pinning**: Reference specific versions with Git refs (`?ref=v1.0.0`)
-- **Cross-team sharing**: Import configurations from other teams without duplication
-- **External standards**: Pull in compliance or security baselines from external sources
-
 ## Supported URL Formats
 
-Remote imports leverage [go-getter](https://github.com/hashicorp/go-getter) for downloading. Here are some common formats:
+Remote imports use [go-getter](https://github.com/hashicorp/go-getter) for downloading. Here are some common formats:
 
 | Format | Example |
 |--------|---------|

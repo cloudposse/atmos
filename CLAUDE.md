@@ -45,6 +45,7 @@ atmos test                   # Run short tests
 atmos test --full            # Run full acceptance tests
 atmos test --coverage        # Tests with coverage
 atmos lint --changed         # golangci-lint on changed files
+atmos lint docs --changed    # vale prose lint on changed PRDs/docs (writing-style skill)
 ```
 
 ## Architecture
@@ -307,6 +308,8 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
+
+**Use the `writing-style` skill** for the required writing style (ASD-STE100-inspired: short sentences, active voice, no contractions, plain words). Run `atmos lint docs` before opening a PR that adds or changes a PRD. See `docs/writing-style-guide.md` for the full rule set.
 
 ### Pull Requests (MANDATORY)
 

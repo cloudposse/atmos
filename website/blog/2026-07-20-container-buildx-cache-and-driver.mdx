@@ -26,7 +26,7 @@ registry-backed cache, and keeping all of that in sync with the rest of the buil
 
 ## The Fix
 
-`action: build` now accepts `driver` and `cache`:
+The `action: build` step now accepts `driver` and `cache`:
 
 ```yaml
 - name: build
@@ -54,8 +54,8 @@ registry-backed cache, and keeping all of that in sync with the rest of the buil
 
 Atmos creates the named builder if it doesn't already exist and reuses it on later runs, so the
 builder's own cache persists across builds on the same host instead of starting cold every time.
-`driver` also accepts a full form when you need driver-specific options, such as pointing Buildx
-at a mirrored BuildKit image to avoid Docker Hub rate limits:
+The `driver` field also accepts a full form when you need driver-specific options, such as
+pointing Buildx at a mirrored BuildKit image to avoid Docker Hub rate limits:
 
 ```yaml
 with:

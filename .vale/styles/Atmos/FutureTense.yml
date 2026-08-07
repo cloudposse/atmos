@@ -1,0 +1,38 @@
+# Flags future tense where present tense reads better. ASD-STE100 prefers the
+# simplest tense: reference documentation describes what the software does,
+# not what it will do. "Atmos writes the file", not "Atmos will write the
+# file". This is a paraphrase of that principle, not a copy of the
+# ASD-STE100 specification text.
+#
+# The pattern absorbs any adverbs between "will" and the verb, so the reported
+# match spans the whole construction ("will automatically install") instead of
+# stopping at the adverb ("will automatically"). Without that, the highlighted
+# span points at the wrong word and the rule does not match the "will plus a
+# verb" description in docs/writing-style-guide.md.
+#
+# Matches lowercase "will" only, so the proper noun "Will" does not fire.
+# "will not" is included: "Atmos will not overwrite" is better written
+# "Atmos does not overwrite".
+#
+# `exceptions` covers the noun sense of "will". After the auxiliary "will",
+# English requires a bare infinitive, so a conjugated form of "be" means the
+# match is a noun ("free will are not...") rather than future tense. RE2 has
+# no lookahead or lookbehind, so this cannot be expressed in the pattern.
+#
+# Fixtures: .vale/testdata/FutureTense.md
+extends: existence
+message: "'%s' is future tense. Reference documentation describes what Atmos does now, so prefer the present tense."
+level: suggestion
+ignorecase: false
+scope: text
+nonword: true
+exceptions:
+  - will are
+  - will is
+  - will was
+  - will were
+  - will am
+  - will been
+  - will being
+tokens:
+  - '\bwill\s+(?:(?:not|also|already|always|never|only|still|then|soon|just|now|again|first|otherwise|instead|[a-z]+ly)\s+)*[a-z]+\b'

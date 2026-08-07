@@ -9,11 +9,11 @@ tags:
   - security
 ---
 
-Atmos now supports the `aws/assume-root` identity kind, enabling secure, centralized management of root access across your AWS Organization using the STS AssumeRoot API.
+Root access in AWS member accounts has been a standing liability. The credentials exist in every account whether anyone uses them or not, and proving who used them last means checking each account separately. AWS addressed this with Centralized Root Access, and Atmos now reaches it through the `aws/assume-root` identity kind.
 
 <!--truncate-->
 
-## The Challenge with Root Access
+## The Problem
 
 Root access in AWS member accounts has traditionally been problematic:
 
@@ -97,14 +97,7 @@ To use `aws/assume-root`:
 2. **Configure a permission set** with `sts:AssumeRoot` permission in your management account
 3. **Target account must be a member** of your AWS Organization
 
-## Security Benefits
-
-- **No persistent root credentials**: All access uses short-lived STS tokens
-- **Principle of least privilege**: Task policies limit what root can do
-- **Centralized audit**: All access logged in CloudTrail
-- **Credential chaining**: Leverages existing SSO infrastructure
-
-## Get Started
+## How to Use It
 
 Update to the latest Atmos and configure your first assume-root identity:
 
@@ -122,6 +115,6 @@ auth:
 
 For detailed configuration options, see the [Authentication Documentation](/cli/commands/auth/usage).
 
-## Feedback
+## Get Involved
 
-We'd love to hear how assume-root works for your organization. Share your experience in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or report issues in [GitHub Issues](https://github.com/cloudposse/atmos/issues).
+Tell us how assume-root works for your organization, and open an issue at https://github.com/cloudposse/atmos/issues.

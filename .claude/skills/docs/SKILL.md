@@ -77,6 +77,14 @@ Changelog posts live in `website/blog/` as dated `.mdx` files (required only for
 and style requirements (problem-first framing, no backtick-opening prose, optional cast embeds, no
 Go-internals leakage) — don't restate them here.
 
+## Writing Style
+
+PRDs (`docs/prd/`) and every page under `website/docs/` follow the Atmos writing style (ASD-STE100-inspired:
+short sentences, active voice, no contractions, plain words). Use the **`writing-style` skill**
+(`.claude/skills/writing-style/SKILL.md`) and `docs/writing-style-guide.md` for the full rule set — don't
+restate them here. This does not apply to `website/blog/`, which follows the `changelog` skill's narrative
+style instead.
+
 ## Release Docs
 
 When behavior changes, update all user-facing surfaces in the same PR:
@@ -94,6 +102,7 @@ Run the narrowest useful validation first, then broader checks if website or ski
 
 ```bash
 git diff --check
+atmos lint docs --changed
 cd website && pnpm run build
 ```
 

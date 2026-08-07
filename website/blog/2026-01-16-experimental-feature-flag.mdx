@@ -6,13 +6,17 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-Atmos now provides granular control over experimental features with the new `settings.experimental` configuration option—giving teams the flexibility to explore new capabilities safely while maintaining stability in production environments.
+Every fast-moving tool has a line running through it, somewhere between the parts you can safely build a pipeline on and the parts that are still settling. That line is usually invisible. A command works, so someone uses it, and the team finds out it was provisional the day it changes. Atmos now draws the line where you can see it, and lets you decide what happens when someone crosses it.
 
 <!--truncate-->
 
-## What's New
+## The Problem
 
-Experimental features in Atmos are now clearly marked and controllable. The new `settings.experimental` configuration option lets you choose how Atmos handles experimental commands:
+As Atmos evolves, we add capabilities like devcontainers, toolchain management, and Terraform backend provisioning. Those need real-world use before we can call them stable, which means they ship before their behavior is frozen. Until now nothing in the CLI told you which commands were in that state, and nothing stopped one from quietly becoming load-bearing in a CI pipeline.
+
+## The Fix
+
+Experimental features are now marked in the CLI, and the `settings.experimental` option lets you choose how Atmos handles them:
 
 - **`warn`** (default) — Show a notification when running experimental commands, then continue
 - **`silence`** — Run experimental commands without any notification
@@ -39,7 +43,7 @@ When you run `--help` on an experimental command, you'll see a prominent badge a
 Manage development containers with full lifecycle support.
 ```
 
-## Configuration
+## How to Use It
 
 Control experimental features in `atmos.yaml`:
 
@@ -56,6 +60,24 @@ Or via environment variable:
 export ATMOS_EXPERIMENTAL=disable
 ```
 
+### Per-Environment Settings
+
+For local development, where trying a new command is the point:
+
+```yaml
+settings:
+  experimental: warn  # See warnings but continue working
+```
+
+For CI and production, where nothing unstable should run at all:
+
+```yaml
+settings:
+  experimental: disable  # Refuse to run experimental commands
+```
+
+Both `disable` and `error` refuse the command and exit non-zero. The difference is the output: `error` prints the experimental notice first, so the failing job's log names the feature that was blocked, while `disable` fails without it.
+
 ## Current Experimental Features
 
 The following features are currently marked as experimental:
@@ -68,49 +90,13 @@ The following features are currently marked as experimental:
 | Workdir Management | `atmos terraform workdir` | Component working directory management |
 | Affected Components | `atmos list affected` | Identify changes for targeted CI/CD |
 
-## Use Cases
-
-### Development Environment
-
-For local development where you want to experiment with new features:
-
-```yaml
-settings:
-  experimental: warn  # See warnings but continue working
-```
-
-### CI/CD Pipeline
-
-For continuous integration where you want stability:
-
-```yaml
-settings:
-  experimental: disable  # Block experimental commands in CI
-```
-
-### Production Environment
-
-For production where experimental features must be explicitly enabled:
-
-```yaml
-settings:
-  experimental: error  # Require explicit opt-in
-```
-
-## Why This Matters
-
-As Atmos continues to evolve, we're adding powerful new capabilities like devcontainers, toolchain management, and advanced Terraform features. These features need real-world testing before they're considered stable.
-
-The experimental feature flag gives you:
-
-- **Clear visibility** — Know immediately when you're using an experimental feature
-- **Granular control** — Choose how to handle experimental features per environment
-- **Safe exploration** — Try new features locally while keeping CI stable
-- **Predictable behavior** — Same configuration works identically across environments
-
 ## Documentation
 
 For complete documentation on experimental features and configuration options, see:
 
 - [Experimental Features Configuration](/cli/configuration/settings/experimental)
 - [Settings Reference](/cli/configuration/settings)
+
+## Get Involved
+
+If a command you rely on is marked experimental, or one that should be marked is not, we want to hear about it. Open an issue at https://github.com/cloudposse/atmos/issues

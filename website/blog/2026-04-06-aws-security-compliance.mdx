@@ -10,49 +10,25 @@ import File from '@site/src/components/File'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
-Atmos can now pull security findings from AWS Security Hub, map them to the exact Atmos
-components and stacks that manage the affected resources, and generate structured remediation
-reports — all from a single command.
+A Security Hub finding tells you that a bucket is unencrypted. It does not tell you which component created the bucket, which stack configured it, or what to change. Closing the gap means pivoting from the console to the repository, grepping for a resource name, guessing at which stack applies, and reconstructing intent from HCL — once per finding. Atmos can now do that mapping for you.
 
 <!--truncate-->
 
-## Why This Matters
+## The Problem
 
-Reviewing AWS security findings today means navigating Security Hub, cross-referencing resources
-with Terraform code, and manually figuring out which stack configuration caused the issue. This is
-slow and requires deep AWS + Terraform expertise.
+Security findings arrive as resource ARNs. Infrastructure is written as components and stacks. Nothing connects the two.
 
-With `atmos aws security analyze`, one command replaces that entire workflow:
+So reviewing findings turns into an exercise in translation. You read a finding in Security Hub, work out which resource it names, search the repository for whatever created that resource, work back to the stack that configured it, and only then decide what to change. Doing that reliably takes someone who knows both AWS and the Terraform in front of them well, and it takes them a long time. Most teams triage by severity and never get to the rest.
+
+## The Fix
+
+One command fetches the findings, maps them to your Atmos components through resource tags, and shows which code manages each affected resource:
 
 ```bash
 atmos aws security analyze --stack prod-us-east-1
 ```
 
-The command fetches findings, maps them to your Atmos components via resource tags, and shows
-which code manages each affected resource. Add `--ai` for AI-powered remediation with specific
-code changes and deploy commands.
-
-## Quick Start
-
-<File title="atmos.yaml">
-```yaml
-aws:
-  security:
-    enabled: true
-    identity: "security-readonly"  # Atmos Auth identity → Security Hub account
-    region: "us-east-2"            # Security Hub aggregation region
-    tag_mapping:
-      stack_tag: "atmos:stack"
-      component_tag: "atmos:component"
-```
-</File>
-
-```bash
-# Authenticate and analyze
-atmos auth login
-atmos aws security analyze
-atmos aws security analyze --ai  # With AI remediation
-```
+Add `--ai` for remediation that names the specific configuration change and the command to deploy it.
 
 ## What You Get
 
@@ -93,15 +69,39 @@ atmos aws security analyze --ai  # With AI remediation
 **Risk:** low
 ```
 
-## Key Features
+## Capabilities
 
 - **Finding-to-code mapping** — traces AWS resources back to Atmos components via tags or naming heuristics
 - **Atmos Auth integration** — `identity` field targets the Security Hub delegated admin account
-- **Multi-turn AI analysis** — API providers can call `atmos_describe_component`, `read_component_file` to gather context before generating remediation
+- **Multi-turn AI analysis** — the AI reads the component's stack configuration and Terraform source before proposing a fix, rather than guessing from the finding text alone
 - **CLI provider support** — Claude Code and Codex CLI fall back to enriched single-prompt mode
 - **Compliance reports** — `atmos aws compliance report --framework cis-aws` for framework-specific posture
 - **Four output formats** — Markdown (terminal), JSON (CI/CD), YAML (config), CSV (spreadsheets)
 - **Structured schema** — every output follows the same schema regardless of AI provider
+
+## How to Use It
+
+### Quick Start
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  security:
+    enabled: true
+    identity: "security-readonly"  # Atmos Auth identity → Security Hub account
+    region: "us-east-2"            # Security Hub aggregation region
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+```
+</File>
+
+```bash
+# Authenticate and analyze
+atmos auth login
+atmos aws security analyze
+atmos aws security analyze --ai  # With AI remediation
+```
 
 ## Commands
 
@@ -134,8 +134,8 @@ atmos aws security analyze --identity security-admin --region us-west-2
 
 ## See It in Action
 
-Tested against a multi-account AWS organization (11 accounts, Security Hub delegated admin,
-500 findings fetched, 97% mapped to Atmos components).
+The transcripts below come from a multi-account AWS organization: 11 accounts, a Security Hub
+delegated admin, 500 findings fetched, narrowed to one component.
 
 **Without `--ai`** — findings mapped to components:
 
@@ -189,7 +189,7 @@ Resource Tags:
 | **Total** | **4** | **4**  | **0**    |
 ```
 
-**With `--ai`** — the AI reads the actual Terraform source and stack config via tools,
+**With `--ai`** — the AI reads the actual Terraform source and stack config,
 detects drift, and generates targeted remediation:
 
 ```text
@@ -211,6 +211,8 @@ with exact confidence to this component via Atmos tags.
 
 ## Findings Breakdown
 
+[excerpt: 2 of the 4 findings shown]
+
 ### 🟠 Finding 1 — EC2.18: Unrestricted Ingress on Unauthorized Port (HIGH)
 
 Standard: AWS Foundational Security Best Practices v1.0.0
@@ -226,7 +228,7 @@ Fix: Set in catalog/rds/example.yaml:
 
 ### 🟠 Finding 2 — EC2.13: Unrestricted Ingress on Port 22/SSH (HIGH)
 
-Standard: CIS AWS Foundations Benchmark v1.2.0
+Standard: AWS Foundational Security Best Practices v1.0.0
 
 ⚠️ This is anomalous — port 22 has no business being on an RDS security
 group. This strongly suggests an out-of-band manual change was made directly
@@ -240,7 +242,7 @@ Fix:
 
 ## Root Cause (Common Thread)
 
-Both findings stem from the same security group and share a root cause:
+Both findings above stem from the same security group and share a root cause:
 var.allowed_cidr_blocks being set too permissively, compounded by possible
 out-of-band drift. The cloudposse/rds/aws module internally creates and
 manages SG ingress rules based on this variable.
@@ -281,12 +283,11 @@ manages SG ingress rules based on this variable.
 |                      |        | has no expected legitimate impact                 |
 ```
 
-The AI used multi-turn tools (`atmos_describe_component`, `read_component_file`) to read
-the actual Terraform source and stack config, detected that port 22 on an RDS security group
-is anomalous (likely AWS Console drift), identified the common root cause in
-`allowed_cidr_blocks`, and generated targeted remediation with Terraform validation guards
-to prevent future regressions. Duplicate findings are deduplicated before AI analysis —
-one call covers all related findings.
+Before answering, the AI read the component's Terraform source and stack configuration. That is
+how it concluded that port 22 on an RDS security group is anomalous and probably AWS Console
+drift, traced both findings to the same `allowed_cidr_blocks` value, and proposed validation
+guards against a repeat. Duplicate findings are deduplicated first, so one call covers all
+related findings.
 
 **Compliance report** — framework-specific posture scoring:
 
@@ -364,3 +365,7 @@ $ atmos aws compliance report --ai
 - [Security Analyze Command](/cli/commands/aws/security/analyze)
 - [Compliance Report Command](/cli/commands/aws/compliance/report)
 - [Atmos Auth](/cli/configuration/auth)
+
+## Get Involved
+
+Tell us which findings Atmos fails to map back to a component, and open an issue at https://github.com/cloudposse/atmos/issues.

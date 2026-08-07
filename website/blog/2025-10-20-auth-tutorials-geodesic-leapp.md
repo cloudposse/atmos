@@ -10,26 +10,28 @@ date: 2025-10-20T12:00:00.000Z
 release: v1.196.0
 ---
 
-We've published two comprehensive guides to help you adopt and integrate `atmos auth` into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.
+Changing how a team authenticates is rarely blocked by the new tool. It is blocked by the old setup, which works, which nobody has fully written down, and which somebody configured three years ago. Two new guides cover the two setups Atmos users most often have to translate from: Leapp, and Geodesic.
 
 <!--truncate-->
 
-## What's New
+## The Problem
 
-The `atmos auth` command (introduced in v1.194.1) provides native AWS IAM Identity Center authentication directly in Atmos, eliminating the need for external credential management tools. To help teams adopt this feature, we've created two detailed tutorials:
+The `atmos auth` command (introduced in v1.194.1) handles AWS IAM Identity Center authentication natively, so credentials no longer depend on a separate app. Adopting it means mapping an existing arrangement onto it — a Leapp profile list, or a container that already expects credentials to be somewhere specific. That mapping is the actual work, and it is what the guides document.
 
-### 1. [Migrating from Leapp](/tutorials/migrating-from-leapp)
+## The Fix
 
-If your team uses Leapp for credential management, this guide walks you through the migration process step-by-step:
+### [Migrating from Leapp](/tutorials/migrating-from-leapp)
+
+If your team uses Leapp for credential management, this guide walks through the migration step by step:
 
 - **Understanding the mapping** between Leapp concepts (providers, sessions, identities) and `atmos auth` configuration
 - **Quick migration examples** showing side-by-side comparisons
 - **Field-by-field reference** for converting Leapp sessions to Atmos identities
 - **Troubleshooting common issues** during migration
 
-The guide includes practical examples using real Leapp session configurations, making it easy to translate your existing setup.
+The examples use real Leapp session configurations, so you can translate your existing setup rather than rebuild it.
 
-### 2. [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic)
+### [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic)
 
 For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevOps toolbox, this guide explains how to integrate `atmos auth`:
 
@@ -39,49 +41,34 @@ For teams using [Geodesic](https://github.com/cloudposse/geodesic) as their DevO
 - **Source profile configuration** for assume-role utilities
 - **Complete working examples** showing all components together
 
-The guide covers the authentication workflow, explaining that authentication happens on your host machine (not inside the container) and details keychain integration behavior with containers.
+The part that surprises people: authentication happens on your host machine, not inside the container. The guide covers why, and what that means for keychain access from a container.
 
-## Key Benefits of Atmos Auth
+## Why Move Authentication Into Atmos
 
-Using `atmos auth` provides several advantages over external credential managers:
+Compared with an external credential manager:
 
-- **Configuration as code** - Authentication config lives in `atmos.yaml` alongside your infrastructure
-- **Component-level auth** - Different components can use different AWS identities
-- **Workflow integration** - No separate credential management app to run
-- **Cross-platform** - Works consistently on Linux, macOS, and Windows
-- **Team consistency** - Everyone uses the same authentication approach
+- **Configuration as code** — authentication config lives in `atmos.yaml`, next to the infrastructure it authenticates against
+- **Per-component identities** — different components can use different AWS identities
+- **Nothing extra to run** — no separate credential app to install, launch, or keep in sync
+- **Cross-platform** — the same setup works on Linux, macOS, and Windows
+- **One approach per team** — everyone authenticates the same way, so a new teammate inherits a working setup rather than a description of one
 
-## Getting Started
+## How to Use It
 
-1. **Read the guides**:
-   - [Migrating from Leapp](/tutorials/migrating-from-leapp)
-   - [Configuring Geodesic](/tutorials/configuring-geodesic)
+Read the guide that matches your situation — [Leapp migration](/tutorials/migrating-from-leapp) or [Geodesic configuration](/tutorials/configuring-geodesic) — alongside the [authentication user guide](/cli/commands/auth/usage) and the [command reference](/cli/commands/auth/login). Then:
 
-2. **Review the main documentation**:
-   - [Authentication User Guide](/cli/commands/auth/usage)
-   - [Command Reference](/cli/commands/auth/login)
+```bash
+# Configure providers and identities in atmos.yaml
+# Then authenticate
+atmos auth login
 
-3. **Try it out**:
-   ```bash
-   # Configure providers and identities in atmos.yaml
-   # Then authenticate
-   atmos auth login
+# Verify authentication
+atmos auth whoami
 
-   # Verify authentication
-   atmos auth whoami
+# Use with Terraform
+atmos terraform plan <component> -s <stack>
+```
 
-   # Use with Terraform
-   atmos terraform plan <component> -s <stack>
-   ```
+## Get Involved
 
-## Feedback Welcome
-
-These guides are designed to be practical and actionable. If you encounter issues, find gaps in the documentation, or have suggestions for improvement:
-
-- Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
-- Share your experience in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
-- Contribute improvements via pull request
-
----
-
-**Ready to migrate?** Start with the [Leapp migration guide](/tutorials/migrating-from-leapp) or jump straight to [Geodesic configuration](/tutorials/configuring-geodesic) if you're already using `atmos auth`.
+If a guide has a gap, or your setup does not map cleanly onto either one, that is worth reporting at https://github.com/cloudposse/atmos/issues

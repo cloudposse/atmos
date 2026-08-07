@@ -1,0 +1,43 @@
+# Atmos technical dictionary: project- and domain-specific terms that are
+# always allowed, even though they are not everyday English words. This is
+# our own curated list, not a reproduction of the ASD-STE100 controlled
+# vocabulary. See docs/writing-style-guide.md.
+
+[Aa]tmos
+[Aa]tmos\.yaml
+[Tt]erraform
+[Oo]pen[Tt]ofu
+[Hh]elmfile
+[Pp]acker
+[Aa]nsible
+[Kk]ubeconfig
+[Kk]ubectl
+[Kk]ustomize
+YAML
+HCL
+JSON
+[Gg]omplate
+[Ss]prig
+[Ll]introller
+golangci-lint
+gofumpt
+[Vv]ale
+[Ww]orkflow
+[Ww]orkspace
+[Cc]omponent
+[Cc]atalog
+[Mm]ixin
+[Vv]endoring
+[Tt]oolchain
+[Ii]dentity
+[Ee]mulator
+[Hh]ook
+[Ss]tack
+[Bb]ackend
+[Rr]egistry
+[Aa]qua
+CLI
+CI
+OIDC
+OPA
+[Rr]ego

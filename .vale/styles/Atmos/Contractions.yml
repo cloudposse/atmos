@@ -1,0 +1,11 @@
+# Flags contractions. ASD-STE100 avoids contractions in technical writing
+# because an expanded word ("do not") is unambiguous, while a contraction
+# ("don't") can be misread, especially by non-native English readers.
+extends: existence
+message: "Avoid the contraction '%s' in technical writing. Use the full form instead."
+level: suggestion
+ignorecase: true
+tokens:
+  - "\\b\\w+n't\\b"
+  - "\\b(?:it|that|there|here|what|who|he|she)'s\\b"
+  - "\\b(?:I|you|we|they)'(?:re|ve|ll|d)\\b"

@@ -9,13 +9,31 @@ date: 2025-10-27T12:00:00.000Z
 release: v1.196.0
 ---
 
-Atmos now follows CLI tool conventions on macOS, using `~/.config`, `~/.cache`, and `~/.local/share` instead of `~/Library/Application Support`. This ensures seamless integration with Geodesic and consistency with other DevOps tools.
+You authenticate on your Mac, start Geodesic, and the container cannot see your credentials. Nothing failed and nothing was misconfigured — Geodesic mounts `~/.config`, and Atmos had written to `~/Library/Application Support`. On macOS, Atmos now uses `~/.config`, `~/.cache`, and `~/.local/share`, the same directories every other CLI tool in the toolchain uses.
 
 <!--truncate-->
 
-## What Changed
+## The Problem
 
-Starting with this release, Atmos on **macOS** uses different default paths for XDG Base Directory Specification:
+When Atmos added XDG Base Directory support, it took the defaults from the `adrg/xdg` library, which points at `~/Library/Application Support` on macOS. That is correct behavior for a Mac application. It was the wrong answer for Atmos, and it broke in three ways:
+
+1. **Geodesic incompatibility** — Geodesic mounts `~/.config` by default, not `~/Library/Application Support`. Credentials written outside the mount are invisible inside the container.
+2. **Ecosystem inconsistency** — gh, git, packer, stripe, op, kubectl, docker, and terraform all use `~/.config` on macOS. Atmos was the outlier in its own toolchain.
+3. **Platform fragmentation** — a path that differs between Linux and macOS makes any shared script, Dockerfile, or runbook conditional.
+
+### CLI tools and GUI applications differ here
+
+The ecosystem has a clear split, and it is not about macOS versus Linux — it is about what kind of program you are.
+
+**CLI tools** use `~/.config`, `~/.cache`, and `~/.local/share` on every platform, macOS included. GitHub CLI, HashiCorp Packer, Stripe CLI, and 1Password CLI all do. The payoff is one path everywhere and paths that survive being mounted into a container.
+
+**GUI applications** — the things that live in `/Applications` — use `~/Library/Application Support` and `~/Library/Caches`, which integrates properly with macOS conventions for shipped apps.
+
+Atmos is a CLI tool, so it should follow CLI conventions.
+
+## The Fix
+
+On **macOS**, the defaults change:
 
 **Before:**
 - Config: `~/Library/Application Support/atmos/`
@@ -27,107 +45,10 @@ Starting with this release, Atmos on **macOS** uses different default paths for 
 - Cache: `~/.cache/atmos/`
 - Data: `~/.local/share/atmos/`
 
-**Note:** This only affects macOS. Linux and Windows paths remain unchanged.
+Linux and Windows paths are unchanged. The override applies process-wide, so every part of Atmos resolves the same locations — there is no code path left that writes to the old directories.
 
-## Why This Change?
+Your `~/.config` now sits alongside the rest of your tooling:
 
-### The Problem
-
-When we implemented XDG Base Directory Specification support, we used the `github.com/adrg/xdg` library which defaults to `~/Library/Application Support` on macOS. This follows macOS conventions for **GUI applications**.
-
-However, this created problems:
-
-1. **Geodesic Incompatibility**: Geodesic mounts `~/.config` by default, not `~/Library/Application Support`
-2. **Ecosystem Inconsistency**: Other CLI tools (gh, git, packer, stripe, op, kubectl, docker, terraform) all use `~/.config` on macOS
-3. **Platform Fragmentation**: Different paths on Linux vs macOS made cross-platform workflows confusing
-
-### CLI Tools vs GUI Applications
-
-Research into the CLI tool ecosystem revealed a clear pattern:
-
-**CLI Tools** (command-line only):
-- Use `~/.config`, `~/.cache`, `~/.local/share` on **all platforms** including macOS
-- Examples: GitHub CLI (`gh`), HashiCorp Packer, Stripe CLI, 1Password CLI
-- Benefits: Consistent paths across Linux/macOS, works with containerized environments
-
-**GUI Applications** (native Mac apps):
-- Use `~/Library/Application Support`, `~/Library/Caches`
-- Provides better macOS system integration
-- Standard for applications in `/Applications`
-
-Since **Atmos is a CLI tool**, it should follow CLI conventions, not GUI conventions.
-
-## Impact on Users
-
-### Most Users Not Affected
-
-If you're upgrading from versions **prior to v1.195.0**, you're not affected because:
-- Old versions used `~/.aws/atmos/` (legacy path)
-- The `~/Library/Application Support` path was never released in a stable version
-
-### macOS Users Running Unreleased Versions
-
-If you were using Atmos auth on macOS from the main branch between v1.195.0 and this release:
-
-### Option 1: Use new path (recommended)
-```bash
-# Re-login to store credentials in new location
-atmos auth login
-```
-
-### Option 2: Keep existing location
-```bash
-# Add to ~/.zshrc or ~/.bash_profile
-export ATMOS_XDG_CONFIG_HOME="$HOME/Library/Application Support"
-```
-
-**Note**: This keeps credentials in the old location but affects **all** Atmos XDG paths (config, cache, data), not just credentials. This may cause issues with Geodesic which expects credentials in `~/.config`. We recommend Option 1 (re-login) instead.
-
-### Option 3: Move credentials
-```bash
-if [ -d "$HOME/Library/Application Support/atmos" ]; then
-    mkdir -p ~/.config
-    mv "$HOME/Library/Application Support/atmos" ~/.config/
-fi
-```
-
-## Benefits
-
-### Seamless Geodesic Integration
-
-Geodesic automatically mounts these directories:
-- `~/.aws`
-- `~/.config` ← Atmos credentials now stored here
-- `~/.ssh`
-- `~/.kube`
-- `~/.terraform.d`
-
-**Configuration needed for Geodesic users:** Geodesic sets system-wide XDG environment variables (`XDG_CONFIG_HOME=/etc/xdg_config_home`) that need to be overridden. Add to your Geodesic Dockerfile:
-
-```dockerfile
-# Override Geodesic's system XDG paths to use home directory
-ENV ATMOS_XDG_CONFIG_HOME=$HOME/.config
-ENV ATMOS_XDG_DATA_HOME=$HOME/.local/share
-ENV ATMOS_XDG_CACHE_HOME=$HOME/.cache
-```
-
-This ensures Atmos credentials are stored in mounted directories (`~/.config`) rather than non-mounted system directories (`/etc/xdg_config_home`). See [Configuring Geodesic](/tutorials/configuring-geodesic) for details.
-
-### Consistent Cross-Platform Paths
-
-```bash
-# Linux
-~/.config/atmos/aws/provider/credentials
-
-# macOS (new)
-~/.config/atmos/aws/provider/credentials
-
-# Same path on both platforms!
-```
-
-### Ecosystem Alignment
-
-Your `~/.config` directory now contains configuration for all your CLI tools:
 ```text
 ~/.config/
 ├── atmos/          # Atmos (now!)
@@ -138,45 +59,76 @@ Your `~/.config` directory now contains configuration for all your CLI tools:
 └── op/             # 1Password CLI
 ```
 
-## Technical Implementation
+## How to Use It
 
-We override the `adrg/xdg` library's macOS defaults using an `init()` function:
+### Most users are not affected
 
-```go
-func init() {
-    if runtime.GOOS == "darwin" {
-        xdg.ConfigHome = filepath.Join(homeDir, ".config")
-        xdg.DataHome = filepath.Join(homeDir, ".local", "share")
-        xdg.CacheHome = filepath.Join(homeDir, ".cache")
-    }
-}
+If you are upgrading from a version **prior to v1.195.0**, there is nothing to do:
+
+- Older versions used `~/.aws/atmos/`, the legacy path.
+- The `~/Library/Application Support` path was never in a stable release.
+
+### If you ran an unreleased build on macOS
+
+This applies only if you used Atmos auth on macOS from the main branch between v1.195.0 and this release. Pick one of three:
+
+#### Option 1: Use the new path (recommended)
+
+```bash
+# Re-login to store credentials in new location
+atmos auth login
 ```
 
-This ensures **all code** in Atmos (even code that directly imports `github.com/adrg/xdg`) gets CLI tool conventions on macOS.
+Costs you one login. Leaves nothing behind to explain later.
 
-## Documentation Updates
+#### Option 2: Keep the existing location
 
-- [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
-- [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths.
+```bash
+# Add to ~/.zshrc or ~/.bash_profile
+export ATMOS_XDG_CONFIG_HOME="$HOME/Library/Application Support"
+```
 
-## Migration Support
+This pins **all** Atmos XDG paths — config, cache, and data — to the old location, not just credentials. It also reintroduces the Geodesic problem, since the container still expects `~/.config`. Option 1 is the better trade.
 
-If you encounter issues:
+#### Option 3: Move the credentials
 
-1. Check your current credentials location:
-   ```bash
-   ls -la ~/Library/Application\ Support/atmos
-   ls -la ~/.config/atmos
-   ```
+```bash
+if [ -d "$HOME/Library/Application Support/atmos" ]; then
+    mkdir -p ~/.config
+    mv "$HOME/Library/Application Support/atmos" ~/.config/
+fi
+```
 
-2. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) if you need help
+Preserves the existing session without a re-login, at the cost of a manual move you have to remember to run on every machine.
+
+### Geodesic configuration
+
+Geodesic sets system-wide XDG environment variables (`XDG_CONFIG_HOME=/etc/xdg_config_home`) that need to be overridden, because `/etc/xdg_config_home` is not one of the mounted directories. Add to your Geodesic Dockerfile:
+
+```dockerfile
+# Override Geodesic's system XDG paths to use home directory
+ENV ATMOS_XDG_CONFIG_HOME=$HOME/.config
+ENV ATMOS_XDG_DATA_HOME=$HOME/.local/share
+ENV ATMOS_XDG_CACHE_HOME=$HOME/.cache
+```
+
+Geodesic already mounts `~/.aws`, `~/.config`, `~/.ssh`, `~/.kube`, and `~/.terraform.d`, so credentials written to `~/.config` are visible inside the container. See [Configuring Geodesic](/tutorials/configuring-geodesic).
+
+### Checking where your credentials are
+
+```bash
+ls -la ~/Library/Application\ Support/atmos
+ls -la ~/.config/atmos
+```
 
 ## References
 
+- [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic)
+- [Auth Usage Guide](/cli/commands/auth/usage) — updated with the macOS paths
 - [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
 - [Stack Overflow discussion on XDG equivalents on macOS](https://stackoverflow.com/questions/3373948/equivalents-of-xdg-config-home-and-xdg-data-home-on-mac-os-x)
 - [Geodesic](https://github.com/cloudposse/geodesic)
 
----
+## Get Involved
 
-This change aligns Atmos with CLI tool best practices and ensures seamless integration with containerized development environments. macOS users now enjoy the same consistent experience as Linux users!
+If this migration leaves you somewhere the three options above do not cover, describe your setup at https://github.com/cloudposse/atmos/issues

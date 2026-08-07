@@ -9,50 +9,33 @@ tags:
   - documentation
 ---
 
-Finding information in documentation shouldn't require knowing the exact terminology or page structure. With **Ask AI**, you can now ask natural language questions about Atmos and get intelligent, contextual answers—powered by [Algolia DocSearch v4](https://docsearch.algolia.com/docs/v4/askai/) and ChatGPT.
+Finding information in documentation shouldn't require knowing the exact terminology or page structure. With **Ask AI**, you can ask a question in your own words and get an answer assembled from the Atmos docs, with links to the pages it came from.
 
 <!--truncate-->
 
-## How It Works
+## The Problem
 
-When you open the search dialog (press `/` or `Cmd+K`), you can seamlessly switch between traditional keyword search and a chat-style assistant that understands your questions.
+Keyword search only works when you already know the keyword. If you are trying to find out how Atmos handles a thing, but the docs call that thing something else, the search box has nothing to match on — and a question that spans two or three pages ("what's the difference between imports and inheritance?") has no single page to land on at all. You end up guessing at vocabulary, or reading the sidebar top to bottom.
 
-**Key features:**
+## The Fix
 
-- **Natural language queries** - Ask questions like "How do I configure AWS SSO authentication?" or "What's the difference between stacks and components?"
-- **Contextual answers** - Responses are generated from the actual documentation content, not generic AI knowledge
-- **Source citations** - Every answer includes links to the specific documentation pages it drew from
-- **Seamless experience** - Switch between keyword search and AI assistant without leaving the search dialog.
+The search dialog on [atmos.tools](https://atmos.tools) now has a second mode: a chat-style assistant, built on [Algolia DocSearch v4](https://docsearch.algolia.com/docs/v4/askai/).
 
-## Under the Hood
+Nothing about it is trained on Atmos. It retrieves from the same Algolia index that backs the existing keyword search — the crawled content of this documentation site — and uses a language model to turn the passages it retrieves into an answer. That is the useful property: answers come from the current published docs rather than from a model's recollection of Atmos, and every answer cites the pages it drew from, so you can go read the real thing.
 
-Ask AI uses Algolia's integration with large language models (LLMs) to understand your questions and find relevant information from the indexed documentation. The assistant is specifically trained on Atmos documentation, so it understands:
+The tradeoff is the same one every retrieval system has. If something is not in the docs, Ask AI cannot answer it, and a page that is wrong or stale will produce an answer that is wrong or stale in exactly the same way.
 
-- Atmos CLI commands and their flags
-- Stack configuration patterns and YAML syntax
-- Authentication providers and identity management
-- Workflows, custom commands, and extensibility patterns
-- Design patterns and best practices
+## How to Use It
 
-## Try It Now
-
-Visit [atmos.tools](https://atmos.tools) and press `/` or `Cmd+K` to open the search dialog. Try asking questions like:
+Visit [atmos.tools](https://atmos.tools) and press `/` or `Cmd+K` to open the search dialog, then switch to the assistant. Keyword search is still there and still the right tool when you know what you are looking for. Questions worth trying:
 
 - "How do I set up AWS SSO with Atmos?"
 - "What is the difference between imports and inheritance?"
 - "How do I create a custom workflow?"
 - "What YAML functions are available?"
 
-The AI assistant will provide detailed answers with direct links to the relevant documentation pages.
-
-## Technical Details
-
-This feature is enabled by upgrading to Docusaurus 3.9.2 and DocSearch v4, which adds native support for Algolia's Ask AI feature. The assistant is configured with an understanding of Atmos as a DevOps and cloud automation tool, ensuring responses are relevant and technically accurate.
+Each answer arrives with direct links to the relevant documentation pages.
 
 ## Get Involved
 
-Have feedback on Ask AI? We'd love to hear how it's helping you navigate the documentation:
-
-- [Open an issue](https://github.com/cloudposse/atmos/issues) for bugs or feature requests
-- [Join our Slack](https://slack.cloudposse.com/) to discuss with the community
-- [Star the repo](https://github.com/cloudposse/atmos) if you find Atmos helpful
+If Ask AI gives you a bad answer, that usually means the docs behind it are thin or wrong — which is worth fixing at the source. Tell us at [our issue tracker](https://github.com/cloudposse/atmos/issues), or in [Slack](https://slack.cloudposse.com/).
