@@ -149,8 +149,10 @@ The expiry is written to **stderr** via `ui.*` (not sensitive), keeping stdout a
 
 ### Error Handling
 
-One static sentinel `ErrRDSTokenGeneration` (in `errors/errors.go`, beside `ErrEKSTokenGeneration`);
-all failures wrap it with `fmt.Errorf("%w: %w", …)` for `errors.Is`.
+The static sentinel `ErrRDSTokenGeneration` (in `errors/errors.go`, beside `ErrEKSTokenGeneration`) wraps
+validation and token-generation failures; identity and config failures wrap their own sentinels
+(`ErrIdentityAuthFailed`, `ErrFailedToInitConfig`). All are wrapped via `fmt.Errorf` and matchable with
+`errors.Is`, as detailed in the table below.
 
 | Context | Behavior |
 |---|---|
