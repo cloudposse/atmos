@@ -176,7 +176,7 @@ func (s *Service) Provision(
 
 	// 2. Sync local component files to workdir (incremental, per-file checksum).
 	// Use sourceComponent for finding the source directory, workdirComponent for metadata.
-	metadata, changed, err := s.syncLocalToWorkdir(ctx, atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack, suppressOutput)
+	metadata, changed, err := s.syncLocalToWorkdir(ctx, atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack)
 	if err != nil {
 		return err
 	}
@@ -252,9 +252,11 @@ func (s *Service) syncLocalToWorkdir(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
-	workdirPath, workdirComponent, sourceComponent, stack string, suppressOutput bool,
+	workdirPath, workdirComponent, sourceComponent, stack string,
 ) (*WorkdirMetadata, bool, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
+
+	suppressOutput := OutputSuppressed(ctx)
 
 	// Use sourceComponent (base component) for finding the source directory.
 	componentPath, err := s.validateComponentPath(atmosConfig, componentConfig, sourceComponent)
@@ -326,6 +328,8 @@ func (s *Service) computeContentHash(ctx context.Context, workdirPath string) st
 			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
 		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
 			_, _ = fmt.Fprintf(writers.Stderr, "WARNING: Failed to compute content hash: %s\n", err)
+		} else {
+			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
 		}
 		return ""
 	}
