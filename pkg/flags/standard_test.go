@@ -605,6 +605,64 @@ func TestStandardFlagParser_ValidateFlagValues_MethodOnCmd(t *testing.T) {
 	})
 }
 
+// TestStandardFlagParser_ValidateFlagValues_EnvVarOnly is a regression test:
+// a flag whose invalid value is supplied only through its bound environment
+// variable -- never touched on the CLI -- must still be rejected. Before this
+// fix, ValidateFlagValues only inspected cmd.Flags().Changed(), so an
+// env-only value (e.g. ATMOS_AI_SKILL_CLIENT=bogus) silently bypassed
+// validation: the command reported success while distributing to zero
+// clients, since "bogus" matched no real client.
+func TestStandardFlagParser_ValidateFlagValues_EnvVarOnly(t *testing.T) {
+	t.Run("rejects an invalid value sourced only from an env var", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		t.Setenv("TEST_ATMOS_VALIDATE_CLIENT_ENV", "bogus-name")
+
+		err := parser.ValidateFlagValues(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bogus-name")
+	})
+
+	t.Run("accepts a valid value sourced only from an env var", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV_OK"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		t.Setenv("TEST_ATMOS_VALIDATE_CLIENT_ENV_OK", "vscode")
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("still a no-op when nothing was set anywhere", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV_UNSET"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+}
+
 // TestStandardFlagParser_ParseWithPositionalArgs tests parsing with positional arguments.
 func TestStandardFlagParser_ParseWithPositionalArgs(t *testing.T) {
 	t.Run("parses flags with command registered", func(t *testing.T) {
