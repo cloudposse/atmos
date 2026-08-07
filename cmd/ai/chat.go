@@ -130,7 +130,7 @@ var chatCmd = &cobra.Command{
 			} else {
 				// Create anonymous session with timestamp.
 				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
-				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: getModelFromConfig(&atmosConfig), Provider: getProviderFromConfig(&atmosConfig)})
+				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: client.GetModel(), Provider: getProviderFromConfig(&atmosConfig)})
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
