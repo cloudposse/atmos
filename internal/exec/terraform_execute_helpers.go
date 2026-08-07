@@ -940,7 +940,7 @@ func prepareInitExecution(ctx context.Context, atmosConfig *schema.AtmosConfigur
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
 func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
-	newPath, err := prepareInitExecution(shellCommandContext(opts...), atmosConfig, info, componentPath)
+	newPath, err := prepareInitExecution(shellCommandProvisionerContext(opts...), atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
 	}
@@ -1010,7 +1010,7 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(shellCommandContext(opts...), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(shellCommandProvisionerContext(opts...), 5*time.Minute)
 	defer cancel()
 
 	if err := provisioner.ExecuteProvisioners(

@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -404,6 +405,7 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	var uiOutput bytes.Buffer
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -417,11 +419,13 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	}
 
 	// Hash failure is a warning, not an error.
-	err = service.Provision(WithOutputSuppressed(context.Background()), atmosConfig, componentConfig)
+	ctx := provisioner.WithOutputWriters(WithOutputSuppressed(context.Background()), provisioner.OutputWriters{Stderr: &componentOutput})
+	err = service.Provision(ctx, atmosConfig, componentConfig)
 	require.NoError(t, err)
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 	assert.Empty(t, uiOutput.String())
+	assert.Contains(t, componentOutput.String(), "Provisioning workdir for component 'vpc'")
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {

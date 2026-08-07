@@ -457,6 +457,30 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 	})
 }
 
+func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
+	initSpinTestIO(t)
+	handler, ok := Get("spin")
+	require.True(t, ok)
+	spinHandler := handler.(*SpinHandler)
+	var stdout, stderr bytes.Buffer
+	ctx := WithOutputWriters(WithOutputSuppressed(t.Context()), OutputWriters{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
+		Name:    "run",
+		Title:   "Run",
+		Command: "echo stdout; echo stderr >&2",
+	}, NewVariables())
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "stdout")
+	assert.Contains(t, stderr.String(), "stderr")
+	assert.Contains(t, result.Metadata["stdout"], "stdout")
+	assert.Contains(t, result.Metadata["stderr"], "stderr")
+}
+
 // TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY
 // test environment, ExecWithSpinner runs the operation directly (no animation),
 // so the command actually runs and we can assert on its captured output.

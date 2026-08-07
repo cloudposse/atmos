@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -202,6 +203,28 @@ func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, backendProvisionErr)
 	assert.Contains(t, err.Error(), "failed to provision s3 backend")
+}
+
+func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
+	t.Cleanup(backend.ResetRegistryForTesting)
+
+	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
+		return &backend.ProvisionResult{Warnings: []string{"bucket policy is permissive"}}, nil
+	})
+	var output bytes.Buffer
+	ctx := WithOutputWriters(WithOutputSuppressed(t.Context()), OutputWriters{Stderr: &output})
+
+	err := autoProvisionBackend(ctx, &schema.AtmosConfiguration{}, map[string]any{
+		"backend_type": "s3",
+		"backend":      map[string]any{},
+		"provision": map[string]any{
+			"backend": map[string]any{"enabled": true},
+		},
+	}, nil, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, output.String(), "Provisioned S3 backend")
+	assert.Contains(t, output.String(), "WARNING: bucket policy is permissive")
 }
 
 func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {

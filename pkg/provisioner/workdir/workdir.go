@@ -164,6 +164,8 @@ func (s *Service) Provision(
 	if !suppressOutput {
 		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
+	} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		_, _ = fmt.Fprintf(writers.Stderr, "Provisioning workdir for component '%s'\n", workdirComponent)
 	}
 
 	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
@@ -204,11 +206,15 @@ func (s *Service) Provision(
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+			_, _ = fmt.Fprintf(writers.Stderr, "Workdir provisioned: %s\n", workdirPath)
 		}
 	} else {
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+			_, _ = fmt.Fprintf(writers.Stderr, "Workdir ready (no changes): %s\n", workdirPath)
 		}
 	}
 	return nil

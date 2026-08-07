@@ -108,12 +108,21 @@ func autoProvisionBackend(
 		return err
 	}
 
+	writers := OutputWritersFromContext(ctx)
+	if OutputSuppressed(ctx) && writers.Stderr != nil {
+		_, _ = fmt.Fprintln(writers.Stderr, completedMsg)
+	}
+
 	// Display warnings AFTER spinner completes to avoid concurrent output issues.
 	// The spinner runs operations in a background goroutine while animating on stderr,
 	// so any output during spinner execution would interleave and corrupt the display.
-	if result != nil && !OutputSuppressed(ctx) {
+	if result != nil {
 		for _, warning := range result.Warnings {
-			ui.Warning(warning)
+			if OutputSuppressed(ctx) && writers.Stderr != nil {
+				_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", warning)
+			} else if !OutputSuppressed(ctx) {
+				ui.Warning(warning)
+			}
 		}
 	}
 

@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"io"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -17,7 +18,16 @@ type StepExecutor struct {
 	atmosConfig *schema.AtmosConfiguration
 }
 
-type outputSuppressedContextKey struct{}
+type (
+	outputSuppressedContextKey struct{}
+	outputWritersContextKey    struct{}
+)
+
+// OutputWriters routes step subprocess output through component-scoped streams.
+type OutputWriters struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
 
 // WithOutputSuppressed disables transient step UI for this context.
 func WithOutputSuppressed(ctx context.Context) context.Context {
@@ -32,6 +42,21 @@ func OutputSuppressed(ctx context.Context) bool {
 
 	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
 	return ok
+}
+
+// WithOutputWriters attaches component-scoped output streams to ctx.
+func WithOutputWriters(ctx context.Context, writers OutputWriters) context.Context {
+	defer perf.Track(nil, "step.WithOutputWriters")()
+
+	return context.WithValue(ctx, outputWritersContextKey{}, writers)
+}
+
+// OutputWritersFromContext returns component-scoped output streams from ctx.
+func OutputWritersFromContext(ctx context.Context) OutputWriters {
+	defer perf.Track(nil, "step.OutputWritersFromContext")()
+
+	writers, _ := ctx.Value(outputWritersContextKey{}).(OutputWriters)
+	return writers
 }
 
 // NewStepExecutor creates a new step executor.

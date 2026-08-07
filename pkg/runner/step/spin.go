@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
 	"time"
@@ -65,8 +66,17 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	var stdout, stderr bytes.Buffer
+	writers := OutputWritersFromContext(ctx)
+	stdoutWriter := io.Writer(&stdout)
+	stderrWriter := io.Writer(&stderr)
+	if writers.Stdout != nil {
+		stdoutWriter = io.MultiWriter(&stdout, writers.Stdout)
+	}
+	if writers.Stderr != nil {
+		stderrWriter = io.MultiWriter(&stderr, writers.Stderr)
+	}
 	operation := func() error {
-		return h.runCommand(execCtx, opts, &stdout, &stderr)
+		return h.runCommand(execCtx, opts, stdoutWriter, stderrWriter)
 	}
 	if OutputSuppressed(ctx) {
 		err = operation()
@@ -146,7 +156,7 @@ func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.Workfl
 }
 
 // runCommand executes the command with configured options.
-func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, stdout, stderr *bytes.Buffer) error {
+func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, stdout, stderr io.Writer) error {
 	if opts.command == "" {
 		return errUtils.ErrStepEmptyCommand
 	}

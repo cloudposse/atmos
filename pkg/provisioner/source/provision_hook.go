@@ -244,7 +244,13 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		return nil
 	}
 	if workdir.OutputSuppressed(ctx) {
-		return operation()
+		if err := operation(); err != nil {
+			return err
+		}
+		if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+			_, _ = fmt.Fprintln(writers.Stderr, completedMsg)
+		}
+		return nil
 	}
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
 }
