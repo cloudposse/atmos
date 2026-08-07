@@ -101,6 +101,19 @@ With `--server`:
   Custom Resource Definitions authoritatively. Requires a reachable cluster and
   a configured kubeconfig.
 
+:::caution Bootstrapping a namespace with `--server`
+Each object's server-side dry-run is evaluated independently against the
+cluster's *currently persisted* state. If a manifest set creates its own
+namespace and also delivers objects into that namespace in the same batch —
+the common pattern for a first deploy — `--server` reports the dependent
+objects as invalid (`namespaces "my-namespace" not found`) even though the
+manifest set is entirely valid and `apply`/`deploy` (a real, non-dry-run
+apply) succeeds without issue. This is inherent to how the Kubernetes API
+server evaluates dry-run requests, not an Atmos-specific limitation. If you
+hit this, apply the namespace first (or without `--server`) and re-run
+`--server` once it exists.
+:::
+
 ### Kustomize config objects
 
 Kustomize's own `Kustomization` and `Component` objects are not Kubernetes API

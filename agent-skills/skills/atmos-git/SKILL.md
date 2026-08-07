@@ -36,8 +36,7 @@ git:
         author:
           name: Atmos Bot
           email: atmos@example.com
-        signing:
-          mode: auto
+        signing: auto               # auto | always | never
 ```
 
 Use identities or `github/sts` for private GitHub access. Do not put tokens in repository URIs.

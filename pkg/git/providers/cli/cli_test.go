@@ -71,6 +71,10 @@ func TestCloneFreshMinimalArgs(t *testing.T) {
 
 func TestCloneReconcilesExistingWorkdir(t *testing.T) {
 	runner := newFakeRunner()
+	// The common case: the workdir's remote already matches the configured
+	// URI (unchanged since the original clone), so reconcile must not issue
+	// a redundant "remote set-url".
+	runner.on("remote get-url origin", atmosgit.RunResult{Stdout: "https://github.com/acme/deploy.git\n"}, nil)
 	provider := New(WithRunner(runner))
 	workdir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
@@ -83,11 +87,42 @@ func TestCloneReconcilesExistingWorkdir(t *testing.T) {
 	require.NoError(t, err)
 
 	calls := runner.joinedCalls()
-	require.Len(t, calls, 4)
+	require.Len(t, calls, 5)
 	assert.Equal(t, "status --porcelain --untracked-files=all", calls[0])
-	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[1])
-	assert.Equal(t, "checkout main", calls[2])
-	assert.Equal(t, "merge --ff-only origin/main", calls[3])
+	assert.Equal(t, "remote get-url origin", calls[1])
+	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[2])
+	assert.Equal(t, "checkout main", calls[3])
+	assert.Equal(t, "merge --ff-only origin/main", calls[4])
+}
+
+// TestCloneReconcileUpdatesRemoteURLOnChange covers the config-drift case: the
+// workdir's existing "origin" remote no longer matches the configured URI
+// (e.g. a corrected typo or a migrated repository), so reconcile must repoint
+// it via "remote set-url" before fetching -- otherwise the correction in
+// config would be silently ignored by an already-cloned workdir forever,
+// since fetch/pull address the remote by name, never by the configured URI.
+func TestCloneReconcileUpdatesRemoteURLOnChange(t *testing.T) {
+	runner := newFakeRunner()
+	runner.on("remote get-url origin", atmosgit.RunResult{Stdout: "https://github.com/acme/old-deploy.git\n"}, nil)
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
+
+	err := provider.Clone(context.Background(), &atmosgit.CloneOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+		Depth:       1,
+	})
+	require.NoError(t, err)
+
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 6)
+	assert.Equal(t, "status --porcelain --untracked-files=all", calls[0])
+	assert.Equal(t, "remote get-url origin", calls[1])
+	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
+	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[3])
+	assert.Equal(t, "checkout main", calls[4])
+	assert.Equal(t, "merge --ff-only origin/main", calls[5])
 }
 
 func TestCloneReconcileRefusesDirtyWorkdir(t *testing.T) {
