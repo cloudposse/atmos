@@ -15,8 +15,8 @@ releases, fixing the Version Tracker resolver and its sibling callers at the roo
 had resolved `atmos` to a draft release (`v1.226.0`) instead of the real latest published release
 (`v1.225.0`), when run with `datasource: github-releases` and `desired: latest`. Draft releases are only
 visible to collaborators via the GitHub API, so this doesn't reproduce with a plain public read-only token —
-but `secrets.GITHUB_TOKEN` in a repo's own CI does have that access, which is exactly the situation that
-surfaced the bug.
+but `secrets.GITHUB_TOKEN` in a repo's own CI has that access whenever the workflow's token permissions grant
+at least read access to repository contents, which is the situation that surfaced the bug.
 
 Root cause: `pkg/github/releases.go`'s `GetReleases` lists all releases via `client.Repositories.ListReleases`
 (which includes drafts for authorized tokens) and only filtered prereleases (`filterPrereleases`) and by date
