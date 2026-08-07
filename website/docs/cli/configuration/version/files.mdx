@@ -7,6 +7,8 @@ description: Configure file managers that render locked versions into project fi
 ---
 
 import File from '@site/src/components/File'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 `version.files` declares which files carry managed versions. [`atmos version track apply`](/cli/commands/version/track/apply) rewrites those files from the lock file, and [`verify`](/cli/commands/version/track/verify) fails when they drift.
 
@@ -47,22 +49,155 @@ When `version.files` is empty, managers with default paths run over those defaul
   <dd>Renders `*.tmpl` source files to sibling files using the `.version` context.</dd>
 </dl>
 
-## Marker Example
+## Updating Dockerfiles
+
+Annotate the line to update with an `atmos:version` comment. The `marker` manager rewrites the version token in place from the lock file:
 
 ```dockerfile
 # atmos:version opentofu
 ENV TOFU_VERSION=1.10.6
 ```
 
+The same annotation works in any commented format, for example YAML:
+
 ```yaml
 tofu_version: 1.10.6 # atmos:version opentofu
 ```
 
-Use `match=` when the default token detection is ambiguous:
+Given this `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.10"
+
+  files:
+    - manager: marker
+      paths:
+        - Dockerfile
+```
+</File>
+
+`atmos version track update prod` followed by `atmos version track apply prod` rewrites the annotated line in place:
+
+<Tabs>
+  <TabItem value="before" label="Before" default>
+    <File title="Dockerfile">
+    ```dockerfile
+    # atmos:version opentofu
+    ENV TOFU_VERSION=1.10.6
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="after" label="After">
+    <File title="Dockerfile">
+    ```dockerfile
+    # atmos:version opentofu
+    ENV TOFU_VERSION=1.10.8
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+A Dockerfile can track more than one tool — each just needs its own marker line:
+
+```dockerfile
+# atmos:version opentofu
+ENV TOFU_VERSION=1.10.8
+
+# atmos:version terraform
+ENV TERRAFORM_VERSION=1.9.8
+```
+
+Use `match=` when the default token detection is ambiguous, for example a version-shaped path segment appearing before the actual version:
 
 ```shell
-DOWNLOAD_URL="https://example.com/tool/v1.2.3/tool.tgz" # atmos:version tool match=/tool/(v[^/]+)/tool.tgz
+RUN curl -fsSL https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip # atmos:version terraform match=terraform_([0-9.]+)_linux
 ```
+
+## Updating GitHub Action Workflows
+
+The `github-actions` manager rewrites `uses:` refs in workflow files, matching entries by `owner/repo` package. Add a dependency for the action and register the manager:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    checkout:
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      desired: "v6"
+
+  files:
+    - manager: github-actions
+      paths:
+        - .github/workflows/*.yaml
+```
+</File>
+
+`atmos version track apply prod` rewrites the matching `uses:` line:
+
+<Tabs>
+  <TabItem value="before" label="Before" default>
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@v5
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="after" label="After">
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@v6
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+Set `update.pin: sha` to pin third-party actions to their immutable commit SHA instead — Atmos writes the SHA with the human-readable version as a trailing comment, matching the Renovate/Dependabot convention:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    checkout:
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      desired: "v6"
+      update:
+        pin: sha
+```
+</File>
+
+<Tabs>
+  <TabItem value="before" label="Before" default>
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@v5
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="after" label="After">
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@8edcb1bdb4e267140fa742c62e395cd74f332709 # v6.1.0
+    ```
+    </File>
+  </TabItem>
+</Tabs>
 
 ## Examples
 
