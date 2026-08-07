@@ -9,17 +9,17 @@ A field-test pass of the `osterman/vendor-pull-stack-flag` PR (which added `--la
 consistency/coverage gaps. This fix:
 
 1. `vendor pull --stack X --tags Y` now rejects the combination instead of silently dropping
-   `--tags` and vendoring every component in the stack.
+  `--tags` and vendoring every component in the stack.
 2. `vendor update --component X --tags Y` composes correctly (both already filter the same
-   `vendor.yaml` `Sources[]` domain) and now errors explicitly when the combination matches
-   nothing, instead of silently succeeding with an empty report.
+  `vendor.yaml` `Sources[]` domain) and now errors explicitly when the combination matches
+  nothing, instead of silently succeeding with an empty report.
 3. `pull`'s and `update`'s "selector matched nothing" error wording/sentinel are now identical
-   (both share a stack/labels-only selector vocabulary).
+  (both share a stack/labels-only selector vocabulary).
 4. `clean`/`verify` now support `--type`/`--file`, matching `diff`/`update`.
 5. Deduplicated two hand-maintained copies of the stack-walk logic in
-   `internal/exec/vendor_component_utils.go`, and two hand-maintained copies of the
-   component+tags matcher (`internal/exec`'s `shouldSkipSource` / `pkg/vendoring`'s
-   `sourceMatchesFilter`) into one shared `vendoring.MatchesComponentTags`.
+  `internal/exec/vendor_component_utils.go`, and two hand-maintained copies of the
+  component+tags matcher (`internal/exec`'s `shouldSkipSource` / `pkg/vendoring`'s
+  `sourceMatchesFilter`) into one shared `vendoring.MatchesComponentTags`.
 
 ## Context
 
