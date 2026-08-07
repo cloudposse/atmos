@@ -429,6 +429,25 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	assert.Contains(t, componentOutput.String(), "WARNING: Failed to compute content hash: hash failed")
 }
 
+func TestServiceComputeContentHash_WarnsWithoutOutputWriter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockHasher := NewMockHasher(ctrl)
+	mockHasher.EXPECT().HashDir("workdir").Return("", errors.New("hash failed"))
+	service := NewServiceWithDeps(nil, mockHasher)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&output)
+	t.Cleanup(restoreUI)
+
+	contentHash := service.computeContentHash(WithOutputSuppressed(t.Context()), "workdir")
+
+	assert.Empty(t, contentHash)
+	assert.Contains(t, output.String(), "Failed to compute content hash: hash failed")
+}
+
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping read-only directory test on Windows - directory permissions work differently")
