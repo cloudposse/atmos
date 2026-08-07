@@ -331,7 +331,7 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 
 	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (see
 	// TestRunInstall_WithValidToolSpec for why not DefaultToolVersionsFilePath).
-	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution
+	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution.
 	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	// Check for either key - the implementation may normalize to the shorter form

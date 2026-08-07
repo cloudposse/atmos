@@ -1,9 +1,12 @@
 package toolchain
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -44,7 +47,7 @@ func init() {
 func runLock(cmd *cobra.Command, args []string) error {
 	v := viper.GetViper()
 	if err := lockParser.BindFlagsToViper(cmd, v); err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFlagBinding, err)
 	}
 
 	maxConcurrency, err := resolveInstallMaxConcurrency(cmd)

@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -93,4 +95,52 @@ func TestRunLock_ReportsInTargetOrder(t *testing.T) {
 	require.NotEqual(t, -1, idxC, "expected ccc in output, got %q", output)
 	assert.Less(t, idxA, idxB, "aaa must be reported before bbb")
 	assert.Less(t, idxB, idxC, "bbb must be reported before ccc")
+}
+
+// TestRunLock_ForceWritesLockFileWithoutInstalling verifies the actual contract `atmos
+// toolchain lock` exists to provide: even with toolchain.use_lock_file: false (so a real
+// `atmos toolchain install` wouldn't write a lock entry), RunLock still writes a real,
+// checksum-populated toolchain.lock.yaml entry -- and never extracts/installs the binary
+// into the toolchain tree. Mirrors TestLockTool_WritesLockEntryWithoutInstalling
+// (installer package, unit-level) at the RunLock orchestration layer, using the same
+// real-registry-lookup pattern as TestRunInstall_WithCanonicalFormat (install_test.go).
+func TestRunLock_ForceWritesLockFileWithoutInstalling(t *testing.T) {
+	setupTestIO(t)
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.11.4\n")
+
+	// InstallPath MUST be isolated to a per-test temp dir: RunLock performs a real
+	// registry lookup + download via NewInstaller(), and without an explicit
+	// InstallPath, GetInstallPath() falls back to the real, shared, XDG toolchain
+	// cache directory the rest of the acceptance suite depends on (see the identical
+	// caveat on TestRunInstall_WithCanonicalFormat in install_test.go).
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath, InstallPath: installPath, UseLockFile: false}})
+	defer func() {
+		SetAtmosConfig(prevConfig)
+	}()
+
+	err := RunLock(nil, LockOptions{MaxConcurrency: 4})
+	require.NoError(t, err)
+
+	// The lock file must be written despite use_lock_file: false -- that's the whole
+	// point of `atmos toolchain lock`'s force-write behavior.
+	lockFilePath := filepath.Join(installPath, "toolchain.lock.yaml")
+	lockData, err := os.ReadFile(lockFilePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(lockData), "checksum_algorithm")
+	assert.Contains(t, string(lockData), "terraform")
+
+	// No binary may be installed -- locking must never extract/install into binDir
+	// (GetInstallPath()/bin).
+	binDir := filepath.Join(installPath, "bin")
+	entries, statErr := os.ReadDir(binDir)
+	if statErr == nil {
+		assert.Empty(t, entries, "RunLock must not install a binary into binDir")
+	} else {
+		assert.True(t, os.IsNotExist(statErr), "unexpected error reading binDir: %v", statErr)
+	}
 }

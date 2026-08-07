@@ -52,7 +52,7 @@ func RunLock(toolNames []string, opts LockOptions) error {
 	filePath := GetToolVersionsFilePath()
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to load .tool-versions: %w", errUtils.ErrToolVersionsFileOperation, err)
+		return fmt.Errorf("%w: failed to load %s: %w", errUtils.ErrToolVersionsFileOperation, filePath, err)
 	}
 
 	targets, err := resolveLockTargets(toolVersions, toolNames)
@@ -119,7 +119,7 @@ func resolveLockTargets(toolVersions *ToolVersions, toolNames []string) ([]toolI
 		}
 		owner, repo, err := installer.ParseToolSpec(resolvedKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve tool '%s': %w", name, err)
+			return nil, fmt.Errorf("%w: failed to resolve tool '%s': %w", errUtils.ErrInvalidToolSpec, name, err)
 		}
 		targets = append(targets, toolInfo{version, owner, repo})
 	}
