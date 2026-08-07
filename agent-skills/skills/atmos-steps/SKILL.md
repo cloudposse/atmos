@@ -154,6 +154,10 @@ A workflow-level `working_directory:` default still reaches extended step types 
 own `working_directory:` unset — it falls back to the same `base_path`-anchored resolution the
 workflow-level default already gets for shell/exec/atmos steps.
 
+After `working_directory` is resolved, relative handler fields such as `source`, `destination`,
+`path`, `files`, and `context` resolve against that directory. For container builds, `Dockerfile`
+resolves relative to the resolved `context`, not directly to `working_directory`.
+
 ## Output
 
 Use output modes instead of pipe redirection:

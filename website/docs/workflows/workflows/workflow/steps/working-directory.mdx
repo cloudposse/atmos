@@ -43,6 +43,10 @@ Path resolution differs by step type:
 
 There is no component-relative resolution here, since a workflow step isn't necessarily scoped to a
 single component. A [`kind: step` hook](/stacks/hooks#kind-step-run-a-step-type) resolves a plain
-relative value (no `./` prefix) against the component's own working directory instead, and a
-dot-prefixed value (`.`, `..`, `./x`, `../x`) against the current working directory — see that page
-for the full rule.
+relative value (no `./` prefix), or an unset `working_directory`, against the component's own
+working directory instead, and a dot-prefixed value (`.`, `..`, `./x`, `../x`) against the current
+working directory — see that page for the full rule.
+
+After `working_directory` is resolved, relative handler fields such as `source`, `destination`,
+`path`, `files`, and `context` resolve against that directory. For container builds, `Dockerfile`
+resolves relative to the resolved `context`, not directly to `working_directory`.
