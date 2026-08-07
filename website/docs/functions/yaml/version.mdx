@@ -15,6 +15,8 @@ Use `!version` to read a locked version from the active Atmos version track.
 
 The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses the stack's asserted `version.track`, then `version.track` from `atmos.yaml`, then `default`.
 
+`!version` is a stack-manifest function — it only resolves inside stack configuration files (`stacks/**`), not in `atmos.yaml` itself. `atmos.yaml` is only consulted as a *source* for `version.track`; it isn't processed by the same YAML-function evaluator, so `!version` there fails with an unsupported-tag error.
+
 ## Usage
 
 ```yaml
@@ -23,7 +25,7 @@ The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses 
 
 ## Example
 
-Use `!version` when the whole YAML value is the version:
+Use `!version` in a stack manifest when the whole value is the version:
 
 <Tabs>
   <TabItem value="terraform" label="Terraform" default>
@@ -121,7 +123,7 @@ Use `{{ .version.name }}` when the version is part of a larger string:
   </TabItem>
 </Tabs>
 
-Use `!version` when the whole YAML value is the version. Use `{{ .version.name }}` when the version is part of a larger string.
+Use `!version` when the whole value in a stack manifest is the version. Use `{{ .version.name }}` when the version is part of a larger string.
 
 ## Pinned Entries
 
