@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { performCopy } from './copy.mjs';
 import './index.css';
 
 interface CommandBoxProps {
@@ -6,19 +7,19 @@ interface CommandBoxProps {
   command: string;
 }
 
+type CopyStatus = 'idle' | 'copied' | 'failed';
+
 export default function CommandBox({ label, command }: CommandBoxProps) {
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [status, setStatus] = useState<CopyStatus>('idle');
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setFailed(true);
-      setTimeout(() => setFailed(false), 2000);
-    }
+    // A single status value keeps "copied" and "failed" mutually exclusive by
+    // construction - a retry can never leave the button showing both at once.
+    clearTimeout(resetTimeoutRef.current);
+    const result = await performCopy((text) => navigator.clipboard.writeText(text), command);
+    setStatus(result);
+    resetTimeoutRef.current = setTimeout(() => setStatus('idle'), 2000);
   };
 
   return (
@@ -33,9 +34,9 @@ export default function CommandBox({ label, command }: CommandBoxProps) {
         <button
           className="command-box__copy"
           onClick={handleCopy}
-          title={failed ? 'Copy failed' : copied ? 'Copied!' : 'Copy to clipboard'}
+          title={status === 'failed' ? 'Copy failed' : status === 'copied' ? 'Copied!' : 'Copy to clipboard'}
         >
-          {copied ? (
+          {status === 'copied' ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M13.5 4L6 11.5L2.5 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
