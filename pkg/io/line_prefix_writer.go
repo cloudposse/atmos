@@ -71,6 +71,13 @@ func (w *LinePrefixWriter) Write(p []byte) (int, error) {
 	}
 
 	w.buffer = append(w.buffer, p...)
+
+	// Hold writeMu for the whole flush so that every line produced by this
+	// single Write call reaches the shared writer as one contiguous block.
+	// Locking per-line let a concurrent node's writer interleave a line in
+	// between two lines emitted from the same Write call.
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
 	if err := w.flushCompleteLinesLocked(); err != nil {
 		return 0, err
 	}
@@ -87,84 +94,67 @@ func (w *LinePrefixWriter) Flush() error {
 	if len(w.buffer) == 0 && len(w.pending) == 0 {
 		return nil
 	}
-	lines, rest := splitBufferedLines(w.buffer)
-	if len(rest) > 0 {
-		lines = append(lines, rest)
-		rest = nil
-	}
-	return w.writeLinesLocked(lines, rest)
-}
 
-// flushCompleteLinesLocked writes buffered complete lines while w.mu is held,
-// leaving any trailing partial line buffered for a later Write or Flush.
-func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
-	lines, rest := splitBufferedLines(w.buffer)
-	if len(lines) == 0 {
-		return nil
-	}
-	return w.writeLinesLocked(lines, rest)
-}
-
-// splitBufferedLines splits buf into its complete, delimited lines and any
-// trailing partial content, without mutating buf.
-func splitBufferedLines(buf []byte) (lines [][]byte, rest []byte) {
-	rest = buf
-	for {
-		idx := lineEndIndex(rest)
-		if idx < 0 {
-			return lines, rest
-		}
-		end := idx + 1
-		if rest[idx] == carriageReturnByte && end < len(rest) && rest[end] == lineFeedByte {
-			end++
-		}
-		lines = append(lines, append([]byte(nil), rest[:end]...))
-		rest = rest[end:]
-	}
-}
-
-// writeLinesLocked writes lines, in order, under a single writeMu acquisition
-// so the whole batch lands on the shared underlying writer as one contiguous
-// block instead of being interleaved line-by-line with a concurrent writer's
-// own batch -- e.g. a \r-terminated segment held back by a prior Write plus
-// the line that completes it in the next Write. Any pending suffix left over
-// from a prior short or failed write is retried first. On error, only the
-// unwritten suffix of the line in progress is kept (in w.pending, already
-// encoded); the untouched lines after it, plus rest, are restored to
-// w.buffer so a later Write or Flush can retry them. Nothing already
-// accepted by w is repeated, and a failed line's prefix is never re-applied.
-// The caller must already hold w.mu.
-func (w *LinePrefixWriter) writeLinesLocked(lines [][]byte, rest []byte) error {
-	if w.w == nil {
-		w.buffer = rest
-		return nil
-	}
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
 
+	if err := w.flushCompleteLinesLocked(); err != nil {
+		return err
+	}
+	if len(w.buffer) == 0 {
+		return nil
+	}
+	line := append([]byte(nil), w.buffer...)
+	w.buffer = w.buffer[:0]
+	return w.writeLineLocked(line)
+}
+
+// flushCompleteLinesLocked writes any pending suffix left over from a prior
+// short or failed write, then any buffered complete lines, while w.mu and
+// w.writeMu are held. It leaves any trailing partial line buffered for a
+// later Write or Flush.
+func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	if len(w.pending) > 0 {
 		if err := w.writePendingLocked(); err != nil {
-			w.buffer = append(joinLines(lines), rest...)
 			return err
 		}
 	}
-
-	for i, line := range lines {
-		normalized := bytes.ReplaceAll(line, crlfBytes, lfBytes)
-		normalized = bytes.ReplaceAll(normalized, crBytes, lfBytes)
-
-		if w.prefix == "" {
-			w.pending = normalized
-		} else {
-			w.pending = append([]byte(w.prefix), normalized...)
+	for {
+		idx := lineEndIndex(w.buffer)
+		if idx < 0 {
+			return nil
 		}
-		if err := w.writePendingLocked(); err != nil {
-			w.buffer = append(joinLines(lines[i+1:]), rest...)
+		end := idx + 1
+		if w.buffer[idx] == carriageReturnByte && end < len(w.buffer) && w.buffer[end] == lineFeedByte {
+			end++
+		}
+		line := append([]byte(nil), w.buffer[:end]...)
+		w.buffer = w.buffer[end:]
+		if err := w.writeLineLocked(line); err != nil {
 			return err
 		}
 	}
-	w.buffer = rest
-	return nil
+}
+
+// writeLineLocked writes one already-delimited raw line with the configured
+// prefix. If the underlying write is short or fails after n > 0 bytes, the
+// unwritten encoded suffix is kept in w.pending (not w.buffer) so a later
+// call retries exactly those bytes, without re-applying the prefix or
+// resending bytes w already accepted. Callers must hold w.writeMu.
+func (w *LinePrefixWriter) writeLineLocked(line []byte) error {
+	if w.w == nil {
+		return nil
+	}
+
+	normalized := bytes.ReplaceAll(line, crlfBytes, lfBytes)
+	normalized = bytes.ReplaceAll(normalized, crBytes, lfBytes)
+
+	if w.prefix == "" {
+		w.pending = normalized
+	} else {
+		w.pending = append([]byte(w.prefix), normalized...)
+	}
+	return w.writePendingLocked()
 }
 
 // writePendingLocked writes w.pending to the underlying writer, retaining
@@ -183,16 +173,6 @@ func (w *LinePrefixWriter) writePendingLocked() error {
 	}
 	w.pending = nil
 	return nil
-}
-
-// joinLines concatenates lines back into a single buffer, for restoring
-// unwritten output after a partial-batch write failure.
-func joinLines(lines [][]byte) []byte {
-	var out []byte
-	for _, line := range lines {
-		out = append(out, line...)
-	}
-	return out
 }
 
 // lineEndIndex returns the first complete line-ending byte position or -1 when absent.
