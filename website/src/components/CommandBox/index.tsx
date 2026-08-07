@@ -8,11 +8,17 @@ interface CommandBoxProps {
 
 export default function CommandBox({ label, command }: CommandBoxProps) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setFailed(true);
+      setTimeout(() => setFailed(false), 2000);
+    }
   };
 
   return (
@@ -27,7 +33,7 @@ export default function CommandBox({ label, command }: CommandBoxProps) {
         <button
           className="command-box__copy"
           onClick={handleCopy}
-          title={copied ? 'Copied!' : 'Copy to clipboard'}
+          title={failed ? 'Copy failed' : copied ? 'Copied!' : 'Copy to clipboard'}
         >
           {copied ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
