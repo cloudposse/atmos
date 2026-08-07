@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -245,6 +246,18 @@ func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) 
 		assert.Equal(t, absFile, cfg.Bake.File)
 		assert.Equal(t, []string{absFile}, cfg.Bake.Files)
 	})
+
+	// resolveBakeFiles anchors each entry independently via
+	// ResolveInWorkingDirectory; a per-entry template failure must propagate
+	// as a wrapped ErrTemplateEvaluation instead of being swallowed or
+	// panicking, mirroring the single-File error handling covered by
+	// TestBuildConfigResolutionErrors' "bake file" case.
+	t.Run("invalid template in a bake files entry returns wrapped error", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "build", WorkingDirectory: workDir}
+		_, err := resolveBakeFiles(h, step, NewVariables(), []string{"docker-bake.hcl", "{{"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
 }
 
 // TestResolveBuildCacheAnchorsLocalPaths reproduces the same working-directory
@@ -281,6 +294,33 @@ func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
 		require.NotNil(t, cache)
 		require.Len(t, cache.From, 1)
 		assert.Equal(t, "registry.example.com/app:buildcache", cache.From[0]["ref"])
+	})
+
+	// anchorCacheLocalPaths' doc comment notes attrs are already
+	// template-resolved by ResolveEnvMap by the time it runs, but
+	// ResolveInWorkingDirectory resolves the value a second time before
+	// anchoring it (so a template that legitimately evaluates to
+	// template-like text, e.g. a literal "{{", fails on the second pass).
+	// That failure must surface as a wrapped ErrTemplateEvaluation, not be
+	// swallowed or panic.
+	t.Run("value that is not a valid template on the second resolve pass returns wrapped error", func(t *testing.T) {
+		err := anchorCacheLocalPaths(h, step, vars, map[string]string{"type": buildxCacheTypeLocal, "src": "{{"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+
+	// End-to-end through resolveBuildCacheEntries/resolveBuildCache: a `type:
+	// local` entry whose `src` template legitimately evaluates to
+	// template-like text fails ResolveInWorkingDirectory's second resolve
+	// pass inside anchorCacheLocalPaths, and that error must propagate all
+	// the way out of resolveBuildCache, not just out of anchorCacheLocalPaths
+	// in isolation.
+	t.Run("anchoring error propagates out of resolveBuildCache", func(t *testing.T) {
+		_, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "local", "src": `{{ "{{" }}`}},
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 
