@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 )
 
 func TestRunLock_RejectsInvalidMaxConcurrency(t *testing.T) {
@@ -129,10 +131,15 @@ func TestRunLock_ForceWritesLockFileWithoutInstalling(t *testing.T) {
 	// The lock file must be written despite use_lock_file: false -- that's the whole
 	// point of `atmos toolchain lock`'s force-write behavior.
 	lockFilePath := filepath.Join(installPath, "toolchain.lock.yaml")
-	lockData, err := os.ReadFile(lockFilePath)
+	lockFile, err := lockfile.Load(lockFilePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(lockData), "checksum_algorithm")
-	assert.Contains(t, string(lockData), "terraform")
+	entry := lockFile.Tools["hashicorp/terraform"]
+	require.NotNil(t, entry, "expected a hashicorp/terraform lock entry")
+	assert.Equal(t, "1.11.4", entry.Version)
+	platform := entry.Platforms[runtime.GOOS+"_"+runtime.GOARCH]
+	require.NotNil(t, platform, "expected a lock entry for the current platform")
+	assert.NotEmpty(t, platform.ChecksumAlgorithm)
+	assert.NotEmpty(t, platform.Checksum)
 
 	// No binary may be installed -- locking must never extract/install into binDir
 	// (GetInstallPath()/bin).
