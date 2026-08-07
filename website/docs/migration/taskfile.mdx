@@ -81,10 +81,15 @@ dependency tasks inside a [`parallel`](/workflows/steps/type/parallel) step:
                 type: shell
                 command: atmos lint
           - type: atmos
-            command: terraform apply terraform -s dev
+            command: terraform apply infra -s dev
     ```
   </TabItem>
 </Tabs>
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
+actually name the component.
 
 If a Taskfile's `deps:` list needs an order between its own entries, add `needs:` to the steps
 inside the `parallel` block. Do not default to sequential steps just because that is Atmos's own

@@ -105,8 +105,13 @@ commands:
             type: shell
             command: atmos lint
       - type: atmos
-        command: terraform apply terraform -s dev
+        command: terraform apply infra -s dev
 ```
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
+task's Terraform code to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
+user actually names the component.
 
 If the Taskfile's `deps:` list needs its own internal order, add `needs:` to the steps inside the
 `parallel` block. Do not assume the tasks should run one after another just because that is

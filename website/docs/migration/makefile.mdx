@@ -111,10 +111,15 @@ See [AI Agent Skills](/ai/agent-skills) for details.
           - type: shell
             command: atmos test
           - type: atmos
-            command: terraform apply terraform -s {{ .Flags.env }}
+            command: terraform apply infra -s {{ .Flags.env }}
     ```
   </TabItem>
 </Tabs>
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
+actually name the component.
 
 ## Independent Targets Become Custom Commands
 

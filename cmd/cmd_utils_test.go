@@ -2439,6 +2439,9 @@ func TestHiddenCommandStillExecutesDirectly(t *testing.T) {
 		Description:      "a hidden helper command",
 		Hidden:           true,
 		WorkingDirectory: workDir,
+		// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
+		// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
+		// are cross-platform including on Windows -- not a platform-specific binary call.
 		Steps: []schema.Task{{
 			Name:    "write-sentinel",
 			Type:    schema.TaskTypeShell,
@@ -2519,6 +2522,9 @@ func TestDefaultDispatchToHiddenChildStillExecutes(t *testing.T) {
 				Description:      "hidden implementation",
 				Hidden:           true,
 				WorkingDirectory: workDir,
+				// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
+				// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
+				// are cross-platform including on Windows -- not a platform-specific binary call.
 				Steps: []schema.Task{{
 					Name:    "write-sentinel",
 					Type:    schema.TaskTypeShell,

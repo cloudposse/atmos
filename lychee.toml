@@ -189,10 +189,11 @@ exclude = [
   # This PDF intermittently times out from CI runners across multiple docs
   # referencing it; verified to return 200 outside CI via curl.
   "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
-  # reproducible-builds.org (the canonical SOURCE_DATE_EPOCH spec, cited from
-  # docs/prd/archive-step.md) is the correct, unchanged URL, but the whole
-  # domain currently refuses connections from every network tested (CI, curl,
-  # and WebFetch all got connection-refused) -- an upstream outage, not a
-  # broken/moved link. Revisit this exclude if the outage is long resolved.
-  "reproducible-builds\\.org",
+  # The SOURCE_DATE_EPOCH spec page, cited from docs/prd/archive-step.md, is
+  # the correct, unchanged URL, but currently refuses connections from every
+  # network tested (CI, curl, and WebFetch all got connection-refused) -- an
+  # upstream outage, not a broken/moved link. Scoped to this one path so other
+  # reproducible-builds.org links stay covered by the link check. Revisit this
+  # exclude once the outage is long resolved.
+  "reproducible-builds\\.org/docs/source-date-epoch/",
 ]

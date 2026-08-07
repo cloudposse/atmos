@@ -132,8 +132,13 @@ commands:
       - type: shell
         command: atmos test
       - type: atmos
-        command: terraform apply terraform -s {{ .Flags.env }}
+        command: terraform apply infra -s {{ .Flags.env }}
 ```
+
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
+target's Terraform code to `components/terraform/infra/` (the default
+`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
+user actually names the component.
 
 ## Shape C: Recursive or Parallel Make
 
