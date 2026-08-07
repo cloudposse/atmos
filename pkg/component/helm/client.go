@@ -18,7 +18,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
