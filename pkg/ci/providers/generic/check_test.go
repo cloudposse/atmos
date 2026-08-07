@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,6 +48,25 @@ func TestCreateCheckRun(t *testing.T) {
 
 		assert.NotEqual(t, first.ID, second.ID)
 		assert.Equal(t, first.ID+1, second.ID)
+	})
+
+	t.Run("masks registered secrets in published fields", func(t *testing.T) {
+		atmosio.Reset()
+		t.Cleanup(atmosio.Reset)
+
+		const secret = "generic-check-secret-ABCD1234"
+		atmosio.RegisterSecret(secret)
+		checkRun, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{
+			Name:    "atmos/plan/test/service",
+			Status:  provider.CheckRunStatePending,
+			Title:   "credential: " + secret,
+			Summary: "diff contains " + secret,
+		})
+		require.NoError(t, err)
+		assert.NotContains(t, checkRun.Title, secret)
+		assert.NotContains(t, checkRun.Summary, secret)
+		assert.Contains(t, checkRun.Title, atmosio.MaskReplacement)
+		assert.Contains(t, checkRun.Summary, atmosio.MaskReplacement)
 	})
 }
 

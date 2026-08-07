@@ -28,7 +28,7 @@ func (p *Provider) setCommitStatus(ctx context.Context, owner, repo, sha, status
 	repoStatus := &github.RepoStatus{
 		State:       github.String(state),
 		Context:     github.String(statusContext),
-		Description: github.String(truncateDescription(description)),
+		Description: github.String(truncateDescription(provider.MaskPublishedContent(description))),
 	}
 
 	if targetURL != "" {
