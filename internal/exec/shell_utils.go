@@ -26,6 +26,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
@@ -100,6 +101,24 @@ func shellCommandContext(opts ...ShellCommandOption) context.Context {
 		return context.Background()
 	}
 	return cfg.ctx
+}
+
+func shellCommandProvisionerContext(opts ...ShellCommandOption) context.Context {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	ctx := cfg.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if cfg.streams == nil {
+		return ctx
+	}
+	return provisioner.WithOutputWriters(ctx, provisioner.OutputWriters{
+		Stdout: cfg.streams.Stdout,
+		Stderr: cfg.streams.Stderr,
+	})
 }
 
 // WithEnvironment provides a pre-sanitized process environment for subprocess execution.

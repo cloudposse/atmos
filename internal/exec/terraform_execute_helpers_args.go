@@ -91,7 +91,7 @@ func buildInitSubcommandArgs(
 	componentPath *string,
 	opts ...ShellCommandOption,
 ) ([]string, error) {
-	newPath, provErr := prepareInitExecution(shellCommandContext(opts...), atmosConfig, info, *componentPath)
+	newPath, provErr := prepareInitExecution(shellCommandProvisionerContext(opts...), atmosConfig, info, *componentPath)
 	if provErr != nil {
 		return nil, provErr
 	}

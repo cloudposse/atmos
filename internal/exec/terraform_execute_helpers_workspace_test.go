@@ -7,6 +7,7 @@ package exec
 //   - executeMainTerraformCommand (bare-workspace short-circuit + error propagation)
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"testing"
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	process "github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -235,9 +238,21 @@ func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, DryRun: true}
 	ctx := provWorkdir.WithOutputSuppressed(t.Context())
-	require.NoError(t, executeMainTerraformCommand(&atmosConfig, &info, []string{subcommandInit}, "/tmp/component", false, WithProcessContext(ctx)))
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, executeMainTerraformCommand(
+		&atmosConfig,
+		&info,
+		[]string{subcommandInit},
+		"/tmp/component",
+		false,
+		WithProcessContext(ctx),
+		WithProcessStreams(process.Streams{Stdout: &stdout, Stderr: &stderr}),
+	))
 	assert.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
 	assert.True(t, provWorkdir.OutputSuppressed(shellCommandContext(dispatchOpts...)))
+	writers := provisioner.OutputWritersFromContext(shellCommandProvisionerContext(dispatchOpts...))
+	assert.Same(t, &stdout, writers.Stdout)
+	assert.Same(t, &stderr, writers.Stderr)
 }
 
 func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing.T) {

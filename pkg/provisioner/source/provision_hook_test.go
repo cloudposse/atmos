@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -1471,6 +1472,7 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 	var uiOutput bytes.Buffer
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -1486,9 +1488,11 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 		},
 	}
 
-	err = AutoProvisionSource(workdir.WithOutputSuppressed(t.Context()), atmosConfig, "terraform", componentConfig, nil)
+	ctx := provisioner.WithOutputWriters(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{Stderr: &componentOutput})
+	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
 	require.NoError(t, err)
 	assert.Empty(t, uiOutput.String())
+	assert.Contains(t, componentOutput.String(), "Auto-provisioned source to")
 }
 
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies

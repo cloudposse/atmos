@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -50,12 +51,16 @@ type envCaptureHandler struct {
 type outputSuppressionCaptureHandler struct {
 	runnerstep.BaseHandler
 	suppressed *bool
+	writers    *runnerstep.OutputWriters
 }
 
 func (h *outputSuppressionCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
 
 func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
 	*h.suppressed = runnerstep.OutputSuppressed(ctx)
+	if h.writers != nil {
+		*h.writers = runnerstep.OutputWritersFromContext(ctx)
+	}
 	return runnerstep.NewStepResult("ok"), nil
 }
 
@@ -418,6 +423,27 @@ func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
 			assert.Equal(t, tt.suppressed, suppressed)
 		})
 	}
+}
+
+func TestStepEngineForwardsOutputWriters(t *testing.T) {
+	var suppressed bool
+	var writers runnerstep.OutputWriters
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-writer-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+		writers:     &writers,
+	})
+	var stdout, stderr bytes.Buffer
+	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "output-writer-capture-test"})
+	ctx.Stdout = &stdout
+	ctx.Stderr = &stderr
+
+	_, err := stepEngine{}.Run(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, suppressed)
+	assert.Same(t, &stdout, writers.Stdout)
+	assert.Same(t, &stderr, writers.Stderr)
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {

@@ -3,6 +3,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -62,7 +63,16 @@ var (
 	registryMu          sync.RWMutex
 )
 
-type outputSuppressedContextKey struct{}
+type (
+	outputSuppressedContextKey struct{}
+	outputWritersContextKey    struct{}
+)
+
+// OutputWriters routes in-process provisioner output through component-scoped streams.
+type OutputWriters struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
 
 // WithOutputSuppressed disables transient provisioner output for this context.
 func WithOutputSuppressed(ctx context.Context) context.Context {
@@ -77,6 +87,21 @@ func OutputSuppressed(ctx context.Context) bool {
 
 	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
 	return ok
+}
+
+// WithOutputWriters attaches component-scoped output streams to ctx.
+func WithOutputWriters(ctx context.Context, writers OutputWriters) context.Context {
+	defer perf.Track(nil, "provisioner.WithOutputWriters")()
+
+	return context.WithValue(ctx, outputWritersContextKey{}, writers)
+}
+
+// OutputWritersFromContext returns component-scoped output streams from ctx.
+func OutputWritersFromContext(ctx context.Context) OutputWriters {
+	defer perf.Track(nil, "provisioner.OutputWritersFromContext")()
+
+	writers, _ := ctx.Value(outputWritersContextKey{}).(OutputWriters)
+	return writers
 }
 
 // RegisterProvisioner registers a provisioner for a specific hook event.
