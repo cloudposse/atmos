@@ -3,7 +3,7 @@ title: atmos ai skill
 sidebar_label: skill
 sidebar_class_name: command
 id: skill
-description: Manage AI skills including install, list, and uninstall operations
+description: Manage AI skills including install, list, update, and uninstall operations
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -30,6 +30,7 @@ Skills are specialized AI assistants that provide expert knowledge for specific 
 The `atmos ai skill` command lets you:
 - Install official skills by name (offline) or community skills from GitHub
 - List the full catalog of available skills alongside what's installed
+- Update installed bundled skills to the latest version shipped with your `atmos` binary
 - Remove skills you no longer need
 
 :::tip Global `--skill` Flag
@@ -155,6 +156,56 @@ atmos ai skill list --installed
 
 # Show detailed information
 atmos ai skill list --detailed
+```
+
+### `atmos ai skill update`
+
+Update installed bundled skills to their latest catalog version. Bundled skills are static copies made at install time — upgrading the `atmos` binary alone does not refresh a skill you already installed, even if that release bundles newer skill content. `update` compares each installed bundled skill's recorded version against the catalog embedded in the running binary and reinstalls only the ones that are actually outdated; skills already at the current version are left untouched.
+
+Omit `<name>` entirely to update every installed bundled skill that has a newer version available (a single confirmation, not one per skill). Skills installed from a GitHub repository are not supported yet — there's no cheap way to check whether a git-sourced skill's upstream has moved without re-fetching it; run `atmos ai skill install <source> --force` to refresh one of those manually.
+
+An outdated skill is reinstalled the same way `atmos ai skill install <name> --force` would install it, so the same client-distribution and scope flags apply.
+
+**Usage:**
+```shell
+atmos ai skill update [name] [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-y, --yes`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`--path`</dt>
+  <dd>Override the skill install directory (default: `~/.atmos/skills`). Relative paths resolve against the current working directory.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to distribute the updated skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Distribute the updated skill to every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Distribution scope: `project` (default) or `user`. Wins over `--global` if both are set.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
+</dl>
+
+**Examples:**
+```shell
+# Update a single bundled skill if a newer version is available
+atmos ai skill update atmos-terraform
+
+# Update every installed bundled skill that has an update available
+atmos ai skill update
+
+# Skip the confirmation prompt
+atmos ai skill update --yes
+
+# Update and redistribute to a specific AI client
+atmos ai skill update atmos-terraform --client vscode
 ```
 
 ### `atmos ai skill uninstall`

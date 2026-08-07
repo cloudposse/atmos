@@ -130,8 +130,7 @@ func init() {
 	// Create parser with install-specific flags using functional options.
 	installParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "", false,
-			"Reinstall if skill is already installed (also the only way today to pick up a newer bundled skill "+
-				"version -- there is no separate update command)"),
+			"Reinstall if skill is already installed; see `atmos ai skill update` to reinstall only outdated bundled skills"),
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),

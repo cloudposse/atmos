@@ -10,6 +10,7 @@ Available Commands:
   install     Install bundled or GitHub-hosted AI skills
   list        List available and installed skills
   uninstall   Remove an installed skill
+  update      Update installed bundled skills to their latest catalog version
 
 Examples:
   # Install an official skill by name (offline, no network/Git required)
@@ -21,6 +22,9 @@ Examples:
 
   # List available and installed skills
   atmos ai skill list
+
+  # Update installed bundled skills that have a newer version available
+  atmos ai skill update
 
   # Uninstall a skill
   atmos ai skill uninstall skill-name

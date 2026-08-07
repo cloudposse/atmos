@@ -24,8 +24,9 @@ func TestSkillCmd_AvailableCommands(t *testing.T) {
 	assert.Contains(t, SkillCmd.Long, "install")
 	assert.Contains(t, SkillCmd.Long, "list")
 	assert.Contains(t, SkillCmd.Long, "uninstall")
-	// "info" is not a registered subcommand (only install/list/uninstall are);
-	// the help text must not advertise a command that doesn't exist.
+	assert.Contains(t, SkillCmd.Long, "update")
+	// "info" is not a registered subcommand (only install/list/uninstall/update
+	// are); the help text must not advertise a command that doesn't exist.
 	assert.NotContains(t, SkillCmd.Long, "info")
 }
 
@@ -38,6 +39,7 @@ func TestSkillCmd_AvailableCommands(t *testing.T) {
 func TestSkillCmd_SubcommandDescriptionsMatchCobraShort(t *testing.T) {
 	assert.Contains(t, SkillCmd.Long, "Install bundled or GitHub-hosted AI skills")
 	assert.Contains(t, SkillCmd.Long, "List available and installed skills")
+	assert.Contains(t, SkillCmd.Long, "Update installed bundled skills to their latest catalog version")
 }
 
 func TestSkillCmd_Examples(t *testing.T) {
@@ -45,12 +47,13 @@ func TestSkillCmd_Examples(t *testing.T) {
 	assert.Contains(t, SkillCmd.Long, "atmos ai skill install github.com/user/skill-name")
 	assert.Contains(t, SkillCmd.Long, "@v1.2.3")
 	assert.Contains(t, SkillCmd.Long, "atmos ai skill list")
+	assert.Contains(t, SkillCmd.Long, "atmos ai skill update")
 	assert.Contains(t, SkillCmd.Long, "atmos ai skill uninstall skill-name")
 }
 
 func TestSkillCmd_CanHaveSubcommands(t *testing.T) {
 	// SkillCmd is designed to have subcommands registered via init() in skill package.
-	// The actual subcommands (install, list, uninstall) are tested in the skill package.
+	// The actual subcommands (install, list, uninstall, update) are tested in the skill package.
 	// Here we just verify the command is set up correctly to receive subcommands.
 	assert.NotNil(t, SkillCmd)
 	assert.Equal(t, "skill", SkillCmd.Name())

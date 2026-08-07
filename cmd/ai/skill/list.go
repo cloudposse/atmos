@@ -147,10 +147,10 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 			e.version = s.Version
 			e.source = s.Source
 			e.skill = s
-			// A plain string inequality is enough: skill versions aren't
-			// guaranteed to be semver, and this is only a nudge toward
-			// `--force` (today's only update mechanism), not a strict ordering check.
-			e.updateAvailable = s.Version != "" && c.Version != "" && s.Version != c.Version
+			// Same rule `atmos ai skill update` uses to decide whether to
+			// reinstall, so the "update available" indicator here always
+			// agrees with what update would actually do.
+			e.updateAvailable = marketplace.SkillVersionOutdated(s.Version, c.Version)
 		}
 		entries = append(entries, e)
 	}

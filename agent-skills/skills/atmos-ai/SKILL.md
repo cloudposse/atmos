@@ -102,16 +102,23 @@ from the relevant skill.
 
 ### Installing Skills: `atmos ai skill` (canonical, cross-client)
 
-`atmos ai skill install`/`list`/`uninstall` is the canonical, cross-client way to manage skills --
-it works for every supported client (Claude Code, VS Code/Copilot, Gemini), not just Claude Code.
+`atmos ai skill install`/`list`/`update`/`uninstall` is the canonical, cross-client way to manage
+skills -- it works for every supported client (Claude Code, VS Code/Copilot, Gemini), not just
+Claude Code.
 
 ```bash
 atmos ai skill list                          # Browse the bundled catalog + what's installed
 atmos ai skill install atmos-terraform       # Bundled skill, offline, no network/Git needed
 atmos ai skill install github.com/user/repo  # Community skill from GitHub
 atmos ai skill install                       # Install every bundled skill at once
+atmos ai skill update                        # Refresh installed bundled skills to the latest catalog version
 atmos ai skill uninstall atmos-terraform
 ```
+
+Installing a bundled skill copies its content at that point in time -- upgrading the `atmos`
+binary alone doesn't refresh a skill you already installed. Run `atmos ai skill update` after
+upgrading Atmos to pick up any bundled skill content that shipped since you installed it. Skills
+installed from GitHub aren't covered by `update` yet; re-run `install <source> --force` for those.
 
 By default the skill is copied into every detected client's project-local skill directory
 (`.claude/skills/`, `.github/skills/` for VS Code/Copilot, `.gemini/skills/`) with zero extra
