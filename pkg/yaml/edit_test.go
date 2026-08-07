@@ -184,6 +184,24 @@ func TestGetType_ExplicitNull(t *testing.T) {
 	assert.Equal(t, TypeNull, typ)
 }
 
+// TestGetType_RawPathExplicitNull is a regression test for a CodeRabbit
+// finding: pathIsExplicitlyPresent fell back to Get's collapsed null/missing
+// check for any raw yq path (one starting with "."), even a plain dot-path
+// like ".vars.explicit_null" that could have been decomposed into segments
+// like its non-raw counterpart. That made an explicit null under a raw path
+// look "missing" (ok=false) instead of reporting (TypeNull, true).
+func TestGetType_RawPathExplicitNull(t *testing.T) {
+	content := []byte("vars:\n  explicit_null: null\n  region: us-east-1\n")
+
+	typ, ok := GetType(content, ".vars.explicit_null")
+	assert.True(t, ok, "a raw dot-path pointing at an explicit null must report present")
+	assert.Equal(t, TypeNull, typ)
+
+	// A genuinely missing raw path must still report absent.
+	_, ok = GetType(content, ".vars.does_not_exist")
+	assert.False(t, ok)
+}
+
 // TestGetType_MissingNestedPath covers a path whose ancestor segment doesn't
 // exist at all (as opposed to a leaf segment that's explicitly null),
 // exercising the has()-on-null-parent short-circuit in

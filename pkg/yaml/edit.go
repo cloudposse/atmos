@@ -245,11 +245,20 @@ func GetType(content []byte, path string) (string, bool) {
 // up the chain is needed.
 //
 // Raw yq expressions (paths starting with ".", the DotPathToYqPath
-// passthrough for power users) can't be decomposed into segments this way,
-// so presence for those falls back to Get's collapsed missing/null check.
+// passthrough for power users) are usually just an ordinary dot-path with a
+// redundant leading dot (e.g. ".vars.explicit_null"), so the leading dot is
+// stripped and the same segment decomposition is attempted first -- this is
+// what lets a raw explicit-null path report present rather than folding into
+// "missing" the way Get's collapsed null/missing check would. Only a
+// genuinely non-decomposable expression (filters, unions, anything
+// splitDotPath can't tokenize) falls back to that collapsed check; the
+// fallback never regresses past the pre-existing behavior for those.
 func pathIsExplicitlyPresent(content []byte, path string) bool {
 	trimmed := strings.TrimSpace(path)
 	if strings.HasPrefix(trimmed, ".") {
+		if segments, err := splitDotPath(strings.TrimPrefix(trimmed, ".")); err == nil {
+			return segmentsArePresent(content, segments)
+		}
 		_, err := Get(content, path)
 		return err == nil
 	}
@@ -258,6 +267,12 @@ func pathIsExplicitlyPresent(content []byte, path string) bool {
 	if err != nil {
 		return false
 	}
+	return segmentsArePresent(content, segments)
+}
+
+// segmentsArePresent runs the has()-on-parent presence check described in
+// pathIsExplicitlyPresent's doc comment for an already-decomposed path.
+func segmentsArePresent(content []byte, segments []pathSegment) bool {
 	last := segments[len(segments)-1]
 	parentExpr := yqPathFromSegments(segments[:len(segments)-1])
 

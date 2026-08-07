@@ -209,8 +209,10 @@ spec:
 	require.NoError(t, vendorGetCmd.Flags().Set("file", root))
 	require.NoError(t, vendorSetCmd.Flags().Set("file", root))
 
-	initVendorTestWriter(t)
+	stdout := captureVendorStdout(t)
 	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}), "get must resolve the imported component")
+	assert.Equal(t, "v0.1.0", strings.TrimSpace(stdout.String()),
+		"get must return the imported file's version, not the root file's spec.sources[0].version (v1.0.0)")
 
 	rootBefore, err := os.ReadFile(root)
 	require.NoError(t, err)

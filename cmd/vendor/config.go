@@ -117,10 +117,13 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 		if err != nil {
 			return err
 		}
+		if err := runVendorConfigSet(file, args[0], args[1], valueType); err != nil {
+			return err
+		}
 		if !cmd.Flags().Changed("type") && valueType == atmosyaml.TypeString {
 			warnIfVendorValueLooksNonString(args[1])
 		}
-		return runVendorConfigSet(file, args[0], args[1], valueType)
+		return nil
 	},
 }
 

@@ -185,6 +185,24 @@ func TestVendorConfigSetCmd_NoWarningWhenTypeExplicit(t *testing.T) {
 	assert.NotContains(t, got, "looks like it could be a bool/int/float", "warning must not fire when --type was explicit")
 }
 
+// TestVendorConfigSetCmd_NoWarningOnFailedWrite is a regression test for a
+// CodeRabbit finding: the warning used to fire before the write was
+// attempted, so a failed write (e.g. a missing file) still claimed the value
+// was "being stored as a literal string" even though nothing was written.
+func TestVendorConfigSetCmd_NoWarningOnFailedWrite(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+	stderr := setupVendorUICapture(t)
+
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", missing))
+
+	err := vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].version", "42"})
+	require.Error(t, err)
+
+	got := plainOutput(stderr.String())
+	assert.NotContains(t, got, "looks like it could be a bool/int/float", "warning must not fire when the write itself failed")
+}
+
 func TestVendorConfigSetCmd_InvalidTypeValue(t *testing.T) {
 	resetCommandFlags(t, vendorConfigSetCmd)
 
