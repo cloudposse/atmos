@@ -87,7 +87,7 @@ atmos ai skill install [source] [flags]
   <dd>Distribute the skill to every supported AI client.</dd>
 
   <dt>`--scope`</dt>
-  <dd>Distribution scope: `project` (writes into this repo's client directories, default) or `user` (writes into each client's personal, user-level directory instead). When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--yes`, no TTY, or CI) fall back to `project`.</dd>
+  <dd>Distribution scope: `project` (writes into this repo's client directories, default) or `user` (writes into each client's personal, user-level directory instead). Wins over `--global` if both are set. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--yes`, no TTY, or CI) fall back to `project`.</dd>
 
   <dt>`-g, --global`</dt>
   <dd>Alias for `--scope user`.</dd>
@@ -183,7 +183,7 @@ atmos ai skill uninstall [name] [flags]
   <dd>Remove the skill from every supported AI client.</dd>
 
   <dt>`--scope`</dt>
-  <dd>Distribution scope: `project` (default) or `user`. Use `user` to clean up a skill that was installed with `--scope user`. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--force`, no TTY, or CI) fall back to `project`.</dd>
+  <dd>Distribution scope: `project` (default) or `user`. Use `user` to clean up a skill that was installed with `--scope user`. Wins over `--global` if both are set. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--force`, no TTY, or CI) fall back to `project`.</dd>
 
   <dt>`-g, --global`</dt>
   <dd>Alias for `--scope user`.</dd>

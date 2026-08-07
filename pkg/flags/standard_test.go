@@ -474,6 +474,137 @@ func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
 	}
 }
 
+// TestStandardFlagParser_ValidateSingleFlag_StringSlice covers the []string branch
+// added to validateSingleFlag so a repeatable flag (e.g. --client) validates every
+// element, not just a single scalar value.
+func TestStandardFlagParser_ValidateSingleFlag_StringSlice(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]interface{}
+		expectError   bool
+		errorContains []string
+	}{
+		{
+			name:        "all values valid",
+			flags:       map[string]interface{}{"client": []string{"claude-code", "vscode"}},
+			expectError: false,
+		},
+		{
+			name:          "one invalid value among valid ones",
+			flags:         map[string]interface{}{"client": []string{"claude-code", "bogus-name"}},
+			expectError:   true,
+			errorContains: []string{"bogus-name", "client"},
+		},
+		{
+			name:        "empty elements are skipped",
+			flags:       map[string]interface{}{"client": []string{""}},
+			expectError: false,
+		},
+		{
+			name:        "empty slice",
+			flags:       map[string]interface{}{"client": []string{}},
+			expectError: false,
+		},
+	}
+
+	validValues := []string{"claude-code", "vscode", "gemini"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewStandardFlagParser(
+				WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+				WithValidValues("client", validValues...),
+			)
+
+			err := parser.validateSingleFlag("client", validValues, tt.flags, nil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				for _, text := range tt.errorContains {
+					assert.Contains(t, err.Error(), text)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestStandardFlagParser_ValidateFlagValues_StringSlice_ThroughFlagSet covers
+// validateFlagValues end-to-end for a StringSliceFlag: setting an invalid element on
+// a real Cobra FlagSet must be rejected the same way validateSingleFlag rejects it
+// directly.
+func TestStandardFlagParser_ValidateFlagValues_StringSlice_ThroughFlagSet(t *testing.T) {
+	parser := NewStandardFlagParser(
+		WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+		WithValidValues("client", "claude-code", "vscode", "gemini"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	require.NoError(t, cmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+	flags := map[string]interface{}{"client": []string{"claude-code", "bogus-name"}}
+	err := parser.validateFlagValues(flags, cmd.Flags())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+}
+
+// TestStandardFlagParser_ValidateFlagValues_MethodOnCmd covers the exported
+// ValidateFlagValues entry point used by commands (e.g. `atmos ai skill
+// install`/`uninstall`) that bind flags via BindFlagsToViper and read them back
+// manually instead of calling Parse().
+func TestStandardFlagParser_ValidateFlagValues_MethodOnCmd(t *testing.T) {
+	t.Run("rejects an invalid element on a changed StringSliceFlag", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+		err := parser.ValidateFlagValues(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bogus-name")
+	})
+
+	t.Run("accepts valid elements", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("client", "vscode"))
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("no-op when the flag was never changed", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("nil cmd is a no-op", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+
+		assert.NoError(t, parser.ValidateFlagValues(nil))
+	})
+}
+
 // TestStandardFlagParser_ParseWithPositionalArgs tests parsing with positional arguments.
 func TestStandardFlagParser_ParseWithPositionalArgs(t *testing.T) {
 	t.Run("parses flags with command registered", func(t *testing.T) {
@@ -1541,6 +1672,24 @@ func TestStandardParser_Registry(t *testing.T) {
 	registry := parser.Registry()
 	require.NotNil(t, registry)
 	assert.True(t, registry.Has("format"))
+}
+
+// TestStandardParser_ValidateFlagValues verifies that StandardParser.ValidateFlagValues
+// delegates to the underlying StandardFlagParser's ValidateFlagValues, exactly like
+// `atmos ai skill install`/`uninstall` call it after BindFlagsToViper.
+func TestStandardParser_ValidateFlagValues(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+		WithValidValues("client", "claude-code", "vscode", "gemini"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+	err := parser.ValidateFlagValues(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
 }
 
 // TestStandardParser_SetPositionalArgs verifies that StandardParser.SetPositionalArgs

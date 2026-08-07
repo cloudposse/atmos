@@ -3,6 +3,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1858,6 +1860,29 @@ func TestExecCommand_FormatError(t *testing.T) {
 	})
 }
 
+// TestExecCommand_InvalidFormatFlag verifies that an unrecognized --format value
+// is rejected up front (before any AI client is created), rather than silently
+// falling back to the text formatter the way formatter.NewFormatter's default
+// case does.
+func TestExecCommand_InvalidFormatFlag(t *testing.T) {
+	tmpDir := createValidAtmosConfig(t, true, "")
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	testCmd := createTestExecCmd()
+	require.NoError(t, testCmd.Flags().Set("format", "bogusvalue"))
+
+	err := execCmd.RunE(testCmd, []string{"test prompt"})
+	require.Error(t, err)
+
+	var execErr *execError
+	require.True(t, errors.As(err, &execErr))
+	assert.Equal(t, 1, execErr.code)
+	assert.Equal(t, "input_error", execErr.errorType)
+	assert.Contains(t, execErr.Error(), "bogusvalue")
+}
+
 // TestExecCommand_AIClientCreationError tests the ai_error case when client creation fails.
 func TestExecCommand_AIClientCreationError(t *testing.T) {
 	t.Run("ai_error on client creation failure", func(t *testing.T) {
@@ -2961,6 +2986,134 @@ ai:
 		err = execCmd.RunE(testCmd, []string{"test prompt"})
 		assert.NoError(t, err)
 	})
+}
+
+// TestExecCommand_SessionPersistence_RoundTrip is the real round-trip test for
+// the --session fix: it runs `exec --session` twice against the same session
+// name and confirms (a) the SECOND call's HTTP request to the model actually
+// includes the first turn's question and answer as prior context — proving
+// history threading works, not just that no error occurred — and (b) both
+// turns end up durably persisted and queryable via the session manager
+// afterward. Before this fix, --session was a complete no-op: SessionID was
+// only echoed into result metadata, and pkg/ai/session was never touched.
+func TestExecCommand_SessionPersistence_RoundTrip(t *testing.T) {
+	var mu sync.Mutex
+	var capturedRequests []string
+	responses := []string{"First answer", "Second answer"}
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+
+		mu.Lock()
+		idx := len(capturedRequests)
+		capturedRequests = append(capturedRequests, string(bodyBytes))
+		mu.Unlock()
+
+		content := "no more canned responses"
+		if idx < len(responses) {
+			content = responses[idx]
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index":         0,
+					"message":       map[string]interface{}{"role": "assistant", "content": content},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+		})
+	}))
+	defer mockServer.Close()
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      base_url: "` + mockServer.URL + `"
+      model: "llama3.3:70b"
+      max_tokens: 4096
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	// First turn: a fresh cobra.Command per call mirrors a real separate `atmos
+	// ai exec` invocation from the shell.
+	firstCmd := createTestExecCmd()
+	require.NoError(t, firstCmd.Flags().Set("session", "roundtrip-session"))
+	require.NoError(t, firstCmd.Flags().Set("no-tools", "true"))
+	require.NoError(t, execCmd.RunE(firstCmd, []string{"First question"}))
+
+	// Second turn, same session name.
+	secondCmd := createTestExecCmd()
+	require.NoError(t, secondCmd.Flags().Set("session", "roundtrip-session"))
+	require.NoError(t, secondCmd.Flags().Set("no-tools", "true"))
+	require.NoError(t, execCmd.RunE(secondCmd, []string{"Second question"}))
+
+	// The second HTTP request to the model must carry the first turn's
+	// question and answer as prior context.
+	require.Len(t, capturedRequests, 2)
+	assert.Contains(t, capturedRequests[1], "First question")
+	assert.Contains(t, capturedRequests[1], "First answer")
+	assert.Contains(t, capturedRequests[1], "Second question")
+	// The first request must NOT have seen the second turn (sanity check that
+	// capturedRequests[0]/[1] weren't accidentally swapped).
+	assert.NotContains(t, capturedRequests[0], "Second question")
+
+	// Both turns must be durably persisted and queryable afterward.
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	ctx := context.Background()
+	sess, getErr := manager.GetSessionByName(ctx, "roundtrip-session")
+	require.NoError(t, getErr)
+
+	messages, msgErr := manager.GetMessages(ctx, sess.ID, 0)
+	require.NoError(t, msgErr)
+	require.Len(t, messages, 4)
+	assert.Equal(t, "user", messages[0].Role)
+	assert.Equal(t, "First question", messages[0].Content)
+	assert.Equal(t, "assistant", messages[1].Role)
+	assert.Equal(t, "First answer", messages[1].Content)
+	assert.Equal(t, "user", messages[2].Role)
+	assert.Equal(t, "Second question", messages[2].Content)
+	assert.Equal(t, "assistant", messages[3].Role)
+	assert.Equal(t, "Second answer", messages[3].Content)
 }
 
 // TestExecCommand_APIErrorHandling tests error handling when the AI API returns errors.

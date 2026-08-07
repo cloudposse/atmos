@@ -300,11 +300,17 @@ func (p *StandardFlagParser) registerIntFlag(flagSet *pflag.FlagSet, f *IntFlag,
 	}
 }
 
-// registerStringSliceFlag registers a string slice flag with optional required marking.
+// registerStringSliceFlag registers a string slice flag with optional required marking
+// and ValidValues.
 func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *StringSliceFlag, markRequired func(string) error) {
 	defer perf.Track(nil, "flags.StandardFlagParser.registerStringSliceFlag")()
 
 	flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
+
+	// Populate validValues map for runtime validation.
+	if len(f.ValidValues) > 0 {
+		p.validValues[f.Name] = f.ValidValues
+	}
 
 	if f.Required {
 		_ = markRequired(f.Name)
@@ -758,7 +764,56 @@ func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}, co
 	return nil
 }
 
+// ValidateFlagValues validates cmd's already-parsed flag values against this parser's
+// registered ValidValues constraints (see WithValidValues). It's the entry point for
+// commands that bind flags via BindFlagsToViper and then read them back manually
+// instead of going through the full Parse() pipeline -- e.g. `atmos ai skill
+// install`/`uninstall`, whose --path/--scope/--client interplay doesn't fit the
+// positional-arg-centric StandardOptions shape Parse() builds. Only flags the user
+// explicitly changed are checked, matching Parse()'s own behavior, so unrelated
+// Viper/env-var defaults never trip validation.
+func (p *StandardFlagParser) ValidateFlagValues(cmd *cobra.Command) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.ValidateFlagValues")()
+
+	if len(p.validValues) == 0 || cmd == nil {
+		return nil
+	}
+
+	flagsMap := make(map[string]interface{}, len(p.validValues))
+	for flagName := range p.validValues {
+		value, ok := p.currentFlagValue(cmd, flagName)
+		if !ok {
+			continue
+		}
+		flagsMap[flagName] = value
+	}
+
+	return p.validateFlagValues(flagsMap, cmd.Flags())
+}
+
+// currentFlagValue reads flagName's current value off cmd in whatever type its
+// registered Flag definition uses (string for StringFlag, []string for
+// StringSliceFlag), so ValidateFlagValues can hand validateFlagValues the same shape
+// of value Parse() would have produced via populateFlagsFromViper.
+func (p *StandardFlagParser) currentFlagValue(cmd *cobra.Command, flagName string) (interface{}, bool) {
+	if _, ok := p.registry.Get(flagName).(*StringSliceFlag); ok {
+		value, err := cmd.Flags().GetStringSlice(flagName)
+		if err != nil {
+			return nil, false
+		}
+		return value, true
+	}
+
+	value, err := cmd.Flags().GetString(flagName)
+	if err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
 // validateSingleFlag validates a single flag's value against its valid values list.
+// The flag's value may be a scalar string (StringFlag) or a []string (StringSliceFlag),
+// in which case every element is validated individually.
 func (p *StandardFlagParser) validateSingleFlag(flagName string, validValues []string, flags map[string]interface{}, combinedFlags *pflag.FlagSet) error {
 	defer perf.Track(nil, "flags.StandardFlagParser.validateSingleFlag")()
 
@@ -772,15 +827,23 @@ func (p *StandardFlagParser) validateSingleFlag(flagName string, validValues []s
 		return nil
 	}
 
-	// Convert to string and validate.
-	strValue, ok := value.(string)
-	if !ok || strValue == "" {
-		return nil
-	}
-
-	// Check if value is in valid values list.
-	if !p.isValueValid(strValue, validValues) {
-		return p.createValidationError(flagName, strValue, validValues)
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		if !p.isValueValid(v, validValues) {
+			return p.createValidationError(flagName, v, validValues)
+		}
+	case []string:
+		for _, item := range v {
+			if item == "" {
+				continue
+			}
+			if !p.isValueValid(item, validValues) {
+				return p.createValidationError(flagName, item, validValues)
+			}
+		}
 	}
 
 	return nil

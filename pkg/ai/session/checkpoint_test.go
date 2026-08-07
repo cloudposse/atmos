@@ -2,8 +2,10 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +14,94 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// checkpointTestStreams is a minimal iolib.Streams implementation that
+// captures UI output to buffers, so tests can assert on ui.Warning content
+// emitted by buildCheckpoint.
+type checkpointTestStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *checkpointTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *checkpointTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *checkpointTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *checkpointTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *checkpointTestStreams) RawError() stdio.Writer  { return s.stderr }
+
+// captureUIOutput initializes the UI formatter against a buffer so ui.Warning
+// (and other ui.* calls) can be asserted on, and returns that buffer.
+func captureUIOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stderr := &bytes.Buffer{}
+	streams := &checkpointTestStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	return stderr
+}
+
+// TestManager_ExportSession_WarnsOnUnimportableCheckpoint verifies that
+// exporting a session with no recorded model and/or no messages still
+// succeeds (a user should be able to export for inspection regardless), but
+// emits a ui.Warning so the eventual re-import failure isn't a surprise. See
+// validateCheckpointSession, which requires both a non-empty Model and at
+// least one message.
+func TestManager_ExportSession_WarnsOnUnimportableCheckpoint(t *testing.T) {
+	t.Run("empty model warns but still exports", func(t *testing.T) {
+		manager, cleanup := setupTestManager(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		sess, err := manager.CreateSession(ctx, CreateSessionParams{Name: "no-model", Provider: "custom"})
+		require.NoError(t, err)
+		require.NoError(t, manager.storage.AddMessage(ctx, &Message{SessionID: sess.ID, Role: "user", Content: "hi", CreatedAt: time.Now()}))
+
+		stderr := captureUIOutput(t)
+		tmpFile := filepath.Join(t.TempDir(), "no-model.json")
+		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
+		require.NoError(t, err, "export must still succeed despite the missing model")
+		assert.Contains(t, stderr.String(), "no-model")
+		assert.Contains(t, stderr.String(), "not be re-importable")
+	})
+
+	t.Run("no messages warns but still exports", func(t *testing.T) {
+		manager, cleanup := setupTestManager(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		sess, err := manager.CreateSession(ctx, CreateSessionParams{Name: "no-messages", Model: "gpt-4", Provider: "openai"})
+		require.NoError(t, err)
+
+		stderr := captureUIOutput(t)
+		tmpFile := filepath.Join(t.TempDir(), "no-messages.json")
+		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
+		require.NoError(t, err, "export must still succeed despite having no messages")
+		assert.Contains(t, stderr.String(), "no-messages")
+		assert.Contains(t, stderr.String(), "not be re-importable")
+	})
+
+	t.Run("model and messages present: no warning", func(t *testing.T) {
+		manager, cleanup := setupTestManager(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		sess, err := manager.CreateSession(ctx, CreateSessionParams{Name: "healthy", Model: "gpt-4", Provider: "openai"})
+		require.NoError(t, err)
+		require.NoError(t, manager.storage.AddMessage(ctx, &Message{SessionID: sess.ID, Role: "user", Content: "hi", CreatedAt: time.Now()}))
+
+		stderr := captureUIOutput(t)
+		tmpFile := filepath.Join(t.TempDir(), "healthy.json")
+		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
+		require.NoError(t, err)
+		assert.NotContains(t, stderr.String(), "not be re-importable")
+	})
+}
 
 func TestManager_ExportSession(t *testing.T) {
 	manager, cleanup := setupTestManager(t)
@@ -791,6 +880,52 @@ func TestManager_ExportImportRoundTrip(t *testing.T) {
 	assert.Equal(t, "What is the capital of France?", importedMessages[0].Content)
 	assert.Equal(t, "assistant", importedMessages[1].Role)
 	assert.Equal(t, "The capital of France is Paris.", importedMessages[1].Content)
+}
+
+// TestManager_ExportImportRoundTrip_CLIProviderNoExplicitModel covers the
+// zero-config claude-code path: a session created against a CLI provider with
+// no explicit `ai.providers.claude-code.model` in atmos.yaml. Before the fix in
+// cmd/ai/chat.go (session creation now resolves Model from the constructed
+// client's GetModel(), which claude-code defaults to "claude-code", instead of
+// the independent getModelFromConfig lookup that returns "" for an
+// unconfigured provider), such a session would have Model == "" and fail
+// validateCheckpointSession on import. This asserts the round trip succeeds
+// once Model is populated the way cmd/ai now populates it.
+func TestManager_ExportImportRoundTrip_CLIProviderNoExplicitModel(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Model here mirrors claude-code's resolved default model (see
+	// pkg/ai/agent/claudecode.NewClient / base.ExtractConfig), simulating what
+	// cmd/ai/chat.go now records via client.GetModel() for a zero-config
+	// CLI-provider session, rather than the blank string the old
+	// getModelFromConfig-only lookup would have produced.
+	sess, err := manager.CreateSession(ctx, CreateSessionParams{
+		Name:     "cli-provider-no-model",
+		Model:    "claude-code",
+		Provider: "claude-code",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, manager.storage.AddMessage(ctx, &Message{
+		SessionID: sess.ID,
+		Role:      "user",
+		Content:   "What stacks do I have?",
+		CreatedAt: time.Now(),
+	}))
+
+	tmpFile := filepath.Join(t.TempDir(), "cli-provider.json")
+	err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
+	require.NoError(t, err)
+
+	imported, err := manager.ImportSession(ctx, tmpFile, ImportOptions{Name: "cli-provider-no-model-imported"})
+	require.NoError(t, err)
+	require.NotNil(t, imported)
+	assert.Equal(t, "claude-code", imported.Model)
+	assert.Equal(t, "claude-code", imported.Provider)
+	assert.Equal(t, 1, imported.MessageCount)
 }
 
 func TestManager_ExportSession_ErrorHandling(t *testing.T) {

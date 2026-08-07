@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -126,6 +127,15 @@ func installedEntryWithMetadata(name, source, version, path string, enabled, isB
 	entry := installedEntry(name, source, version, path)
 	entry["enabled"] = enabled
 	entry["is_builtin"] = isBuiltIn
+	return entry
+}
+
+// installedEntryWithMinAtmos is installedEntry plus a compatibility.atmos
+// constraint recorded at install time, for exercising `skill list --detailed`'s
+// "Min Atmos" line.
+func installedEntryWithMinAtmos(name, source, version, path, minAtmosVersion string) map[string]interface{} {
+	entry := installedEntry(name, source, version, path)
+	entry["min_atmos_version"] = minAtmosVersion
 	return entry
 }
 
@@ -249,6 +259,38 @@ func TestBuildListEntries(t *testing.T) {
 			require.NotNil(t, e.skill)
 			assert.True(t, e.skill.Enabled)
 			assert.False(t, e.skill.IsBuiltIn)
+			assert.False(t, e.updateAvailable, "installed version matches the catalog's current version")
+		}
+		assert.True(t, found, "atmos-terraform must be present")
+	})
+
+	t.Run("installed catalog skill with an older version is marked updateAvailable", func(t *testing.T) {
+		tempHome := withTempHome(t)
+		skillPath := filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform")
+		writeRegistry(t, tempHome, map[string]map[string]interface{}{
+			"atmos-terraform": installedEntry(
+				"atmos-terraform",
+				"github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform",
+				"0.9.0", // Older than the real catalog's "1.0.0".
+				skillPath,
+			),
+		})
+
+		installer, err := marketplace.NewInstaller("test")
+		require.NoError(t, err)
+
+		entries, err := buildListEntries(installer)
+		require.NoError(t, err)
+
+		var found bool
+		for _, e := range entries {
+			if e.name != "atmos-terraform" {
+				continue
+			}
+			found = true
+			assert.True(t, e.updateAvailable)
+			assert.Equal(t, "0.9.0", e.version)
+			assert.Equal(t, "1.0.0", e.catalogVersion)
 		}
 		assert.True(t, found, "atmos-terraform must be present")
 	})
@@ -333,12 +375,22 @@ func TestSkillListRows_InstalledState(t *testing.T) {
 			installed:     true,
 			skill:         &marketplace.InstalledSkill{Enabled: false},
 		},
+		{
+			name:            "outdated-skill",
+			version:         "0.9.0",
+			catalogVersion:  "1.0.0",
+			displaySource:   "github.com/example/outdated",
+			installed:       true,
+			updateAvailable: true,
+			skill:           &marketplace.InstalledSkill{Enabled: true},
+		},
 	})
 
-	require.Len(t, rows, 3)
+	require.Len(t, rows, 4)
 	assert.Equal(t, "available", rows[0]["state"])
 	assert.Equal(t, "installed, enabled (v1.0.0)", rows[1]["state"])
 	assert.Equal(t, "installed, disabled (v2.0.0)", rows[2]["state"])
+	assert.Equal(t, "installed, enabled (v0.9.0) (update available)", rows[3]["state"])
 }
 
 func TestRenderEntryDetails_Metadata(t *testing.T) {
@@ -380,6 +432,23 @@ func TestRenderEntryDetails_Metadata(t *testing.T) {
 			source:      "github.com/cloudposse/atmos//agent-skills/skills/available-skill",
 			available:   true,
 		},
+		{
+			name:            "outdated-skill",
+			displayName:     "Outdated Skill",
+			version:         "0.9.0",
+			catalogVersion:  "1.0.0",
+			source:          "github.com/cloudposse/atmos//agent-skills/skills/outdated-skill",
+			available:       true,
+			installed:       true,
+			updateAvailable: true,
+			skill: &marketplace.InstalledSkill{
+				Enabled:         true,
+				InstalledAt:     now,
+				UpdatedAt:       now,
+				Path:            "/tmp/outdated-skill",
+				MinAtmosVersion: "1.2.0",
+			},
+		},
 	})
 
 	assert.Contains(t, output, "Atmos Terraform (Installed)")
@@ -389,6 +458,13 @@ func TestRenderEntryDetails_Metadata(t *testing.T) {
 	assert.Contains(t, output, "Type:         Built-in")
 	assert.Contains(t, output, "Type:         Community")
 	assert.Contains(t, output, "Available Skill (Available)")
+
+	// Compatibility constraint recorded at install time.
+	assert.Contains(t, output, "Min Atmos:    1.2.0")
+
+	// Update-available note on the Version line, pointing at the catalog's
+	// current version.
+	assert.Contains(t, output, "Version:      0.9.0 (update available: 1.0.0)")
 }
 
 func TestListCmd_DefaultOutput(t *testing.T) {
@@ -496,6 +572,56 @@ func TestListCmd_DetailedOutput(t *testing.T) {
 	assert.Contains(t, output, "Location:")
 }
 
+// TestListCmd_DetailedOutput_ShowsMinAtmosVersion covers rendering
+// compatibility.atmos, recorded at install time as InstalledSkill.MinAtmosVersion,
+// in `skill list --detailed`.
+func TestListCmd_DetailedOutput_ShowsMinAtmosVersion(t *testing.T) {
+	tempHome := withTempHome(t)
+	skillPath := filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform")
+	writeRegistry(t, tempHome, map[string]map[string]interface{}{
+		"atmos-terraform": installedEntryWithMinAtmos(
+			"atmos-terraform",
+			"github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform",
+			"1.0.0",
+			skillPath,
+			"1.5.0",
+		),
+	})
+	resetListFlags(t)
+	require.NoError(t, listCmd.Flags().Set("detailed", "true"))
+
+	stdout := setupSkillListOutput(t)
+	require.NoError(t, listCmd.RunE(listCmd, []string{}))
+	output := stdout.String()
+
+	assert.Contains(t, output, "Min Atmos:")
+	assert.Contains(t, output, "1.5.0")
+}
+
+// TestListCmd_DetailedOutput_OmitsMinAtmosVersionWhenUnset covers the common case:
+// most installed skills declare no compatibility.atmos constraint, so the "Min
+// Atmos" line must not appear at all (not even blank) for them.
+func TestListCmd_DetailedOutput_OmitsMinAtmosVersionWhenUnset(t *testing.T) {
+	tempHome := withTempHome(t)
+	skillPath := filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform")
+	writeRegistry(t, tempHome, map[string]map[string]interface{}{
+		"atmos-terraform": installedEntry(
+			"atmos-terraform",
+			"github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform",
+			"1.0.0",
+			skillPath,
+		),
+	})
+	resetListFlags(t)
+	require.NoError(t, listCmd.Flags().Set("detailed", "true"))
+
+	stdout := setupSkillListOutput(t)
+	require.NoError(t, listCmd.RunE(listCmd, []string{}))
+	output := stdout.String()
+
+	assert.NotContains(t, output, "Min Atmos:")
+}
+
 func TestListCmd_CorruptedRegistry(t *testing.T) {
 	tempHome := withTempHome(t)
 	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
@@ -506,6 +632,12 @@ func TestListCmd_CorruptedRegistry(t *testing.T) {
 	err := listCmd.RunE(listCmd, []string{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to initialize installer")
+
+	// The underlying registry-corruption error must still carry its actionable
+	// hints after being wrapped by NewInstaller/RunE, not just the bare message.
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	assert.True(t, errUtils.HasHint(err, "rm "+registryPath),
+		"hint should tell the user how to delete/repair the corrupted registry file")
 }
 
 func TestCountEntries(t *testing.T) {

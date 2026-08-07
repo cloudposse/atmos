@@ -25,7 +25,7 @@ import (
 // Installer manages skill installation.
 type Installer struct {
 	downloader    DownloaderInterface
-	validator     *Validator
+	validator     SkillValidator
 	localRegistry *LocalRegistry
 	atmosVersion  string
 }
@@ -153,15 +153,16 @@ func (i *Installer) moveSkillToInstallPath(tempDir, installPath string, force bo
 // registerSkill registers a skill in the local registry.
 func (i *Installer) registerSkill(metadata *SkillMetadata, sourceInfo *SourceInfo, installPath string, force bool) error {
 	installedSkill := &InstalledSkill{
-		Name:        metadata.Name,
-		DisplayName: metadata.GetDisplayName(),
-		Source:      sourceInfo.FullPath,
-		Version:     metadata.GetVersion(),
-		InstalledAt: time.Now(),
-		UpdatedAt:   time.Now(),
-		Path:        installPath,
-		IsBuiltIn:   false,
-		Enabled:     true,
+		Name:            metadata.Name,
+		DisplayName:     metadata.GetDisplayName(),
+		Source:          sourceInfo.FullPath,
+		Version:         metadata.GetVersion(),
+		InstalledAt:     time.Now(),
+		UpdatedAt:       time.Now(),
+		Path:            installPath,
+		IsBuiltIn:       false,
+		Enabled:         true,
+		MinAtmosVersion: metadata.GetMinAtmosVersion(),
 	}
 
 	if force {
@@ -259,7 +260,19 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 		return err
 	}
 
-	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
+	// Validate the materialized files before registering, so a bundled skill that
+	// fails the same compatibility/structure checks as a Git-sourced one is never
+	// left half-installed and registered. Bundled skills are Atmos's own, already-
+	// reviewed content, but the Atmos-version compatibility gate still applies (e.g.
+	// a skill built for a newer Atmos release installed against an older binary).
+	if err := i.validator.Validate(installPath, metadata); err != nil {
+		if removeErr := os.RemoveAll(installPath); removeErr != nil {
+			log.Warnf("Failed to remove invalid installation at %s: %v", installPath, removeErr)
+		}
+		return fmt.Errorf("skill validation failed: %w", err)
+	}
+
+	if err := i.registerBundledSkill(available, installName, installPath, metadata); err != nil {
 		return err
 	}
 
@@ -422,7 +435,8 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 		return outcomeSkipped
 	}
 
-	if _, err := readBundledMetadata(available.Name); err != nil {
+	metadata, err := readBundledMetadata(available.Name)
+	if err != nil {
 		log.Warnf("Skipping %s: %v", available.Name, err)
 		return outcomeFailed
 	}
@@ -433,7 +447,18 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 		return outcomeFailed
 	}
 
-	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
+	// See the matching comment in installBundledSkill: validate before
+	// registering so a skill that fails compatibility checks isn't left
+	// half-installed and registered.
+	if err := i.validator.Validate(installPath, metadata); err != nil {
+		log.Warnf("Skipping %s: skill validation failed: %v", available.Name, err)
+		if removeErr := os.RemoveAll(installPath); removeErr != nil {
+			log.Warnf("Failed to remove invalid installation at %s: %v", installPath, removeErr)
+		}
+		return outcomeFailed
+	}
+
+	if err := i.registerBundledSkill(available, installName, installPath, metadata); err != nil {
 		log.Warnf("Failed to register %s: %v", available.Name, err)
 		return outcomeFailed
 	}
@@ -514,18 +539,21 @@ func (i *Installer) prepareInstallPath(installPath, installName string, force bo
 
 // registerBundledSkill records an installed bundled skill in the local registry.
 // The installName is the name under which the skill is registered (it may differ
-// from available.Name when the skill was installed with --as).
-func (i *Installer) registerBundledSkill(available *AvailableSkill, installName, installPath string) error {
+// from available.Name when the skill was installed with --as). The metadata parameter is the
+// parsed SKILL.md frontmatter (already validated by the caller), used here only to
+// record its compatibility.atmos constraint for `skill list --detailed`.
+func (i *Installer) registerBundledSkill(available *AvailableSkill, installName, installPath string, metadata *SkillMetadata) error {
 	installedSkill := &InstalledSkill{
-		Name:        installName,
-		DisplayName: available.DisplayName,
-		Source:      available.Source,
-		Version:     available.Version,
-		InstalledAt: time.Now(),
-		UpdatedAt:   time.Now(),
-		Path:        installPath,
-		IsBuiltIn:   false,
-		Enabled:     true,
+		Name:            installName,
+		DisplayName:     available.DisplayName,
+		Source:          available.Source,
+		Version:         available.Version,
+		InstalledAt:     time.Now(),
+		UpdatedAt:       time.Now(),
+		Path:            installPath,
+		IsBuiltIn:       false,
+		Enabled:         true,
+		MinAtmosVersion: metadata.GetMinAtmosVersion(),
 	}
 	if err := i.localRegistry.Add(installedSkill); err != nil {
 		return fmt.Errorf("failed to register skill: %w", err)
@@ -611,6 +639,15 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		return outcomeSkipped
 	}
 
+	// Validate before copying into the install path, so a skill in the package that
+	// fails compatibility/structure checks (e.g. requires a newer Atmos than this
+	// binary) is rejected instead of silently registered like the single-skill and
+	// bundled paths always did.
+	if err := i.validator.Validate(skill.dir, skill.metadata); err != nil {
+		log.Warnf("Skipping %s: skill validation failed: %v", skillName, err)
+		return outcomeFailed
+	}
+
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
 		log.Warnf("Failed to create directory for %s: %v", skillName, err)
 		return outcomeFailed
@@ -622,15 +659,16 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 	}
 
 	installedSkill := &InstalledSkill{
-		Name:        skillName,
-		DisplayName: skill.metadata.GetDisplayName(),
-		Source:      sourceInfo.FullPath,
-		Version:     skill.metadata.GetVersion(),
-		InstalledAt: time.Now(),
-		UpdatedAt:   time.Now(),
-		Path:        installPath,
-		IsBuiltIn:   false,
-		Enabled:     true,
+		Name:            skillName,
+		DisplayName:     skill.metadata.GetDisplayName(),
+		Source:          sourceInfo.FullPath,
+		Version:         skill.metadata.GetVersion(),
+		InstalledAt:     time.Now(),
+		UpdatedAt:       time.Now(),
+		Path:            installPath,
+		IsBuiltIn:       false,
+		Enabled:         true,
+		MinAtmosVersion: skill.metadata.GetMinAtmosVersion(),
 	}
 
 	if err := i.localRegistry.Add(installedSkill); err != nil {

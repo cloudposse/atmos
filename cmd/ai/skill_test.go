@@ -24,7 +24,20 @@ func TestSkillCmd_AvailableCommands(t *testing.T) {
 	assert.Contains(t, SkillCmd.Long, "install")
 	assert.Contains(t, SkillCmd.Long, "list")
 	assert.Contains(t, SkillCmd.Long, "uninstall")
-	assert.Contains(t, SkillCmd.Long, "info")
+	// "info" is not a registered subcommand (only install/list/uninstall are);
+	// the help text must not advertise a command that doesn't exist.
+	assert.NotContains(t, SkillCmd.Long, "info")
+}
+
+// TestSkillCmd_SubcommandDescriptionsMatchCobraShort covers that the embedded
+// help markdown's one-line subcommand descriptions match what install/list's own
+// Cobra Short fields actually say (see cmd/ai/skill/install.go, list.go), instead
+// of the stale "Install a skill from a GitHub repository" (undersold the
+// bundled-offline path) and "List installed skills" (wrong -- list shows
+// available AND installed by default) wording that used to drift from them.
+func TestSkillCmd_SubcommandDescriptionsMatchCobraShort(t *testing.T) {
+	assert.Contains(t, SkillCmd.Long, "Install bundled or GitHub-hosted AI skills")
+	assert.Contains(t, SkillCmd.Long, "List available and installed skills")
 }
 
 func TestSkillCmd_Examples(t *testing.T) {

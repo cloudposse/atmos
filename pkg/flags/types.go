@@ -303,6 +303,7 @@ type StringSliceFlag struct {
 	Description    string
 	Required       bool
 	EnvVars        []string // Environment variables to bind.
+	ValidValues    []string // Valid values for each element of this flag (enforced during validation).
 	CompletionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
@@ -360,6 +361,14 @@ func (f *StringSliceFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetEnvVars")()
 
 	return f.EnvVars
+}
+
+// GetValidValues returns the list of valid values for each element of this flag.
+// Returns nil if no validation is needed.
+func (f *StringSliceFlag) GetValidValues() []string {
+	defer perf.Track(nil, "flags.StringSliceFlag.GetValidValues")()
+
+	return f.ValidValues
 }
 
 // GetCompletionFunc implements Flag.
