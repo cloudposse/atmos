@@ -93,7 +93,8 @@ func anchorViolation(name string, before, after map[string]anchorInfo) string {
 			name, b.aliasCount, a.aliasCount)
 	case b.aliasCount > 0 && b.content != a.content:
 		return fmt.Sprintf("anchor &%s is shared by %d alias(es) and its value would change; "+
-			"edit the anchor definition explicitly or restructure to avoid mutating shared data",
+			"edit the anchor definition explicitly, or add an explicit key at this path to override "+
+			"the anchored value here without touching the anchor",
 			name, b.aliasCount)
 	}
 	return ""

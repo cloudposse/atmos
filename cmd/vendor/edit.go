@@ -48,11 +48,11 @@ var vendorGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		path, err := vendoring.ComponentVersionPath(file, args[0])
+		path, declaringFile, err := vendoring.ComponentVersionPath(file, args[0])
 		if err != nil {
 			return err
 		}
-		return runVendorConfigGet(file, path)
+		return runVendorConfigGet(declaringFile, path)
 	},
 }
 
@@ -75,11 +75,11 @@ The source is matched by component name, so manifest ordering does not matter.`,
 		if err != nil {
 			return err
 		}
-		path, err := vendoring.ComponentVersionPath(file, args[0])
+		path, declaringFile, err := vendoring.ComponentVersionPath(file, args[0])
 		if err != nil {
 			return err
 		}
-		return runVendorConfigSet(file, path, args[1], atmosyaml.TypeString)
+		return runVendorConfigSet(declaringFile, path, args[1], atmosyaml.TypeString)
 	},
 }
 

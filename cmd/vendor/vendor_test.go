@@ -161,7 +161,7 @@ spec:
 	require.NoError(t, vendorGetCmd.Flags().Set("file", file))
 
 	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}))
-	path, err := vendoring.ComponentVersionPath(file, "vpc")
+	path, _, err := vendoring.ComponentVersionPath(file, "vpc")
 	require.NoError(t, err)
 	got, err := atmosyaml.GetFile(file, path)
 	require.NoError(t, err)
@@ -171,6 +171,59 @@ spec:
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
 	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}))
+}
+
+// TestVendorGetSetCmd_ImportOnlyComponent is a regression test for a
+// field-test finding: `atmos vendor get`/`atmos vendor set` returned "component
+// not found" for a component declared only in an imported vendor manifest,
+// even though `atmos vendor config list` could see it -- because the alias
+// commands only ever resolved the component against the root file. The get
+// must now succeed, and the set must land in the imported file, not the root.
+func TestVendorGetSetCmd_ImportOnlyComponent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o755))
+	root := filepath.Join(dir, DefaultVendorManifest)
+	require.NoError(t, os.WriteFile(root, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - vendor/terraform.yaml
+  sources:
+    - component: root-comp
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v1.0.0
+`), 0o644))
+	imported := filepath.Join(dir, "vendor", "terraform.yaml")
+	require.NoError(t, os.WriteFile(imported, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+
+	resetCommandFlags(t, vendorGetCmd)
+	resetCommandFlags(t, vendorSetCmd)
+	require.NoError(t, vendorGetCmd.Flags().Set("file", root))
+	require.NoError(t, vendorSetCmd.Flags().Set("file", root))
+
+	initVendorTestWriter(t)
+	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}), "get must resolve the imported component")
+
+	rootBefore, err := os.ReadFile(root)
+	require.NoError(t, err)
+
+	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}), "set must resolve the imported component")
+
+	got, err := atmosyaml.GetFile(imported, "spec.sources[0].version")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.0", got, "version updated in the imported file")
+
+	rootAfter, err := os.ReadFile(root)
+	require.NoError(t, err)
+	assert.Equal(t, string(rootBefore), string(rootAfter), "root manifest must be untouched")
 }
 
 // captureVendorStdout wires a data writer backed by a buffer so RunE calls

@@ -3,13 +3,23 @@ package vendor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
+
+// hintText joins every hint attached to err into one string for substring
+// assertions -- errors.GetAllHints returns []string (one per WithHint call),
+// and assert.Contains on a slice checks element equality, not substring
+// containment within an element.
+func hintText(err error) string {
+	return strings.Join(crdberrors.GetAllHints(err), "\n")
+}
 
 const vendorConfigFixture = `apiVersion: atmos/v1
 kind: AtmosVendorConfig
@@ -53,6 +63,46 @@ func TestVendorConfigGetCmd_MissingFile(t *testing.T) {
 	err := vendorConfigGetCmd.RunE(vendorConfigGetCmd, []string{"spec.sources[0].version"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+	// Regression for a field-test finding: a missing --file used to surface a
+	// bare "failed to read file: open ...: no such file or directory" with no
+	// guidance, unlike the polished hint `vendor get` gives for no-file-at-all.
+	assert.Contains(t, hintText(err), "--file",
+		"missing-file error should hint at checking/overriding --file")
+}
+
+// TestVendorConfigGetCmd_NotFoundInImportChain is a regression test for a
+// field-test finding: a path missing from the resolved file gave no
+// indication that the manifest imports other files that might declare it,
+// unlike `vendor config list`, which already walks the whole chain.
+func TestVendorConfigGetCmd_NotFoundInImportChain(t *testing.T) {
+	resetCommandFlags(t, vendorConfigGetCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o755))
+	root := filepath.Join(dir, DefaultVendorManifest)
+	require.NoError(t, os.WriteFile(root, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - vendor/terraform.yaml
+  sources:
+    - component: root-comp
+      version: v1.0.0
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "vendor", "terraform.yaml"), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      version: v0.1.0
+`), 0o644))
+	require.NoError(t, vendorConfigGetCmd.Flags().Set("file", root))
+
+	err := vendorConfigGetCmd.RunE(vendorConfigGetCmd, []string{"spec.sources[0].description"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+	hints := hintText(err)
+	assert.Contains(t, hints, "imports", "hint should mention the manifest imports other files")
+	assert.Contains(t, hints, "vendor config list", "hint should point at list to see the full import chain")
 }
 
 // --- vendorConfigSetCmd -------------------------------------------------------
@@ -93,6 +143,46 @@ func TestVendorConfigSetCmd_MissingFile(t *testing.T) {
 	err := vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].version", "v0.9.0"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+	assert.Contains(t, hintText(err), "--file",
+		"missing-file error should hint at checking/overriding --file")
+}
+
+// TestVendorConfigSetCmd_WarnsOnNonStringLooking is a regression test for a
+// field-test finding: unlike `config set`/`stack set`, vendor config set
+// silently stored numeric/bool-looking values as literal strings with no
+// warning at all when --type wasn't passed.
+func TestVendorConfigSetCmd_WarnsOnNonStringLooking(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+	stderr := setupVendorUICapture(t)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].description", "42"}))
+
+	got := plainOutput(stderr.String())
+	assert.Contains(t, got, "looks like it could be a bool/int/float", "warning must fire for a default-typed numeric-looking value")
+
+	value, err := atmosyaml.GetFile(file, "spec.sources[0].description")
+	require.NoError(t, err)
+	assert.Equal(t, "42", value, "value is still stored as the string \"42\"")
+}
+
+// TestVendorConfigSetCmd_NoWarningWhenTypeExplicit proves the warning is
+// skipped when the user explicitly chose --type=string, since that's a
+// deliberate choice, not an accident.
+func TestVendorConfigSetCmd_NoWarningWhenTypeExplicit(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+	stderr := setupVendorUICapture(t)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("type", atmosyaml.TypeString))
+
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].description", "42"}))
+
+	got := plainOutput(stderr.String())
+	assert.NotContains(t, got, "looks like it could be a bool/int/float", "warning must not fire when --type was explicit")
 }
 
 func TestVendorConfigSetCmd_InvalidTypeValue(t *testing.T) {
@@ -147,6 +237,8 @@ func TestVendorConfigDeleteCmd_MissingFile(t *testing.T) {
 	err := vendorConfigDeleteCmd.RunE(vendorConfigDeleteCmd, []string{"spec.sources[0].targets"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+	assert.Contains(t, hintText(err), "--file",
+		"missing-file error should hint at checking/overriding --file")
 }
 
 // --- vendorConfigFormatCmd ----------------------------------------------------

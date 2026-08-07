@@ -238,6 +238,10 @@ func TestSet_EditThroughAliasIsRejected(t *testing.T) {
 	_, err := Set([]byte(fixtureWithAnchors), "components.vpc.tags.Team", "networking")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
+	// Regression for a field-test finding: the error must name the practical
+	// workaround (an explicit override key), not just "restructure".
+	assert.Contains(t, err.Error(), "add an explicit key at this path to override",
+		"error should point at the actionable fix, not just say to restructure")
 }
 
 func TestSet_EditAnchorDefinitionIsRejected(t *testing.T) {

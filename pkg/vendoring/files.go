@@ -109,46 +109,56 @@ func decodeVendorManifest(file string) (*minimalVendorConfig, error) {
 }
 
 // ComponentVersionPath resolves the dot-notation path addressing a component's
-// pinned version in a vendor manifest file (e.g. "spec.sources[2].version").
-// The source is matched by component name, so manifest ordering does not
-// matter; the returned path reflects the component's current array index.
-// Returns an error wrapping atmosyaml.ErrYAMLPathNotFound if the component is
-// not declared in the manifest.
-func ComponentVersionPath(vendorFile, component string) (string, error) {
+// pinned version (e.g. "spec.sources[2].version"), searching vendorFile and
+// every manifest it imports (recursively). The source is matched by component
+// name, so manifest ordering does not matter; the returned path reflects the
+// component's array index within the file that declares it, which is also
+// returned as declaringFile -- it may differ from vendorFile when the
+// component is declared only in an imported manifest. Returns an error
+// wrapping atmosyaml.ErrYAMLPathNotFound if the component is not declared
+// anywhere in the chain.
+func ComponentVersionPath(vendorFile, component string) (path, declaringFile string, err error) {
 	defer perf.Track(nil, "vendoring.ComponentVersionPath")()
 
 	// Surface a read failure the same way atmosyaml.GetFile/QueryFile do
 	// (wrapping atmosyaml.ErrReadFile) so callers see a consistent sentinel
 	// regardless of which underlying primitive resolved the file.
 	if _, err := os.ReadFile(vendorFile); err != nil {
-		return "", fmt.Errorf("%w: %w", atmosyaml.ErrReadFile, err)
+		return "", "", fmt.Errorf("%w: %w", atmosyaml.ErrReadFile, err)
 	}
 
-	sources, err := readVendorSources(vendorFile)
+	files, err := CollectManifestFiles(vendorFile)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	for i := range sources {
-		if sources[i].Component == component {
-			return fmt.Sprintf("spec.sources[%d].version", i), nil
+	for _, file := range files {
+		sources, err := readVendorSources(file)
+		if err != nil {
+			return "", "", err
+		}
+		for i := range sources {
+			if sources[i].Component == component {
+				return fmt.Sprintf("spec.sources[%d].version", i), file, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("%w: component %q not found in %s", atmosyaml.ErrYAMLPathNotFound, component, vendorFile)
+	return "", "", fmt.Errorf("%w: component %q not found in %s", atmosyaml.ErrYAMLPathNotFound, component, vendorFile)
 }
 
 // SetComponentVersion sets the version for a component in a vendor manifest
-// file, preserving comments/anchors/formatting. The edit targets the matching
-// source by component name (not by index), so reordering the manifest is
-// safe. Returns an error wrapping atmosyaml.ErrYAMLPathNotFound if the
-// component is not declared in the manifest.
+// file (or one of the files it imports), preserving comments/anchors/
+// formatting. The edit targets the matching source by component name (not by
+// index), so reordering the manifest is safe. Returns an error wrapping
+// atmosyaml.ErrYAMLPathNotFound if the component is not declared anywhere in
+// vendorFile's import chain.
 func SetComponentVersion(vendorFile, component, version string) error {
 	defer perf.Track(nil, "vendoring.SetComponentVersion")()
 
-	path, err := ComponentVersionPath(vendorFile, component)
+	path, declaringFile, err := ComponentVersionPath(vendorFile, component)
 	if err != nil {
 		return err
 	}
-	_, err = atmosyaml.SetFileWithType(vendorFile, path, version, atmosyaml.TypeString)
+	_, err = atmosyaml.SetFileWithType(declaringFile, path, version, atmosyaml.TypeString)
 	return err
 }
 
