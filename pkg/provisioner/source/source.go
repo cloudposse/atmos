@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -164,7 +165,46 @@ func DetermineTargetDirectory(
 		return "", err
 	}
 
-	return filepath.Join(componentBasePath, component), nil
+	targetDir := filepath.Join(componentBasePath, component)
+
+	// Containment guard: component names come from user-controlled stack manifests. A name
+	// containing ".." segments (e.g. "../escape-test-nowd") would otherwise resolve outside
+	// componentBasePath via filepath.Join's implicit Clean(), vendoring the source into an
+	// arbitrary sibling directory instead of under components/<type>/. This mirrors the
+	// guards in internal/terraform_backend/terraform_backend_local.go's
+	// resolveLocalBackendComponentPath and pkg/terraform/output/config.go's
+	// extractComponentPath, except there is no safe fallback path to fall through to here -
+	// this branch already IS the final default - so an escaping path is a hard error instead.
+	if err := validateWithinComponentBasePath(targetDir, componentBasePath); err != nil {
+		return "", err
+	}
+
+	return targetDir, nil
+}
+
+// validateWithinComponentBasePath verifies that targetDir resolves to a location inside (or
+// equal to) componentBasePath, returning ErrPathTraversal if it does not. Note: symlinks are
+// not resolved; this is a best-effort guard against literal ".." traversal in component names.
+func validateWithinComponentBasePath(targetDir, componentBasePath string) error {
+	absTarget, errTarget := filepath.Abs(targetDir)
+	absBase, errBase := filepath.Abs(componentBasePath)
+	if errTarget != nil || errBase != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve component target directory `%s`", targetDir).
+			Err()
+	}
+
+	sep := string(filepath.Separator)
+	if absTarget == absBase || strings.HasPrefix(absTarget, absBase+sep) {
+		return nil
+	}
+
+	return errUtils.Build(errUtils.ErrPathTraversal).
+		WithExplanationf("Component target directory `%s` resolves outside the component base path `%s`", targetDir, componentBasePath).
+		WithHint("Component names must not contain '..' segments that escape the components directory").
+		WithContext("target_dir", absTarget).
+		WithContext("component_base_path", absBase).
+		Err()
 }
 
 // getWorkingDirectoryOverride checks for working_directory in metadata or settings.
