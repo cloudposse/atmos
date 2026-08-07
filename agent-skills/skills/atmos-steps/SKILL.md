@@ -139,10 +139,20 @@ Do not use `--chdir` or `cd` for real workflow, custom-command, or step executio
 and still configure `working_directory` on every real step. Relative paths must be checked
 against the surface's base path rules.
 
-In workflows and custom commands, every relative `working_directory` value resolves against the
-current working directory, whether or not it starts with `./`. `kind: step`/`kind: steps` hooks are
-the one exception: a plain relative value with no `./` prefix resolves against the component's own
-working directory instead. See `atmos-hooks` for the full rule.
+Working-directory resolution is not one rule — it differs by surface, and getting this wrong
+silently anchors relative fields (`source`, `destination`, `path`, `files`, `context`, ...) to the
+wrong directory instead of erroring:
+
+| Surface | Relative `working_directory` resolves against |
+|---|---|
+| Custom command's own `working_directory:` (command- or step-level) | Atmos `base_path` — always, whether or not the value starts with `./` |
+| A workflow's own `working_directory:` (the workflow-level default), or a `type: shell`/`exec`/`atmos` step's `working_directory:` | Atmos `base_path` — always, whether or not the value starts with `./` |
+| An extended/registered step type (`archive`, `file`, `junit`, `workdir`, `container`, ...) with its own step-level `working_directory:` | The current working directory — always, whether or not the value starts with `./` |
+| `kind: step`/`kind: steps` hook | The component's own working directory for a bare value or when unset; the current working directory for a dot-prefixed value (`.`, `..`, `./x`, `../x`) — see `atmos-hooks` for the full Dot/Bare rule |
+
+A workflow-level `working_directory:` default still reaches extended step types that leave their
+own `working_directory:` unset — it falls back to the same `base_path`-anchored resolution the
+workflow-level default already gets for shell/exec/atmos steps.
 
 ## Output
 

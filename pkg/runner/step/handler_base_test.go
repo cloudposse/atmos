@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -410,5 +411,24 @@ func TestBaseHandler_ResolveInWorkingDirectory(t *testing.T) {
 		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("tilde-prefixed working directory expands to the home directory", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		homedir.Reset()
+		t.Cleanup(homedir.Reset)
+		// Process cwd differs from home, and also has a same-named "scratch"
+		// dir — an unexpanded "~" would be joined as a literal cwd-relative
+		// path segment instead of erroring or resolving to home, so this
+		// proves expansion actually happened rather than merely not erroring.
+		t.Chdir(t.TempDir())
+
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("~", "scratch")}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(home, "scratch", "file.txt"), result)
 	})
 }

@@ -27,8 +27,22 @@ Use step-level `working_directory` for commands that need a different current di
 
 When a workflow-level container sandbox is active, Atmos resolves the path on the host and maps it into the container workspace before execution.
 
-Every relative `working_directory` value — whether or not it starts with `./` — resolves against the
-current working directory in a workflow step. There is no component-relative resolution here, since a
-workflow step isn't necessarily scoped to a single component. A [`kind: step` hook](/stacks/hooks#kind-step-run-a-step-type)
-resolves a plain relative value (no `./` prefix) against the component's own working directory instead —
-see that page for the full rule.
+## Path Resolution
+
+Path resolution differs by step type:
+
+- A `type: shell`, `type: exec`, or `type: atmos` step's `working_directory` — like the
+  [workflow-level default](/workflows/working-directory) it can override — resolves a relative
+  value against the Atmos `base_path`, whether or not it starts with `./`.
+- An extended step type (for example [`archive`](/workflows/steps/type/archive),
+  [`file`](/workflows/steps/type/file), `junit`, `workdir`, or
+  [`container`](/workflows/steps/type/container)) resolves its own `working_directory` against the
+  current working directory instead, whether or not it starts with `./`. If the step leaves
+  `working_directory` unset, it still falls back to the workflow-level default
+  (`base_path`-resolved) before falling back further to the current working directory.
+
+There is no component-relative resolution here, since a workflow step isn't necessarily scoped to a
+single component. A [`kind: step` hook](/stacks/hooks#kind-step-run-a-step-type) resolves a plain
+relative value (no `./` prefix) against the component's own working directory instead, and a
+dot-prefixed value (`.`, `..`, `./x`, `../x`) against the current working directory — see that page
+for the full rule.

@@ -60,6 +60,35 @@ func TestWorkdirHandlerExecuteResolvesPathAgainstWorkingDirectory(t *testing.T) 
 	assert.FileExists(t, filepath.Join(want, "README.md"))
 }
 
+func TestWorkdirHandlerExecuteResolvesRelativeSourceAgainstWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(workDir, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "srcdir", "marker.txt"), []byte("from-working-directory\n"), 0o644))
+
+	// A same-named "srcdir" elsewhere (the process cwd) proves source
+	// anchors to WorkingDirectory, not cwd, when both exist.
+	cwd := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(cwd, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "srcdir", "marker.txt"), []byte("from-cwd\n"), 0o644))
+	t.Chdir(cwd)
+
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "fixture",
+		Type:             schema.TaskTypeWorkdir,
+		Source:           "srcdir",
+		Path:             "target",
+		WorkingDirectory: workDir,
+	}, NewVariables())
+
+	require.NoError(t, err)
+	want := filepath.Join(workDir, "target")
+	assert.Equal(t, want, result.Value)
+	content, err := os.ReadFile(filepath.Join(want, "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-working-directory\n", string(content))
+}
+
 func TestWorkdirHandlerExecuteRequiresResetForExistingTarget(t *testing.T) {
 	sourceDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("demo\n"), 0o644))

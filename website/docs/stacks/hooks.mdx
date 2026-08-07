@@ -642,10 +642,15 @@ An explicit `working_directory:` value resolves differently depending on its sha
 
 In short: a plain relative value like `foo` behaves like the unset default (component-relative),
 while a `./`- or `../`-prefixed value is an explicit signal to resolve against the directory you
-ran `atmos` from instead. This distinction only applies to `kind: step`/`kind: steps` hooks — a
-[workflow step's `working_directory`](/workflows/steps/working-directory) or a [custom
-command's](/cli/configuration/commands/working-directory) always resolves against the current
-working directory, since neither has a single component in scope the way a hook does.
+ran `atmos` from instead. This dot/bare distinction only applies to `kind: step`/`kind: steps`
+hooks, since neither a workflow nor a custom command has a single component in scope the way a hook
+does. Outside hooks, a relative `working_directory` resolves one of two ways depending on the
+step type, never against the component: a [custom command's](/cli/configuration/commands/working-directory)
+own `working_directory`, a workflow's own [workflow-level default](/workflows/working-directory),
+and a `type: shell`/`exec`/`atmos` [workflow step's `working_directory`](/workflows/steps/working-directory)
+all resolve against the Atmos `base_path`; an extended step type's own `working_directory` (for
+example `archive`, `file`, `junit`, `workdir`, or `container`) resolves against the current working
+directory instead.
 
 <dl>
   <dt>`type`</dt>

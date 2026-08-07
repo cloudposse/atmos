@@ -1218,6 +1218,58 @@ func TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectoryUsesProvisione
 	assert.Equal(t, "handler.js", r.File[0].Name)
 }
 
+// TestStepEngineRunsWorkdirTypeWithBareRelativeWorkingDirectoryAnchorsSource
+// proves that a workdir step's relative `source` anchors to the component
+// working directory the same way `path` does, for a bare-relative
+// working_directory hook. Before the fix, `source` always resolved against
+// the process cwd regardless of working_directory (bare or dot-prefixed),
+// while `path` correctly anchored to the component dir — a same-step
+// inconsistency found via manual field testing, not covered by any prior
+// test.
+func TestStepEngineRunsWorkdirTypeWithBareRelativeWorkingDirectoryAnchorsSource(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	workDir := filepath.Join(componentDir, "sub")
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "srcdir", "marker.txt"), []byte("from-component-dir"), 0o644))
+
+	// Process cwd differs from componentDir/workDir, and also has a
+	// same-named "srcdir" — a wrong (cwd-anchored) source resolution would
+	// silently succeed against the wrong directory instead of failing loudly.
+	cwd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "srcdir", "marker.txt"), []byte("from-cwd"), 0o644))
+	t.Chdir(cwd)
+
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+		Hook: &Hook{
+			Kind: stepKindName,
+			Type: "workdir",
+			With: map[string]any{
+				"source":            "srcdir",
+				"path":              "out",
+				"working_directory": "sub", // bare relative, no dot prefix
+			},
+		},
+	}
+
+	out, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	content, err := os.ReadFile(filepath.Join(workDir, "out", "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-component-dir", string(content))
+}
+
 func TestVerifyStepsHookTypes(t *testing.T) {
 	t.Run("known types", func(t *testing.T) {
 		hook := &Hook{

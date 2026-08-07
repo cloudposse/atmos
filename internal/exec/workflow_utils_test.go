@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1896,6 +1898,63 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-mixed-types", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes
+// proves that a workflow-level `working_directory:` default (documented as
+// "default working directory for all steps") actually reaches extended step
+// types (archive, file, junit, workdir, container, ...), not just the
+// shell/exec/atmos legacy dispatch path. Before the fix, extended steps only
+// ever looked at their own step-level WorkingDirectory (via
+// pkg/runner/step's resolver) and silently ignored the workflow-level
+// default, falling back to the process cwd instead.
+func TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	basePath := t.TempDir()
+	subDir := filepath.Join(basePath, "sub")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "marker.txt"), []byte("from-workflow-default"), 0o644))
+
+	// Process cwd differs from basePath and also has a same-named "sub" dir,
+	// so a wrong (cwd-fallback) resolution would silently succeed against
+	// the wrong directory instead of failing loudly.
+	cwd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "sub", "marker.txt"), []byte("from-cwd"), 0o644))
+	t.Chdir(cwd)
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: basePath}
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description:      "Test workflow-level working_directory default reaches extended step types",
+		WorkingDirectory: "sub",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "archive",
+				Type:        "archive",
+				Action:      "replace",
+				Source:      ".",
+				Destination: "../result.zip",
+				Format:      "zip",
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(atmosConfig, "test-workflow-default-workdir", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(filepath.Join(basePath, "result.zip"))
+	require.NoError(t, err, "archive should land under basePath (the workflow-level default), not the process cwd")
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	rc, err := r.File[0].Open()
+	require.NoError(t, err)
+	defer rc.Close()
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, "from-workflow-default", string(content))
 }
 
 // TestExecuteWorkflow_EnvStepPersistsToLaterSteps verifies that ExecuteWorkflow's

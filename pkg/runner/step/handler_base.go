@@ -8,10 +8,16 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
+
+// homeDirProvider expands a leading `~` in step.WorkingDirectory, matching
+// the same tilde-expansion --chdir already gets (see cmd/root.go's
+// processChdirFlag). Stateless, so a single shared instance is safe.
+var homeDirProvider = filesystem.NewOSHomeDirProvider()
 
 // BaseHandler provides common functionality for step handlers.
 type BaseHandler struct {
@@ -254,6 +260,12 @@ func isDotPrefixedWorkingDirectory(value string) bool {
 // resolveWorkingDirectory resolves step.WorkingDirectory (itself a possible
 // template) to an absolute base directory.
 //
+// A leading `~` (e.g. `~/scratch`) is expanded to the user's home directory
+// before the Dot/Bare/absolute checks below run, so it is never joined as a
+// literal path segment. A resulting `~`-expanded value is always absolute
+// and therefore short-circuits the classification just like any other
+// absolute value.
+//
 // An explicit, non-empty, non-absolute value is classified per
 // docs/prd/base-path-resolution-semantics.md's Dot/Bare convention (see
 // isDotPrefixedWorkingDirectory):
@@ -277,17 +289,9 @@ func isDotPrefixedWorkingDirectory(value string) bool {
 func (h BaseHandler) resolveWorkingDirectory(step *schema.WorkflowStep, vars *Variables) (string, error) {
 	defer perf.Track(nil, "step.BaseHandler.resolveWorkingDirectory")()
 
-	workDir := step.WorkingDirectory
-	if workDir != "" {
-		resolved, err := vars.Resolve(workDir)
-		if err != nil {
-			return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-				WithCause(err).
-				WithContext("step", step.Name).
-				WithContext("field", "working_directory").
-				Err()
-		}
-		workDir = resolved
+	workDir, err := resolveWorkingDirectoryValue(step, vars, step.WorkingDirectory)
+	if err != nil {
+		return "", err
 	}
 	if workDir == "" {
 		cwd, err := os.Getwd()
@@ -315,4 +319,34 @@ func (h BaseHandler) resolveWorkingDirectory(step *schema.WorkflowStep, vars *Va
 		workDir = abs
 	}
 	return workDir, nil
+}
+
+// resolveWorkingDirectoryValue template-resolves and tilde-expands a
+// step.WorkingDirectory value, returning "" unchanged when raw is empty.
+// Split out of resolveWorkingDirectory to keep its own cyclomatic complexity
+// under the repo's lint threshold.
+func resolveWorkingDirectoryValue(step *schema.WorkflowStep, vars *Variables, raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	resolved, err := vars.Resolve(raw)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "working_directory").
+			Err()
+	}
+	if resolved == "" {
+		return "", nil
+	}
+	expanded, err := homeDirProvider.Expand(resolved)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrPathResolution).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "working_directory").
+			Err()
+	}
+	return expanded, nil
 }

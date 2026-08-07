@@ -1025,6 +1025,18 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	stepCopy := *workflowStep
 	stepCopy.DryRun = opts.DryRun
 	stepCopy.Stack = opts.FinalStack
+	// Extended step types (archive, file, junit, workdir, container, ...) resolve
+	// their own relative fields against step.WorkingDirectory only; unlike the
+	// shell/exec/atmos dispatch path above, they never see the workflow-level
+	// working_directory default. Fall back to it here (base_path-anchored, same
+	// as the shell path) so a workflow-level default actually applies to every
+	// step type, matching its documented "default working directory for all
+	// steps" behavior instead of silently falling back to the process cwd.
+	if strings.TrimSpace(stepCopy.WorkingDirectory) == "" && opts.AtmosConfig != nil {
+		if workDir := workflowPkg.CalculateWorkingDirectory(workflow, &stepCopy, opts.AtmosConfig.BasePath); workDir != "" {
+			stepCopy.WorkingDirectory = workDir
+		}
+	}
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
 }
