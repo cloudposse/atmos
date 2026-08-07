@@ -545,6 +545,139 @@ func TestRunStackSet_ExplicitFile_AutoWithExistingNull_DoesNotForceNull(t *testi
 	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
 }
 
+// TestRunStackSet_ExplicitFile_AutoRejectsExistingList is a regression test
+// for a field-test finding: --type=auto used to fall through GetType's
+// default case to TypeString for a !!seq/!!map existing value, silently
+// collapsing a list into a plain string with no warning. GetType now reports
+// TypeYAML for a non-scalar existing value, and effectiveStackValueType must
+// refuse rather than silently coerce.
+func TestRunStackSet_ExplicitFile_AutoRejectsExistingList(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        taglist:
+          - a
+          - b
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	err := runStackSet([]string{"vars.taglist", "x"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	// The list must survive untouched -- the whole point of refusing.
+	raw, readErr := os.ReadFile(file)
+	require.NoError(t, readErr)
+	content := string(raw)
+	assert.Contains(t, content, "- a")
+	assert.Contains(t, content, "- b")
+	assert.NotContains(t, content, "taglist: x")
+}
+
+// TestRunStackSet_ExplicitFile_AutoRejectsExistingMap is TestRunStackSet_
+// ExplicitFile_AutoRejectsExistingList's map counterpart.
+func TestRunStackSet_ExplicitFile_AutoRejectsExistingMap(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        tagmap:
+          team: platform
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	err := runStackSet([]string{"vars.tagmap", "oops"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	raw, readErr := os.ReadFile(file)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), "team: platform")
+	assert.NotContains(t, string(raw), "tagmap: oops")
+}
+
+// TestRunStackSet_AnchorOwner_RejectedThroughCLI and its _AnchorUser sibling
+// exercise the config-field-test fixture's mycomponent-anchor-owner/
+// mycomponent-anchor-user components through the actual CLI command layer --
+// a field-test finding noted these fixture components were purpose-built to
+// prove the anchor guard but were never exercised by any test, only manually
+// verified once by hand.
+func TestRunStackSet_AnchorOwner_RejectedThroughCLI(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent-anchor-owner"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeString
+
+	err := runStackSet([]string{"vars.region", "us-west-2"})
+	require.ErrorIs(t, err, atmosyaml.ErrYAMLAnchorAltered)
+
+	raw, readErr := os.ReadFile(flagFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), `region: &shared_region "us-east-1"`)
+}
+
+func TestRunStackSet_AnchorUser_RejectedThroughCLI(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent-anchor-user"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeString
+
+	err := runStackSet([]string{"vars.region", "us-west-2"})
+	require.ErrorIs(t, err, atmosyaml.ErrYAMLAnchorAltered)
+
+	raw, readErr := os.ReadFile(flagFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), "region: *shared_region")
+}
+
+// TestResolveEditTarget_SharedFile_CatalogImport is a regression test for a
+// field-test finding: editing a value that resolves (via provenance or an
+// explicit --file) to a manifest reached only through import silently
+// affects every other stack/component that imports the same file, with no
+// indication to the user. The editTarget.sharedFile field is the signal
+// warnIfSharedFile acts on; this asserts it's computed correctly for both an
+// imported catalog file and the stack's own top-level manifest.
+func TestResolveEditTarget_SharedFile_CatalogImport(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+
+	// vars.baz is only defined in the imported catalog file.
+	tgt, err := resolveEditTarget("vars.baz", true)
+	require.NoError(t, err)
+	assert.True(t, tgt.sharedFile, "a value resolving to an imported catalog file must be flagged as shared")
+
+	// vars.foo is overridden directly in the stack's own top-level manifest.
+	tgt, err = resolveEditTarget("vars.foo", true)
+	require.NoError(t, err)
+	assert.False(t, tgt.sharedFile, "a value resolving to the stack's own top-level manifest must not be flagged as shared")
+}
+
 func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)

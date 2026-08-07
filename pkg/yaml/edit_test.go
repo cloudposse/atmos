@@ -169,6 +169,22 @@ func TestGetType(t *testing.T) {
 	assert.Equal(t, TypeString, typ)
 }
 
+// TestGetType_ListAndMap is a regression test: GetType used to fall through
+// to (TypeString, true) for a !!seq or !!map tag, which callers read as a
+// confidently resolved scalar inference -- letting --type=auto silently
+// replace an existing list/map with a plain string. It must report
+// (TypeYAML, true) instead, so callers can tell "there's a typed answer, but
+// it isn't a scalar" apart from "this really is a string".
+func TestGetType_ListAndMap(t *testing.T) {
+	typ, ok := GetType([]byte(fixtureWithComments), "sources")
+	assert.True(t, ok)
+	assert.Equal(t, TypeYAML, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "components.terraform.vpc.vars")
+	assert.True(t, ok)
+	assert.Equal(t, TypeYAML, typ)
+}
+
 func TestGetType_NotFound(t *testing.T) {
 	_, ok := GetType([]byte(fixtureWithComments), "vars.does_not_exist")
 	assert.False(t, ok)

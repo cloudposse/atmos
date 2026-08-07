@@ -359,6 +359,38 @@ func TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull(t *testing.T) {
 	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
 }
 
+// TestConfigSetCommand_AutoRejectsExistingList is a regression test for a
+// field-test finding: --type=auto used to fall through GetFileType's default
+// case to TypeString for a !!seq/!!map existing value, silently collapsing a
+// list into a plain string with no warning. GetType now reports TypeYAML for
+// a non-scalar existing value, and effectiveValueType must refuse rather
+// than silently coerce.
+func TestConfigSetCommand_AutoRejectsExistingList(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(
+		"settings:\n  taglist:\n    - a\n    - b\n",
+	), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	err = configSetCmd.RunE(configSetCmd, []string{"settings.taglist", "x"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "- a")
+	assert.Contains(t, string(content), "- b")
+	assert.NotContains(t, string(content), "taglist: x")
+}
+
 func TestConfigSetCommand_InvalidType(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")

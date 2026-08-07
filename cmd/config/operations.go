@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -56,7 +58,10 @@ already at that path, otherwise string. Pass --type explicitly to override.`,
 			return err
 		}
 
-		effectiveType, resolved := effectiveValueType(file, args[0])
+		effectiveType, resolved, err := effectiveValueType(file, args[0])
+		if err != nil {
+			return err
+		}
 		if !resolved {
 			warnIfSilentlyStoredAsString(args[1])
 		}
@@ -89,17 +94,41 @@ already at that path, otherwise string. Pass --type explicitly to override.`,
 // setting if auto-inference forced it here. So a null-typed existing value
 // falls through to the same unresolved/string-fallback path as "nothing to
 // infer from".
-func effectiveValueType(file, dotPath string) (valType string, resolved bool) {
+//
+// Either inference source can also land on TypeYAML -- the schema modeling a
+// map/slice field, or GetFileType finding an existing list/map -- which
+// means "there's a typed answer, but it isn't a scalar auto can coerce a
+// plain CLI string argument into." That returns a non-nil error instead of
+// silently falling through to TypeString, which would otherwise replace the
+// list/map with a plain string with no indication anything destructive
+// happened.
+func effectiveValueType(file, dotPath string) (valType string, resolved bool, err error) {
 	if valueType != atmosyaml.TypeAuto {
-		return valueType, true
+		return valueType, true, nil
 	}
 	if inferred, ok := cfg.InferValueType(dotPath); ok {
-		return inferred, true
+		if inferred == atmosyaml.TypeYAML {
+			return "", false, newNonScalarInferenceError(dotPath)
+		}
+		return inferred, true, nil
 	}
 	if inferred, ok := atmosyaml.GetFileType(file, dotPath); ok && inferred != atmosyaml.TypeNull {
-		return inferred, true
+		if inferred == atmosyaml.TypeYAML {
+			return "", false, newNonScalarInferenceError(dotPath)
+		}
+		return inferred, true, nil
 	}
-	return atmosyaml.TypeString, false
+	return atmosyaml.TypeString, false, nil
+}
+
+// newNonScalarInferenceError builds the actionable error returned when
+// --type=auto resolves to a path whose existing (or schema-modeled) value is
+// a list or map.
+func newNonScalarInferenceError(dotPath string) error {
+	return errUtils.Build(fmt.Errorf("%w: %q", atmosyaml.ErrTypeInferenceNonScalar, dotPath)).
+		WithHint("Pass --type=yaml with a full replacement literal (e.g. --type=yaml '[\"a\",\"b\"]'), " +
+			"or --type=string to intentionally overwrite it with a string.").
+		Err()
 }
 
 // warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything

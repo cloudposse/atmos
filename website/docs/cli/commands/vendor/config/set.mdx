@@ -45,7 +45,10 @@ atmos vendor config set --type=yaml 'spec.sources[0].tags' '["a", "b"]'
 
 <dl>
   <dt>`--type` (string, default `string`)</dt>
-  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
+  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal). `auto` is
+  recognized but rejected — unlike `config set`/`stack config set`, vendor manifests have no schema or
+  existing-value signal for auto-inference to draw on, so `--type` must be given explicitly (or omitted, which
+  defaults to `string`).</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest file to edit.</dd>
 </dl>

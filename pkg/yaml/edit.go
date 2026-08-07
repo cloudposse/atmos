@@ -198,11 +198,19 @@ func Get(content []byte, path string) (string, error) {
 }
 
 // GetType reads the YAML tag of the value already at path and maps it to a
-// SetFileWithType type name (TypeBool, TypeInt, TypeFloat, TypeString, or
-// TypeNull). Returns ok=false when the path doesn't currently resolve to a
-// value at all (missing, or an unaddressable structural node), which callers
-// treat as "nothing to infer from". An explicit YAML null is a real, present
-// value -- it returns (TypeNull, true), not ok=false.
+// SetFileWithType type name (TypeBool, TypeInt, TypeFloat, TypeString,
+// TypeNull, or TypeYAML). Returns ok=false when the path doesn't currently
+// resolve to a value at all (missing, or an unaddressable structural node),
+// which callers treat as "nothing to infer from". An explicit YAML null is a
+// real, present value -- it returns (TypeNull, true), not ok=false.
+//
+// A !!seq or !!map tag returns (TypeYAML, true), not (TypeString, true):
+// a plain CLI string argument can never be a faithful auto-inferred
+// replacement for an existing list or map, so callers must treat TypeYAML
+// here as "auto-inference found something, but it isn't a scalar coercion
+// it can safely perform" rather than as a resolved string type -- silently
+// collapsing a list/map to TypeString would destroy the existing structure
+// with no warning.
 func GetType(content []byte, path string) (string, bool) {
 	defer perf.Track(nil, "yaml.GetType")()
 
@@ -231,8 +239,11 @@ func GetType(content []byte, path string) (string, bool) {
 		return TypeFloat, true
 	case "!!null":
 		return TypeNull, true
-	default:
+	case "!!str":
 		return TypeString, true
+	default:
+		// !!seq, !!map, or any other non-scalar tag.
+		return TypeYAML, true
 	}
 }
 

@@ -277,7 +277,9 @@ func init() {
 
 	vendorConfigSetParser = flags.NewStandardParser(
 		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
-		flags.WithStringFlag("type", "", atmosyaml.TypeString, "Value type: string, int, bool, float, null, or yaml (raw literal)"),
+		flags.WithStringFlag("type", "", atmosyaml.TypeString,
+			"Value type: string, int, bool, float, null, or yaml (raw literal). auto is recognized but rejected -- "+
+				"vendor manifests have no schema or existing-value signal to infer from."),
 	)
 	vendorConfigSetParser.RegisterFlags(vendorConfigSetCmd)
 	if err := vendorConfigSetParser.BindToViper(viper.GetViper()); err != nil {

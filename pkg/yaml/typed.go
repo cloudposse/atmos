@@ -1,7 +1,9 @@
 package yaml
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -84,19 +86,45 @@ func buildRHS(value, valueType string) (string, error) {
 }
 
 // buildValidatedRHS handles value types whose input must be validated before it
-// is inserted verbatim as a typed YAML scalar.
+// is inserted as a typed YAML scalar. The validated int/float value is written
+// back out in its canonical decimal form (via strconv.FormatInt/formatYAMLFloat)
+// rather than verbatim: Go's strconv grammar and yaml.v3's default scalar
+// resolver disagree on some inputs that pass validation here. For example,
+// strconv.ParseInt(v, 10, 64) accepts a leading-zero string like "010" as
+// decimal 10, but yaml.v3 re-parses an unquoted "010" as octal (8) on the next
+// read. Writing verbatim would silently round-trip to a different value than
+// the one just validated; writing the canonical form closes that gap.
 func buildValidatedRHS(value, valueType string) (string, error) {
 	switch valueType {
 	case TypeInt:
-		if _, err := strconv.ParseInt(value, decimalBase, bitSize64); err != nil {
+		parsed, err := strconv.ParseInt(value, decimalBase, bitSize64)
+		if err != nil {
+			if errors.Is(err, strconv.ErrRange) {
+				return "", fmt.Errorf("%w: %q is out of range for a 64-bit integer; use --type=yaml or --type=string to store it verbatim",
+					ErrInvalidTypedValue, value)
+			}
 			return "", fmt.Errorf("%w: %q is not an integer", ErrInvalidTypedValue, value)
 		}
-		return value, nil
+		return strconv.FormatInt(parsed, decimalBase), nil
 	case TypeFloat:
-		if _, err := strconv.ParseFloat(value, bitSize64); err != nil {
+		parsed, err := strconv.ParseFloat(value, bitSize64)
+		if err != nil {
 			return "", fmt.Errorf("%w: %q is not a float", ErrInvalidTypedValue, value)
 		}
-		return value, nil
+		if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+			// YAML 1.1 spells these ".nan"/".inf"/"-.inf", but that leading
+			// dot collides with the yq expression language's path-navigation
+			// operator when inserted as a raw assignment RHS (SetRaw builds
+			// "path = rhs" and evaluates rhs as an expression, not a literal
+			// scalar) -- ".nan" silently resolves to "look up field nan on
+			// the root document", writing null instead of NaN. There's no
+			// verified-safe way to insert these two values through this
+			// code path today, so refuse rather than silently write the
+			// wrong thing.
+			return "", fmt.Errorf("%w: %q (NaN/Infinity) can't be written through --type=float; use --type=yaml with explicit .nan/.inf/-.inf YAML syntax if you need this value",
+				ErrInvalidTypedValue, value)
+		}
+		return formatYAMLFloat(parsed), nil
 	case TypeBool:
 		b, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
@@ -106,6 +134,18 @@ func buildValidatedRHS(value, valueType string) (string, error) {
 	default:
 		return "", fmt.Errorf("%w: unknown value type %q", ErrInvalidTypedValue, valueType)
 	}
+}
+
+// formatYAMLFloat renders a finite float in a form yaml.v3's default resolver
+// will read back as the same float. A whole number (e.g. 10) is given an
+// explicit ".0" so it keeps the !!float tag instead of round-tripping as
+// !!int. Callers must not pass NaN or +/-Inf -- see buildValidatedRHS.
+func formatYAMLFloat(f float64) string {
+	s := strconv.FormatFloat(f, 'g', -1, bitSize64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
 }
 
 // SetWithType assigns value at path, coercing it according to valueType, and

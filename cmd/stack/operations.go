@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -41,6 +42,7 @@ type editTarget struct {
 	provLine           int    // line within provFile
 	mergedType         string // type of the effective merged value (e.g. inherited from an abstract component), if any
 	mergedTypeResolved bool   // whether mergedType reflects a real, present value (see atmosyaml.GetType)
+	sharedFile         bool   // true when file is reached only via import, not the stack's own top-level manifest -- see warnIfSharedFile
 }
 
 var stackGetCmd = &cobra.Command{
@@ -131,7 +133,11 @@ func runStackSet(args []string) error {
 	if err != nil {
 		return err
 	}
-	effectiveType, resolved := effectiveStackValueType(tgt)
+	warnIfSharedFile(tgt)
+	effectiveType, resolved, err := effectiveStackValueType(tgt)
+	if err != nil {
+		return err
+	}
 	if !resolved {
 		warnIfSilentlyStoredAsString(args[1])
 	}
@@ -167,17 +173,40 @@ func runStackSet(args []string) error {
 // if auto-inference forced it here. So a null-typed existing value falls
 // through to the same unresolved/string-fallback path as "nothing to infer
 // from".
-func effectiveStackValueType(tgt *editTarget) (valType string, resolved bool) {
+//
+// Either signal can also land on TypeYAML -- the target file's own value, or
+// the merged/inherited value, being a list or map -- which means "there's a
+// typed answer, but it isn't a scalar auto can coerce a plain CLI string
+// argument into." That returns a non-nil error instead of silently falling
+// through to TypeString, which would otherwise replace the list/map with a
+// plain string with no indication anything destructive happened.
+func effectiveStackValueType(tgt *editTarget) (valType string, resolved bool, err error) {
 	if flagType != atmosyaml.TypeAuto {
-		return flagType, true
+		return flagType, true, nil
 	}
 	if inferred, ok := atmosyaml.GetFileType(tgt.file, tgt.yqPath); ok && inferred != atmosyaml.TypeNull {
-		return inferred, true
+		if inferred == atmosyaml.TypeYAML {
+			return "", false, newNonScalarInferenceError(tgt.inFilePath)
+		}
+		return inferred, true, nil
 	}
 	if tgt.mergedTypeResolved && tgt.mergedType != atmosyaml.TypeNull {
-		return tgt.mergedType, true
+		if tgt.mergedType == atmosyaml.TypeYAML {
+			return "", false, newNonScalarInferenceError(tgt.inFilePath)
+		}
+		return tgt.mergedType, true, nil
 	}
-	return atmosyaml.TypeString, false
+	return atmosyaml.TypeString, false, nil
+}
+
+// newNonScalarInferenceError builds the actionable error returned when
+// --type=auto resolves to a path whose existing (or merged/inherited) value
+// is a list or map.
+func newNonScalarInferenceError(dotPath string) error {
+	return errUtils.Build(fmt.Errorf("%w: %q", atmosyaml.ErrTypeInferenceNonScalar, dotPath)).
+		WithHint("Pass --type=yaml with a full replacement literal (e.g. --type=yaml '[\"a\",\"b\"]'), " +
+			"or --type=string to intentionally overwrite it with a string.").
+		Err()
 }
 
 // warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything
@@ -193,11 +222,26 @@ func warnIfSilentlyStoredAsString(value string) {
 	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because there's no existing value at this path to infer a type from. Pass --type to store it as bool, int, float, or yaml.", value)
 }
 
+// warnIfSharedFile warns before a set/delete edits a manifest that isn't one
+// of the stack's own top-level files (i.e. it's reached only through
+// import:), since editing it changes the effective value for every other
+// stack/component that imports the same file too -- not just the one
+// selected by -s/-c. See resolveEditTarget for how tgt.sharedFile is
+// computed.
+func warnIfSharedFile(tgt *editTarget) {
+	if !tgt.sharedFile {
+		return
+	}
+	ui.Warningf("`%s` is defined in `%s`, which may be imported by other stacks or components -- this change affects all of them, not just `%s` in stack `%s`.",
+		flagComponent, atmosyaml.DisplayPath(tgt.file), flagComponent, flagStack)
+}
+
 func runStackDelete(args []string) error {
 	tgt, err := resolveEditTarget(args[0], true)
 	if err != nil {
 		return err
 	}
+	warnIfSharedFile(tgt)
 	existed, err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath)
 	if err != nil {
 		return err
@@ -308,6 +352,7 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 	// Explicit file override bypasses provenance resolution.
 	if flagFile != "" {
 		tgt.file = flagFile
+		tgt.sharedFile = !isTopLevelStackFile(&atmosConfig, tgt.file)
 		// For read-only get, reflect the value actually stored in the explicit
 		// file rather than the merged value.
 		if !requireEditable {
@@ -319,6 +364,24 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 	}
 
 	return resolveTargetByProvenance(&atmosConfig, result, tgt, dotPath, requireEditable)
+}
+
+// isTopLevelStackFile reports whether file is one of the stack's own
+// top-level manifests (the files matched directly by stacks.included_paths),
+// as opposed to a file reached only through import. StackConfigFilesAbsolutePaths
+// on atmosConfig lists exactly the former, so anything not in it is shared
+// with -- and edited on behalf of -- every stack or component that imports it.
+func isTopLevelStackFile(atmosConfig *schema.AtmosConfiguration, file string) bool {
+	abs, err := filepath.Abs(file)
+	if err != nil {
+		return false
+	}
+	for _, f := range atmosConfig.StackConfigFilesAbsolutePaths {
+		if f == abs {
+			return true
+		}
+	}
+	return false
 }
 
 // describeComponentForEdit initializes a config with stacks processed (the root
@@ -392,5 +455,6 @@ func resolveTargetByProvenance(atmosConfig *schema.AtmosConfiguration, result *e
 			Err()
 	}
 	tgt.file = absFile
+	tgt.sharedFile = !isTopLevelStackFile(atmosConfig, tgt.file)
 	return tgt, nil
 }
