@@ -1,0 +1,41 @@
+---
+title: atmos gcp gke token
+sidebar_label: token
+sidebar_class_name: command
+description: Emit a Kubernetes ExecCredential from an Atmos-managed GCP identity.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Resolve or refresh an Atmos GCP identity and emit its short-lived access token as Kubernetes `ExecCredential` JSON.
+</Intro>
+
+## Usage
+
+```shell
+atmos gcp gke token --identity <identity>
+```
+
+The generated GKE kubeconfig invokes this command automatically. It writes only JSON to stdout; diagnostics go to stderr. The token is not written to kubeconfig or included in error messages.
+
+## Flags
+
+<dl>
+  <dt>`--identity`, `-i`</dt>
+  <dd>The Atmos GCP identity to resolve. If omitted, Atmos uses `ATMOS_IDENTITY` or the only configured identity.</dd>
+</dl>
+
+## Output
+
+```json
+{
+  "apiVersion": "client.authentication.k8s.io/v1beta1",
+  "kind": "ExecCredential",
+  "status": {
+    "expirationTimestamp": "2026-08-07T12:30:00Z",
+    "token": "example-redacted-token"
+  }
+}
+```
+
+The command uses the existing Auth manager, including valid cached credentials and provider refresh when required. It suppresses linked integration auto-provisioning during token resolution so the GKE integration cannot recursively rewrite its own kubeconfig.

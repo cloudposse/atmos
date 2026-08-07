@@ -1,0 +1,66 @@
+---
+title: GKE kubeconfig authentication
+sidebar_label: gke
+sidebar_class_name: command
+id: gke
+description: Provision a GKE kubeconfig from an Atmos-managed GCP identity.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Configure a GKE kubeconfig whose short-lived access tokens are supplied dynamically by Atmos Auth. No `gcloud`, Application Default Credentials bootstrap, or external GKE authentication plugin is required.
+</Intro>
+
+## Configuration
+
+```yaml
+auth:
+  integrations:
+    example-gke:
+      kind: gcp/gke
+      via:
+        identity: example-deployer
+      spec:
+        cluster:
+          name: example-cluster
+          project_id: example-project
+          location: us-central1
+          alias: example
+          kubeconfig:
+            path: /tmp/example-kubeconfig
+            update: replace
+```
+
+The cluster `name`, `project_id`, and regional or zonal `location` are required. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`.
+
+## Use the integration
+
+Selecting the linked identity provisions the kubeconfig and contributes `KUBECONFIG` and `KUBE_CONFIG_PATH` to the child environment:
+
+```shell
+atmos auth exec --identity example-deployer -- kubectl get namespaces
+atmos helm plan example-release --stack example-stack --identity example-deployer
+```
+
+The same composed identity environment is available to native Helm, Kubernetes, Helmfile, kubectl subprocesses, and workflows. The integration does not add Helm-specific behavior.
+
+## How it works
+
+Atmos calls the GKE API for `projects/{project}/locations/{location}/clusters/{name}` using the resolved identity's access token. It writes only the Kubernetes API endpoint, cluster CA, context, and this exec plugin to kubeconfig:
+
+```shell
+atmos gcp gke token --identity example-deployer
+```
+
+Kubernetes invokes the command whenever it needs a fresh credential. The access token and expiration are returned as Kubernetes `ExecCredential` JSON and are never persisted in kubeconfig.
+
+GKE is an Auth integration rather than a Kubernetes identity because the GCP identity remains the source credential and the kubeconfig is derived client configuration. Kubernetes RBAC remains independently required after Google authenticates the caller.
+
+## Permissions
+
+The identity must be able to describe the cluster, normally with `container.clusters.get`, and its provider must be able to obtain or refresh a GCP OAuth2 access token. Kubernetes roles and role bindings still determine what that identity may do inside the cluster.
+
+## See also
+
+- [`atmos gcp gke token`](token) — Exec credential command
+- [Atmos Auth](/cli/configuration/auth) — Providers, identities, and integrations

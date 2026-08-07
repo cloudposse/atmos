@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -248,6 +249,23 @@ func TestIntegrationTargetKey(t *testing.T) {
 				Kind: "aws/eks",
 			},
 			want: "my-eks",
+		},
+		{
+			name:    "GKE with cluster",
+			intName: "example-gke",
+			integration: schema.Integration{
+				Kind: integrations.KindGCPGKE,
+				Spec: &schema.IntegrationSpec{
+					Cluster: &schema.Cluster{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"},
+				},
+			},
+			want: "gcp/gke:example-project:us-central1:example-cluster",
+		},
+		{
+			name:        "GKE without cluster falls back to name",
+			intName:     "example-gke",
+			integration: schema.Integration{Kind: integrations.KindGCPGKE},
+			want:        "example-gke",
 		},
 		{
 			name:        "ECR Public always returns fixed key",

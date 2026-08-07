@@ -46,6 +46,11 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
 			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
 		}
+	case integrations.KindGCPGKE:
+		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
+			cluster := cfg.Spec.Cluster
+			return fmt.Sprintf("gcp/gke:%s:%s:%s", cluster.ProjectID, cluster.Location, cluster.Name)
+		}
 	}
 	return name
 }
@@ -58,7 +63,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
 	// Check if integrations should be skipped (when called from ExecuteIntegration or eks-token).
-	if ctx.Value(skipIntegrationsKey) != nil {
+	if IntegrationsSkipped(ctx) {
 		log.Debug("Skipping auto-triggered integrations (explicit execution)", logKeyIdentity, identityName)
 		return
 	}
