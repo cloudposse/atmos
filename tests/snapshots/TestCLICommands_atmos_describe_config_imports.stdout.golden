@@ -144,5 +144,12 @@ auth:
 container:
   runtime:
     auto_start: true
+toolchain:
+  install_path: ""
+  file_path: ""
+  tools_dir: ""
+  versions_file: ""
+  use_tool_versions: false
+  use_lock_file: true
 list:
   error_mode: warn
