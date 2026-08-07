@@ -584,9 +584,9 @@ func TestFilterDrafts(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		name        string
-		releases    []*github.RepositoryRelease
-		expectedLen int
+		name         string
+		releases     []*github.RepositoryRelease
+		expectedTags []string
 	}{
 		{
 			name: "filters out draft releases",
@@ -595,12 +595,12 @@ func TestFilterDrafts(t *testing.T) {
 				{TagName: github.String("v1.226.0"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
 				{TagName: github.String("v1.225.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
 			},
-			expectedLen: 2,
+			expectedTags: []string{"v1.0.0", "v1.225.0"},
 		},
 		{
-			name:        "handles empty slice",
-			releases:    []*github.RepositoryRelease{},
-			expectedLen: 0,
+			name:         "handles empty slice",
+			releases:     []*github.RepositoryRelease{},
+			expectedTags: []string{},
 		},
 		{
 			name: "handles all drafts",
@@ -608,7 +608,7 @@ func TestFilterDrafts(t *testing.T) {
 				{TagName: github.String("v2.0.0-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
 				{TagName: github.String("v2.0.1-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
 			},
-			expectedLen: 0,
+			expectedTags: []string{},
 		},
 		{
 			name: "handles no drafts",
@@ -616,17 +616,18 @@ func TestFilterDrafts(t *testing.T) {
 				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
 				{TagName: github.String("v1.1.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
 			},
-			expectedLen: 2,
+			expectedTags: []string{"v1.0.0", "v1.1.0"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := filterDrafts(tt.releases)
-			assert.Len(t, result, tt.expectedLen)
+			require.Len(t, result, len(tt.expectedTags))
 
-			for _, release := range result {
+			for i, release := range result {
 				assert.False(t, release.GetDraft(), "Should not contain draft releases")
+				assert.Equal(t, tt.expectedTags[i], release.GetTagName(), "tag at index %d should match expected order", i)
 			}
 		})
 	}
