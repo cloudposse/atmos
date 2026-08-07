@@ -427,6 +427,9 @@ func TestYAMLFunctionsDeferredMergeCacheCorrectness(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/atmos-yaml-functions-merge")
 	t.Setenv("ATMOS_STAGE", "test")
 
+	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
 	describeDeepMerge := func(t *testing.T) map[string]interface{} {
 		t.Helper()
 		componentSection, err := e.ExecuteDescribeComponent(

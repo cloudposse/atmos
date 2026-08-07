@@ -1245,6 +1245,7 @@ func ProcessStackConfig(
 		cfg.PackerComponentType:     true,
 		cfg.AnsibleComponentType:    true,
 		cfg.KubernetesComponentType: true,
+		cfg.HelmComponentType:       true,
 	}
 	for componentType, components := range globalComponentsSection {
 		if builtInTypes[componentType] {

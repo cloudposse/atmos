@@ -224,4 +224,43 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 		// Must not silently fall back to unrendered/partial text.
 		assert.Nil(t, result)
 	})
+
+	t.Run("renders a deferred !template value using configured custom delimiters, not the hardcoded {{ }}", func(t *testing.T) {
+		atmosConfig := templatingEnabledConfig()
+		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
+
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:              atmosConfig,
+			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:          schema.Settings{},
+			ComponentTemplateContext: map[string]any{"foo": "bar"},
+			ResolutionCtx:            &ResolutionContext{},
+		})
+
+		// The fast path must recognize "[[" as the configured left delimiter and route this
+		// through the render path instead of skipping it (which would leave "[[ .foo ]]"
+		// unrendered).
+		result, err := processor.ProcessYAMLFunctionString(`!template '[[ .foo ]]'`)
+
+		require.NoError(t, err)
+		assert.Equal(t, "'bar'", result)
+	})
+
+	t.Run("still fast-paths a !template value with no expression when custom delimiters are configured", func(t *testing.T) {
+		atmosConfig := templatingEnabledConfig()
+		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
+
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:         atmosConfig,
+			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:     schema.Settings{},
+			// Must not be required: the fast path skips the render call entirely.
+			ResolutionCtx: &ResolutionContext{},
+		})
+
+		result, err := processor.ProcessYAMLFunctionString("!template 'hello'")
+
+		require.NoError(t, err)
+		assert.Equal(t, "'hello'", result)
+	})
 }

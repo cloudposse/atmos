@@ -68,7 +68,7 @@ func ExecuteTerraformGenerateBackends(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
 
-	stacksMap, _, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -200,6 +200,15 @@ func ExecuteTerraformGenerateBackends(
 					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 				}
 
+				// Recover this component's deferred-merge contexts (per section: vars, settings,
+				// env, auth, providers, etc.) from the FindStacksMap cache so deferred YAML
+				// functions (!template, !labels, !tags, !terraform.output, etc.) can be resolved
+				// and deep-merged against a concrete override at the same path below, instead of
+				// silently losing data the way #2888 described for the main describe/plan path.
+				if compDctx, ok := deferredContexts[stackFileName][cfg.TerraformComponentType][componentName]; ok {
+					configAndStacksInfo.DeferredMergeContexts = compDctx
+				}
+
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
@@ -241,6 +250,15 @@ func ExecuteTerraformGenerateBackends(
 					return err
 				}
 
+				// Snapshot the component context for deferred-YAML-function template rendering
+				// below (a deferred value's own {{ }} expression, e.g. a parametrized
+				// !terraform.state stack argument, needs the same data source ProcessTmplWithDatasources
+				// uses here).
+				componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
+				for k, v := range configAndStacksInfo.ComponentSection {
+					componentTemplateContext[k] = v
+				}
+
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
 					atmosConfig,
 					&configAndStacksInfo,
@@ -272,6 +290,18 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				componentSection = componentSectionFinal
+				configAndStacksInfo.ComponentSection = componentSectionFinal
+
+				// Resolve deferred YAML functions (!template, !labels, !tags, !terraform.output,
+				// etc.) and deep-merge their results against any concrete override at the same
+				// path. Without this, a section that only survived Stage 2's structural merge as an
+				// unresolved function string (or a placeholder) would silently lose the function's
+				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
+				// via this same call (see internal/exec/utils.go).
+				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil); err != nil {
+					return err
+				}
+				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {
 					backendSection = i

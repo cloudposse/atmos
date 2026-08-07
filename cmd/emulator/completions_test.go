@@ -119,7 +119,7 @@ func TestStackNamesForCompletion_ListsAllStacks(t *testing.T) {
 
 	stacks, err := stackNamesForCompletion(&atmosConfig)
 	require.NoError(t, err)
-	assert.Contains(t, stacks, "local")
+	assert.Equal(t, []string{"dev", "local", "prod", "staging"}, stacks)
 }
 
 func TestRegisterEmulatorCompletions(t *testing.T) {

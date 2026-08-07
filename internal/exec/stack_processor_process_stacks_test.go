@@ -1580,6 +1580,73 @@ func TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge(t *testing.T) {
 	assert.Equal(t, "local-value", env["CONFLICT_ENV"], "component-local env var must win over global on conflict")
 }
 
+// TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough verifies that `components.helm` is
+// processed only by the dedicated Helm parallel-processing path, not reprocessed by the
+// custom-component-type passthrough loop that follows it. The two paths merge stack-global
+// sections differently: the built-in Helm path merges global `auth:`/`hooks:` into the component
+// (via GlobalAuth/GlobalAndTerraformHooks), while the custom-type passthrough loop only merges
+// vars/settings/env/metadata and knows nothing about auth/hooks. If `components.helm` isn't listed
+// in `builtInTypes`, the passthrough loop treats "helm" as a custom type key present in
+// globalComponentsSection, reprocesses it, and clobbers `allComponents[cfg.HelmComponentType]` with
+// a version that lost the global auth/hooks merge — a regression for #2888's Stage 3 resolution,
+// which resolves deferred contexts against whatever ends up in allComponents.
+func TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"role": "default-role",
+		},
+		cfg.HooksSectionName: map[string]any{
+			"before": []any{"global-hook"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.HelmComponentType: map[string]any{
+				"app": map[string]any{
+					cfg.ChartSectionName: "bitnami/nginx",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	helm, ok := components[cfg.HelmComponentType].(map[string]any)
+	require.True(t, ok, "result must contain helm components")
+	app, ok := helm["app"].(map[string]any)
+	require.True(t, ok, "helm component 'app' must exist")
+
+	// Only the built-in Helm processing path merges stack-global auth/hooks into the component.
+	// The custom-type passthrough loop does not touch these sections at all, so their absence
+	// here is the signal that `components.helm` was clobbered by that loop.
+	auth, ok := app[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "helm component 'app' must have a merged auth section from stack-global auth, got: %v", app[cfg.AuthSectionName])
+	assert.Equal(t, "default-role", auth["role"])
+
+	hooks, ok := app[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "helm component 'app' must have a merged hooks section from stack-global hooks, got: %v", app[cfg.HooksSectionName])
+	assert.Equal(t, []any{"global-hook"}, hooks["before"])
+}
+
 // componentHooks extracts the merged hooks section for a terraform component
 // from a ProcessStackConfig result. It fails the test if the component or its
 // hooks section is missing, so inheritance assertions read cleanly.

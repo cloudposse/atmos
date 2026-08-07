@@ -127,9 +127,13 @@ func (p *TemplateAwareYAMLProcessor) ProcessYAMLFunctionString(value string) (an
 
 	// Fast path: skip the template engine call entirely when there's no Go-template expression to
 	// render (the common case: most deferred function arguments are static). This runs once per
-	// deferred string rather than once per whole document, so avoiding the render call when it
-	// can't possibly change anything matters for large stacks.
-	if !strings.Contains(value, "{{") {
+	// deferred string rather than once per whole document, so avoiding the render call when
+	// it can't possibly change anything matters for large stacks.
+	leftDelimiter := "{{"
+	if d := p.atmosConfig.Templates.Settings.Delimiters; len(d) == 2 && d[0] != "" {
+		leftDelimiter = d[0]
+	}
+	if !strings.Contains(value, leftDelimiter) {
 		return p.inner.ProcessYAMLFunctionString(value)
 	}
 

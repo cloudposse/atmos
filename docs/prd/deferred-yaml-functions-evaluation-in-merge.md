@@ -3,7 +3,8 @@
 ## Status
 **Current**: ✅ Implemented — the Completion Plan below (Plan B, full unification) has shipped: a
 real `YAMLFunctionProcessor` now resolves deferred YAML functions at Stage 3 (per-invocation,
-`internal/exec/utils.go`'s `resolveDeferredYamlFunctions`), and the result deep-merges against any
+`internal/exec/deferred_contexts.go`'s `resolveDeferredYamlFunctions`, which constructs a
+`TemplateAwareYAMLProcessor`), and the result deep-merges against any
 concrete override at the same path — including the mirror-precedence direction the original plan
 didn't anticipate (a concrete value at a *lower*-precedence layer than the function; see
 `pkg/merge/merge_yaml_functions.go`'s `fillMissingLayerValues`). The literal #2888 report
@@ -116,6 +117,26 @@ With the transformer, when it sees both `vars` are maps and returns `nil` (think
 signal "I didn't handle this, please continue with normal processing."
 
 ## Proposed Solution: Deferred Merge (v2.0)
+
+> **Historical design pseudocode.** The "Data Structures" and "Implementation Phases" subsections
+> immediately below (through the end of `mergeSlices`) capture the original 2025-11-29 design
+> proposal and predate the shipped implementation. They do not match the real symbol names or
+> control flow. In particular:
+> - `MergeContext`/`NewMergeContext`/`AddDeferred`/`IncrementPrecedence` do not exist in shipped
+>   code; the real type is `DeferredMergeContext` (`pkg/merge/deferred.go`), tracked per-component
+>   rather than via a single global precedence counter.
+> - `ApplyDeferredMerges` calling `ProcessYAMLFunctionString` directly (Phase 3) does not reflect
+>   the shipped flow. In production, `internal/exec/deferred_contexts.go`'s
+>   `resolveDeferredYamlFunctions` constructs a `TemplateAwareYAMLProcessor`
+>   (`internal/exec/yaml_processor.go`) and passes that processor into
+>   `merge.ApplyDeferredMerges`, which then calls the processor per deferred value.
+> - The `postMergeFunctions` list in `isAtmosYAMLFunction` (Phase 1) is stale: shipped code
+>   (`pkg/merge/merge_yaml_functions.go`) sources this list from the canonical constants in
+>   `pkg/utils/yaml_utils.go` and additionally includes `!labels`, `!labels.keys`,
+>   `!labels.values`, and `!tags` — the four functions whose omission was the literal #2888 bug.
+>
+> See the ["Implementation Status"](#implementation-status) section below for the as-shipped
+> design.
 
 ### Core Concept
 
@@ -834,6 +855,17 @@ vars:
 
 ## Next Steps
 
+> **Historical / completed.** This "Next Steps" section (Immediate Actions, Implementation Order,
+> Open Questions) was written before implementation began and describes the intended build order,
+> not shipped file/function names. Data-structure and pre-merge-detection work (steps 1–2 below)
+> shipped as `pkg/merge/deferred.go` and `pkg/merge/merge_yaml_functions.go` in the original PRD
+> pass; the post-merge application and integration work (step 3) — actually wiring a real
+> `YAMLFunctionProcessor` into `ApplyDeferredMerges` at a production call site — was the part left
+> undone and is what the ["Known Gap: #2888"](#known-gap-2888--deferred-values-are-never-actually-resolved-in-production)
+> and ["Completion Plan"](#completion-plan-wiring-post-merge-resolution-plan-b) sections below cover;
+> that plan has since shipped (see the [Status](#status) note at the top of this document and the
+> "Post-fix status" notes in those sections).
+
 ### Immediate Actions
 
 1. **Remove transformer code** from `pkg/merge/merge.go` (if any remains)
@@ -966,30 +998,42 @@ record of what was built; it documents implemented infrastructure, not delivered
 ✓ Full project builds successfully
 ```
 
-**Caveat (added 2026-08-06):** these numbers describe `pkg/merge` in isolation. Every one of these
-tests either passes `processor = nil` to `ApplyDeferredMerges` or asserts the type-conflict-avoidance
-behavior only — none of them exercise a real `YAMLFunctionProcessor` resolving a function and that
-result being deep-merged against a concrete value from another layer, because no such processor was
-ever wired at a real call site. `tests/yaml_functions_integration_test.go`'s
-`TestYAMLFunctionsDeferredMerge` suite runs through the real `internal/exec` pipeline against these
-same fixtures, but until 2026-08-06 every one of its subtests only asserted the merged key existed
-(`require.Contains(t, vars, "template_config")`), never the merged *value* — which is exactly why it
-was green while the underlying deep-merge was silently broken. See Known Gap below.
+**Caveat (added 2026-08-06, describes the pre-fix state — see "Post-fix status" below):** these
+numbers describe `pkg/merge` in isolation. Every one of these tests either passed `processor = nil`
+to `ApplyDeferredMerges` or asserted the type-conflict-avoidance behavior only — none of them
+exercised a real `YAMLFunctionProcessor` resolving a function and that result being deep-merged
+against a concrete value from another layer, because no such processor was wired at a real call
+site yet. `tests/yaml_functions_integration_test.go`'s `TestYAMLFunctionsDeferredMerge` suite runs
+through the real `internal/exec` pipeline against these same fixtures, but until 2026-08-06 every
+one of its subtests only asserted the merged key existed (`require.Contains(t, vars,
+"template_config")`), never the merged *value* — which is exactly why it was green while the
+underlying deep-merge was silently broken. See Known Gap below.
+
+**Post-fix status (2026-08-06, later the same day):** a real `TemplateAwareYAMLProcessor` is now
+wired into `ApplyDeferredMerges` at Stage 3 (`internal/exec/deferred_contexts.go`'s
+`resolveDeferredYamlFunctions`, called from `internal/exec/utils.go`). The regression tests below
+now assert the merged *value*, not just key presence, and pass. See the
+["Completion Plan"](#completion-plan-wiring-post-merge-resolution-plan-b) section for the shipped
+implementation.
 
 ### Benefits Delivered
 
+The checklist below reflects the pre-fix state as of the original 2025-11-29 PRD pass and the
+2026-08-06 gap discovery. As of the fix landing later on 2026-08-06 (commit `4b832423e3`), the
+previously-❌ item is now delivered — see "Post-fix status" above.
+
 ✅ **Eliminates type conflicts** when merging YAML functions with concrete values (no crash)
-❌ **Deep-merges a YAML function's resolved value with a concrete value from another layer** — this
-was the actual point of the PRD ("Deep-Merge Capability with Deferred Merge" section above) and it
-does not happen in production: the concrete value silently wins outright, the function's contribution
-is discarded. See the Known Gap and Completion Plan sections below.
-✅ **Preserves merge order** with precedence tracking (the bookkeeping works; only the final
-resolve-and-remerge step was never connected)
-✅ **Supports all list merge strategies** (replace, append, merge) — for the isolated `pkg/merge` unit
-tests; unverified end-to-end since resolution is never triggered in production
+✅ **Deep-merges a YAML function's resolved value with a concrete value from another layer** — this
+was the actual point of the PRD ("Deep-Merge Capability with Deferred Merge" section above). It was
+previously undelivered in production (concrete value silently won outright, discarding the
+function's contribution — see the Known Gap section below for the historical record); it is now
+delivered via the Completion Plan below.
+✅ **Preserves merge order** with precedence tracking
+✅ **Supports all list merge strategies** (replace, append, merge) — now verified end-to-end via the
+production resolution path, not just isolated `pkg/merge` unit tests
 ✅ **Backwards compatible** - no changes to existing configurations needed
-✅ **Well tested at the unit level** - 89.9% coverage with 76 test cases in `pkg/merge`; zero
-end-to-end coverage of the resolve-and-remerge path until the regression tests added 2026-08-06
+✅ **Well tested at the unit level** - 89.9% coverage with 76 test cases in `pkg/merge`, plus
+end-to-end coverage of the resolve-and-remerge path via the regression tests added 2026-08-06
 ✅ **Documented** - comprehensive examples and integration guides
 ✅ **Performance optimized** - refactored for reduced cognitive complexity
 
@@ -1022,6 +1066,14 @@ The deferred merge infrastructure is ready for integration into the stack proces
 See integration example in `pkg/merge/merge_yaml_functions.go` (`MergeWithDeferred` function documentation).
 
 ## Known Gap: #2888 — Deferred Values Are Never Actually Resolved in Production
+
+> **Historical — this gap is now closed.** This section documents a bug that existed between
+> 2025-11-29 (original PRD) and 2026-08-06 (fix landed, commit `4b832423e3`,
+> "fix(merge): resolve deferred YAML functions and deep-merge with concrete overrides (#2888)"). It
+> is kept as-written for the historical record of the investigation. For the as-shipped result, see
+> the "Post-fix status" note under ["Benefits Delivered"](#benefits-delivered) and the shipped-code
+> pointers in the [Completion Plan](#completion-plan-wiring-post-merge-resolution-plan-b) section
+> below.
 
 **Discovered**: 2026-08-06, via [GitHub issue #2888](https://github.com/cloudposse/atmos/issues/2888)
 (`!labels`/`!tags` losing data on merge) and a field-test/investigation pass that traced the failure
@@ -1068,7 +1120,28 @@ Empirically verified (details in the issue and in the regression tests added bel
 
 Both should go GREEN once the completion plan below ships.
 
+**Post-fix status:** both regression tests now pass — see the "Post-fix status" note under
+["Benefits Delivered"](#benefits-delivered) above.
+
 ## Completion Plan: Wiring Post-Merge Resolution (Plan B)
+
+> **Historical / completed.** This section was written as a forward-looking plan on 2026-08-06,
+> before implementation, and is kept largely as-written for the design rationale (why Stage 2 can't
+> be the resolution point, what must not regress). The actual fix landed the same day as a single
+> commit (`4b832423e3`, "fix(merge): resolve deferred YAML functions and deep-merge with concrete
+> overrides (#2888)") rather than as the staged PR 1 (plumbing-only) / PR 2 (behavior change) split
+> described below — the two were combined into one change. The shipped implementation follows this
+> plan's "Full unification" design closely: `internal/exec/deferred_contexts.go`'s
+> `resolveDeferredYamlFunctions` is the Stage 3 resolution point (called from
+> `internal/exec/utils.go`, after `ProcessCustomYamlTags` and before
+> `postProcessTemplatesAndYamlFunctions`, matching PR 1 step 5 / PR 2 step 4 below); it constructs a
+> `TemplateAwareYAMLProcessor` (`internal/exec/yaml_processor.go`, matching PR 2 step 3) and resolves
+> per-section `*merge.DeferredMergeContext` bundles carried on
+> `schema.ConfigAndStacksInfo.DeferredMergeContexts` (typed `any` to avoid the import cycle, matching
+> PR 1 step 4). The shipped fix additionally handles the mirror-precedence direction (a concrete
+> value at a *lower*-precedence layer than the function) via `pkg/merge/merge_yaml_functions.go`'s
+> `fillMissingLayerValues`, which this plan did not originally anticipate — added after a new
+> regression test caught it during implementation.
 
 Two designs were evaluated for closing this gap:
 
