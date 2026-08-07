@@ -99,10 +99,9 @@ leading with `--error-mode`; after this fix they can only appear under
 
 ## What this replaces
 
-Earlier revisions of this PR fixed the symptom in `cmd/list` instead: first by skipping the
-credential-backed YAML functions unconditionally for inventory commands, then by making that
-skip demand-driven on whether the requested output could render such a value. Review
-(osterman, #2820) rejected both:
+An earlier revision of this PR tried to fix the symptom in `cmd/list` by skipping the
+credential-backed YAML functions *unconditionally* for inventory commands. Review
+(osterman, #2820) rejected that:
 
 > I don't believe this is the correct fix because there are legitimate use cases for having
 > columns based on customizable views supported by Atmos to refer to this state. What we've
@@ -110,10 +109,18 @@ skip demand-driven on whether the requested output could render such a value. Re
 > values instead. This should already be supported everywhere.
 
 That is right, and it locates the defect one layer down: the problem was never that these
-commands resolve state, it is that a failed resolution had no graceful path. Skipping the
-reads would also have diverged `list` from the rest of Atmos, which degrades. All `cmd/list`
-changes were reverted; the fix now lives entirely in the classifier, so every caller of the
-describe pipeline benefits rather than the four commands that were patched by hand.
+commands resolve state when a view asks for it, it is that a failed resolution had no graceful
+path. Unconditionally skipping the reads would also have diverged `list` from the rest of
+Atmos, which degrades rather than blanks values out. So the graceful-degradation fix lives in
+the classifier, where every caller of the describe pipeline benefits rather than only the four
+commands that were patched by hand.
+
+What survives in `cmd/list` is the narrower, demand-driven guard
+(`skipCredentialBackedYAMLFunctionsForInventory`): built-in identity-only inventory output —
+no `--identity`, no custom column, query, filter, or upload — stays credential-free, because
+nothing that output renders can carry a credential-backed value, so there is nothing to read.
+The moment a view actually asks for one (an explicit identity, or a customized
+column/query/filter/upload), the read runs and now degrades instead of aborting.
 
 ## Verification
 
@@ -141,11 +148,13 @@ describe pipeline benefits rather than the four commands that were patched by ha
 
 ## Recommendations
 
-- **Cost, not correctness, is now the open question.** With degradation in place, a
-  multi-account `atmos list stacks` still *attempts* every cross-account read before
-  degrading, and each unreachable backend costs its full retry budget. Correct, but
-  potentially slow on a large repository. Resolving values lazily — only when something is
-  about to render them — is the real answer, and is worth tracking separately.
+- **Cost, not correctness, is now the open question.** Default identity-only inventory output
+  stays credential-free and reads nothing. But once a view asks for a credential-backed value —
+  an explicit `--identity`, or a custom column, query, filter, or upload — a multi-account
+  `atmos list stacks` still *attempts* every cross-account read before degrading, and each
+  unreachable backend costs its full retry budget. Correct, but potentially slow on a large
+  repository. Resolving those values lazily — only when something is about to render them — is
+  the real answer, and is worth tracking separately.
 - **`!terraform.output` is not covered and should be.** It is the closest sibling to the
   function this fixes and fails the same way in the same topology, but it shells out to
   `terraform output` and wraps every subprocess failure in `ErrTerraformOutputFailed` —
