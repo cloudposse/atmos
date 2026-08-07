@@ -140,7 +140,8 @@ profiles:
 1. **Configurable profile directory** (highest precedence):
    - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
    - Example: `profiles.base_path: "./custom-profiles"`
-   - If relative, resolved from `atmos.yaml` directory
+   - If relative, resolved from the declaring source's directory (see FR1.9 when `--config`/
+     `--config-path` selects more than one source)
 
 2. **Project-local hidden profiles**:
    - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
@@ -168,6 +169,19 @@ profiles:
 **FR1.7**: Profiles SHOULD support organizing configuration by domain (e.g., `auth.yaml`, `terraform.yaml`, `logging.yaml`)
 
 **FR1.8**: Profile inheritance MUST be supported via the existing `import:` mechanism in profile YAML files
+
+**FR1.9**: When `--config`/`--config-path` selects more than one config source, a relative
+`profiles.base_path` MUST resolve against **the directory of whichever specific source declared
+it**, not always the first source. `--config file1.yaml,file2.yaml` and
+`--config-path dir1,dir2` both merge multiple directories into one config; the single-`atmos.yaml`
+assumption elsewhere in this document ("resolved from `atmos.yaml` directory") does not by itself
+say which of several directories that means. Precedent/implementation:
+`AtmosConfiguration.ProfilesBasePathConfigDir` tracks the directory of whichever source most
+recently declared `profiles.base_path` (files merged before directories — cloudposse/atmos#2867),
+falling back to the first source's directory if none declared it. This generalizes the same "where
+the config is defined" anchor rule FR10 of the
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) establishes for
+`base_path` itself.
 
 Example structure:
 ```text
@@ -243,16 +257,21 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 
 #### FR3: Configuration Merging and Precedence
 
-**FR3.1**: Configuration loading order MUST be:
-1. Embedded defaults (built into Atmos binary)
-2. System directory (`/usr/local/etc/atmos` or `%LOCALAPPDATA%\atmos`)
-3. Home directory (`~/.atmos/atmos.yaml`)
-4. Working directory (`./atmos.yaml`)
-5. Environment variables (`ATMOS_*`)
-6. CLI config path (`ATMOS_CLI_CONFIG_PATH` or `--config-dir`)
-7. `.atmos.d/` directories (lexicographic order)
-8. **Active profiles** (left-to-right for multiple profiles, lexicographic within each profile)
-9. Local `atmos.yaml` (final override)
+**FR3.1**: Configuration loading order MUST be (see
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) FR8 for the
+authoritative `atmos.yaml` search order underlying steps 2-8):
+1. Embedded defaults (built into the Atmos binary; always the base layer)
+2. `--config`/`--config-path` CLI flags — when given, these select the config source(s) directly;
+   steps 3-8 (env var / directory search) are then skipped entirely rather than merged on top
+3. `ATMOS_CLI_CONFIG_PATH` environment variable
+4. Current directory (`./atmos.yaml`, CWD only, no parent search)
+5. Git repository root (`repo-root/atmos.yaml`)
+6. Parent directory search (walks up from CWD)
+7. Home directory (`~/.atmos/atmos.yaml`)
+8. System directory (`/usr/local/etc/atmos` or `%LOCALAPPDATA%\atmos`)
+9. `.atmos.d/` directories (lexicographic order)
+10. **Active profiles** (left-to-right for multiple profiles, lexicographic within each profile)
+11. Local `atmos.yaml` (final override)
 
 **FR3.2**: Profile configuration files within a profile directory MUST be loaded in lexicographic order
 
@@ -457,7 +476,8 @@ When this feature is implemented, the following tasks must be completed:
 
 **TR1.4**: Profile configuration MUST be loaded into Viper before final configuration unmarshaling
 
-**TR1.5**: Profile path resolution MUST support both absolute and relative paths from the config directory
+**TR1.5**: Profile path resolution MUST support both absolute and relative paths from the
+declaring source's directory (see FR1.9 for the multi-source `--config`/`--config-path` case)
 
 #### TR2: Schema and Validation
 
@@ -629,11 +649,12 @@ describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. Load Base Configuration Chain                                │
 │    • Embedded defaults                                           │
-│    • System directory (/usr/local/etc/atmos)                     │
+│    • --config / --config-path CLI flags (skips the rest below   │
+│      when given -- see base-path-resolution-semantics.md FR8)   │
+│    • ATMOS_CLI_CONFIG_PATH environment variable                  │
+│    • Working directory, git root, parent search (./atmos.yaml)  │
 │    • Home directory (~/.atmos/atmos.yaml)                        │
-│    • Working directory (./atmos.yaml)                            │
-│    • Environment variables (ATMOS_*)                             │
-│    • CLI config path (--config-dir)                              │
+│    • System directory (/usr/local/etc/atmos)                     │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -692,25 +713,8 @@ profiles:
 
 **Profile location precedence:**
 
-1. **Configurable profile directory** (highest precedence):
-   - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
-   - Example: `profiles.base_path: "./custom-profiles"`
-   - If relative, resolved from `atmos.yaml` directory
-
-2. **Project-local hidden profiles**:
-   - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
-   - Example: `/infrastructure/atmos/.atmos/profiles/`
-   - Higher precedence than non-hidden `profiles/` directory
-
-3. **XDG user profiles** (follows XDG Base Directory Specification):
-   - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
-   - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
-   - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
-
-4. **Project-local non-hidden profiles** (lowest precedence):
-   - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
-   - Example: `/infrastructure/atmos/profiles/`
-   - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
+See FR1.2 (and FR1.9 for the `--config file1.yaml,file2.yaml` / `--config-path dir1,dir2`
+multi-source case) for the full precedence list and resolution rule.
 
 **Note:** Profile configuration is meta - if a profile sets `profiles.base_path`, it affects subsequent profile loading. This is intentional to allow profiles to configure the system.
 

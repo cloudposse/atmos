@@ -149,6 +149,13 @@ type AtmosConfiguration struct {
 	// and populated alongside the store auth resolver in the `atmos secret` and terraform code paths.
 	SecretsAuth   *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
 	CliConfigPath string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	// BasePathConfigDir is the directory of the --config/--config-path source that declared
+	// (or, absent any declaration, the first source that contributed) base_path, used to resolve
+	// a relative (dot-prefixed or empty) base_path correctly when multiple --config files or
+	// --config-path directories are given. CliConfigPath itself becomes a ";"-joined multi-directory
+	// string in that case, which is not a valid single directory to join a relative path against.
+	// Transient, populated during LoadConfig, never serialized.
+	BasePathConfigDir string `yaml:"-" json:"-" mapstructure:"-"`
 	// ProfilesBasePathConfigDir is the directory of the --config file that declared
 	// profiles.base_path, used to resolve a relative profiles.base_path correctly when multiple
 	// --config files are given (cloudposse/atmos#2867: previously always resolved against the

@@ -435,10 +435,20 @@ func getGitRootOrEmpty() string {
 
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// First, resolve the base path itself to an absolute path.
-	// Relative paths are resolved relative to atmos.yaml location (atmosConfig.CliConfigPath).
+	// Relative paths are resolved relative to atmos.yaml location. Normally that's
+	// atmosConfig.CliConfigPath, but when multiple --config files or --config-path directories
+	// were merged, CliConfigPath becomes a ";"-joined multi-directory string (see connectPaths) --
+	// not a valid single directory to join a relative path against. BasePathConfigDir tracks the
+	// directory of whichever source actually declared base_path (or the first source, if none did)
+	// for exactly that case; it's empty for the single-source path, where CliConfigPath is already
+	// the correct single directory.
+	basePathAnchor := atmosConfig.CliConfigPath
+	if atmosConfig.BasePathConfigDir != "" {
+		basePathAnchor = atmosConfig.BasePathConfigDir
+	}
 	var atmosBasePathAbs string
 	var err error
-	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath, atmosConfig.BasePathSource)
+	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, basePathAnchor, atmosConfig.BasePathSource)
 	if err != nil {
 		return err
 	}

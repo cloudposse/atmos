@@ -410,12 +410,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// the same profile-loading/edition/final-unmarshal tail every other config source uses
 	// below, instead of returning immediately (see mergeConfigFromCLIArgs' doc comment).
 	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		configPaths, profilesBasePathConfigDir, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
+		configPaths, dirs, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
 		if err != nil {
 			return atmosConfig, err
 		}
 		atmosConfig.CliConfigPath = connectPaths(configPaths)
-		atmosConfig.ProfilesBasePathConfigDir = profilesBasePathConfigDir
+		atmosConfig.BasePathConfigDir = dirs.basePath
+		atmosConfig.ProfilesBasePathConfigDir = dirs.profilesBasePath
 	} else {
 		// Load configuration from different sources.
 		if err := loadConfigSources(v, configAndStacksInfo); err != nil {

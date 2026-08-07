@@ -122,7 +122,10 @@ func FindAllStackConfigsInPathsForStack(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths %v", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
+		// The paths are backtick-wrapped so the markdown error renderer treats them as a literal
+		// code span instead of parsing the "**" glob wildcard (a common included_paths pattern) as
+		// emphasis, which otherwise corrupts the rendered path list.
+		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths `%v`", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, false, nil
@@ -203,7 +206,9 @@ func FindAllStackConfigsInPaths(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, fmt.Errorf("%w in the paths %v", errUtils.ErrNoStackManifestsFound, includeStackPaths)
+		// Backtick-wrapped for the same reason as the ForStack variant above: avoid the markdown
+		// renderer misinterpreting "**" glob wildcards in the path list as emphasis.
+		return nil, nil, fmt.Errorf("%w in the paths `%v`", errUtils.ErrNoStackManifestsFound, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, nil

@@ -360,6 +360,192 @@ stacks:
 			"was actually declared), not main.yaml's directory (just the first --config file)")
 }
 
+// TestInitCliConfig_MultipleConfigFilesBasePathResolves reproduces a field-tested regression:
+// connectPaths joins every --config file's directory into a ";"-delimited CliConfigPath string
+// ("dirA;dirB;") once 2+ files are given. Before BasePathConfigDir existed,
+// AtmosConfigAbsolutePaths joined a dot-prefixed base_path directly against that malformed
+// string, producing a nonexistent path -- so stack discovery silently found nothing (`list
+// stacks` printed "No stacks found" with no error at all). Both --config files here live in the
+// SAME directory (the simplest case that still corrupts the naive ";"-join), and base_path is
+// the common explicit "." convention.
+func TestInitCliConfig_MultipleConfigFilesBasePathResolves(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "deploy"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755))
+
+	mainFile := filepath.Join(tempDir, "main.yaml")
+	require.NoError(t, os.WriteFile(mainFile, []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+`), 0o644))
+
+	fragmentFile := filepath.Join(tempDir, "fragment.yaml")
+	require.NoError(t, os.WriteFile(fragmentFile, []byte(`
+logs:
+  level: Debug
+`), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "deploy", "test.yaml"), []byte(`
+vars:
+  tenant: acme
+  environment: ue1
+  stage: test
+components:
+  terraform:
+    test-component:
+      vars: {}
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{mainFile, fragmentFile},
+	}
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err,
+		"a dot-prefixed base_path must still resolve correctly once a SECOND --config file "+
+			"joins CliConfigPath into a multi-directory string -- it must not silently corrupt "+
+			"stack discovery")
+	assert.NotEmpty(t, atmosConfig.StackConfigFilesAbsolutePaths,
+		"the real stack manifest must be found; an empty result here means base_path resolved "+
+			"to a nonexistent path built from the raw \";\"-joined CliConfigPath")
+}
+
+// TestInitCliConfig_MultipleConfigPathDirsBasePathResolves is the --config-path analogue of
+// TestInitCliConfig_MultipleConfigFilesBasePathResolves: mergeConfigFromDirectories builds the
+// same ";"-joined CliConfigPath as mergeFiles does, so the same corruption applies when 2+
+// --config-path directories are given.
+func TestInitCliConfig_MultipleConfigPathDirsBasePathResolves(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	dirX := filepath.Join(tempDir, "dirX")
+	dirY := filepath.Join(tempDir, "dirY")
+	require.NoError(t, os.MkdirAll(filepath.Join(dirX, "stacks", "deploy"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dirX, "components", "terraform"), 0o755))
+	require.NoError(t, os.MkdirAll(dirY, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dirX, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+`), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dirY, "atmos.yaml"), []byte(`
+logs:
+  level: Debug
+`), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dirX, "stacks", "deploy", "test.yaml"), []byte(`
+vars:
+  tenant: acme
+  environment: ue1
+  stage: test
+components:
+  terraform:
+    test-component:
+      vars: {}
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dirX, dirY},
+	}
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err,
+		"a dot-prefixed base_path must still resolve correctly once a SECOND --config-path "+
+			"directory joins CliConfigPath into a multi-directory string")
+	assert.NotEmpty(t, atmosConfig.StackConfigFilesAbsolutePaths,
+		"the real stack manifest under dirX must be found; an empty result here means base_path "+
+			"resolved to a nonexistent path built from the raw \";\"-joined CliConfigPath")
+}
+
+// TestInitCliConfig_ConfigPathProfilesBasePathResolvesAgainstDeclaringDir is the --config-path
+// analogue of TestInitCliConfig_ProfilesBasePathResolvesAgainstDeclaringFile: a field-tested
+// regression found that mergeConfigFromDirectories (the --config-path flag's merge path) never
+// tracked which directory declared profiles.base_path -- only mergeFiles (--config) did. So a
+// profiles.base_path declared in a NON-first --config-path directory fell back to the first
+// directory and the profile was reported as "does not exist" even though it did. Here, only the
+// SECOND --config-path directory declares profiles.base_path, and the profile only exists
+// relative to that second directory.
+func TestInitCliConfig_ConfigPathProfilesBasePathResolvesAgainstDeclaringDir(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+	if orig, ok := os.LookupEnv("ATMOS_PROFILE"); ok {
+		require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+		t.Cleanup(func() { require.NoError(t, os.Setenv("ATMOS_PROFILE", orig)) })
+	}
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	// dirB is the FIRST --config-path directory (the naive "primary" fallback) and declares no
+	// profiles.base_path.
+	dirB := filepath.Join(tempDir, "dirB")
+	require.NoError(t, os.MkdirAll(dirB, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dirB, "atmos.yaml"), []byte(`
+base_path: "./"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+`), 0o644))
+
+	// dirA is the SECOND --config-path directory and is the only one that declares
+	// profiles.base_path, relative to ITS OWN directory.
+	dirA := filepath.Join(tempDir, "dirA")
+	require.NoError(t, os.MkdirAll(dirA, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dirA, "atmos.yaml"), []byte(`
+profiles:
+  base_path: ./myprofiles
+`), 0o644))
+
+	// The profile directory only exists relative to dirA, NOT relative to dirB (the first
+	// --config-path directory) -- proving resolution uses the declaring directory, not just the
+	// first --config-path directory.
+	profileDir := filepath.Join(dirA, "myprofiles", "testprof")
+	require.NoError(t, os.MkdirAll(profileDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "atmos.yaml"), []byte(`
+logs:
+  level: Trace
+`), 0o644))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{dirB, dirA},
+		ProfilesFromArg:        []string{"testprof"},
+	}
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
+	require.NoError(t, err,
+		"the profile must be found relative to dirA (where profiles.base_path was actually "+
+			"declared), not dirB's directory (just the first --config-path directory)")
+	assert.Equal(t, "Trace", atmosConfig.Logs.Level,
+		"the profile's logs.level override must be applied, proving it was found")
+}
+
 // TestDeclaresProfilesBasePath covers declaresProfilesBasePath's branches directly: malformed
 // YAML, no top-level mapping, no profiles key, profiles present but not itself a mapping,
 // profiles a mapping without base_path, and the true-positive case.

@@ -770,6 +770,9 @@ func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 
 	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
 		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
+	assert.Contains(t, err.Error(), "`[", "the path list must be backtick-wrapped as a literal "+
+		"code span so the markdown error renderer doesn't misinterpret the \"**\" glob wildcard "+
+		"(a common included_paths pattern) as emphasis and corrupt the rendered output")
 }
 
 // TestFindAllStackConfigsInPathsForStack_GenuineGlobError verifies that a genuinely invalid
@@ -818,6 +821,9 @@ func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 
 	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
 		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
+	assert.Contains(t, err.Error(), "`[", "the path list must be backtick-wrapped as a literal "+
+		"code span so the markdown error renderer doesn't misinterpret the \"**\" glob wildcard "+
+		"(a common included_paths pattern) as emphasis and corrupt the rendered output")
 }
 
 // TestFindAllStackConfigsInPaths_GenuineGlobError is the non-stack-variant counterpart of
