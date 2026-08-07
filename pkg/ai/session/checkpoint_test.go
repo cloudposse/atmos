@@ -8,6 +8,7 @@ import (
 	stdio "io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -46,6 +48,18 @@ func captureUIOutput(t *testing.T) *bytes.Buffer {
 	return stderr
 }
 
+// plainUIOutput strips ANSI styling from captured ui.* output and collapses
+// whitespace (including any word-wrap newlines/indentation the formatter
+// inserts, which varies by terminal width and CI-detection) down to single
+// spaces, so content assertions aren't coupled to rendering details. Without
+// this, ui.Warning's markdown-aware renderer can split a styled run right in
+// the middle of an asserted phrase (observed in CI: same text, same test,
+// passes locally but fails under CI=true because the renderer takes a
+// different styling path there) even though the visible text is identical.
+func plainUIOutput(buf *bytes.Buffer) string {
+	return strings.Join(strings.Fields(ansi.Strip(buf.String())), " ")
+}
+
 // TestManager_ExportSession_WarnsOnUnimportableCheckpoint verifies that
 // exporting a session with no recorded model and/or no messages still
 // succeeds (a user should be able to export for inspection regardless), but
@@ -66,8 +80,9 @@ func TestManager_ExportSession_WarnsOnUnimportableCheckpoint(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "no-model.json")
 		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
 		require.NoError(t, err, "export must still succeed despite the missing model")
-		assert.Contains(t, stderr.String(), "no-model")
-		assert.Contains(t, stderr.String(), "not be re-importable")
+		plain := plainUIOutput(stderr)
+		assert.Contains(t, plain, "no-model")
+		assert.Contains(t, plain, "not be re-importable")
 	})
 
 	t.Run("no messages warns but still exports", func(t *testing.T) {
@@ -82,8 +97,9 @@ func TestManager_ExportSession_WarnsOnUnimportableCheckpoint(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "no-messages.json")
 		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
 		require.NoError(t, err, "export must still succeed despite having no messages")
-		assert.Contains(t, stderr.String(), "no-messages")
-		assert.Contains(t, stderr.String(), "not be re-importable")
+		plain := plainUIOutput(stderr)
+		assert.Contains(t, plain, "no-messages")
+		assert.Contains(t, plain, "not be re-importable")
 	})
 
 	t.Run("model and messages present: no warning", func(t *testing.T) {
@@ -99,7 +115,7 @@ func TestManager_ExportSession_WarnsOnUnimportableCheckpoint(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "healthy.json")
 		err = manager.ExportSession(ctx, sess.ID, tmpFile, ExportOptions{Format: "json"})
 		require.NoError(t, err)
-		assert.NotContains(t, stderr.String(), "not be re-importable")
+		assert.NotContains(t, plainUIOutput(stderr), "not be re-importable")
 	})
 }
 
