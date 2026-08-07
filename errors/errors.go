@@ -1270,6 +1270,12 @@ var (
 	ErrAKSIntegrationFailed    = errors.New("AKS integration failed")
 	ErrAKSTokenGeneration      = errors.New("failed to generate AKS token")
 
+	// GKE server errors.
+	ErrGKEDescribeCluster   = errors.New("failed to describe GKE cluster")
+	ErrGKEClusterNotFound   = errors.New("GKE cluster not found")
+	ErrGKEIntegrationFailed = errors.New("GKE integration failed")
+	ErrGKETokenGeneration   = errors.New("failed to generate GKE token")
+
 	// ACR authentication errors.
 	ErrACRAuthFailed       = errors.New("ACR authentication failed")
 	ErrACRTokenExpired     = errors.New("ACR authorization token expired")

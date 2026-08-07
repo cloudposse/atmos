@@ -91,6 +91,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	_ "github.com/cloudposse/atmos/cmd/gcp"
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"

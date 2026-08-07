@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"    // Register gcp/gke integration.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -62,6 +63,12 @@ const (
 // or other operations that should not re-provision integrations (e.g., rewriting kubeconfig).
 func ContextWithSkipIntegrations(ctx context.Context) context.Context {
 	return context.WithValue(ctx, skipIntegrationsKey, true)
+}
+
+// IntegrationsSkipped reports whether auto-provisioned integrations are disabled for ctx.
+// Token-producing exec plugins use this to avoid recursively provisioning their kubeconfig.
+func IntegrationsSkipped(ctx context.Context) bool {
+	return ctx.Value(skipIntegrationsKey) != nil
 }
 
 // isInteractive checks if interactive prompts should be shown.
