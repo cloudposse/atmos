@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -277,4 +279,26 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 			Cache:    &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}},
 		},
 	}))
+}
+
+// TestContainerHandlerValidateInvalidPullEchoesValue confirms that the default
+// (non-verbose) error for an invalid `run.pull` value echoes the actual value the
+// user typed, rather than only listing the valid options.
+func TestContainerHandlerValidateInvalidPullEchoesValue(t *testing.T) {
+	handler := &ContainerHandler{}
+
+	err := handler.Validate(&schema.WorkflowStep{
+		Name: "run",
+		Type: "container",
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine",
+			Command: "echo ok",
+			Pull:    "sometimes",
+		},
+	})
+	require.Error(t, err)
+
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.Contains(t, formatted, "Pull policy must be", "default message should keep the valid-options explanation")
+	assert.Contains(t, formatted, "sometimes", "default message should echo the actual invalid value")
 }

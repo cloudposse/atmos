@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -91,6 +92,19 @@ func TestBaseHandler_ValidateRequired(t *testing.T) {
 		require.Error(t, err)
 		// Use errors.Is() to check for sentinel error.
 		assert.True(t, errors.Is(err, errUtils.ErrStepFieldRequired))
+	})
+
+	t.Run("default (non-verbose) message names the step and field", func(t *testing.T) {
+		// The field/step/type are already computed here — the default message must
+		// surface them directly rather than hiding them behind --verbose context.
+		step := &schema.WorkflowStep{Name: "run", Type: "container"}
+		err := handler.ValidateRequired(step, "run.image", "")
+		require.Error(t, err)
+
+		formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		assert.Contains(t, formatted, "run", "default message should name the step")
+		assert.Contains(t, formatted, "container", "default message should name the step type")
+		assert.Contains(t, formatted, "run.image", "default message should name the missing field")
 	})
 }
 
