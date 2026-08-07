@@ -58,6 +58,54 @@ func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
 	assert.Equal(t, "container-id", res.Metadata["container_id"])
 }
 
+// TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker is a
+// regression test for a bug where a `type: container, action: run` step's
+// `restart:`/`healthcheck:` fields decoded successfully from `with:` but were
+// silently dropped before reaching the `docker create` invocation: neither
+// container.EphemeralConfig nor the runtime CreateConfig it built carried the
+// values, so no --restart/--health-* flags were ever emitted. Asserts the
+// real recorded argv (not a hand-built struct) includes both.
+func TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker(t *testing.T) {
+	installStepFakeDocker(t)
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+
+	_, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name: "run",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+			Restart: &schema.ContainerRestart{
+				Policy:     "on-failure",
+				MaxRetries: 3,
+			},
+			HealthCheck: &schema.ContainerHealthCheck{
+				Test:     []string{"CMD", "true"},
+				Interval: "5s",
+				Retries:  2,
+			},
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a docker create invocation, got: %v", args)
+	assert.Contains(t, createLine, "--restart\ton-failure:3")
+	assert.Contains(t, createLine, "--health-cmd\ttrue")
+	assert.Contains(t, createLine, "--health-interval\t5s")
+	assert.Contains(t, createLine, "--health-retries\t2")
+}
+
 func TestContainerHandlerExecuteBuildWithFakeDocker(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}
