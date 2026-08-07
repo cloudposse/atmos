@@ -1170,6 +1170,128 @@ func TestCustomCommandIntegrationAttemptHelper(t *testing.T) {
 	os.Exit(0)
 }
 
+// customCommandAppendHelperCommand returns a command invoking TestCustomCommandIntegrationAppendHelper,
+// which appends value+"\n" to path (O_APPEND, unlike customCommandWriteHelperCommand's truncating
+// write) -- for tests asserting relative step ORDER by accumulating markers into one shared file.
+func customCommandAppendHelperCommand(t *testing.T, path, value string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAppendHelper -- %s %s", exe, encodedPath, encodedValue)
+}
+
+func TestCustomCommandIntegrationAppendHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 2)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(string(pathBytes), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, writeErr := f.WriteString(string(valueBytes) + "\n")
+	closeErr := f.Close()
+	require.NoError(t, writeErr)
+	require.NoError(t, closeErr)
+	os.Exit(0)
+}
+
+// customCommandWriteAndExitHelperCommand returns a command invoking
+// TestCustomCommandIntegrationWriteAndExitHelper, which writes value to path and then exits with
+// exitCode -- for tests needing a step that both leaves evidence it ran AND fails, e.g. exercising
+// `continue:` forgiveness.
+func customCommandWriteAndExitHelperCommand(t *testing.T, path, value string, exitCode int) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteAndExitHelper -- %s %s %d", exe, encodedPath, encodedValue, exitCode)
+}
+
+func TestCustomCommandIntegrationWriteAndExitHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	exitCode, err := strconv.Atoi(args[2])
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(exitCode)
+}
+
+// customCommandMatrixWriteHelperCommand returns a command whose `{{ .matrix.component }}`/
+// `{{ .matrix.stack }}` placeholders are left UNRESOLVED in the returned string -- the control-step
+// engine (pkg/workflow/control.go's resolveControlStep) renders them against each matrix row before
+// the command ever reaches the shell, so the subprocess only ever sees already-resolved plain-text
+// values. This is what TestCustomCommandIntegrationMatrixWriteHelper writes to path, proving
+// `.matrix.*` resolves inside a custom command's `type: matrix` step.
+func customCommandMatrixWriteHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationMatrixWriteHelper -- {{ .matrix.component }} {{ .matrix.stack }} %s", exe, encodedPath)
+}
+
+func TestCustomCommandIntegrationMatrixWriteHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	component, stack, encodedPath := args[0], args[1], args[2]
+	pathBytes, err := base64.RawURLEncoding.DecodeString(encodedPath)
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(string(pathBytes), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, writeErr := fmt.Fprintf(f, "component=%s,stack=%s\n", component, stack)
+	closeErr := f.Close()
+	require.NoError(t, writeErr)
+	require.NoError(t, closeErr)
+	os.Exit(0)
+}
+
 // TestCustomCommandIntegration_ComponentEnvExported verifies that a custom component's `env`
 // section is exported as real environment variables to the command's step subprocess (mirroring
 // the built-in terraform/helmfile/packer/ansible providers). This is the behavior that lets a

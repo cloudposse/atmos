@@ -1247,7 +1247,7 @@
     },
     "dependencies": {
       "title": "dependencies",
-      "description": "Component, file, or folder dependencies used by affected detection and DAG execution",
+      "description": "Component, file, or folder dependencies used by affected detection and DAG execution, plus named command/workflow dependencies (`commands`, `workflows`) used by command/workflow orchestration.",
       "oneOf": [
         {
           "type": "string",
@@ -1255,9 +1255,65 @@
         },
         {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": true,
+          "properties": {
+            "commands": {
+              "$ref": "#/definitions/unit_dependencies",
+              "description": "Named custom commands that must complete before this command/workflow runs its own steps."
+            },
+            "workflows": {
+              "$ref": "#/definitions/unit_dependencies",
+              "description": "Named workflows that must complete before this command/workflow runs its own steps. A plain name resolves within the current workflow file; a structured entry with `file:` resolves cross-file."
+            }
+          }
         }
       ]
+    },
+    "unit_dependency": {
+      "title": "unit_dependency",
+      "description": "References a single named command or workflow that must complete before the declaring command/workflow runs its own steps.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the target command or workflow."
+        },
+        "file": {
+          "type": "string",
+          "description": "Workflow file to resolve name in, for a cross-file workflow reference. Only meaningful for workflows entries; ignored for commands (which resolve globally)."
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Parameterized flag overrides for this dependency invocation. Two entries referencing the same name with the same flags/args collapse into a single executed node (automatic dedup); different flags/args produce distinct nodes that both run."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Parameterized positional-argument overrides for this dependency invocation."
+        },
+        "fail": {
+          "type": "string",
+          "enum": ["wait_all", "fail_fast", "best_effort"],
+          "description": "Controls failure propagation for this dependency: wait_all (default), fail_fast, or best_effort."
+        }
+      }
+    },
+    "unit_dependencies": {
+      "title": "unit_dependencies",
+      "description": "A list of named command/workflow dependencies. Each element may be a plain name string (the common case, equivalent to {name: <value>}) or a structured object for parameterized invocation or a cross-file workflow reference.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          { "$ref": "#/definitions/unit_dependency" }
+        ]
+      }
     },
     "command": {
       "title": "command",

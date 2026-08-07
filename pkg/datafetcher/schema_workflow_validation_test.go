@@ -31,6 +31,40 @@ func TestManifestSchema_Issue2708_WorkflowDependenciesTools(t *testing.T) {
 	assertSchemaValid(t, website, manifest)
 }
 
+// TestManifestSchema_WorkflowDependenciesCommandsAndWorkflows guards against a real schema bug:
+// the shared "dependencies" definition only modeled tools/components/files/folders, so a
+// documented `dependencies.commands`/`dependencies.workflows` declaration (see
+// pkg/schema/dependencies.go's Dependencies struct) was silently rejected by the manifest schema
+// (additionalProperties: false) even though Atmos itself supports it at runtime. The stack-config
+// schema's dependencies definition is permissive (additionalProperties: true) so it never rejected
+// these fields, but had no typed shape for them either -- this test also covers that surface.
+func TestManifestSchema_WorkflowDependenciesCommandsAndWorkflows(t *testing.T) {
+	manifest := map[string]any{
+		"workflows": map[string]any{
+			"deploy": map[string]any{
+				"description": "Deploy after build and lint",
+				"dependencies": map[string]any{
+					"commands": []any{
+						"build",
+						map[string]any{"name": "lint", "flags": map[string]any{"env": "dev"}},
+					},
+					"workflows": []any{
+						"prepare",
+						map[string]any{"name": "test", "file": "test.yaml"},
+					},
+				},
+				"steps": []any{
+					map[string]any{"command": "echo deploy"},
+				},
+			},
+		},
+	}
+
+	assertSchemaValid(t, loadEmbeddedSchemaBytes(t), manifest)
+	assertSchemaValid(t, loadWebsiteSchemaBytes(t), manifest)
+	assertSchemaValid(t, loadStackConfigSchemaBytes(t), manifest)
+}
+
 // TestManifestSchema_Issue2708_InteractiveChooseAndInputSteps reproduces the second snippet:
 // `type: choose` with `options` + `default`, and `type: input` with `default`.
 func TestManifestSchema_Issue2708_InteractiveChooseAndInputSteps(t *testing.T) {

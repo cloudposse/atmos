@@ -321,14 +321,18 @@ func (c *Checker) Compute(effectiveWhen schema.Condition, declared StepDeclarati
 // RecordSuccess persists the current sources checksum for the next run's comparison. Call ONLY
 // after the step's own Execute() returns success -- a failed step must never mark itself falsely
 // up to date. Precondition has no persisted state (exec.LookPath is always evaluated live), so
-// it has nothing to record here.
+// it has nothing to record here -- callers gate this call on inputs/artifacts being declared at
+// all, not on inputs.Sources being non-empty: an artifacts-only step (inputs == nil) still needs
+// a record of the (empty) sources hash, or checksumChanged's `!found` branch reports "changed"
+// forever and the step never stabilizes to "skip" even once its artifacts exist and are unchanged.
 func (c *Checker) RecordSuccess(inputs *schema.Inputs, baseDir, stateDir, scope, stepName string) error {
 	defer perf.Track(nil, "freshness.Checker.RecordSuccess")()
 
-	if inputs == nil || len(inputs.Sources) == 0 {
-		return nil
+	var sourcePatterns []string
+	if inputs != nil {
+		sourcePatterns = inputs.Sources
 	}
-	sources, err := globAll(c.globber, baseDir, inputs.Sources)
+	sources, err := globAll(c.globber, baseDir, sourcePatterns)
 	if err != nil {
 		return err
 	}
@@ -336,7 +340,7 @@ func (c *Checker) RecordSuccess(inputs *schema.Inputs, baseDir, stateDir, scope,
 	if err != nil {
 		return err
 	}
-	key := c.stateKey(scope, stepName, baseDir, inputs.Sources)
+	key := c.stateKey(scope, stepName, baseDir, sourcePatterns)
 	return c.store.Save(stateDir, key, Record{SourcesHash: hash})
 }
 

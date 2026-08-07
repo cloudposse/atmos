@@ -12623,7 +12623,7 @@
               "type": "null"
             }
           ],
-          "description": "Fail controls failure propagation for this dependency's siblings: wait_all (default),\nfail_fast, or best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's\nParallelFailConfig."
+          "description": "Fail controls failure propagation across the WHOLE dependency run (not just this entry's\nown siblings, despite the field living on a single entry): wait_all (default), fail_fast,\nor best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's\nParallelFailConfig. If any direct dependency declares best_effort, the entire run's\nfailures are forgiven, including siblings that declared no fail: at all; if any declares\nfail_fast (and none declare best_effort), the whole run cancels remaining work on the\nfirst failure. Mixing modes across sibling dependencies is legal but has this one\nrun-wide outcome — it is not resolved per entry."
         }
       },
       "type": "object",

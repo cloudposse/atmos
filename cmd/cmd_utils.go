@@ -1436,10 +1436,12 @@ func executeCustomCommand(
 				commandErr = errors.Join(commandErr, err)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
-		} else if step.Inputs != nil {
+		} else if step.Inputs != nil || step.Artifacts != nil {
 			// Record the new sources checksum only after a successful step -- a failed step
 			// must never falsely mark itself up to date. Recording failure is logged, not
-			// fatal: it must not fail an otherwise-successful step.
+			// fatal: it must not fail an otherwise-successful step. Gated on Artifacts too (not
+			// just Inputs): an artifacts-only step still needs a recorded (empty) sources hash,
+			// or it reruns forever -- see the RecordSuccess doc comment.
 			if recErr := freshnessChecker.RecordSuccess(step.Inputs, stepWorkDir, freshnessStateDir, freshnessScope, stepFreshnessName(step.Name, i)); recErr != nil {
 				log.Debug("Failed to record freshness state for custom command step", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i, "error", recErr)
 			}

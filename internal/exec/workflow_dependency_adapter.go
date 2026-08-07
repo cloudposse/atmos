@@ -79,7 +79,10 @@ func CommandLookup(atmosConfig *schema.AtmosConfiguration) taskgraph.Lookup {
 	defer perf.Track(atmosConfig, "exec.CommandLookup")()
 
 	return func(ref taskgraph.Ref) ([]taskgraph.Ref, bool, error) {
-		found, ok := schema.FindCommandByName(atmosConfig.Commands, ref.Name)
+		found, ok, ambiguous := schema.FindCommandByName(atmosConfig.Commands, ref.Name)
+		if ambiguous {
+			return nil, false, fmt.Errorf("%w: %q", errUtils.ErrAmbiguousCommandName, ref.Name)
+		}
 		if !ok {
 			return nil, false, nil
 		}

@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
 )
 
 // TestExecuteWorkflow_DependenciesWorkflowsSameFile verifies a workflow's dependencies.workflows
@@ -218,4 +220,47 @@ func TestResolveAtmosBinary_UsesOwnExecutablePath(t *testing.T) {
 	assert.Equal(t, wantExecutable, resolved, "must resolve the currently-running binary's own path")
 	assert.NotEqual(t, "atmos", resolved, "must never be the bare command name (PATH-resolved at exec time)")
 	assert.True(t, filepath.IsAbs(resolved), "resolved binary path must be absolute")
+}
+
+// TestCommandLookup_AmbiguousNameErrors guards against dependencies.commands: [build] silently
+// resolving to whichever of two unrelated "build" commands schema.FindCommandByName's tree-walk
+// visits first when the config declares duplicate nested command names -- CommandLookup must
+// surface a clear error instead, since graph-building (taskgraph.Run) fails on this before any
+// dispatch happens, closing the gap for both the lookup and the actual cobra-tree dispatch.
+func TestCommandLookup_AmbiguousNameErrors(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{Name: "terraform", Commands: []schema.Command{{Name: "build"}}},
+			{Name: "docker", Commands: []schema.Command{{Name: "build"}}},
+		},
+	}
+
+	lookup := CommandLookup(atmosConfig)
+	_, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindCommand, Name: "build"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAmbiguousCommandName)
+	assert.False(t, found)
+}
+
+// TestCommandLookup_UniqueNestedNameResolves confirms the unambiguous case still works: a nested
+// command referenced by its own name resolves correctly regardless of nesting depth.
+func TestCommandLookup_UniqueNestedNameResolves(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{Name: "terraform", Commands: []schema.Command{
+				{Name: "build", Dependencies: &schema.Dependencies{
+					Commands: schema.UnitDependencies{{Name: "lint"}},
+				}},
+			}},
+		},
+	}
+
+	lookup := CommandLookup(atmosConfig)
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindCommand, Name: "build"})
+
+	require.NoError(t, err)
+	assert.True(t, found)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "lint", refs[0].Name)
 }

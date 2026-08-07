@@ -114,6 +114,7 @@ func TestCustomCommandRunner_SetsFlagsAndInvokesRun(t *testing.T) {
 	var ran bool
 	var preRan bool
 	var receivedArgs []string
+	var resolvedDuringRun bool
 
 	target := markCustom(&cobra.Command{Use: "build"})
 	target.PersistentFlags().String("env", "dev", "")
@@ -121,6 +122,7 @@ func TestCustomCommandRunner_SetsFlagsAndInvokesRun(t *testing.T) {
 	target.Run = func(cmd *cobra.Command, args []string) {
 		ran = true
 		receivedArgs = args
+		resolvedDuringRun = DependenciesAlreadyResolved(cmd)
 		// Custom-command flags are registered via PersistentFlags; cmd.Flags() (the local set)
 		// does not merge them in outside Cobra's own Execute() path (see CustomCommandRunner's
 		// doc comment) -- read back via PersistentFlags() to match.
@@ -142,7 +144,36 @@ func TestCustomCommandRunner_SetsFlagsAndInvokesRun(t *testing.T) {
 	assert.True(t, preRan, "PreRun must run before Run, mirroring Cobra's own lifecycle")
 	assert.True(t, ran)
 	assert.Equal(t, []string{"arg1"}, receivedArgs)
-	assert.True(t, DependenciesAlreadyResolved(target), "the invoked target's context must be marked so it does not re-resolve its own dependencies")
+	assert.True(t, resolvedDuringRun, "the target's context must be marked while it is actually running, so it does not re-resolve its own dependencies")
+	assert.False(t, DependenciesAlreadyResolved(target), "the target's context must be restored to its pre-dispatch state once the dispatch returns, so it doesn't leak into a later invocation")
+}
+
+// TestCustomCommandRunner_RestoresContextForSubsequentTopLevelInvocation is the regression case
+// for the context-leak bug: after a command runs once as a dependency, invoking the SAME
+// *cobra.Command object again directly (e.g. a long-lived process like `atmos mcp server`, or a
+// test suite reusing RootCmd across cases) must NOT see the stale dependencies-resolved marker or
+// route its own error into the first dispatch's already-drained error sink.
+func TestCustomCommandRunner_RestoresContextForSubsequentTopLevelInvocation(t *testing.T) {
+	root := newFakeRoot()
+
+	target := markCustom(&cobra.Command{Use: "build"})
+	target.Run = func(*cobra.Command, []string) {}
+	root.AddCommand(target)
+
+	runner := CustomCommandRunner(root, isCustomForTest)
+	require.NoError(t, runner(context.Background(), taskgraph.Ref{Kind: taskgraph.KindCommand, Name: "build"}))
+
+	// Simulate a later, direct (non-dependency) invocation of the same command object.
+	var sawResolvedMarker bool
+	target.Run = func(cmd *cobra.Command, _ []string) {
+		sawResolvedMarker = DependenciesAlreadyResolved(cmd)
+		// A genuine failure from THIS invocation must not be swallowed by the first
+		// dispatch's now-stale (and already-read) error sink.
+		RecordDependencyError(cmd, errors.New("second invocation failed"))
+	}
+	target.Run(target, nil)
+
+	assert.False(t, sawResolvedMarker, "a subsequent top-level invocation must not inherit the dependency dispatch's resolved marker")
 }
 
 func TestCustomCommandRunner_InvalidFlagErrors(t *testing.T) {

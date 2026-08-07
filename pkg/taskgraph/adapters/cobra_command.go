@@ -201,6 +201,14 @@ func CustomCommandRunner(root *cobra.Command, isCustom IsCustomCommand) taskgrap
 // returns whatever error the invocation recorded via its dependency error sink -- Cobra's Run has
 // no return value, so the sink is the channel back to the caller. Ref is passed by pointer only to
 // avoid copying its (currently 96-byte) value; it is never mutated here.
+//
+// Target's context is restored to whatever it was before this dispatch (deferred, so it runs even
+// if PreRun/Run panics) -- without this, target permanently kept the dependencies-resolved marker
+// and this dispatch's now-stale error sink after returning. A later normal (non-dependency)
+// invocation of the same *cobra.Command -- e.g. the same process running it again, as tests that
+// reuse RootCmd across cases do, or a long-lived process like `atmos mcp server` -- would then
+// silently skip its own dependency resolution (DependenciesAlreadyResolved reading the leftover
+// marker) and could report an error into the stale, already-drained sink from this dispatch.
 func dispatchCustomCommand(ctx context.Context, target *cobra.Command, ref *taskgraph.Ref) error {
 	resetFlagsToDeclaredDefaults(target.PersistentFlags(), ref.Flags)
 	// Custom-command flags are always registered via PersistentFlags -- Command.Flags() returns
@@ -212,8 +220,10 @@ func dispatchCustomCommand(ctx context.Context, target *cobra.Command, ref *task
 		}
 	}
 
+	originalCtx := target.Context()
 	depCtx, sink := WithDependencyErrorSink(WithDependenciesResolved(ctx))
 	target.SetContext(depCtx)
+	defer target.SetContext(originalCtx)
 	if target.PreRun != nil {
 		target.PreRun(target, ref.Args)
 	}

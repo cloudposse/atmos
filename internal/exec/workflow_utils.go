@@ -1047,10 +1047,12 @@ func ExecuteWorkflow(
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
 			conditionStatus = schema.ConditionPredicateFailure
-		} else if step.Inputs != nil {
+		} else if step.Inputs != nil || step.Artifacts != nil {
 			// Record the new sources checksum only after a successful Execute() -- a failed
 			// step must never falsely mark itself up to date. Recording failure itself is
-			// logged, not fatal: it must not fail an otherwise-successful step.
+			// logged, not fatal: it must not fail an otherwise-successful step. Gated on
+			// Artifacts too (not just Inputs): an artifacts-only step still needs a recorded
+			// (empty) sources hash, or it reruns forever -- see the RecordSuccess doc comment.
 			if recErr := freshnessChecker.RecordSuccess(step.Inputs, stepWorkDir, freshnessStateDir, freshnessScope, step.Name); recErr != nil {
 				log.Debug("Failed to record freshness state for workflow step", "workflow", workflow, logKeyStep, step.Name, "error", recErr)
 			}
@@ -1075,6 +1077,27 @@ func ExecuteWorkflow(
 
 // stepExecutorState holds persistent state for extended step execution within a workflow.
 // This allows step results to be passed between steps for variable templating.
+//
+// KNOWN LIMITATION: this is a single process-wide global, but dependencies.workflows (see
+// taskgraph.Run at this file's ExecuteWorkflow call site) can dispatch multiple sibling
+// workflow-kind dependency nodes CONCURRENTLY when they share no edge between them. Two such
+// ExecuteWorkflow calls running at once both reset/read/write this same global, which can mix
+// template results across the concurrently-running workflows. A real per-invocation fix means
+// threading a *stepPkg.StepExecutor as an explicit parameter through ExecuteWorkflow and every
+// helper that currently reads this global directly (executeExtendedStep,
+// workflow_command_templating.go's resolvers, workflow_control_adapter.go's TemplateData/
+// StoreResult callbacks) instead of reaching for the package-level var -- removing the global
+// entirely. A quick mutex around this var is NOT a safe substitute: wrapping ExecuteWorkflow's
+// whole body deadlocks on a multi-level dependency chain (a dependency dispatched while holding
+// the lock recursively calls taskgraph.Run for ITS OWN siblings, whose dispatch goroutines then
+// block forever trying to acquire the same non-reentrant lock the parent is holding), and a
+// narrower lock/unlock/relock around just the dependency-resolution call leaves a stale-pointer
+// race window (a captured `workflowVars := stepExecutorState.Variables()` reference can diverge
+// from what the global points to after a concurrent sibling's reset, so some of a workflow's own
+// step code reads the old instance while other code re-reads the global and gets a different
+// one). Command-kind dependencies do not have this problem: dependencies.commands dispatches
+// in-process against Cobra's own per-command flag/context state (see
+// pkg/taskgraph/adapters/cobra_command.go), not this shared executor.
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {

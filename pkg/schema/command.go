@@ -11,20 +11,40 @@ import (
 // Custom CLI commands.
 
 // FindCommandByName searches commands (and their nested Commands subcommands, recursively)
-// for a Command with the given top-level Name, returning the first match. Used to resolve
-// dependencies.commands entries, which reference a command by its own name regardless of
-// nesting depth, since atmosConfig.Commands is already a flat-merged list of every
-// atmos.d-imported command definition by the time dependency resolution runs.
-func FindCommandByName(commands []Command, name string) (*Command, bool) {
+// for a Command with the given top-level Name. Used to resolve dependencies.commands entries,
+// which reference a command by its own name regardless of nesting depth, since
+// atmosConfig.Commands is already a flat-merged list of every atmos.d-imported command
+// definition by the time dependency resolution runs.
+//
+// Ambiguous reports whether more than one command in the tree shares name -- e.g. two unrelated
+// parent commands each declaring a nested child named "build" -- in which case cmd is nil and
+// found is false regardless of how many matches exist: callers MUST treat this as unresolvable,
+// never silently pick "whichever the tree-walk found first," since that order is an
+// implementation detail (declaration order across possibly-merged atmos.d imports), not a
+// meaningful disambiguation rule a config author actually chose.
+func FindCommandByName(commands []Command, name string) (cmd *Command, found bool, ambiguous bool) {
+	matches := collectCommandsByName(commands, name)
+	switch len(matches) {
+	case 0:
+		return nil, false, false
+	case 1:
+		return matches[0], true, false
+	default:
+		return nil, false, true
+	}
+}
+
+// collectCommandsByName returns every Command in the tree (commands and their nested Commands
+// subcommands, recursively) whose Name matches name.
+func collectCommandsByName(commands []Command, name string) []*Command {
+	var matches []*Command
 	for i := range commands {
 		if commands[i].Name == name {
-			return &commands[i], true
+			matches = append(matches, &commands[i])
 		}
-		if found, ok := FindCommandByName(commands[i].Commands, name); ok {
-			return found, true
-		}
+		matches = append(matches, collectCommandsByName(commands[i].Commands, name)...)
 	}
-	return nil, false
+	return matches
 }
 
 // Command defines a custom CLI command.

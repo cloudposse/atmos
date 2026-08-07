@@ -146,9 +146,14 @@ type UnitDependency struct {
 	Flags map[string]string `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
 	// Args carries parameterized positional-argument overrides for this dependency invocation.
 	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
-	// Fail controls failure propagation for this dependency's siblings: wait_all (default),
-	// fail_fast, or best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's
-	// ParallelFailConfig.
+	// Fail controls failure propagation across the WHOLE dependency run (not just this entry's
+	// own siblings, despite the field living on a single entry): wait_all (default), fail_fast,
+	// or best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's
+	// ParallelFailConfig. If any direct dependency declares best_effort, the entire run's
+	// failures are forgiven, including siblings that declared no fail: at all; if any declares
+	// fail_fast (and none declare best_effort), the whole run cancels remaining work on the
+	// first failure. Mixing modes across sibling dependencies is legal but has this one
+	// run-wide outcome — it is not resolved per entry.
 	Fail string `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
 }
 

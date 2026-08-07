@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/dependency"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 )
@@ -79,7 +80,10 @@ func WithWorkflowLookup(fn Lookup) Option {
 // The overall fail mode is derived from direct entries' Fail field: best_effort if any direct
 // entry sets it, else fail_fast if any direct entry sets it, else wait_all (the default --
 // every dependency runs to completion regardless of siblings' failures, and Run returns the
-// combined error at the end).
+// combined error at the end). This derivation is run-wide, not per-entry: one direct dependency
+// declaring `fail: best_effort` forgives the whole graph's failures, including siblings that
+// declared no `fail:` at all (see UnitDependency.Fail's doc comment) -- swallowed failures are
+// still logged at warn level below so they aren't silently invisible.
 func Run(ctx context.Context, direct []Ref, opts ...Option) error {
 	defer perf.Track(nil, "taskgraph.Run")()
 
@@ -110,6 +114,9 @@ func Run(ctx context.Context, direct []Ref, opts ...Option) error {
 
 	aggregate := scheduler.New(graph, dispatcher, schedOpts...).Run(ctx)
 	if failMode == FailBestEffort {
+		if aggregate.Err != nil {
+			log.Warn("Dependency failures ignored due to fail: best_effort", "error", aggregate.Err)
+		}
 		return nil
 	}
 	return aggregate.Err

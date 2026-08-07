@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -43,17 +44,14 @@ func TestCustomCommandIntegration_ParallelStepWithNeeds(t *testing.T) {
 				Type: schema.TaskTypeParallel,
 				Steps: []schema.WorkflowStep{
 					{
-						Name: "first",
-						Type: "shell",
-						// filepath.ToSlash: an unquoted Windows backslash path reaching mvdan/sh
-						// (pkg/utils/shell_utils.go) would have its backslashes consumed as shell
-						// escapes; forward slashes are valid path separators on Windows too.
-						Command: "echo first >> " + filepath.ToSlash(orderFile),
+						Name:    "first",
+						Type:    "shell",
+						Command: customCommandAppendHelperCommand(t, orderFile, "first"),
 					},
 					{
 						Name:    "second",
 						Type:    "shell",
-						Command: "echo second >> " + filepath.ToSlash(orderFile),
+						Command: customCommandAppendHelperCommand(t, orderFile, "second"),
 						Needs:   []string{"first"},
 					},
 				},
@@ -86,6 +84,78 @@ func TestCustomCommandIntegration_ParallelStepWithNeeds(t *testing.T) {
 	assert.Equal(t, []string{"first", "second"}, splitNonEmptyLines(string(content)), "second must run after first per sibling needs:, even though the group runs concurrently")
 }
 
+// TestCustomCommandIntegration_MatrixStepResolvesMatrixValues verifies that a `type: matrix` step
+// declared inside a custom command's steps: list can reference `{{ .matrix.* }}` in its command,
+// proving the control-step engine (pkg/workflow/control.go's controlTemplateData) injects matrix
+// values independently of what the custom-command adapter's TemplateData callback does with its own
+// matrix argument -- ExecuteCustomCommandControlStep's callback ignores it deliberately, matching
+// the workflow control adapter's identical (and already-covered) pattern.
+func TestCustomCommandIntegration_MatrixStepResolvesMatrixValues(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	rowsFile := filepath.Join(tmpDir, "rows.txt")
+
+	showSummary := false
+	testCommand := schema.Command{
+		Name:        "test-matrix-values",
+		Description: "Test type: matrix step resolves .matrix.* in a custom command",
+		Steps: schema.Tasks{
+			{
+				Name: "plans",
+				Type: schema.TaskTypeMatrix,
+				Matrix: map[string][]string{
+					"component": {"vpc", "eks"},
+					"stack":     {"dev"},
+				},
+				ParallelOutput: &schema.ParallelOutputConfig{
+					Mode:        "none",
+					ShowSummary: &showSummary,
+				},
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "plan",
+						Type:    "shell",
+						Command: customCommandMatrixWriteHelperCommand(t, rowsFile),
+					},
+				},
+			},
+		},
+	}
+
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, c := range RootCmd.Commands() {
+		if c.Name() == "test-matrix-values" {
+			customCmd = c
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	customCmd.Run(customCmd, []string{})
+
+	content, err := os.ReadFile(rowsFile)
+	require.NoError(t, err, "matrix rows must execute")
+	assert.ElementsMatch(t, []string{"component=vpc,stack=dev", "component=eks,stack=dev"}, splitNonEmptyLines(string(content)),
+		"each matrix row's command must see its own resolved .matrix.component/.matrix.stack values")
+}
+
 // TestCustomCommandIntegration_ContinueAlwaysForgivesFailure verifies GitHub-Actions-
 // continue-on-error semantics for custom commands: a step with `continue: always` that fails
 // still lets subsequent steps run, and the overall command does not exit with an error.
@@ -113,17 +183,16 @@ func TestCustomCommandIntegration_ContinueAlwaysForgivesFailure(t *testing.T) {
 		Description: "Test continue: always forgives a step failure",
 		Steps: schema.Tasks{
 			{
-				// filepath.ToSlash: see the comment on the parallel-needs test above.
-				Command:  "echo fail >> " + filepath.ToSlash(failFile) + " && exit 7",
+				Command:  customCommandWriteAndExitHelperCommand(t, failFile, "fail", 7),
 				Type:     "shell",
 				Continue: schema.MustCondition(schema.ConditionPredicateAlways),
 			},
 			{
-				Command: "echo ran >> " + filepath.ToSlash(ranFile),
+				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
 				Type:    "shell",
 			},
 			{
-				Command: "echo failure-handler >> " + filepath.ToSlash(handlerFile),
+				Command: customCommandWriteHelperCommand(t, handlerFile, "failure-handler"),
 				Type:    "shell",
 				When:    schema.MustCondition(schema.ConditionPredicateFailure),
 			},
@@ -148,4 +217,76 @@ func TestCustomCommandIntegration_ContinueAlwaysForgivesFailure(t *testing.T) {
 	assert.FileExists(t, failFile)
 	assert.FileExists(t, ranFile, "step after a forgiven failure must still run")
 	assert.NoFileExists(t, handlerFile, "a forgiven failure must not satisfy a later when: failure")
+}
+
+// TestCustomCommandIntegration_UnforgivenFailureSkipsPlainStepsButRunsFailureHandler verifies the
+// no-`continue:` (default) case: an unforgiven step failure does NOT literally halt the step loop
+// (there is deliberately no `break` -- see the loop's own comments); instead it flips the running
+// status to failure, which the implicit `when: success` gate on later plain steps evaluates false
+// (skipping them), while a later step with an explicit `when: failure` still gets evaluated and
+// runs -- exactly mirroring GitHub Actions' `if: success()` default / `if: failure()` override
+// semantics, and the pkg/workflow executor's identical, pre-existing loop shape.
+func TestCustomCommandIntegration_UnforgivenFailureSkipsPlainStepsButRunsFailureHandler(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	failFile := filepath.Join(tmpDir, "fail.txt")
+	skippedFile := filepath.Join(tmpDir, "skipped.txt")
+	handlerFile := filepath.Join(tmpDir, "failure-handler.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-unforgiven-failure",
+		Description: "Test an unforgiven step failure skips plain steps but still runs a when: failure handler",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandWriteAndExitHelperCommand(t, failFile, "fail", 1),
+				Type:    "shell",
+			},
+			{
+				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
+				Type:    "shell",
+			},
+			{
+				Command: customCommandWriteHelperCommand(t, handlerFile, "failure-handler"),
+				Type:    "shell",
+				When:    schema.MustCondition(schema.ConditionPredicateFailure),
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, c := range RootCmd.Commands() {
+		if c.Name() == "test-unforgiven-failure" {
+			customCmd = c
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+	errUtils.OsExit = func(code int) { panic(code) }
+
+	assert.Panics(t, func() {
+		customCmd.Run(customCmd, []string{})
+	}, "an unforgiven step failure must exit non-zero")
+
+	assert.FileExists(t, failFile, "the failing step itself must still run")
+	assert.NoFileExists(t, skippedFile, "a plain step (implicit when: success) after an unforgiven failure must be skipped")
+	assert.FileExists(t, handlerFile, "a when: failure step must still run after an unforgiven failure")
 }

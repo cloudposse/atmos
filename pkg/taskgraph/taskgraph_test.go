@@ -1,6 +1,7 @@
 package taskgraph
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // staticLookup returns a fixed dependency map: name -> its own direct Refs.
@@ -157,6 +160,34 @@ func TestRun_BestEffortSwallowsFailure(t *testing.T) {
 		WithCommandLookup(staticLookup(map[string][]Ref{"build": {}})),
 	)
 	require.NoError(t, err, "best_effort must not surface the failure")
+}
+
+// TestRun_BestEffortLogsSwallowedFailure guards against best_effort's forgiven failure being
+// silently invisible: Run must still log the aggregate error at warn level before returning nil.
+func TestRun_BestEffortLogsSwallowedFailure(t *testing.T) {
+	originalLogger := log.Default()
+	defer log.SetDefault(originalLogger)
+
+	var buf bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&buf)
+	testLogger.SetLevel(log.WarnLevel)
+	log.SetDefault(testLogger)
+
+	failingRunner := func(_ context.Context, ref Ref) error {
+		if ref.Name == "build" {
+			return assert.AnError
+		}
+		return nil
+	}
+	direct := []Ref{{Kind: KindCommand, Name: "build", Fail: FailBestEffort}}
+	err := Run(
+		context.Background(), direct,
+		WithCommandRunner(failingRunner),
+		WithCommandLookup(staticLookup(map[string][]Ref{"build": {}})),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Dependency failures ignored due to fail: best_effort")
 }
 
 func TestRun_WorkflowKindUsesWorkflowRunnerAndLookup(t *testing.T) {

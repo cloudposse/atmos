@@ -164,6 +164,38 @@ func TestChecker_ArtifactsMissingForcesRerunEvenIfSourcesUnchanged(t *testing.T)
 	assert.True(t, facts.ChecksumChanged, "a missing artifacts: output must force a rerun even though sources are unchanged")
 }
 
+// TestChecker_ArtifactsOnlyStepStabilizesAfterRecordSuccess guards against a real bug: RecordSuccess
+// used to early-return when inputs == nil, so an artifacts-only step (no inputs: declared) never
+// persisted state and permanently reported ChecksumChanged == true, rerunning forever even once its
+// artifact existed and was unchanged.
+func TestChecker_ArtifactsOnlyStepStabilizesAfterRecordSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	artifactFile := filepath.Join(tmpDir, "bin", "app")
+
+	store := newFakeStateStore()
+	globber := fakeGlobber{matches: map[string][]string{"bin/app": {}}}
+	checker := NewChecker(WithGlobber(globber), WithStateStore(store))
+
+	artifacts := &schema.Artifacts{Paths: []string{"bin/app"}}
+	when := checksumChangedCondition(t)
+
+	// First run: artifact doesn't exist yet -> must report changed.
+	facts, err := computeFor(checker, when, nil, artifacts, nil, tmpDir, tmpDir, "cmd:build", "compile")
+	require.NoError(t, err)
+	assert.True(t, facts.ChecksumChanged, "first run must report changed (artifact missing)")
+
+	// The step "runs" and produces the artifact, then records success (inputs == nil).
+	require.NoError(t, os.MkdirAll(filepath.Dir(artifactFile), 0o755))
+	require.NoError(t, os.WriteFile(artifactFile, []byte("binary"), 0o644))
+	globber.matches["bin/app"] = []string{artifactFile}
+	require.NoError(t, checker.RecordSuccess(nil, tmpDir, tmpDir, "cmd:build", "compile"))
+
+	// Second run: artifact now exists and nothing changed -> must report unchanged (skip).
+	facts, err = computeFor(checker, when, nil, artifacts, nil, tmpDir, tmpDir, "cmd:build", "compile")
+	require.NoError(t, err)
+	assert.False(t, facts.ChecksumChanged, "an artifacts-only step must stabilize to unchanged once RecordSuccess has persisted state")
+}
+
 func TestChecker_RecordSuccessNotCalledOnFailureIsCallerResponsibility(t *testing.T) {
 	// Compute alone must never mutate state -- only RecordSuccess does, and callers are
 	// documented to invoke it only after a successful Execute(). This test asserts Compute is
