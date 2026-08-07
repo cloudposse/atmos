@@ -70,8 +70,20 @@ func TestIsRecoverableTerraformError(t *testing.T) {
 	}
 }
 
-// TestIsRecoverableInWarnMode verifies that warn/silent mode only degrades an unprovisioned
-// state/output. Authentication and backend-read errors must stay fatal in every error mode.
+// TestIsRecoverableInWarnMode pins which failures warn/silent mode degrades to the
+// `(computed)` placeholder instead of aborting the command.
+//
+// Widened for https://github.com/cloudposse/atmos/issues/2566: a backend read that failed
+// (ErrReadTerraformState — most importantly a cross-account `AccessDenied`) is now
+// recoverable in warn mode. In a multi-account repository, a command that walks every stack
+// will always meet backends the current identity cannot read; that is the topology working
+// as designed, not a defect, and it must not abort an inventory listing. `--error-mode=strict`
+// still surfaces all of these.
+//
+// The classifier keys on ErrReadTerraformState because that is the wrapper the YAML-function
+// path actually produces: GetTerraformState wraps every backend failure in it (with the
+// underlying cause formatted via %v, so inner sentinels like ErrGetObjectFromS3 are not in
+// the chain). The bare-sentinel cases below document that boundary.
 func TestIsRecoverableInWarnMode(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -89,17 +101,40 @@ func TestIsRecoverableInWarnMode(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "ErrGetObjectFromS3 is not recoverable in warn mode",
+			name:     "ErrReadTerraformState is recoverable in warn mode",
+			err:      errUtils.ErrReadTerraformState,
+			expected: true,
+		},
+		{
+			name: "cross-account AccessDenied, as GetTerraformState actually wraps it, is recoverable",
+			err: fmt.Errorf(
+				"%w for component `global` in stack `dev-pen`: operation error S3: GetObject, "+
+					"https response error StatusCode: 403, api error AccessDenied",
+				errUtils.ErrReadTerraformState,
+			),
+			expected: true,
+		},
+		{
+			name: "credential-refresh failure, as GetTerraformState actually wraps it, is recoverable",
+			err: fmt.Errorf(
+				"%w for component `vpc` in stack `dev`: get identity: get credentials: "+
+					"failed to refresh cached credentials",
+				errUtils.ErrReadTerraformState,
+			),
+			expected: true,
+		},
+		{
+			name:     "bad YQ expression against retrieved state stays fatal",
+			err:      errUtils.ErrEvaluateTerraformBackendVariable,
+			expected: false,
+		},
+		{
+			name:     "bare ErrGetObjectFromS3 is not recoverable: the path always wraps it in ErrReadTerraformState",
 			err:      errUtils.ErrGetObjectFromS3,
 			expected: false,
 		},
 		{
-			name:     "wrapped ErrGetObjectFromS3 credential failure is not recoverable in warn mode",
-			err:      fmt.Errorf("get identity: get credentials: failed to refresh cached credentials: %w", errUtils.ErrGetObjectFromS3),
-			expected: false,
-		},
-		{
-			name:     "ErrTerraformBackendAPIError is not recoverable even in warn mode",
+			name:     "bare ErrTerraformBackendAPIError is not recoverable for the same reason",
 			err:      errUtils.ErrTerraformBackendAPIError,
 			expected: false,
 		},
@@ -119,6 +154,13 @@ func TestIsRecoverableInWarnMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isRecoverableInWarnMode(tt.err)
 			assert.Equal(t, tt.expected, result)
+
+			// The YQ `//` default operator must stay strictly narrower than warn mode: a
+			// credential failure must never be papered over with a literal fallback value.
+			if errors.Is(tt.err, errUtils.ErrReadTerraformState) {
+				assert.False(t, isRecoverableTerraformError(tt.err),
+					"a backend read failure must not enable the YQ default operator")
+			}
 		})
 	}
 }

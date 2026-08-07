@@ -28,6 +28,11 @@ This command shows configuration for stacks and components in the stacks.
 
 :::info YAML Functions and Authentication
 By default, `atmos describe stacks` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+
+Without `--stack`, the command evaluates these functions for **every** component in **every** stack. In a multi-account repository where each stage keeps its Terraform state in its own account, no single identity can read them all. A `!terraform.state` value Atmos cannot read is degraded to the `(computed)` placeholder and the command continues, reporting a summary of what was degraded — run with `--logs-level=Debug` for the underlying cause of each. `!terraform.output` is not degraded this way: it runs `terraform output` as a subprocess, whose failures are too broad to distinguish from real defects, so those still abort the command.
+
+Use `--error-mode=strict` if you would rather a failed read abort the command. To avoid the reads altogether, skip the credential-backed functions with `--skip=terraform.state --skip=terraform.output`, or turn processing off with `--process-functions=false`. Narrowing the run with `--stack <stack>` reduces how many components are evaluated, but does not by itself avoid cross-account reads — a `!terraform.state` inside the selected stack can reference a component in another stack and account.
+
 :::
 
 :::tip

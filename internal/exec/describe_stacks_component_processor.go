@@ -550,7 +550,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 			!p.resolveSecrets && iolib.MaskingEnabled(),
 		)
 		if err != nil {
-			return err
+			return p.explainRepositoryWideYAMLFunctionFailure(err, componentName, stackName)
 		}
 	}
 	if hasLiteralMocks {

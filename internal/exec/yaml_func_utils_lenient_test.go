@@ -151,9 +151,14 @@ func TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails(t *testing.
 	assert.Empty(t, warnings, "non-recoverable errors must not trigger onWarning")
 }
 
-// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn verifies that warn mode does
-// not hide a broken/unavailable credential source (e.g. no EC2 IMDS role or an expired SSO
-// session). Only an unprovisioned state/output is eligible for degradation.
+// TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn pins the classifier boundary for
+// a *bare* ErrGetObjectFromS3: it is not recoverable, so lenient mode still fails.
+//
+// Note this shape does not occur in production. GetTerraformState wraps every backend failure
+// in ErrReadTerraformState (see terraform_state_utils.go), which IS recoverable in warn mode
+// since #2566 — so the same credential failure, arriving through the real call path, now
+// degrades to `(computed)` instead. TestProcessCustomYamlTagsLenient_WrappedCredentialFailure_Warn
+// below covers that production shape. The two together document exactly where the line falls.
 func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -190,4 +195,56 @@ func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "EC2 IMDS")
 	assert.Empty(t, warnings)
+}
+
+// TestProcessCustomYamlTagsLenient_WrappedCredentialFailure_Warn documents a real consequence
+// of the #2566 fix that deserves explicit sign-off: because GetTerraformState collapses every
+// backend failure into ErrReadTerraformState (formatting the cause with %v, so no inner
+// sentinel survives), warn mode cannot tell a cross-account AccessDenied — which must degrade —
+// from a broken credential source such as an expired SSO session, which arguably should stay
+// loud. Both now degrade to `(computed)`.
+//
+// This is the intended trade for making multi-account listing work at all; `--error-mode=strict`
+// still surfaces both. Distinguishing them would require preserving the AWS error code up
+// through the S3 backend (terraform_backend_s3.go also uses %v) and is tracked as follow-up.
+func TestProcessCustomYamlTagsLenient_WrappedCredentialFailure_Warn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+	// Exactly how GetTerraformState wraps a backend failure before the classifier sees it.
+	wrapped := fmt.Errorf(
+		"%w for component `vpc` in stack `test-stack`\nin YAML function: `!terraform.state vpc test-stack bucket_name`\n"+
+			"failed to get object from S3: get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found",
+		errUtils.ErrReadTerraformState,
+	)
+	mockStateGetter.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		Return(nil, wrapped).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"bucket":  `!terraform.state vpc test-stack bucket_name`,
+		"sibling": "unaffected-value",
+	}
+
+	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
+
+	var warnings []DegradationWarning
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+		warnings = append(warnings, w)
+	})
+
+	require.NoError(t, err, "a wrapped backend failure degrades in warn mode after the #2566 fix")
+	assert.Equal(t, degradation.AtmosComputedValue{}, result["bucket"])
+	assert.Equal(t, "unaffected-value", result["sibling"])
+	require.Len(t, warnings, 1, "the degradation must still be reported, so it is never silent")
+	assert.Contains(t, warnings[0].Reason, "EC2 IMDS",
+		"the real cause must survive into the warning for --logs-level=Debug")
 }
