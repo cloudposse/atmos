@@ -99,6 +99,21 @@ func TestCollectSecretScopeEntries_ComponentFilter(t *testing.T) {
 	assert.Equal(t, "api", entries[0].Component)
 }
 
+func TestCollectSecretScopeEntries_SortsSharedNameByComponentType(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				"terraform": map[string]any{"example-service": declaringSection("SHARED_TOKEN")},
+				"helm":      map[string]any{"example-service": declaringSection("SHARED_TOKEN")},
+			},
+		},
+	}
+
+	entries := collectSecretScopeEntries(stacksMap, "")
+	require.Len(t, entries, 2)
+	assert.Equal(t, []string{"helm", "terraform"}, []string{entries[0].ComponentType, entries[1].ComponentType})
+}
+
 // TestSecretEntriesInStack covers the per-stack edge cases: a missing components section, a
 // non-map component-type node, and a section that is not a map.
 func TestSecretEntriesInStack(t *testing.T) {

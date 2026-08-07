@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // errTestBackend is a generic (non-*azcore.ResponseError) backend error used to exercise the
@@ -96,20 +97,26 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			},
 		},
 		{
-			name:      "empty stack",
+			name:      "global scope",
 			stack:     "",
-			component: "app",
+			component: "",
 			key:       "secret",
 			value:     "value",
-			wantErr:   storepkg.ErrEmptyStack,
+			mockFunc: func(_ context.Context, name string, _ azsecrets.SetSecretParameters, _ *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+				assert.Equal(t, "secret", name)
+				return azsecrets.SetSecretResponse{}, nil
+			},
 		},
 		{
-			name:      "empty component",
+			name:      "stack scope",
 			stack:     "dev",
 			component: "",
 			key:       "secret",
 			value:     "value",
-			wantErr:   storepkg.ErrEmptyComponent,
+			mockFunc: func(_ context.Context, name string, _ azsecrets.SetSecretParameters, _ *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+				assert.Equal(t, "dev-secret", name)
+				return azsecrets.SetSecretResponse{}, nil
+			},
 		},
 		{
 			name:      "empty key",
@@ -153,6 +160,22 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 	}
 }
 
+func TestAzureKeyVaultStore_SetSecretStringVerbatim(t *testing.T) {
+	var stored string
+	store := &AzureKeyVaultStore{
+		client: &mockClient{setSecretFunc: func(_ context.Context, _ string, parameters azsecrets.SetSecretParameters, _ *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+			stored = *parameters.Value
+			return azsecrets.SetSecretResponse{}, nil
+		}},
+		vaultURL:       "https://example.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+	}
+	store.SetSecret(true)
+
+	require.NoError(t, store.Set("dev", "app", "credential", "example-token"))
+	assert.Equal(t, "example-token", stored)
+}
+
 func TestAzureKeyVaultStore_Get(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -194,18 +217,28 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 			want: map[string]interface{}{"key": "value", "number": float64(123)},
 		},
 		{
-			name:      "empty stack",
+			name:      "global scope",
 			stack:     "",
-			component: "app",
+			component: "",
 			key:       "secret",
-			wantErr:   storepkg.ErrEmptyStack,
+			mockFunc: func(_ context.Context, name string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				assert.Equal(t, "secret", name)
+				value := "global-value"
+				return azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}, nil
+			},
+			want: "global-value",
 		},
 		{
-			name:      "empty component",
+			name:      "stack scope",
 			stack:     "dev",
 			component: "",
 			key:       "secret",
-			wantErr:   storepkg.ErrEmptyComponent,
+			mockFunc: func(_ context.Context, name string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				assert.Equal(t, "dev-secret", name)
+				value := "stack-value"
+				return azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}, nil
+			},
+			want: "stack-value",
 		},
 		{
 			name:      "empty key",
@@ -277,18 +310,24 @@ func TestAzureKeyVaultStore_Delete(t *testing.T) {
 			},
 		},
 		{
-			name:      "empty stack",
+			name:      "global scope",
 			stack:     "",
-			component: "app",
+			component: "",
 			key:       "secret",
-			wantErr:   storepkg.ErrEmptyStack,
+			mockFunc: func(_ context.Context, name string, _ *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				assert.Equal(t, "secret", name)
+				return azsecrets.DeleteSecretResponse{}, nil
+			},
 		},
 		{
-			name:      "empty component",
+			name:      "stack scope",
 			stack:     "dev",
 			component: "",
 			key:       "secret",
-			wantErr:   storepkg.ErrEmptyComponent,
+			mockFunc: func(_ context.Context, name string, _ *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				assert.Equal(t, "dev-secret", name)
+				return azsecrets.DeleteSecretResponse{}, nil
+			},
 		},
 		{
 			name:      "empty key",
@@ -422,8 +461,8 @@ func TestAzureKeyVaultStore_Has(t *testing.T) {
 	}
 }
 
-// TestAzureKeyVaultStore_HasValidatesInput confirms Has() validates its arguments before touching
-// the client, matching Get/Set/Delete.
+// TestAzureKeyVaultStore_HasValidatesInput confirms Has() rejects an empty key before touching
+// the client while permitting omitted scope segments.
 func TestAzureKeyVaultStore_HasValidatesInput(t *testing.T) {
 	store := &AzureKeyVaultStore{
 		client:         &mockClient{},
@@ -431,23 +470,36 @@ func TestAzureKeyVaultStore_HasValidatesInput(t *testing.T) {
 		stackDelimiter: stringPtr("-"),
 	}
 
+	got, err := store.Has("dev", "app", "")
+	assert.False(t, got)
+	assert.ErrorIs(t, err, storepkg.ErrEmptyKey)
+}
+
+func TestAzureKeyVaultStore_HasSharedScopes(t *testing.T) {
 	tests := []struct {
-		name      string
-		stack     string
-		component string
-		key       string
-		wantErr   error
+		name         string
+		stack        string
+		component    string
+		expectedName string
 	}{
-		{name: "empty stack", stack: "", component: "app", key: "secret", wantErr: storepkg.ErrEmptyStack},
-		{name: "empty component", stack: "dev", component: "", key: "secret", wantErr: storepkg.ErrEmptyComponent},
-		{name: "empty key", stack: "dev", component: "app", key: "", wantErr: storepkg.ErrEmptyKey},
+		{name: "stack scope", stack: "dev", expectedName: "dev-secret"},
+		{name: "global scope", expectedName: "secret"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := store.Has(tt.stack, tt.component, tt.key)
-			assert.False(t, got)
-			assert.ErrorIs(t, err, tt.wantErr)
+			store := &AzureKeyVaultStore{
+				client: &mockClient{listVersionsFunc: func(name string) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+					assert.Equal(t, tt.expectedName, name)
+					return azsecrets.ListSecretPropertiesVersionsResponse{}, nil
+				}},
+				vaultURL:       "https://test.vault.azure.net",
+				stackDelimiter: stringPtr("-"),
+			}
+
+			got, err := store.Has(tt.stack, tt.component, "secret")
+			require.NoError(t, err)
+			assert.True(t, got)
 		})
 	}
 }

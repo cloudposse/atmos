@@ -1,0 +1,6 @@
+apiVersion: v2
+name: secret-values
+description: Generic fixture for native Helm secret rendering
+type: application
+version: 0.1.0
+appVersion: "1.0"

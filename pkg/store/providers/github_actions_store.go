@@ -164,6 +164,11 @@ func (s *GitHubActionsStore) Get(_ string, _ string, key string) (any, error) {
 	return s.getByKey(key)
 }
 
+// GetRaw returns the exact environment value injected by GitHub Actions.
+func (s *GitHubActionsStore) GetRaw(_ string, _ string, key string) (string, error) {
+	return s.getRawByKey(key)
+}
+
 // GetKey returns the secret value for a raw key without stack/component context (same env-read
 // semantics as Get).
 func (s *GitHubActionsStore) GetKey(key string) (any, error) {
@@ -171,20 +176,28 @@ func (s *GitHubActionsStore) GetKey(key string) (any, error) {
 }
 
 func (s *GitHubActionsStore) getByKey(key string) (any, error) {
-	name, err := githubSecretName(s.prefix, key)
+	raw, err := s.getRawByKey(key)
 	if err != nil {
 		return nil, err
 	}
+	return decodeGitHubSecretValue(raw), nil
+}
+
+func (s *GitHubActionsStore) getRawByKey(key string) (string, error) {
+	name, err := githubSecretName(s.prefix, key)
+	if err != nil {
+		return "", err
+	}
 	if !s.readAllowed() {
-		return nil, fmt.Errorf("%w: %q is only readable inside a GitHub Actions runner — %s, or set options.ci.enabled to override",
+		return "", fmt.Errorf("%w: %q is only readable inside a GitHub Actions runner — %s, or set options.ci.enabled to override",
 			store.ErrGitHubSecretValueCIOnly, name, s.envHint(name))
 	}
 	s.alignOnce.Do(s.verifyAlignment)
 	raw, ok := lookupGitHubSecretEnv(name)
 	if !ok {
-		return nil, fmt.Errorf("%w: %q — %s", store.ErrGitHubSecretNotInEnv, name, s.envHint(name))
+		return "", fmt.Errorf("%w: %q — %s", store.ErrGitHubSecretNotInEnv, name, s.envHint(name))
 	}
-	return decodeGitHubSecretValue(raw), nil
+	return raw, nil
 }
 
 // envHint describes how to make the secret available in the runner environment, naming the

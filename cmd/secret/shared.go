@@ -74,6 +74,17 @@ func parseFacets(cmd *cobra.Command) (secretScope, error) {
 // non-interactive shells). In a non-interactive context a missing flag falls back to the standard
 // "required flag not provided" error, preserving today's pipeline behavior.
 func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
+	scope, err := parseScopeStack(cmd, args)
+	if err != nil {
+		return scope, err
+	}
+	return requireScopeComponent(scope, cmd, args)
+}
+
+// parseScopeStack resolves the common facets and requires only a stack. Commands that can prove
+// a component is irrelevant (for example, setting a uniquely global secret) use this narrower
+// helper and discover a declaration-bearing component context afterward.
+func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 	v := viper.GetViper()
 	if err := secretParser.BindFlagsToViper(cmd, v); err != nil {
 		return secretScope{}, err
@@ -100,7 +111,10 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 	}
 	// Make the chosen stack visible to the component completion (it filters by --stack).
 	v.Set(cfg.StackStr, scope.Stack)
+	return scope, nil
+}
 
+func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {
 	if scope.Component == "" {
 		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletion, cmd, args)
 		if err != nil {
