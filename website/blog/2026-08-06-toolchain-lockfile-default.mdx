@@ -29,7 +29,8 @@ that way because the version string matched.
 Toolchain installs now write a lockfile by default. No configuration needed: run `atmos toolchain
 install`, and the exact resolved version, download URL, checksum, and size for your platform get recorded
 automatically. The next install — on a teammate's machine, or in CI — resolves against that lockfile
-instead of asking the registry again, so everyone gets byte-for-byte the same artifact.
+instead of asking the registry again, so everyone on the same operating system and architecture gets
+byte-for-byte the same artifact.
 
 If a project's `atmos.yaml` pins an edition dated before this change, it keeps the old opt-in behavior
 automatically — nothing changes underfoot for a project that was relying on the previous default. New and
