@@ -20,8 +20,9 @@ If no tools are given, every tool in .tool-versions is updated.
 
 A tool pinned to "latest" is re-resolved to the newest version. A tool pinned
 to an exact version is replaced with the newest available version and
-reinstalled. Tools pinned to pr:/sha:/ref: are skipped — those pins are
-immutable by design; use "add" to change them explicitly.`,
+reinstalled. Tools pinned to pr:/sha:/ref: are skipped — update never
+overrides an explicit source selection like this, even ref:<name>, which can
+move over time; use "add" to change one explicitly.`,
 	Args: cobra.ArbitraryArgs,
 	Example: `  atmos toolchain update
   atmos toolchain update terraform

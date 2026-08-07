@@ -220,3 +220,50 @@ func TestRunUpdate_ConcurrencyPreservesOrder(t *testing.T) {
 	assert.Less(t, idxA, idxB, "owner/a must be reported before owner/b")
 	assert.Less(t, idxB, idxC, "owner/b must be reported before owner/c")
 }
+
+// TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions reproduces a
+// field-test finding: a real, successful update replaces the resolved "newest" version via
+// AddToolToVersionsAsDefault, but that helper only ever prepended the new version -- it never
+// removed the old default (or, for a multi-version line, any other previously-pinned version).
+// Every real update on an exact pin therefore left the just-replaced version (and any
+// secondary versions) behind as permanent, ever-growing stale entries. AddVersionToTool's
+// asDefault path now matches asdf's own "set" convention (asdf's docs describe `asdf set
+// <tool> <version>` as equivalent to `echo "<tool> <version>" > .tool-versions`): the whole
+// line becomes exactly the new version, full stop -- including dropping any other
+// already-pinned secondary version, not just the old default. This hits the real network
+// (matching this file's existing convention for exercising a real install, e.g.
+// TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged) since the bug only
+// manifests after install actually succeeds.
+func TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions(t *testing.T) {
+	setupTestIO(t)
+
+	// A pre-existing secondary version (1.9.7) proves the line is fully replaced, not just
+	// the default entry -- update's "never leaves two versions pinned" guarantee applies to
+	// the whole line, not just index 0.
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8 1.9.7\n")
+
+	// InstallPath MUST be isolated to a per-test temp dir -- see the sibling
+	// InstallFailureLeavesToolVersionsUnchanged test for the same isolation rationale.
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+	}})
+
+	// "1.11.4" is a real, installable hashicorp/terraform release (already used by
+	// TestUpdateOneTool_ExactPin_DryRunDoesNotMutate), so this real (unmocked) install
+	// actually succeeds.
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "1.11.4"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
+	require.Equal(t, updateResultUpdated, outcome.result, "update message: %s", outcome.message)
+
+	toolVersions, err := LoadToolVersions(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.11.4"}, toolVersions.Tools["hashicorp/terraform"],
+		"a real update fully replaces the line -- neither the old default (1.9.8) nor the secondary version (1.9.7) may survive as stale entries")
+}

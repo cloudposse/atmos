@@ -63,7 +63,13 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			version = "latest"
 		}
 		if err := toolchain.AddToolVersion(tool, version, setAsDefault); err != nil {
-			return fmt.Errorf("%w: failed to add '%s': %w", errUtils.ErrToolVersionsFileOperation, arg, err)
+			// WithCause (not a second %w) extracts and re-attaches hints/details from err
+			// before wrapping -- a double-%w fmt.Errorf here would silently discard any
+			// hint ValidateVersionSpec attaches (e.g. the range/constraint rejection hint),
+			// since cockroachdb/errors' GetAllHints can't traverse a Go 1.20 multi-wrap.
+			return errUtils.Build(errUtils.ErrToolVersionsFileOperation).
+				WithCause(fmt.Errorf("failed to add '%s': %w", arg, err)).
+				Err()
 		}
 	}
 	return nil

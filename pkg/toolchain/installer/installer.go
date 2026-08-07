@@ -180,6 +180,7 @@ type Installer struct {
 	registryFactory    RegistryFactory       // Factory for creating Aqua registry instances.
 	verificationPolicy verification.Policy
 	useLockFile        bool
+	verifyAgainstLock  bool // Distinct from useLockFile: false for lock's own force-write/refresh path.
 	lockFilePath       string
 	downloadProgress   func(downloaded, total int64)
 }
@@ -244,6 +245,7 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 		if config != nil {
 			i.verificationPolicy = verification.PolicyFromConfig(config.Toolchain.Verification)
 			i.useLockFile = config.Toolchain.UseLockFile
+			i.verifyAgainstLock = config.Toolchain.UseLockFile
 			i.lockFilePath = resolveLockFilePath(config)
 		}
 	}
@@ -255,11 +257,16 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 // verification against it. Call after WithAtmosConfig, which resolves lockFilePath (to
 // toolchain.lock_file, or <install_path>/toolchain.lock.yaml by default) regardless of
 // the use_lock_file toggle -- this option only flips the write-gating bool.
+//
+// The verifyAgainstLock field is deliberately left false here (overriding whatever
+// WithAtmosConfig set): `atmos toolchain lock` intentionally re-locks/refreshes entries, so it
+// must never fail on its own previously-recorded checksum the way a normal `install` would.
 func WithForceLockFile() Option {
 	defer perf.Track(nil, "installer.WithForceLockFile")()
 
 	return func(i *Installer) {
 		i.useLockFile = true
+		i.verifyAgainstLock = false
 	}
 }
 

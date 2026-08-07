@@ -41,6 +41,18 @@ func TestUpdateCommand_CommandStructure(t *testing.T) {
 	assert.Contains(t, updateCmd.Use, "[tool...]")
 }
 
+// TestUpdateCommand_HelpTextDoesNotClaimRefPinsAreImmutable reproduces a field-test finding:
+// the PR's own follow-up commit (and the published toolchain-update.mdx docs) explicitly
+// corrected the claim that ref:-pinned tools are skipped because they're "immutable by
+// design" -- a named git ref CAN move; it's skipped to preserve the user's explicit source
+// selection, not because it can't change. The CLI's own --help text (this command's Long
+// description) was never updated to match and still asserts blanket immutability, which end
+// users see far more often than the website docs.
+func TestUpdateCommand_HelpTextDoesNotClaimRefPinsAreImmutable(t *testing.T) {
+	assert.NotContains(t, updateCmd.Long, "immutable by design",
+		"a named ref: pin can move -- it's skipped by choice, not because it's immutable; the --help text should say so, not the opposite")
+}
+
 // TestToolchainCommand_HasUpdateSubcommand verifies `update` is registered on
 // the parent `toolchain` command (i.e. discoverable via --help), not just
 // defined as a standalone cobra.Command.

@@ -246,6 +246,9 @@ func TestAddCommand_DefaultFlagReplacesExisting(t *testing.T) {
 	versions := toolVersions.Tools["terraform"]
 	require.NotEmpty(t, versions)
 	assert.Equal(t, "1.11.4", versions[0], "add --default should replace the default (first) version")
+	// Checking versions[0] alone (as this test previously did) passes even when the old
+	// default is silently retained as a stale second entry -- assert the exact full shape.
+	assert.Equal(t, []string{"1.11.4"}, versions, "add --default on a single-version tool must not leave 1.9.8 pinned as a stale second entry")
 }
 
 func TestAddCommand_EdgeCases(t *testing.T) {

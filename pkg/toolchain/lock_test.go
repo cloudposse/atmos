@@ -133,9 +133,10 @@ func TestRunLock_ForceWritesLockFileWithoutInstalling(t *testing.T) {
 	lockFilePath := filepath.Join(installPath, "toolchain.lock.yaml")
 	lockFile, err := lockfile.Load(lockFilePath)
 	require.NoError(t, err)
-	entry := lockFile.Tools["hashicorp/terraform"]
-	require.NotNil(t, entry, "expected a hashicorp/terraform lock entry")
-	assert.Equal(t, "1.11.4", entry.Version)
+	tool := lockFile.Tools["hashicorp/terraform"]
+	require.NotNil(t, tool, "expected a hashicorp/terraform lock entry")
+	entry := tool.Versions["1.11.4"]
+	require.NotNil(t, entry, "expected a locked entry for version 1.11.4")
 	platform := entry.Platforms[runtime.GOOS+"_"+runtime.GOARCH]
 	require.NotNil(t, platform, "expected a lock entry for the current platform")
 	assert.NotEmpty(t, platform.ChecksumAlgorithm)

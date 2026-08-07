@@ -1773,6 +1773,10 @@ func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
 	versions := toolVersions.Tools["hashicorp/terraform"]
 	require.NotEmpty(t, versions, "hashicorp/terraform should still be configured")
 	assert.Equal(t, "1.11.4", versions[0], "set should replace the default (first) version, not append")
+	// The whole point of "replace, not append": the old default must not survive as a
+	// second entry. Checking versions[0] alone (as this test previously did) passes even
+	// when the old version is silently retained -- assert the full, exact shape instead.
+	assert.Equal(t, []string{"1.11.4"}, versions, "set on a single-version tool must not leave the old default (1.5.7) pinned as a stale second entry")
 }
 
 // TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write
