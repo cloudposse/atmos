@@ -44,7 +44,8 @@ Browse and search the directory at [atmos.tools/ai/skills](/ai/skills). Or fetch
 
 ```shell
 # Raw Markdown for one skill - readable by a human, fetchable by an agent
-curl https://atmos.tools/ai/skills/<skill-name>.md
+skill_name=atmos-ai
+curl "https://atmos.tools/ai/skills/${skill_name}.md"
 
 # Table view, now with a Category column
 atmos ai skill list
