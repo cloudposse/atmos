@@ -426,6 +426,7 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 	assert.Empty(t, uiOutput.String())
 	assert.Contains(t, componentOutput.String(), "Provisioning workdir for component 'vpc'")
+	assert.Contains(t, componentOutput.String(), "Local component files synced")
 	assert.Contains(t, componentOutput.String(), "WARNING: Failed to compute content hash: hash failed")
 }
 
