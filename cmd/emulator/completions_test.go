@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // withViperBasePath points config discovery at an isolated directory so
@@ -103,6 +105,21 @@ func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {
 
 	_, directive := componentArgCompletion(c, nil, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestStackNamesForCompletion_ListsAllStacks(t *testing.T) {
+	// Unlike stackFlagCompletion/emulatorStackNames (which restrict results to stacks
+	// configuring an emulator component), stackNamesForCompletion lists every stack name in
+	// the project via the shared FindStacksMap cache.
+	t.Chdir(exampleProjectPath(t))
+	withViperBasePath(t, "")
+
+	atmosConfig, err := cfg.InitCliConfig(globalInfoForCompletion(&cobra.Command{Use: "emulator"}), true)
+	require.NoError(t, err)
+
+	stacks, err := stackNamesForCompletion(&atmosConfig)
+	require.NoError(t, err)
+	assert.Contains(t, stacks, "local")
 }
 
 func TestRegisterEmulatorCompletions(t *testing.T) {

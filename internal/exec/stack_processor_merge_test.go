@@ -1463,6 +1463,66 @@ func TestEffectiveAtmosConfig_InvalidStrategy(t *testing.T) {
 		"pkg/merge must reject the invalid strategy when a merge is attempted")
 }
 
+// TestMergeComponentConfigurations_InvalidListMergeStrategy verifies that
+// mergeComponentConfigurations surfaces a merge failure as a real error instead of silently
+// dropping the component (a misconfigured `settings.list_merge_strategy` at any inheritance level
+// must fail loudly, per effectiveAtmosConfig's contract of passing the value through unvalidated).
+func TestMergeComponentConfigurations_InvalidListMergeStrategy(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	atmosCfg.Settings.ListMergeStrategy = "not-a-real-strategy"
+
+	opts := ComponentProcessorOptions{
+		ComponentType:  cfg.TerraformComponentType,
+		Component:      "vpc",
+		GlobalVars:     map[string]any{"a": "1"},
+		GlobalSettings: map[string]any{},
+		GlobalEnv:      map[string]any{},
+		AtmosConfig:    atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.ComponentVars = map[string]any{"b": "2"}
+
+	comp, deferredContexts, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidListMergeStrategy)
+	assert.Nil(t, comp)
+	assert.Nil(t, deferredContexts)
+}
+
+// TestMergeComponentConfigurations_SpaceliftSettingsInvalidType verifies that an abstract
+// Terraform component whose settings.spacelift is not a map produces a clear
+// ErrInvalidSpaceLiftSettings error instead of panicking on the type assertion used to strip
+// workspace_enabled.
+func TestMergeComponentConfigurations_SpaceliftSettingsInvalidType(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType:           cfg.TerraformComponentType,
+		Component:               "abstract-vpc",
+		GlobalVars:              map[string]any{},
+		GlobalSettings:          map[string]any{},
+		GlobalEnv:               map[string]any{},
+		TerraformProviders:      map[string]any{},
+		GlobalAndTerraformHooks: map[string]any{},
+		AtmosConfig:             atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.ComponentSettings = map[string]any{
+		"spacelift": "not-a-map",
+	}
+	res.ComponentMetadata = map[string]any{
+		"type": cfg.AbstractSectionName,
+	}
+
+	comp, deferredContexts, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidSpaceLiftSettings)
+	assert.Nil(t, comp)
+	assert.Nil(t, deferredContexts)
+}
+
 // TestProcessAuthConfig verifies that processAuthConfig merges global and
 // component-level auth configurations, with the component-level settings
 // taking precedence over the global ones.

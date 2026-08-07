@@ -396,6 +396,110 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
 		},
+		{
+			name: "invalid generate section type",
+			config: map[string]any{
+				cfg.GenerateSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGenerateSection,
+		},
+		{
+			name: "invalid secrets section type",
+			config: map[string]any{
+				cfg.SecretsSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidComponentSecrets,
+		},
+		{
+			name: "invalid terraform generate section type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.GenerateSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformGenerateSection,
+		},
+		{
+			name: "invalid terraform source type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.SourceSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformSource,
+		},
+		{
+			name: "invalid terraform provision type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.ProvisionSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformProvision,
+		},
+		{
+			name: "invalid ansible command type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.CommandSectionName: 123,
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleCommand,
+		},
+		{
+			name: "invalid ansible vars type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.VarsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleVars,
+		},
+		{
+			name: "invalid ansible settings type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.SettingsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleSettings,
+		},
+		{
+			name: "invalid ansible env type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.EnvSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleEnv,
+		},
+		{
+			name: "invalid ansible auth type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.AuthSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleAuth,
+		},
+		{
+			name: "invalid components.kubernetes type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.KubernetesComponentType: "invalid-not-a-map",
+				},
+			},
+			expectedError: errUtils.ErrInvalidConfig,
+		},
+		{
+			name: "invalid components.helm type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmComponentType: "invalid-not-a-map",
+				},
+			},
+			expectedError: errUtils.ErrInvalidConfig,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1392,6 +1496,88 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 		"team":   "platform",
 	}, overrideMetadata["labels"], "custom component's own metadata must deep-merge with global on nested maps: local wins on conflicting keys, non-conflicting keys from both sides are retained")
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
+}
+
+// TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge verifies that stack-root global
+// `settings:`/`env:` are merged into custom (non-built-in) component types the same way metadata
+// is (TestProcessStackConfig_CustomComponentTypeGlobalMetadata), with the component's own
+// settings/env taking precedence on conflicting keys. It also verifies that a custom-type entry
+// whose value isn't a map (e.g. malformed manifest content) is safely skipped rather than causing
+// a panic or an error, while a sibling well-formed custom type in the same stack is still
+// processed normally.
+func TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_only":  "global",
+			"conflict_key": "global-value",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ONLY":  "global",
+			"CONFLICT_ENV": "global-value",
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+					cfg.SettingsSectionName: map[string]any{
+						"local_only":   "local",
+						"conflict_key": "local-value",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"LOCAL_ONLY":   "local",
+						"CONFLICT_ENV": "local-value",
+					},
+				},
+			},
+			// Malformed: a custom type whose value is not a map. Must be skipped, not error.
+			"webhook": "not-a-map",
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+
+	// The malformed custom type must be skipped entirely, not fabricated as an empty map.
+	_, hasWebhook := components["webhook"]
+	assert.False(t, hasWebhook, "a custom type whose value isn't a map must be skipped")
+
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should still be present despite the sibling malformed type")
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+
+	settings, ok := deployApp[cfg.SettingsSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a merged settings section, got: %v", deployApp[cfg.SettingsSectionName])
+	assert.Equal(t, "global", settings["global_only"], "global-only setting must be inherited")
+	assert.Equal(t, "local", settings["local_only"], "component-local setting must be retained")
+	assert.Equal(t, "local-value", settings["conflict_key"], "component-local setting must win over global on conflict")
+
+	env, ok := deployApp[cfg.EnvSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a merged env section, got: %v", deployApp[cfg.EnvSectionName])
+	assert.Equal(t, "global", env["GLOBAL_ONLY"], "global-only env var must be inherited")
+	assert.Equal(t, "local", env["LOCAL_ONLY"], "component-local env var must be retained")
+	assert.Equal(t, "local-value", env["CONFLICT_ENV"], "component-local env var must win over global on conflict")
 }
 
 // componentHooks extracts the merged hooks section for a terraform component
