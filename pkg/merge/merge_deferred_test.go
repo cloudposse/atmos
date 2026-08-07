@@ -1337,6 +1337,23 @@ func TestFillMissingLayerValues(t *testing.T) {
 
 		assert.Len(t, dctx.GetDeferredValues()["key"], 1)
 	})
+
+	t.Run("skips a pathKey whose deferred slice is empty (defensive guard)", func(t *testing.T) {
+		// Under the current API, AddDeferred always appends at least one element, so a pathKey
+		// mapping to an empty slice can't naturally arise from public methods — seed it directly
+		// to exercise the defensive len(values) == 0 guard without panicking on values[0].
+		dctx := NewDeferredMergeContext()
+		dctx.deferredValues["key"] = []*DeferredValue{}
+
+		processedInputs := []map[string]any{
+			{"key": "existing_value"},
+		}
+
+		assert.NotPanics(t, func() {
+			fillMissingLayerValues(dctx, processedInputs)
+		})
+		assert.Empty(t, dctx.GetDeferredValues()["key"])
+	})
 }
 
 // TestProcessDeferredField tests the processDeferredField function.
