@@ -1,0 +1,666 @@
+---
+title: Migrating from Terramate
+sidebar_position: 4
+sidebar_label: From Terramate
+description: How to migrate from Terramate to Atmos
+id: terramate
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Terramate and Atmos solve a similar problem—managing Terraform/OpenTofu at scale with DRY, multi-environment configuration. The biggest conceptual difference is code generation: Terramate typically generates each stack's Terraform module-calling code from templates, while Atmos treats Terraform root modules as static, reusable code and only generates thin boilerplate (backend, provider files) around them. This guide will help you understand the differences and migrate your infrastructure.
+</Intro>
+
+## Key Differences at a Glance
+
+| Concept | Terramate | Atmos |
+|---------|-----------|-------|
+| **Configuration Format** | HCL (`*.tm.hcl`) | YAML (`.yaml`) |
+| **Reuse Mechanism** | `globals {}` + `generate_hcl` | `import:` with deep merge + static components |
+| **Module Wiring** | `generate_hcl` commonly assembles the `module "x" {}` call itself from templated `globals` | The component (Terraform root module) is static, checked-in code; only `vars:` change per instance |
+| **Dependencies** | `after`/`before` stack ordering, or plain Terraform `data` lookups between stacks | [`dependencies.components`](/stacks/dependencies/components) for ordering and [`!terraform.output`](/functions/yaml/terraform.output)/[`!terraform.state`](/functions/yaml/terraform.state) for values |
+| **Variable Passing** | `globals "a" "b" {}`, hierarchical by directory | `vars:` with inheritance via imports |
+| **Backend/Provider Generation** | `generate_hcl` mixins hand-template `backend.tf`/`provider.tf` | Native [`backend:`](/stacks/backend)/[`providers:`](/stacks/providers) sections—no generator to write |
+| **Tags** | `tags = [...]` (list only) + `--tags` | [`metadata.tags`](/stacks/components/component-metadata#tags) (list) **and** [`metadata.labels`](/stacks/components/component-metadata#labels) (map) + `--tags`/`--labels` |
+| **Orchestration** | `script {}` blocks + `terramate script run` | [`workflows:`](/workflows) + [custom commands](/cli/configuration/commands) + `dependencies.components` |
+| **Change Detection** | `terramate list --changed` | [`atmos list affected`](/cli/commands/list/affected) / [`atmos describe affected`](/cli/commands/describe/affected) |
+| **Module Source** | `generate_hcl` module block, or a plain `source = "..."` | `source:` for JIT provisioning, or `vendor.yaml` for vendoring |
+| **Stacks** | Directory containing `stack.tm.hcl` | Stack file (YAML), not directory-bound |
+| **Cloud Dashboard** | Terramate Cloud | [Atmos Pro](/pro) |
+| **CLI** | `terramate script run -- deploy` | `atmos terraform plan/apply/deploy`, `atmos workflow <name>` |
+
+### What Atmos Has That Terramate Doesn't
+
+| Feature | Description |
+|---------|-------------|
+| **[Native Authentication](/cli/commands/auth/usage)** | Built-in multi-cloud auth with SAML, SSO, OIDC, and GitHub Actions. No separate tools needed—`atmos auth login` handles it all. |
+| **[Vendoring](/cli/commands/vendor/pull)** | Pull and version external modules locally with `atmos vendor pull`. Terramate has no dedicated vendoring system—module sources are just Terraform's native `source =`. |
+| **Label filtering (AND semantics)** | Terramate tags are list-only, OR-matched. Atmos adds [`metadata.labels`](/stacks/components/component-metadata#labels) (`key: value` map, matched with `--labels` on **all** given pairs)—closer to a Kubernetes label selector. |
+| **[Custom Commands](/cli/configuration/commands)** | Define your own CLI verbs in YAML. Terramate's `script {}` runs a fixed set of job commands per invocation; Atmos custom commands extend the `atmos` CLI surface itself. |
+| **[Terraform Shell](/cli/commands/terraform/shell)** | `atmos terraform shell vpc -s prod` drops you into a configured shell for native Terraform debugging. All vars and backend pre-configured. |
+| **[Component Validation](/cli/commands/validate/stacks)** | JSON Schema and OPA policy validation for stack configurations before deployment. |
+| **[Configuration Provenance](/cli/commands/describe/component)** | `atmos describe component --provenance` traces where every value came from across the import hierarchy—useful since Atmos has no directory-position-based origin the way Terramate's `globals` do. |
+| **[Dependency-Closure Selection](/cli/commands/terraform/plan)** | `--include-dependencies`/`--include-dependents` expand any selector (`--tags`, `--labels`, `--affected`, `-s`) through the dependency graph at runtime—broader than Terramate's static `after`/`before` ordering. |
+
+## Directory Structure Comparison
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Terramate stacks are directories. A `stack.tm.hcl` file marks the directory as a plannable unit, and `generate_hcl` blocks in `imports/` templates emit the actual `.tf` files into each stack directory before Terraform runs.
+
+    ```plaintext
+    infrastructure/
+    ├── terramate.tm.hcl               # Root Terramate config
+    ├── config.tm.hcl                  # Root globals (backend, providers, versions)
+    ├── imports.tm.hcl                 # import { source = "./imports/**/*.tm.hcl" }
+    ├── imports/
+    │   ├── mixins/
+    │   │   ├── backend.tm.hcl         # generate_hcl "backend.tf"
+    │   │   └── terraform.tm.hcl       # generate_hcl "terraform.tf" (providers)
+    │   └── generators/v1/
+    │       └── generate_vpc.tm.hcl    # generate_hcl "main.tf" (module wiring)
+    └── stacks/
+        ├── prod/
+        │   ├── vpc/
+        │   │   ├── stack.tm.hcl       # tags, id, after
+        │   │   ├── main.tf            # GENERATED — do not edit
+        │   │   ├── backend.tf         # GENERATED — do not edit
+        │   │   └── terraform.tf       # GENERATED — do not edit
+        │   └── eks/
+        │       └── stack.tm.hcl       # after = ["tag:vpc"]
+        └── dev/
+            └── vpc/
+                └── stack.tm.hcl
+    ```
+
+    **Characteristics:**
+    - Every stack directory holds a mix of hand-written config (`stack.tm.hcl`, `config.tm.hcl`) and generated Terraform (`main.tf`, `backend.tf`, `terraform.tf`)
+    - The module-calling code is an *output artifact*—edit the generator template, then `terramate generate`, never the `.tf` file directly
+    - Directory position determines both the stack identity and the `globals` inheritance chain
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    With Atmos, components (Terraform root modules) and stacks (YAML config) are cleanly separated, and neither is code-generated from templates. A component is checked-in, static Terraform; a stack is a YAML file that instantiates it with `vars:`.
+
+    ```plaintext
+    infrastructure/
+    ├── atmos.yaml                     # Atmos config (YAML)
+    ├── components/
+    │   └── terraform/
+    │       ├── vpc/
+    │       │   ├── main.tf            # Native Terraform, never generated
+    │       │   └── variables.tf
+    │       └── eks/
+    │           ├── main.tf
+    │           └── variables.tf
+    └── stacks/
+        ├── _defaults/
+        │   └── globals.yaml           # Shared backend/provider defaults
+        ├── prod/
+        │   └── us-east-1.yaml         # vpc + eks instances, tagged
+        └── dev/
+            └── us-east-1.yaml
+    ```
+
+    **Characteristics:**
+    - Component code is fixed; only `vars:` differ per stack instance—no generator template to keep in sync
+    - `backend:`/`providers:` are native stack sections, auto-generated by Atmos itself—no hand-written `generate_hcl` mixin required
+    - One component can be instantiated by any number of stacks with no per-stack copy of its Terraform code
+  </TabItem>
+</Tabs>
+
+**Key difference:** Terramate typically treats each stack's Terraform code as an output of code generation; Atmos treats it as a fixed, portable artifact and only varies configuration around it. This is why a Terramate migration has an extra step the [Terragrunt](/migration/terragrunt) or [Native Terraform](/migration/native-terraform) migrations don't: decompiling a `generate_hcl` generator's templated output back into a real, static `.tf` file once.
+
+:::info Configuration Lives in YAML, Not the Filesystem
+Atmos treats the filesystem as **organization only**—it doesn't influence behavior. All configuration semantics live in YAML stack files and their imports, not in directory position. This means:
+- You can query any component's fully-resolved configuration with `atmos describe component`
+- You can trace where any value came from with `atmos describe component --provenance`
+- Directory structure is purely for human organization, not runtime behavior
+
+This differs from Terramate, where a stack's identity, its `globals` inheritance, and (commonly) its generated Terraform code all derive from where the `stack.tm.hcl` file sits in the directory tree.
+:::
+
+## Concept Mapping
+
+If you're familiar with Terramate, the sections below translate what you already know into Atmos equivalents.
+
+### Stack → Stack Manifest + Component Instance
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    A Terramate stack is a directory marked by `stack.tm.hcl`. The `id` is a stable UUID used as the backend state key—it survives directory renames. `tags` categorize the stack; `after` declares ordering against other tagged stacks.
+
+    <File title="stacks/prod/vpc/stack.tm.hcl">
+    ```hcl
+    stack {
+      name        = "vpc-prod"
+      description = "Production VPC"
+      id          = "db0aac90-33e0-48e2-a5b1-5b680b8b2749"
+      tags        = ["vpc", "production"]
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos stacks are **not filesystem-bound**. A Terramate stack directory typically becomes one component instance inside a named Atmos stack—not a 1:1 directory mapping. Treating them 1:1 is the most common migration mistake; it produces needlessly fragmented stack files.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          metadata:
+            description: "Production VPC"
+            tags: [vpc, production]
+          vars:
+            cidr: "10.0.0.0/16"
+    ```
+    </File>
+
+    To preserve existing state, set the backend `key`/`workspace_key_prefix` to match Terramate's old `id`-derived key exactly—see [Stack Naming for Migrations](#stack-naming-for-migrations) below.
+  </TabItem>
+</Tabs>
+
+### Globals → [Vars](/stacks/vars)
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Terramate `globals` are namespaced (`globals "a" "b" {}`) and deep-merge hierarchically down the directory tree—root config → environment directory → stack directory.
+
+    <File title="stacks/prod/config.tm.hcl">
+    ```hcl
+    globals "vpc" {
+      vpc_name = "vpc-${global.terraform.env}"
+      cidr     = "10.0.0.0/16"
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos `vars`/[`locals`](/stacks/locals) deep-merge through the explicit `import:` graph—the same idea, but not tied to directory position. Atmos is a superset here: use [`!terraform.output`](/functions/yaml/terraform.output)/[`!terraform.state`](/functions/yaml/terraform.state)/`atmos.Component()` for cross-stack reads that Terramate `globals` can't express natively.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    vars:
+      vpc_name: "vpc-{{ .vars.environment }}"
+      cidr: "10.0.0.0/16"
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### `generate_hcl` Mixins → [Backend](/stacks/backend) / [Providers](/stacks/providers)
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Near-universal plumbing—backend and provider config—is templated in a `generate_hcl` mixin and emitted into every stack.
+
+    <File title="imports/mixins/backend.tm.hcl">
+    ```hcl
+    generate_hcl "backend.tf" {
+      content {
+        terraform {
+          backend "s3" {
+            bucket = global.terraform.backend.bucket
+            key    = "terraform/stacks/by-id/${terramate.stack.id}/terraform.tfstate"
+            region = global.terraform.backend.region
+          }
+        }
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos generates `backend.tf.json`/`providers_override.tf.json` natively from stack sections—no `generate_hcl` block to hand-write or keep in sync.
+
+    <File title="stacks/_defaults/globals.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: terraform-state
+          region: us-east-1
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### `generate_hcl` Generators → Component + [Vendoring](/vendor/)
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Per-layer module wiring—the actual `module "vpc" { ... }` call—is commonly hand-templated and generated from `globals`, often gated by a `condition` for staged template-version rollouts.
+
+    <File title="imports/generators/v1/generate_vpc.tm.hcl">
+    ```hcl
+    generate_hcl "main.tf" {
+      condition = global.generators.version == "v1"
+      content {
+        module "vpc" {
+          source  = "terraform-aws-modules/vpc/aws"
+          version = "5.19.0"
+          name    = global.vpc.vpc_name
+          cidr    = global.vpc.cidr
+        }
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    This is a mental-model shift, not a syntax swap: the module *is* the component—static, checked-in code. Only `vars:` vary per stack.
+
+    <File title="components/terraform/vpc/main.tf">
+    ```hcl
+    module "vpc" {
+      source  = "terraform-aws-modules/vpc/aws"
+      version = "5.19.0"
+      name    = var.vpc_name
+      cidr    = var.cidr
+    }
+    ```
+    </File>
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          vars:
+            vpc_name: "vpc-prod"
+            cidr: "10.0.0.0/16"
+    ```
+    </File>
+
+    For modules reused across many stacks, consolidate the `source`/`version` pin into one [`vendor.yaml`](/vendor/) entry (`atmos vendor pull`) instead of repeating it per generator—an auditable, diffable manifest in place of scattered version pins.
+
+    :::tip Staged generator-version rollouts
+    Terramate's `generators/v1`/`v2` directories, gated by `condition`, map to two Atmos options: separate component directories (`vpc`, `vpc-v2`) selected per-stack for a breaking module rewrite, or a per-stack `source`/version override on the same component for a plain version bump.
+    :::
+  </TabItem>
+</Tabs>
+
+### `script {}` → Workflows, Custom Commands, and Dependencies
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    `script {}` bundles job commands, Terramate Cloud sync flags, and (via `terramate script run --changed --tags`) filtering into one construct.
+
+    <File title="stacks/workflows.tm.hcl">
+    ```hcl
+    script "deploy" {
+      job {
+        commands = [
+          ["terraform", "validate"],
+          ["terraform", "plan", "-out", "out.tfplan"],
+          ["terraform", "apply", "-auto-approve", "out.tfplan", {
+            sync_deployment = true
+          }],
+        ]
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos splits the same job across three primitives instead of one: `dependencies.components` for ordering, `workflows:` for the multi-step job itself, and (optionally) a [custom command](/cli/configuration/commands) for a shorter top-level verb.
+
+    <File title="stacks/workflows/deploy.yaml">
+    ```yaml
+    workflows:
+      deploy:
+        steps:
+          - type: atmos
+            command: terraform validate vpc
+          - type: atmos
+            command: terraform deploy vpc
+    ```
+    </File>
+
+    ```bash
+    atmos workflow deploy -s prod-us-east-1
+    ```
+
+    `atmos workflow <name>` is already the direct equivalent of `terramate script run -- <name>`—wrapping it in a custom command is optional. Terramate Cloud's `sync_deployment`/`sync_preview`/`sync_drift_status` map to [Atmos Pro](/pro)'s `settings.pro.drift_detection`, `atmos pro lock`/`unlock`, and `atmos pro commit`.
+  </TabItem>
+</Tabs>
+
+### Tags → [`metadata.tags`](/stacks/components/component-metadata#tags) / [`metadata.labels`](/stacks/components/component-metadata#labels)
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Tags are a flat list, used for CLI filtering, conditional generation, and dependency ordering.
+
+    <File title="stack.tm.hcl">
+    ```hcl
+    stack {
+      tags = ["kubernetes", "production"]
+      after = ["tag:vpc"]
+    }
+    ```
+    </File>
+
+    ```bash
+    terramate list --tags kubernetes
+    terramate script run --tags kubernetes -- deploy
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos has both list-form `tags` (OR-matched by `--tags`) and map-form `labels` (AND-matched by `--labels`), plus stack-wide defaults that deep-merge into every component in a stack.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          metadata:
+            tags: [kubernetes, production]
+            labels:
+              cost-center: platform
+    ```
+    </File>
+
+    ```bash
+    atmos terraform plan --tags kubernetes,production
+    atmos terraform apply --labels cost-center=platform
+    ```
+
+    Read a component's own tags/labels at runtime with the [`!tags`](/functions/yaml/tags)/[`!labels`](/functions/yaml/labels) YAML functions—rarely needed the way Terramate needs `tm_contains(terramate.stack.tags, ...)`, since Atmos components don't hand-generate conditional HCL.
+
+    **The one remaining nuance:** Terramate's `after = ["tag:vpc"]` has no manifest-level equivalent—`dependencies.components[]` only accepts `name`/`component`/`stack`/`kind`, not a tag selector. For declarative ordering, list explicit `dependencies.components[].name` entries. For ad hoc/CI-scoped runs, use `--tags vpc --include-dependents` to expand a tag-selected seed set through the dependency graph at CLI runtime.
+  </TabItem>
+</Tabs>
+
+## Function Mapping
+
+Terramate exposes `tm_*` HCL functions, resolved entirely at `terramate generate` time. Atmos moves the same workflows to Go templates (Sprig/Gomplate) or YAML functions.
+
+| Terramate Function | Atmos Equivalent | Notes |
+|---------------------|-------------------|-------|
+| `tm_try(a, b, default)` | Sprig `default`, or `{{ if }}` | Fallback if a value errors/is unset |
+| `tm_contains(list, item)` | Sprig `has` | Membership test |
+| `tm_alltrue(list)` | Sprig/template `and` chain, or logic in `locals:` | AND-combine boolean conditions |
+| `tm_length(x)` / `tm_split(sep, x)` | Sprig `len` / `splitList` | |
+| `tm_can(expr)` | No direct equivalent—use error-tolerant `{{ if }}` guards | |
+| `tm_dynamic` | Stays in `.tf` (Terraform's own `dynamic` block), or `!template`/template loops for stack-level generation | Atmos rarely needs this since modules aren't hand-assembled |
+
+:::tip YAML Functions vs Templates
+Atmos offers two ways to access dynamic values:
+- **YAML Functions** (`!exec`, `!env`, `!terraform.output`, `!tags`, `!labels`) — Preferred. Validated at parse time, readable, works with YAML tooling.
+- **Go Templates** (`{{ env "VAR" }}`) — Escape hatch when YAML functions don't cover the use case.
+
+See [YAML Functions](/functions/yaml) for the complete reference.
+:::
+
+## CLI Command Comparison
+
+<Tabs>
+  <TabItem value="terramate" label="Terramate" default>
+    Terramate commands scope to a directory with `-C`, and `script run` invokes a named job across all matching stacks.
+
+    ```bash
+    # Plan/deploy one stack
+    terramate script run -C stacks/prod/vpc preview
+    terramate script run -C stacks/prod/vpc deploy
+
+    # What changed since the last commit
+    terramate list --changed
+
+    # Deploy everything changed, in dependency order
+    terramate script run --changed --parallel 4 -- deploy
+
+    # Reconcile only drifted, tagged stacks
+    terramate script run --tags reconcile --status=drifted -- drift reconcile
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos commands run from anywhere in the repo—no directory scoping needed.
+
+    ```bash
+    # Plan/apply one component
+    atmos terraform plan vpc -s prod-us-east-1
+    atmos terraform apply vpc -s prod-us-east-1
+
+    # What changed since the last commit
+    atmos list affected
+    atmos describe affected
+
+    # Apply everything affected, in dependency order
+    atmos terraform apply --affected --max-concurrency 4
+
+    # Apply only tagged components (composes with --labels, --affected, --all)
+    atmos terraform apply --tags reconcile
+
+    # Expand a tag-selected seed set through the dependency graph
+    atmos terraform plan --labels env=prod --include-dependencies
+    ```
+  </TabItem>
+</Tabs>
+
+## Migration Steps
+
+### Step 1: Convert `stack.tm.hcl` + `globals` to Stack YAML
+
+<Tabs>
+  <TabItem value="terramate" label="Before (Terramate)" default>
+    <File title="stacks/prod/vpc/stack.tm.hcl">
+    ```hcl
+    stack {
+      name = "vpc-prod"
+      id   = "db0aac90-33e0-48e2-a5b1-5b680b8b2749"
+      tags = ["vpc"]
+    }
+    ```
+    </File>
+    <File title="stacks/prod/config.tm.hcl">
+    ```hcl
+    globals "vpc" {
+      cidr = "10.0.0.0/16"
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          metadata:
+            tags: [vpc]
+          vars:
+            cidr: "10.0.0.0/16"
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Step 2: Decompile Generated Modules into Static Components
+
+:::info What's a Root Module?
+In Terraform, a **root module** is the top-level directory where you run `terraform plan`/`terraform apply`; it has its own state. In Atmos terminology, root modules are called **components**.
+:::
+
+<Tabs>
+  <TabItem value="terramate" label="Before (Terramate)" default>
+    The module call lives only as a `generate_hcl` template—there's no checked-in `main.tf` to move.
+
+    ```plaintext
+    imports/generators/v1/
+    └── generate_vpc.tm.hcl   # templates module "vpc" { ... }
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    Run `terramate generate` once to materialize the current output, then copy the *generated* `main.tf` into a component directory and replace the literal `global.*` values with `var.*` references.
+
+    ```plaintext
+    components/terraform/
+    └── vpc/
+        ├── main.tf          # the decompiled module block, now static
+        └── variables.tf
+    ```
+
+    This is the one step with no equivalent in a [Terragrunt](/migration/terragrunt) or [Native Terraform](/migration/native-terraform) migration, since those tools never hand-generate the module-calling code in the first place.
+  </TabItem>
+</Tabs>
+
+### Step 3: Replace `generate_hcl` Mixins with Native Backend/Provider Sections
+
+<Tabs>
+  <TabItem value="terramate" label="Before (Terramate)" default>
+    <File title="imports/mixins/backend.tm.hcl">
+    ```hcl
+    generate_hcl "backend.tf" {
+      content {
+        terraform {
+          backend "s3" {
+            bucket = global.terraform.backend.bucket
+            key    = "terraform/stacks/by-id/${terramate.stack.id}/terraform.tfstate"
+            region = global.terraform.backend.region
+          }
+        }
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    <File title="stacks/_defaults/globals.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: terraform-state
+          region: us-east-1
+    ```
+    </File>
+
+    Atmos generates `backend.tf.json` automatically before `terraform init`—no mixin required. To keep reading/writing the same state Terramate wrote, set the backend `key`/`workspace_key_prefix` to match Terramate's old `id`-derived key exactly.
+  </TabItem>
+</Tabs>
+
+### Step 4: Convert `script {}` to Workflows
+
+<Tabs>
+  <TabItem value="terramate" label="Before (Terramate)" default>
+    <File title="stacks/workflows.tm.hcl">
+    ```hcl
+    script "deploy" {
+      job {
+        commands = [
+          ["terraform", "plan", "-out", "out.tfplan"],
+          ["terraform", "apply", "-auto-approve", "out.tfplan"],
+        ]
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    <File title="stacks/workflows/deploy.yaml">
+    ```yaml
+    workflows:
+      deploy:
+        steps:
+          - type: atmos
+            command: terraform deploy vpc
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+## Migration Checklist
+
+<TaskList>
+- [ ] Install Atmos CLI ([Installation Guide](/install))
+- [ ] Create `atmos.yaml` configuration
+- [ ] Run `terramate generate` to materialize the current output of every `generate_hcl` generator
+- [ ] Decompile generated module blocks into static components under `components/terraform/`
+- [ ] Convert `stack.tm.hcl` + `globals` to stack YAML
+- [ ] Replace `generate_hcl` backend/provider mixins with native `backend:`/`providers:` sections
+- [ ] Convert `tags`/`after` ordering to `metadata.tags`/`metadata.labels` and `dependencies.components`
+- [ ] Convert `script {}` blocks to `workflows:` (and custom commands, if needed)
+- [ ] Match backend state keys exactly to preserve existing state
+- [ ] Consolidate reused module versions into `vendor.yaml`
+- [ ] Replace Terramate Cloud sync flags with Atmos Pro (`settings.pro`)
+- [ ] Test with `atmos terraform plan`
+- [ ] Update CI/CD pipelines
+- [ ] Train team on new commands
+</TaskList>
+
+## Stack Naming for Migrations
+
+Every Atmos command requires a stack name—whether you're running `atmos terraform plan -s <stack>`, listing stacks with `atmos list stacks`, or referencing dependencies. You need to define how Atmos determines these names.
+
+You have two options:
+
+### Option 1: Use `name_template` (Recommended for Consistent Patterns)
+
+If you have consistent context variables across all your stacks, configure `name_template` in `atmos.yaml` to programmatically compute stack names:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+```
+</File>
+
+### Option 2: Use Explicit `name` Field (For Inconsistent or Legacy Naming)
+
+If your infrastructure doesn't follow a strict naming convention—common when Terramate stack `id`s and directory names diverged over time—use the `name` field to explicitly specify the stack name:
+
+<File title="stacks/us-east-1/prod/vpc.yaml">
+```yaml
+name: "prod-us-east-1-vpc"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+The `name` field takes precedence over `name_template`, so you can use both—template for most stacks, explicit names for exceptions. For complete documentation, see [Stack Names](/stacks/name).
+
+## Why Migrate?
+
+### Advantages of Atmos
+
+- **No code generation to keep in sync** — components are static Terraform; only configuration varies per stack
+- **Native backend/provider generation** — no `generate_hcl` mixin to write and maintain
+- **Both tags and labels** — list-form OR filtering plus map-form AND filtering, with stack-wide defaults
+- **Deep merge semantics** — imports aren't tied to directory position
+- **Multi-tool orchestration** — not just Terraform (Helmfile, Packer, Ansible, Helm, Kubernetes)
+- **Active development** — regular releases, responsive community
+
+### When to Stay with Terramate
+
+- **It's working for you** — if your team knows Terramate well and has no pain points, there's no reason to change
+- **Heavy dynamic generation** — if you rely on `generate_hcl` to synthesize substantially different module code per environment (not just config), Terramate's full HCL templating power may be necessary
+- **`.tmtriggers` change-detection overrides** — Terramate's CLI-managed "ignore this change" records have no Atmos equivalent; if your team relies on them heavily, budget time to redesign around `dependencies.files`/`dependencies.folders` scoping instead
+
+## Get Help
+
+Migrating a large codebase? We're here to help:
+
+- **[Slack Community](/community/slack)** - Ask migration questions
+- **[Office Hours](/community/office-hours)** - Live support for complex migrations
+- **[GitHub Discussions](https://github.com/cloudposse/atmos/discussions)** - Share your migration story
+
+## Next Steps
+
+Now that you understand the migration path:
+
+- **[Learn YAML in Atmos](/learn/yaml)** - YAML is more powerful than you might think
+- **[Explore YAML Functions](/functions/yaml)** - `!terraform.output`, `!tags`, `!labels`, and more
+- **[Try the Quick Start](/quick-start/simple)** - Get hands-on with Atmos
+- **[Read Core Concepts](/learn/why-atmos)** - Understand Atmos deeply
+- **[Explore Stack Configuration](/stacks/)** - Advanced YAML features
