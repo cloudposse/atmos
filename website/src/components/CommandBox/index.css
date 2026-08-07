@@ -50,7 +50,7 @@ html[data-theme='light'] .command-box__label {
 }
 
 .command-box__code {
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-family: Monaco, Menlo, 'Courier New', monospace;
   font-size: 0.9rem;
   color: #fff;
   flex: 1;
