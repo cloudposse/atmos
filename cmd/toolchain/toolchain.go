@@ -131,6 +131,7 @@ func init() {
 	toolchainCmd.AddCommand(infoCmd)
 	toolchainCmd.AddCommand(installCmd)
 	toolchainCmd.AddCommand(listCmd)
+	toolchainCmd.AddCommand(lockCmd)
 	toolchainCmd.AddCommand(pathCmd)
 	toolchainCmd.AddCommand(registrycmd.GetRegistryCommand())
 	toolchainCmd.AddCommand(removeCmd)

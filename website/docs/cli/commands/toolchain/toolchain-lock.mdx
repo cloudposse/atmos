@@ -1,0 +1,82 @@
+---
+title: atmos toolchain lock
+sidebar_label: lock
+sidebar_class_name: command
+id: lock
+description: Generate or refresh toolchain.lock.yaml without reinstalling tools.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate or refresh `toolchain.lock.yaml` for tools already configured in `.tool-versions`, without extracting or installing binaries into the toolchain tree. This is the command to reach for when you've turned on [`toolchain.use_lock_file`](/cli/configuration/toolchain) for an existing project and want to populate the lock file for tools that are already installed — without forcing a full `--reinstall` of every one of them.
+</Intro>
+
+<CastPlayer title="atmos toolchain lock --help" src="/casts/screengrabs/atmos-toolchain-lock--help.cast" static chrome />
+
+## Usage
+
+Execute the `toolchain lock` command like this:
+
+```shell
+atmos toolchain lock
+```
+
+## Why a Separate Command
+
+`atmos toolchain install` only writes a lock entry as a side effect of actually
+installing a tool — and it skips tools that are already installed unless you
+pass `--reinstall`. That means turning on `use_lock_file: true` for a project
+whose tools were installed before the lock file existed leaves those entries
+missing until every tool is forced to reinstall.
+
+`lock` downloads and verifies each tool's artifact — the same way `install`
+does, to compute a real checksum — but stops short of extracting or placing a
+binary in the toolchain tree. It only writes/updates the tool's
+`toolchain.lock.yaml` entry, so it works the same whether the tool is already
+installed or not, and never touches an already-installed binary.
+
+## Examples
+
+```shell
+# Lock every tool in .tool-versions
+atmos toolchain lock
+
+# Lock specific tools
+atmos toolchain lock terraform
+atmos toolchain lock terraform kubectl
+
+# Limit this batch to two concurrent locks
+atmos toolchain lock --max-concurrency 2
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool...` <em>(optional)</em></dt>
+    <dd>
+        One or more tools to lock. Each tool can be a short name (alias) or full `owner/repo` format.
+        If omitted, locks every version configured for every tool in `.tool-versions`.
+
+        Examples: `terraform`, `hashicorp/terraform`, `kubectl`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of tools to lock concurrently. The default is `4`.
+        Use a positive integer; values lower than `1` are rejected. Resolved
+        the same way as [`install`'s `--max-concurrency`](/cli/commands/toolchain/install#parallel-install-configuration):
+        `--max-concurrency`, `ATMOS_TOOLCHAIN_MAX_CONCURRENCY`, `toolchain.max_concurrency`, then `4`.
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools from `.tool-versions` (also updates the lock file for tools it installs)
+- [`atmos toolchain update`](/cli/commands/toolchain/update) - Move a pinned tool forward to its newest version
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools and their versions

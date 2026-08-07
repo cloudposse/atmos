@@ -327,6 +327,7 @@ commands:
           atmos toolchain info --help
           atmos toolchain install --help
           atmos toolchain list --help
+          atmos toolchain lock --help
           atmos toolchain path --help
           atmos toolchain registry --help
           atmos toolchain registry list --help
@@ -720,6 +721,7 @@ commands:
           atmos toolchain info --help
           atmos toolchain install --help
           atmos toolchain list --help
+          atmos toolchain lock --help
           atmos toolchain path --help
           atmos toolchain registry --help
           atmos toolchain registry list --help

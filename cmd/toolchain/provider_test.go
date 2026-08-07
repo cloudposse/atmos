@@ -79,6 +79,14 @@ func TestCommandProviderImplementations(t *testing.T) {
 			getFlagsBuilder:   func() flags.Builder { return (&ListCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
+			name:              "LockCommandProvider",
+			providerName:      "lock",
+			commandName:       "lock",
+			group:             "Toolchain Commands",
+			expectFlagsParser: true,
+			getFlagsBuilder:   func() flags.Builder { return (&LockCommandProvider{}).GetFlagsBuilder() },
+		},
+		{
 			name:              "PathCommandProvider",
 			providerName:      "path",
 			commandName:       "path",
