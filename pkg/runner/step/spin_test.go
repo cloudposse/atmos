@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -477,7 +476,7 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
 		Name:    "run",
 		Title:   "Run",
-		Command: strconv.Quote(executable) + " -test.run=^$",
+		Command: shellQuoteArgument(executable) + " " + shellQuoteArgument("-test.run=^$"),
 	}, vars)
 
 	require.NoError(t, err)
@@ -485,6 +484,13 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	assert.Contains(t, stderr.String(), "spin-stderr")
 	assert.Contains(t, result.Metadata["stdout"], "spin-stdout")
 	assert.Contains(t, result.Metadata["stderr"], "spin-stderr")
+}
+
+func shellQuoteArgument(argument string) string {
+	if runtime.GOOS == "windows" {
+		return `"` + strings.ReplaceAll(argument, `"`, `""`) + `"`
+	}
+	return "'" + strings.ReplaceAll(argument, "'", "'\\''") + "'"
 }
 
 // TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY
