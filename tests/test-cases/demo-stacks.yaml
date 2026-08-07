@@ -16,6 +16,7 @@ tests:
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
+        - "\\bgcp\\b"
         - "\\bcompletion\\b"
         - "\\bdescribe\\b"
         - "\\bdocs\\b"

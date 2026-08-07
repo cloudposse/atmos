@@ -220,3 +220,37 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestAtmosSchema_ValidGKEIntegration(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	schemaData, err := fetcher.FetchData("atmos://schema/atmos/config/1.0")
+	require.NoError(t, err)
+
+	document := map[string]interface{}{
+		"auth": map[string]interface{}{
+			"integrations": map[string]interface{}{
+				"example-gke": map[string]interface{}{
+					"kind": "gcp/gke",
+					"via":  map[string]interface{}{"identity": "example-deployer"},
+					"spec": map[string]interface{}{
+						"cluster": map[string]interface{}{
+							"name":       "example-cluster",
+							"project_id": "example-project",
+							"location":   "us-central1",
+							"alias":      "example",
+							"kubeconfig": map[string]interface{}{
+								"path":   "/tmp/example-kubeconfig",
+								"update": "replace",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	documentJSON, err := json.Marshal(document)
+	require.NoError(t, err)
+	result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(schemaData), gojsonschema.NewBytesLoader(documentJSON))
+	require.NoError(t, err)
+	assert.True(t, result.Valid(), "GKE integration config should satisfy the embedded schema: %v", result.Errors())
+}

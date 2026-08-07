@@ -41,6 +41,7 @@ BUILT-IN COMMANDS
       emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
                                              registries
       env                                    Output environment variables configured in atmos.yaml
+      gcp [command]                          Run GCP-specific commands for interacting with cloud resources
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments

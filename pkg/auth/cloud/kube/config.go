@@ -60,12 +60,12 @@ type ClusterInfo struct {
 
 	// ID uniquely identifies the cluster and is used as the kubeconfig
 	// cluster map key and default context name: the ARN for EKS, the ARM
-	// resource ID for AKS.
+	// resource ID for AKS, or the canonical GKE resource name.
 	ID string
 
 	// Region disambiguates the generated exec-plugin username when the same
 	// cluster name exists in more than one place: the AWS region for EKS,
-	// the resource group for AKS.
+	// the resource group for AKS, or the project and location for GKE.
 	Region string
 
 	// UserPrefix distinguishes the exec-plugin username by cloud, e.g. "eks"
@@ -83,7 +83,7 @@ type ClusterInfo struct {
 	ExecEnv []clientcmdapi.ExecEnvVar
 }
 
-// KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS).
+// KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS, GKE).
 type KubeconfigManager struct {
 	path string
 	mode os.FileMode

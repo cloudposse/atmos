@@ -3054,7 +3054,7 @@
               "type": "null"
             }
           ],
-          "description": "Name is the cluster name (required by both aws/eks and azure/aks)."
+          "description": "Name is the cluster name (required by aws/eks, azure/aks, and gcp/gke)."
         },
         "region": {
           "anyOf": [
@@ -3089,6 +3089,28 @@
           ],
           "description": "SubscriptionID optionally overrides the Azure subscription used to address\nthe cluster (azure/aks); defaults to the identity's subscription."
         },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ProjectID is the GCP project containing the cluster (required for gcp/gke)."
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Location is the GCP region or zone containing the cluster (required for gcp/gke)."
+        },
         "alias": {
           "anyOf": [
             {
@@ -3116,7 +3138,7 @@
         }
       },
       "type": "object",
-      "description": "Cluster represents a Kubernetes cluster configuration shared by aws/eks\nand azure/aks integrations. Each integration kind reads only the fields it\nneeds: aws/eks requires Name+Region; azure/aks requires Name+ResourceGroup."
+      "description": "Cluster represents a Kubernetes cluster configuration shared by aws/eks,\nazure/aks, and gcp/gke integrations. Each integration kind reads only the\nfields it needs: aws/eks requires Name+Region; azure/aks requires\nName+ResourceGroup; gcp/gke requires Name+ProjectID+Location."
     },
     "Command": {
       "properties": {
@@ -6017,7 +6039,7 @@
         }
       },
       "type": "object",
-      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS).\nIntegrations derive credentials from identities for service-specific access."
+      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS, GKE).\nIntegrations derive credentials from identities for service-specific access."
     },
     "IntegrationSpec": {
       "properties": {
