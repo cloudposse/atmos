@@ -39,6 +39,12 @@ func (p *Provider) postComment(ctx context.Context, opts *provider.PostCommentOp
 	if err := validatePostCommentOptions(opts); err != nil {
 		return nil, err
 	}
+	maskedOpts := *opts
+	maskedOpts.Body = provider.MaskPublishedContent(opts.Body)
+	if err := validatePostCommentOptions(&maskedOpts); err != nil {
+		return nil, err
+	}
+	opts = &maskedOpts
 
 	behavior, err := normalizeBehavior(opts.Behavior)
 	if err != nil {

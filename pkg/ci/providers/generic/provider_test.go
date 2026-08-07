@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,6 +108,23 @@ func TestOutputWriter(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "# Summary")
 		assert.Contains(t, string(content), "Test content")
+	})
+
+	t.Run("WriteSummary masks registered secrets", func(t *testing.T) {
+		atmosio.Reset()
+		t.Cleanup(atmosio.Reset)
+
+		const secret = "generic-summary-secret-ABCD1234"
+		atmosio.RegisterSecret(secret)
+
+		summaryFile := filepath.Join(t.TempDir(), "summary")
+		w := &OutputWriter{summaryFile: summaryFile}
+		require.NoError(t, w.WriteSummary("credential: "+secret))
+
+		content, err := os.ReadFile(summaryFile)
+		require.NoError(t, err)
+		assert.NotContains(t, string(content), secret)
+		assert.Contains(t, string(content), atmosio.MaskReplacement)
 	})
 
 	t.Run("WriteOutput without file logs debug", func(t *testing.T) {
