@@ -194,7 +194,7 @@ func TestWhichCommand_CanonicalName(t *testing.T) {
 
 // TestWhichCommand_StoredAsCanonicalLookupByAlias reproduces a bug where
 // .tool-versions stores a tool under its canonical owner/repo key (e.g.
-// "helm/helm") — which is what the write-side dedup (wouldCreateDuplicate)
+// "helm/helm") — which is what the write-side dedup (findDuplicateKey)
 // keeps when install paths canonicalize — but findBinaryPath does a raw
 // map lookup and misses when the caller asks by alias (e.g. "helm").
 //
