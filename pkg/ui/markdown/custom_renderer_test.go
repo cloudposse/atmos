@@ -218,6 +218,7 @@ func TestCustomRenderer_Render_PackageRefLinkify(t *testing.T) {
 		name        string
 		input       string
 		mustContain []string
+		wantCount   map[string]int
 	}{
 		{
 			name:        "owner/repo@version in a success message",
@@ -234,6 +235,14 @@ func TestCustomRenderer_Render_PackageRefLinkify(t *testing.T) {
 			input:       "Updated jq from jqlang/jq@1.7.1 to jqlang/jq@1.9.0",
 			mustContain: []string{"jqlang/jq@1.7.1", "jqlang/jq@1.9.0"},
 		},
+		{
+			// Regression coverage for an implementation that dedupes by label and
+			// always keeps only the first occurrence -- that would pass the "two
+			// different refs" case above but drop a genuinely repeated reference.
+			name:      "same package ref twice",
+			input:     "Updated jqlang/jq@1.9.0 then jqlang/jq@1.9.0",
+			wantCount: map[string]int{"jqlang/jq@1.9.0": 2},
+		},
 	}
 
 	for _, tt := range tests {
@@ -243,6 +252,9 @@ func TestCustomRenderer_Render_PackageRefLinkify(t *testing.T) {
 			stripped := stripANSIForTest(result)
 			for _, want := range tt.mustContain {
 				assert.Contains(t, stripped, want, "rendered output: %q", stripped)
+			}
+			for want, count := range tt.wantCount {
+				assert.Equal(t, count, strings.Count(stripped, want), "rendered output: %q", stripped)
 			}
 		})
 	}
