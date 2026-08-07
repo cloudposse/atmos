@@ -108,7 +108,7 @@ func (w *LinePrefixWriter) Flush() error {
 	return nil
 }
 
-// flushCompleteLinesLocked writes buffered complete lines while w.mu is held.
+// flushCompleteLinesLocked writes buffered complete lines while w.mu and w.writeMu are held.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	for {
 		idx := lineEndIndex(w.buffer)
