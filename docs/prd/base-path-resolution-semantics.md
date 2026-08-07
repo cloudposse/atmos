@@ -378,8 +378,8 @@ function classify(value):
     if isAbsolute(value):
         return ABSOLUTE
     if value == "." or value == ".."
-       or startsWith(value, "./") or startsWith(value, "../")
-       or startsWith(value, ".\\") or startsWith(value, "..\\"):  # Windows
+        or startsWith(value, "./") or startsWith(value, "../")
+        or startsWith(value, ".\\") or startsWith(value, "..\\"):  # Windows
         return DOT
     return BARE
 ```
