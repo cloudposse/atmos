@@ -191,5 +191,5 @@ exclude = [
   "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
   # reproducible-builds.org intermittently refuses connections from CI
   # runners ("Connection refused"); verified to return 200 outside CI via curl.
-  "reproducible-builds\\.org/docs/source-date-epoch",
+  "reproducible-builds\\.org/docs/source-date-epoch/?$",
 ]

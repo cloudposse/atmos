@@ -135,8 +135,11 @@ signal "I didn't handle this, please continue with normal processing."
 >   `pkg/utils/yaml_utils.go` and additionally includes `!labels`, `!labels.keys`,
 >   `!labels.values`, and `!tags` — the four functions whose omission was the literal #2888 bug.
 >
-> See the ["Implementation Status"](#implementation-status) section below for the as-shipped
-> design.
+> See the top [Status](#status) section and the
+> [Completion Plan](#completion-plan-wiring-post-merge-resolution-plan-b) below for the as-shipped
+> design. The "Implementation Status" section further down is historical: it records the
+> Version 2.0 pre-fix state, where every production call site passed `processor = nil` and the
+> mechanism was never actually wired up (see [Known Gap: #2888](#known-gap-2888--deferred-values-are-never-actually-resolved-in-production)).
 
 ### Core Concept
 
