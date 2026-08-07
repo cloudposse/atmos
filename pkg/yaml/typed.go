@@ -53,7 +53,7 @@ const (
 // than today's silent string. Extending the parsers to accept them too is a
 // separate, larger behavior change, tracked as a follow-up rather than
 // bundled here.
-var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|nan|[+-]?(?:[0-9](?:_?[0-9])*(?:\.[0-9_]*)?|\.[0-9](?:_?[0-9])*)(?:e[+-]?[0-9]+)?)$`)
+var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|nan|[+-]?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:e[+-]?[0-9]+)?)$`)
 
 // LooksNonString reports whether raw looks like it was meant to be a bool or
 // number (e.g. "true", "42", "3.14") rather than a literal string. Callers use

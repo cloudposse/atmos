@@ -40,6 +40,15 @@ func TestLooksNonString(t *testing.T) {
 		{"octal literal", "0o17", false},
 		{"leading-dot inf", ".inf", false},
 		{"negative leading-dot inf", "-.inf", false},
+		// Regression (CodeRabbit finding on PR #2897): the fractional branch
+		// must reject misplaced underscores -- a trailing underscore right
+		// after the last fraction digit, or one immediately after the
+		// decimal point with no digit before it -- since strconv.ParseFloat
+		// rejects both. Only underscores strictly between two digits are a
+		// valid Go/YAML digit separator.
+		{"trailing underscore after fraction digit", "1.2_", false},
+		{"underscore immediately after decimal point", "1._2", false},
+		{"underscore between fraction digits", "1.2_3", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

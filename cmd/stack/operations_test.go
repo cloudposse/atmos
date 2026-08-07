@@ -470,12 +470,12 @@ func TestRunStackSet_ExplicitFile_AutoInfersFromInheritedValue(t *testing.T) {
 
 	flagStack = "nonprod"
 	flagComponent = "mycomponent"
-	flagFile = "stacks/deploy/nonprod.yaml"
+	flagFile = filepath.Join("stacks", "deploy", "nonprod.yaml")
 	flagType = atmosyaml.TypeAuto
 
 	require.NoError(t, runStackSet([]string{"vars.replicas", "3"}))
 
-	raw, err := os.ReadFile("stacks/deploy/nonprod.yaml")
+	raw, err := os.ReadFile(flagFile)
 	require.NoError(t, err)
 	content := string(raw)
 	assert.Contains(t, content, "replicas: 3")
