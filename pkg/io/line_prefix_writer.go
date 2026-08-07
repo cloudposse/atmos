@@ -65,6 +65,13 @@ func (w *LinePrefixWriter) Write(p []byte) (int, error) {
 	}
 
 	w.buffer = append(w.buffer, p...)
+
+	// Hold writeMu for the whole flush so that every line produced by this
+	// single Write call reaches the shared writer as one contiguous block.
+	// Locking per-line let a concurrent node's writer interleave a line in
+	// between two lines emitted from the same Write call.
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
 	if err := w.flushCompleteLinesLocked(); err != nil {
 		return 0, err
 	}
@@ -81,6 +88,10 @@ func (w *LinePrefixWriter) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil
 	}
+
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
+
 	if err := w.flushCompleteLinesLocked(); err != nil {
 		return err
 	}
@@ -95,7 +106,7 @@ func (w *LinePrefixWriter) Flush() error {
 	return nil
 }
 
-// flushCompleteLinesLocked writes buffered complete lines while w.mu is held.
+// flushCompleteLinesLocked writes buffered complete lines while w.mu and w.writeMu are held.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	for {
 		idx := lineEndIndex(w.buffer)
@@ -115,12 +126,11 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 }
 
 // writeLine writes one already-delimited line with the configured prefix.
+// Callers must hold w.writeMu.
 func (w *LinePrefixWriter) writeLine(line []byte) error {
 	if w.w == nil {
 		return nil
 	}
-	w.writeMu.Lock()
-	defer w.writeMu.Unlock()
 
 	line = bytes.ReplaceAll(line, crlfBytes, lfBytes)
 	line = bytes.ReplaceAll(line, crBytes, lfBytes)
