@@ -126,6 +126,7 @@ const (
 	PathsSectionName                  = "paths"
 	ManifestsSectionName              = "manifests"
 	RenderSectionName                 = "render"
+	ValidateSectionName               = "validate"
 	ValuesSectionName                 = "values"
 	ValuesFilesSectionName            = "values_files"
 	PluginsSectionName                = "plugins"
