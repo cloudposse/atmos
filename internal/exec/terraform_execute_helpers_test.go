@@ -426,7 +426,7 @@ func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
 		},
 	}
 
-	_, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
@@ -447,7 +447,7 @@ func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
 		ComponentSection: map[string]any{}, // no WorkdirPathKey
 	}
 
-	_, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
@@ -458,7 +458,7 @@ func TestPrepareInitExecutionPropagatesOutputSuppression(t *testing.T) {
 	originalExecuteProvisioners := executeBeforeInitProvisioners
 	t.Cleanup(func() { executeBeforeInitProvisioners = originalExecuteProvisioners })
 	var observedSuppression atomic.Bool
-	executeBeforeInitProvisioners = func(ctx context.Context, _ provisioner.HookEvent, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ ...*provisioner.TerraformExecContext) error {
+	executeBeforeInitProvisioners = func(ctx context.Context, _ provisioner.HookEvent, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ provisioner.OutputWriters, _ ...*provisioner.TerraformExecContext) error {
 		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
 		return nil
 	}
@@ -466,7 +466,7 @@ func TestPrepareInitExecutionPropagatesOutputSuppression(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
 
-	_, err := prepareInitExecution(provWorkdir.WithOutputSuppressed(t.Context()), &atmosConfig, &info, t.TempDir())
+	_, err := prepareInitExecution(provWorkdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, &atmosConfig, &info, t.TempDir())
 	require.NoError(t, err)
 	require.True(t, observedSuppression.Load())
 }
@@ -476,7 +476,7 @@ func TestResolveAndProvisionComponentPathPropagatesOutputSuppression(t *testing.
 	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
 
 	var observedSuppression atomic.Bool
-	provisionAndResolveTerraformComponentPath = func(ctx context.Context, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, componentPath string) (string, bool, error) {
+	provisionAndResolveTerraformComponentPath = func(ctx context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, componentPath string) (string, bool, error) {
 		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
 		return componentPath, true, nil
 	}
@@ -484,7 +484,7 @@ func TestResolveAndProvisionComponentPathPropagatesOutputSuppression(t *testing.
 	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
 	info := schema.ConfigAndStacksInfo{FinalComponent: "component"}
 
-	_, err := resolveAndProvisionComponentPath(provWorkdir.WithOutputSuppressed(t.Context()), &atmosConfig, &info)
+	_, err := resolveAndProvisionComponentPath(provWorkdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, &atmosConfig, &info)
 	require.NoError(t, err)
 	require.True(t, observedSuppression.Load())
 }

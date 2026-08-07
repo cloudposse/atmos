@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -46,6 +47,7 @@ type componentExecContext struct {
 // Extracting this reduces ExecuteTerraform's cyclomatic complexity by ~10 decision points.
 func prepareComponentExecution(
 	ctx context.Context,
+	writers provisioner.OutputWriters,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
@@ -54,7 +56,7 @@ func prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := resolveAndProvisionComponentPath(ctx, atmosConfig, info)
+	componentPath, err := resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}

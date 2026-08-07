@@ -467,12 +467,12 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	var stdout, stderr bytes.Buffer
-	ctx := WithOutputWriters(WithOutputSuppressed(t.Context()), OutputWriters{
+	ctx := WithOutputSuppressed(t.Context())
+	vars := NewVariables()
+	vars.OutputWriters = OutputWriters{
 		Stdout: &stdout,
 		Stderr: &stderr,
-	})
-
-	vars := NewVariables()
+	}
 	vars.Env["_ATMOS_STEP_FAKE"] = "spin-output"
 	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
 		Name:    "run",

@@ -135,6 +135,7 @@ type TerraformSelection struct {
 // ExecuteTerraform runs selected Terraform components through the shared scheduler.
 func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	defer perf.Track(opts.AtmosConfig, "scheduler.adapters.ExecuteTerraform")()
+
 	if ctx == nil {
 		ctx = context.Background()
 	}

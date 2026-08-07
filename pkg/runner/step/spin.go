@@ -66,7 +66,7 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	var stdout, stderr bytes.Buffer
-	writers := OutputWritersFromContext(ctx)
+	writers := vars.OutputWriters
 	stdoutWriter := io.Writer(&stdout)
 	stderrWriter := io.Writer(&stderr)
 	if writers.Stdout != nil {

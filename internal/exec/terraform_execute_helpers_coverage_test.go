@@ -23,6 +23,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -372,7 +373,7 @@ func TestPrepareInitExecution_WorkdirPath_ReturnsWorkdir(t *testing.T) {
 		},
 	}
 
-	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, customWorkdir, result)
 }
@@ -386,7 +387,7 @@ func TestPrepareInitExecution_NoWorkdirPath_ReturnsOriginalPath(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, tmpDir, result)
 }
@@ -402,7 +403,7 @@ func TestPrepareInitExecution_EmptyWorkdirPath_ReturnsOriginalPath(t *testing.T)
 		},
 	}
 
-	result, err := prepareInitExecution(t.Context(), &atmosConfig, &info, tmpDir)
+	result, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, tmpDir, result)
 }

@@ -1402,7 +1402,7 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
 }
 
@@ -1451,7 +1451,7 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// The guard marker must now be present in componentConfig.
@@ -1488,8 +1488,8 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 		},
 	}
 
-	ctx := provisioner.WithOutputWriters(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{Stderr: &componentOutput})
-	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	ctx := workdir.WithOutputSuppressed(t.Context())
+	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{Stderr: &componentOutput})
 	require.NoError(t, err)
 	assert.Empty(t, uiOutput.String())
 	assert.Contains(t, componentOutput.String(), "Auto-provisioned source to")
@@ -1497,18 +1497,18 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 
 func TestWriteWarning_UsesComponentWriterWhenSuppressed(t *testing.T) {
 	var output bytes.Buffer
-	ctx := provisioner.WithOutputWriters(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{Stderr: &output})
+	ctx := workdir.WithOutputSuppressed(t.Context())
 
-	writeWarning(ctx, "metadata update failed")
+	writeWarning(ctx, provisioner.OutputWriters{Stderr: &output}, "metadata update failed")
 
 	assert.Equal(t, "WARNING: metadata update failed\n", output.String())
 }
 
 func TestWriteInfo_UsesComponentWriterWhenSuppressed(t *testing.T) {
 	var output bytes.Buffer
-	ctx := provisioner.WithOutputWriters(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{Stderr: &output})
+	ctx := workdir.WithOutputSuppressed(t.Context())
 
-	writeInfo(ctx, "Source version changed")
+	writeInfo(ctx, provisioner.OutputWriters{Stderr: &output}, "Source version changed")
 
 	assert.Equal(t, "Source version changed\n", output.String())
 }
@@ -1530,7 +1530,7 @@ func TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir(t *testi
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.NoDirExists(t, filepath.Join(tmpDir, "app"),
@@ -1555,7 +1555,7 @@ func TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir(t *test
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.DirExists(t, targetDir,

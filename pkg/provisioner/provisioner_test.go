@@ -198,7 +198,7 @@ func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
 		"provision": map[string]any{
 			"backend": map[string]any{"enabled": true},
 		},
-	}, nil, nil)
+	}, nil, OutputWriters{}, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, backendProvisionErr)
@@ -212,7 +212,7 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 		return &backend.ProvisionResult{Warnings: []string{"bucket policy is permissive"}}, nil
 	})
 	var output bytes.Buffer
-	ctx := WithOutputWriters(WithOutputSuppressed(t.Context()), OutputWriters{Stderr: &output})
+	ctx := WithOutputSuppressed(t.Context())
 
 	err := autoProvisionBackend(ctx, &schema.AtmosConfiguration{}, map[string]any{
 		"backend_type": "s3",
@@ -220,7 +220,7 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 		"provision": map[string]any{
 			"backend": map[string]any{"enabled": true},
 		},
-	}, nil, nil)
+	}, nil, OutputWriters{Stderr: &output}, nil)
 
 	require.NoError(t, err)
 	assert.Contains(t, output.String(), "Provisioned S3 backend")
