@@ -52,7 +52,9 @@ func TestNormalizeComponentSelectors(t *testing.T) {
 // TestValidateUpdateSelectorFlags proves --stack/--labels reject combining with an explicitly
 // passed --component or with --tags (two distinct selector universes -- see the shared
 // resolveVendorSelectorComponents/vendorSelectorGroupCount doc comments), while allowing --stack or
-// --labels alone, or together with each other.
+// --labels alone, or together with each other, and while allowing --component and --tags together
+// (both operate on the same vendor.yaml Sources[] domain -- see validateUpdateSelectorFlags' own
+// doc comment).
 func TestValidateUpdateSelectorFlags(t *testing.T) {
 	newCmd := func(componentChanged bool) *cobra.Command {
 		c := &cobra.Command{Use: "update"}

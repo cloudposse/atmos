@@ -464,6 +464,36 @@ func TestVendorUpdateCommand_UnknownStackErrors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
+// TestVendorUpdateCommand_ComponentAndTagsMismatchErrors is the end-to-end regression test for
+// updater.UpdateSelectedComponents' tags-mismatch check: --component and --tags compose (both
+// apply against the same vendor.yaml source, via vendoring.MatchesComponentTags), so this is NOT
+// rejected up front -- but when the named component's declared tags don't include the requested
+// one, "atmos vendor update --component vpc --tags compute" must error explicitly instead of
+// silently succeeding with an empty report.
+func TestVendorUpdateCommand_ComponentAndTagsMismatchErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+	chdirTest(t, dir)
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("component", "vpc"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("tags", "compute"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
 // writeComponentManifestFixture writes a "vpc" component.yaml pinned at v0.1.0 under
 // <base>/vpc/component.yaml and points ATMOS_COMPONENTS_TERRAFORM_BASE_PATH at base, so
 // DefaultComponentDirResolver resolves it without needing a real atmos.yaml.
@@ -604,6 +634,108 @@ spec:
 	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
 	assert.Contains(t, err.Error(), "eks")
 	assert.Contains(t, err.Error(), "vpc")
+}
+
+// TestVendorDiffCommand_StackSelectorBatchMode proves --stack resolving more than one component
+// diffs every one of them (batch mode), mirroring TestVendorDiffCommand_TagsSelectorBatchMode --
+// diff had zero --stack coverage at the RunE level before this test (only unit-level
+// ResolveVendorComponentSelector coverage existed).
+func TestVendorDiffCommand_StackSelectorBatchMode(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n    eks: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "dev"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "eks")
+	assert.Contains(t, err.Error(), "vpc")
+}
+
+// TestVendorDiffCommand_LabelsSelector proves --labels (AND-matching stack metadata.labels)
+// resolves to just the matching component -- diff had zero --labels coverage at the RunE level
+// before this test.
+func TestVendorDiffCommand_LabelsSelector(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc:\n      metadata:\n        labels:\n          tier: \"1\"\n    eks:\n      metadata:\n        labels:\n          tier: \"2\"\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("labels", "tier=1"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "mock-vpc", "only the tier=1-labeled vpc must be diffed")
+}
+
+// TestVendorDiffCommand_UnmatchedStackErrors proves --stack matching no components is a hard
+// error -- diff had this behavior confirmed only at the shared resolveVendorSelectorComponents
+// unit level, never through vendorDiffCmd.RunE itself, before this test.
+func TestVendorDiffCommand_UnmatchedStackErrors(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform: {}\n",
+	), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "does-not-exist"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
 func TestVendorUpdateCommand_ComponentManifestFallback(t *testing.T) {

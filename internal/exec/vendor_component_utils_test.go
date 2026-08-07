@@ -565,14 +565,29 @@ func TestHandleStackVendor_PullsOnlyTheGivenStacksComponents(t *testing.T) {
 }
 
 // TestHandleStackVendor_UnknownStack proves an unresolvable stack name fails loudly with
-// errUtils.ErrStackNotFound rather than silently succeeding as a no-op.
+// errUtils.ErrInvalidArgumentError rather than silently succeeding as a no-op -- the same sentinel
+// and wording "atmos vendor update --stack" already uses for its own zero-match case (see
+// cmd/vendor/update.go), since pull and update share an identical stack/labels-only selector
+// vocabulary.
 func TestHandleStackVendor_UnknownStack(t *testing.T) {
 	atmosConfig := buildHandleStackVendorFixture(t)
 
 	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "does-not-exist"})
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestHandleStackVendor_LabelsMatchingNothingErrors proves the labels-only zero-match branch (no
+// --stack, --labels matching no component in any stack) errors with the same sentinel/wording as
+// the named-stack case above, rather than silently succeeding as a no-op.
+func TestHandleStackVendor_LabelsMatchingNothingErrors(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Labels: map[string]string{"tier": "does-not-exist"}})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
 // TestResolveVendorComponentSelector_NoFilterReturnsEveryStacksComponents proves stack == "" scopes
@@ -625,10 +640,10 @@ func TestResolveVendorComponentSelector_StackAndLabelsCompose(t *testing.T) {
 
 // TestResolveVendorComponentSelector_UnknownStackReturnsEmptyNoError proves an unresolvable stack
 // name returns an empty (not error) result -- unlike handleStackVendor's own "vendor pull --stack"
-// entry point (which hard-errors via errUtils.ErrStackNotFound), callers of this shared resolver
-// (vendor update/diff/clean/verify) are responsible for deciding what an empty selector match means
-// for them, since some of those commands support NO selector as "operate on everything" and must be
-// able to tell that apart from "a selector was given and matched nothing".
+// entry point (which hard-errors via errUtils.ErrInvalidArgumentError), callers of this shared
+// resolver (vendor update/diff/clean/verify) are responsible for deciding what an empty selector
+// match means for them, since some of those commands support NO selector as "operate on everything"
+// and must be able to tell that apart from "a selector was given and matched nothing".
 func TestResolveVendorComponentSelector_UnknownStackReturnsEmptyNoError(t *testing.T) {
 	atmosConfig := buildHandleStackVendorFixture(t)
 

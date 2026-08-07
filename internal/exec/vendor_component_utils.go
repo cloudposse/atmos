@@ -235,10 +235,13 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 		return fmt.Errorf("failed to describe stack %q: %w", flg.Stack, err)
 	}
 	if len(stacksMap) == 0 {
-		if flg.Stack == "" {
-			return fmt.Errorf("%w: no stacks have components matching the given labels", errUtils.ErrStackNotFound)
-		}
-		return fmt.Errorf("%w: stack %q not found or has no components", errUtils.ErrStackNotFound, flg.Stack)
+		// Matches cmd/vendor/update.go's identical zero-match wording: pull and update share the
+		// same stack/labels-only selector vocabulary, so both report "no match" with the same
+		// sentinel and text (unlike diff/clean/verify's shared resolver, which also covers
+		// --component/--tags and so uses its own, broader wording).
+		return errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No components matched the given --stack/--labels selector.").
+			Err()
 	}
 
 	componentsByType, err := resolveStackVendorComponents(atmosConfig, stacksMap, componentTypes)
@@ -267,23 +270,27 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 	return errors.Join(errs...)
 }
 
-// resolveStackVendorComponents walks stacksMap's terraform/helmfile/packer components (already
-// scoped to a single stack by ExecuteDescribeStacks' filterByStack) and groups the ones with a
-// component.yaml/component.yml manifest by component type, ready for
-// ExecuteComponentVendorPullBatch. Abstract components are skipped (FilterAbstractComponents --
-// they have no component.yaml of their own); a component without a manifest is silently skipped
-// too, since not every stack component vendors this way -- --stack pulls whichever ones do. A
-// resolved component name is deduped across component types (metadata.component can make two
-// stack-declared names resolve to the same underlying component directory).
-func resolveStackVendorComponents(
-	atmosConfig *schema.AtmosConfiguration,
-	stacksMap map[string]any,
-	componentTypes []string,
-) (map[string][]string, error) {
-	defer perf.Track(atmosConfig, "exec.resolveStackVendorComponents")()
+// stackVendorComponent is one (componentType, resolved name) pair discovered by
+// walkStackVendorComponents, deduplicated within a single walk by componentType+name.
+type stackVendorComponent struct {
+	ComponentType string
+	Name          string
+}
 
-	result := make(map[string][]string)
+// walkStackVendorComponents is the single stack-walk shared by resolveStackVendorComponents (pull's
+// --stack path, which further filters to components with a component.yaml, grouped by type) and
+// ResolveVendorComponentSelector (update/diff/clean/verify's shared selector, which further
+// flattens and dedups by name alone, ignoring type). Previously each function hand-rolled its own,
+// near-identical copy of this walk; this is the one place they now diverge only in what they do with
+// each resolved (type, name) pair, not in how components/stacks are traversed.
+//
+// Walks stacksMap's terraform/helmfile/packer components (already scoped to a single stack, or all
+// stacks, by ExecuteDescribeStacks*'s filterByStack), skips abstract components
+// (FilterAbstractComponents), resolves each name's metadata.component override, and dedupes by
+// componentType+name (the same name can independently appear under two different component types).
+func walkStackVendorComponents(stacksMap map[string]any, componentTypes []string) []stackVendorComponent {
 	seen := make(map[string]bool)
+	var result []stackVendorComponent
 
 	for _, stackSection := range stacksMap {
 		componentsSection, ok := stackComponentsSection(stackSection)
@@ -296,13 +303,19 @@ func resolveStackVendorComponents(
 			if !ok {
 				continue
 			}
-			if err := appendStackTypeComponents(atmosConfig, typeComponents, componentType, seen, result); err != nil {
-				return nil, err
+			for _, name := range FilterAbstractComponents(typeComponents) {
+				resolved := resolveVendorComponentName(name, typeComponents[name])
+				key := componentType + "/" + resolved
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				result = append(result, stackVendorComponent{ComponentType: componentType, Name: resolved})
 			}
 		}
 	}
 
-	return result, nil
+	return result
 }
 
 // stackComponentsSection extracts one stack's "components" map[string]any section from an
@@ -316,35 +329,30 @@ func stackComponentsSection(stackSection any) (map[string]any, bool) {
 	return componentsSection, ok
 }
 
-// appendStackTypeComponents resolves one component type's components (already scoped to a single
-// stack) into result[componentType] -- the per-type body of resolveStackVendorComponents' walk.
-// Deduplicates against seen (shared across all types/stacks in one resolveStackVendorComponents
-// call) and skips components with no component.yaml/component.yml.
-func appendStackTypeComponents(
+// resolveStackVendorComponents walks stacksMap via walkStackVendorComponents and groups the ones
+// with a component.yaml/component.yml manifest by component type, ready for
+// ExecuteComponentVendorPullBatch. A component without a manifest is silently skipped, since not
+// every stack component vendors this way -- --stack pulls whichever ones do.
+func resolveStackVendorComponents(
 	atmosConfig *schema.AtmosConfiguration,
-	typeComponents map[string]any,
-	componentType string,
-	seen map[string]bool,
-	result map[string][]string,
-) error {
-	for _, name := range FilterAbstractComponents(typeComponents) {
-		resolved := resolveVendorComponentName(name, typeComponents[name])
-		key := componentType + "/" + resolved
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+	stacksMap map[string]any,
+	componentTypes []string,
+) (map[string][]string, error) {
+	defer perf.Track(atmosConfig, "exec.resolveStackVendorComponents")()
 
-		hasManifest, err := componentHasVendorManifest(atmosConfig, resolved, componentType)
+	result := make(map[string][]string)
+	for _, c := range walkStackVendorComponents(stacksMap, componentTypes) {
+		hasManifest, err := componentHasVendorManifest(atmosConfig, c.Name, c.ComponentType)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !hasManifest {
 			continue
 		}
-		result[componentType] = append(result[componentType], resolved)
+		result[c.ComponentType] = append(result[c.ComponentType], c.Name)
 	}
-	return nil
+
+	return result, nil
 }
 
 // resolveVendorComponentName returns the component name to vendor for a stack-declared component,
@@ -387,14 +395,15 @@ func componentHasVendorManifest(atmosConfig *schema.AtmosConfiguration, componen
 }
 
 // ResolveVendorComponentSelector resolves --stack/--labels into a flat, deduped, sorted list of
-// component names across componentTypes. An empty stack scopes across all stacks. Reuses
-// ExecuteDescribeStacksScoped's own labelsFilter scoping (the same mechanism `list components
+// component names across componentTypes, via the same walkStackVendorComponents walk
+// resolveStackVendorComponents (pull's --stack path) uses. An empty stack scopes across all stacks.
+// Reuses ExecuteDescribeStacksScoped's own labelsFilter scoping (the same mechanism `list components
 // --labels` already uses) so a --labels filter never forces evaluating out-of-scope stacks.
 //
-// Unlike resolveStackVendorComponents (pull's --stack path), this does not group results by
-// component type and does not require a component.yaml to exist -- `vendor update`, `vendor diff`,
-// `vendor clean`, and `vendor verify` all key off vendor.yaml Sources[].Component by name, not by
-// component type or per-component manifest presence.
+// Unlike resolveStackVendorComponents, this flattens across component type (deduping by name alone,
+// where walkStackVendorComponents itself dedupes by type+name) and does not require a component.yaml
+// to exist -- `vendor update`, `vendor diff`, `vendor clean`, and `vendor verify` all key off
+// vendor.yaml Sources[].Component by name, not by component type or per-component manifest presence.
 func ResolveVendorComponentSelector(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
@@ -423,25 +432,12 @@ func ResolveVendorComponentSelector(
 	seen := make(map[string]bool)
 	var names []string
 
-	for _, stackSection := range stacksMap {
-		componentsSection, ok := stackComponentsSection(stackSection)
-		if !ok {
+	for _, c := range walkStackVendorComponents(stacksMap, componentTypes) {
+		if seen[c.Name] {
 			continue
 		}
-		for _, componentType := range componentTypes {
-			typeComponents, ok := componentsSection[componentType].(map[string]any)
-			if !ok {
-				continue
-			}
-			for _, name := range FilterAbstractComponents(typeComponents) {
-				resolved := resolveVendorComponentName(name, typeComponents[name])
-				if seen[resolved] {
-					continue
-				}
-				seen[resolved] = true
-				names = append(names, resolved)
-			}
-		}
+		seen[c.Name] = true
+		names = append(names, c.Name)
 	}
 
 	sort.Strings(names)

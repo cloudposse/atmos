@@ -269,9 +269,8 @@ func TestParseVendorFlags_Stack(t *testing.T) {
 }
 
 // TestValidateVendorFlags_Stack proves validateVendorFlags rejects --stack combined with
-// --component or --everything, matching the existing --tags mutual-exclusivity rules, while
-// allowing --stack on its own (including together with --tags, which parseVendorFlags never
-// threads through the stack-based handleStackVendor path but validateVendorFlags does not reject).
+// --component, --tags, or --everything, matching the existing --tags mutual-exclusivity rules,
+// while allowing --stack on its own.
 func TestValidateVendorFlags_Stack(t *testing.T) {
 	t.Run("stack alone is valid", func(t *testing.T) {
 		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2"}))
@@ -281,6 +280,12 @@ func TestValidateVendorFlags_Stack(t *testing.T) {
 		err := validateVendorFlags(&VendorFlags{Component: "vpc", Stack: "dev-us-west-2"})
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrValidateComponentStackFlag)
+	})
+
+	t.Run("stack and tags together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Tags: []string{"networking"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateStackTagsFlag)
 	})
 
 	t.Run("everything and stack together is rejected", func(t *testing.T) {

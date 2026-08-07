@@ -101,6 +101,14 @@ func normalizeComponentSelectors(components []string) []string {
 // distinct manifest concept -- see the same rationale documented on
 // internal/exec.ErrValidateTagsLabelsFlag). --stack and --labels compose with each other (--labels
 // narrows further within --stack), but neither composes with --component or --tags.
+//
+// --component DOES compose with --tags, deliberately: both operate on the same vendor.yaml
+// Sources[] domain (vendoring.MatchesComponentTags applies component-exact-AND-tags-any against a
+// single source), so "--component vpc --tags networking" has a coherent meaning -- "update vpc, but
+// only if its declared source is tagged networking" -- already implemented by
+// pkg/vendoring/update.go's sourceMatchesFilter/checkAndUpdateSource. When the combination matches
+// nothing, updater.UpdateSelectedComponents reports that explicitly rather than succeeding silently
+// with an empty report (see its own doc comment).
 func validateUpdateSelectorFlags(cmd *cobra.Command, stack string, labels map[string]string, sourceTags []string) error {
 	hasStackOrLabels := stack != "" || len(labels) > 0
 	if !hasStackOrLabels {

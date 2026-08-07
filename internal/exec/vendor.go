@@ -32,7 +32,12 @@ var (
 	// stack-resolved component metadata.labels (a component concept, the same one --stack resolves
 	// against) -- they can't be combined into one selection.
 	ErrValidateTagsLabelsFlag = errors.New("either '--tags' or '--labels' flag can be provided, but not both")
-	ErrMissingComponent       = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+	// ErrValidateStackTagsFlag guards the same stack-resolution path as ErrValidateComponentStackFlag/
+	// ErrValidateComponentLabelsFlag: --tags filters vendor.yaml's own declared source tags (a
+	// manifest concept), a different universe from the stack-resolved component set --stack
+	// resolves, so they don't compose -- matching --tags' existing exclusivity with --labels.
+	ErrValidateStackTagsFlag = errors.New("either '--stack' or '--tags' flag can be provided, but not both")
+	ErrMissingComponent      = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 	ErrInvalidLockEnforcement = errors.New("'--lock-enforcement' must be one of: strict, warn, silent")
 	// ErrSingleComponentRequired guards the 'vendor update --pull' delegation path, where
@@ -294,6 +299,10 @@ func validateVendorFlags(flg *VendorFlags) error {
 
 	if len(flg.Tags) > 0 && len(flg.Labels) > 0 {
 		return ErrValidateTagsLabelsFlag
+	}
+
+	if flg.Stack != "" && len(flg.Tags) > 0 {
+		return ErrValidateStackTagsFlag
 	}
 
 	if flg.Component != "" && len(flg.Tags) > 0 {

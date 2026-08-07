@@ -40,9 +40,11 @@ func newVendorPullSweepTestCmd() *cobra.Command {
 	cmd := newTestCommandWithGlobalFlags("pull")
 	flags := cmd.Flags()
 	flags.StringP("component", "c", "", "")
+	flags.StringP("stack", "s", "", "")
 	flags.StringP("type", "t", "terraform", "")
 	flags.Bool("dry-run", false, "")
 	flags.String("tags", "", "")
+	flags.String("labels", "", "")
 	flags.Bool("everything", false, "")
 	flags.Bool("refresh-lock", false, "")
 	return cmd
@@ -233,4 +235,23 @@ func TestExecuteVendorPullCommand_Everything_NoVendorFile_RefreshLock_ForcesReDo
 	content, err = os.ReadFile(targetFile)
 	require.NoError(t, err)
 	assert.Equal(t, "# v2\n", string(content), "--refresh-lock must force a re-download even when already materialized")
+}
+
+// TestExecuteVendorPullCommand_StackAndTagsRejected is the end-to-end regression test for
+// ErrValidateStackTagsFlag: "atmos vendor pull --stack X --tags Y" must fail validation rather than
+// silently ignoring --tags. Before this fix, validateVendorFlags never checked Stack×Tags, and
+// handleStackVendor (the --stack dispatch target) never reads flg.Tags at all, so the flag was
+// accepted and quietly dropped -- every sibling subcommand (diff/clean/verify/update) already
+// rejects the same combination.
+func TestExecuteVendorPullCommand_StackAndTagsRejected(t *testing.T) {
+	buildHandleStackVendorFixture(t)
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrValidateStackTagsFlag)
 }

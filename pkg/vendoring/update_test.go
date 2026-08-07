@@ -135,6 +135,29 @@ func TestUpdate_TagsFilter(t *testing.T) {
 	assert.Equal(t, "eks", report.Results[0].Component)
 }
 
+// TestUpdate_ComponentAndTagsFilterCompose proves --component and --tags compose (AND): both apply
+// against the same vendor.yaml source, via MatchesComponentTags, so "vpc" tagged "networking"
+// matches a --component=vpc --tags=networking filter.
+func TestUpdate_ComponentAndTagsFilterCompose(t *testing.T) {
+	file := writeUpdateFixture(t)
+	report, err := Update(nil, &UpdateParams{VendorFiles: []string{file}, Component: "vpc", Tags: []string{"networking"}, Lister: newFakeLister()})
+	require.NoError(t, err)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, "vpc", report.Results[0].Component)
+}
+
+// TestUpdate_ComponentAndTagsFilterExcludesMismatch proves --component composes with --tags in
+// both directions: "vpc" is declared with tag "networking", not "compute" (eks's tag), so
+// --component=vpc --tags=compute matches nothing at this layer -- the caller
+// (updater.UpdateSelectedComponents) is responsible for turning that into an explicit error rather
+// than a silent empty report; see its own tests.
+func TestUpdate_ComponentAndTagsFilterExcludesMismatch(t *testing.T) {
+	file := writeUpdateFixture(t)
+	report, err := Update(nil, &UpdateParams{VendorFiles: []string{file}, Component: "vpc", Tags: []string{"compute"}, Lister: newFakeLister()})
+	require.NoError(t, err)
+	assert.Empty(t, report.Results)
+}
+
 func TestUpdate_TypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "vendor.yaml")

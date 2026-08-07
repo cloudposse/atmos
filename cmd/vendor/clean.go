@@ -51,6 +51,14 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		componentType, err := cmd.Flags().GetString("type")
+		if err != nil {
+			return err
+		}
+		file, err := cmd.Flags().GetString("file")
+		if err != nil {
+			return err
+		}
 		// --stack/--labels resolve components via ExecuteDescribeStacksScoped, which requires
 		// atmosConfig.StackConfigFilesAbsolutePaths to be populated -- only they need
 		// processStacks=true; --component/--tags operate on vendor.yaml/component.yaml manifests
@@ -63,11 +71,14 @@ var vendorCleanCmd = &cobra.Command{
 			return errVendorSelectorsExclusive()
 		}
 		components, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
-			AtmosConfig: &config,
-			Component:   component,
-			Tags:        filterTags,
-			Stack:       stack,
-			Labels:      labels,
+			AtmosConfig:   &config,
+			Component:     component,
+			Tags:          filterTags,
+			Stack:         stack,
+			Labels:        labels,
+			VendorFile:    file,
+			ComponentType: componentType,
+			TypeChanged:   cmd.Flags().Changed("type"),
 		})
 		if err != nil {
 			return err
@@ -105,6 +116,8 @@ var vendorCleanCmd = &cobra.Command{
 func init() {
 	vendorCleanParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Clean only this component"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
+		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Clean only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Clean only components belonging to the specified stack"),
 		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),

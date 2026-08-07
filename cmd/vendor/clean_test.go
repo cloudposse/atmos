@@ -25,6 +25,8 @@ import (
 func newVendorCleanTestCmd() *cobra.Command {
 	c := &cobra.Command{Use: "clean"}
 	c.Flags().StringP("component", "c", "", "")
+	c.Flags().StringP("type", "t", "terraform", "")
+	c.Flags().String("file", "", "")
 	c.Flags().String("tags", "", "")
 	c.Flags().StringP("stack", "s", "", "")
 	c.Flags().String("labels", "", "")
@@ -259,6 +261,139 @@ func TestVendorCleanCmd_UnmatchedStackErrors(t *testing.T) {
 	err := vendorCleanCmd.RunE(cmd, nil)
 
 	require.Error(t, err)
+}
+
+// writeCleanStackLabelsFixture writes an atmos.yaml + stacks/dev.yaml declaring two terraform
+// components ("first", "second") plus two lock-owned artifacts matching them, and chdirs into the
+// fixture root. Neither component needs its own component.yaml: clean's shared selector
+// (ResolveVendorComponentSelector, via resolveVendorSelectorComponents) resolves stack-declared
+// component names directly -- unlike vendor pull's --stack path, it never requires one.
+func writeCleanStackLabelsFixture(t *testing.T, stackYAML string) (firstFile, secondFile string) {
+	t.Helper()
+
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n  helmfile:\n    base_path: components/helmfile\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(stackYAML), 0o644))
+	chdirTest(t, root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	firstDir := filepath.Join(root, "vendor-first")
+	secondDir := filepath.Join(root, "vendor-second")
+	require.NoError(t, os.MkdirAll(firstDir, 0o755))
+	require.NoError(t, os.MkdirAll(secondDir, 0o755))
+	firstFile = filepath.Join(firstDir, "owned.txt")
+	secondFile = filepath.Join(secondDir, "owned.txt")
+	require.NoError(t, os.WriteFile(firstFile, []byte("first"), 0o644))
+	require.NoError(t, os.WriteFile(secondFile, []byte("second"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	firstFiles, err := lockfile.Inventory(firstDir)
+	require.NoError(t, err)
+	secondFiles, err := lockfile.Inventory(secondDir)
+	require.NoError(t, err)
+
+	lock := lockfile.New()
+	lock.Artifacts["artifact-first"] = lockfile.Artifact{Name: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
+	lock.Artifacts["artifact-second"] = lockfile.Artifact{Name: "second", Kind: "source", Target: "vendor-second", Files: secondFiles}
+	require.NoError(t, lockfile.Save(config, lock))
+
+	return firstFile, secondFile
+}
+
+// TestVendorCleanCmd_StackFilterScopesRemoval proves --stack resolves to the stack's declared
+// component names and scopes removal to just those, leaving an out-of-stack sibling untouched --
+// only the "unmatched stack" error case existed before this test.
+func TestVendorCleanCmd_StackFilterScopesRemoval(t *testing.T) {
+	firstFile, secondFile := writeCleanStackLabelsFixture(t, "vars:\n  stage: dev\ncomponents:\n  terraform:\n    first: {}\n")
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, firstFile, "the stack-resolved component's file must be removed")
+	assert.FileExists(t, secondFile, "a component outside the stack must be left alone")
+}
+
+// TestVendorCleanCmd_LabelsFilterScopesRemoval proves --labels (AND-matching stack
+// metadata.labels) scopes removal to just the matching component, leaving a differently-labeled
+// sibling in the same stack untouched -- clean had zero --labels coverage before this test.
+func TestVendorCleanCmd_LabelsFilterScopesRemoval(t *testing.T) {
+	firstFile, secondFile := writeCleanStackLabelsFixture(t,
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    first:\n      metadata:\n        labels:\n          tier: \"1\"\n    second:\n      metadata:\n        labels:\n          tier: \"2\"\n")
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("labels", "tier=1"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, firstFile, "the label-matched component's file must be removed")
+	assert.FileExists(t, secondFile, "a non-matching component must be left alone")
+}
+
+// TestVendorCleanCmd_TypeFilterScopesRemoval proves --stack --type narrows the stack-resolved
+// component set to a single component type, leaving components of other types (even within the
+// same stack) untouched -- clean never wired --type into its selector before this fix.
+func TestVendorCleanCmd_TypeFilterScopesRemoval(t *testing.T) {
+	firstFile, secondFile := writeCleanStackLabelsFixture(t,
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    first: {}\n  helmfile:\n    second: {}\n")
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("type", "helmfile"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.FileExists(t, firstFile, "a component outside the --type filter must be left alone")
+	assert.NoFileExists(t, secondFile, "the type-matched component's file must be removed")
+}
+
+// TestVendorCleanCmd_FileFlagOverridesVendorManifest proves --file resolves --tags against the
+// overridden manifest path instead of the default ./vendor.yaml -- clean never wired --file into
+// its selector before this fix, so --tags could only ever see ./vendor.yaml.
+func TestVendorCleanCmd_FileFlagOverridesVendorManifest(t *testing.T) {
+	root := t.TempDir()
+	chdirTest(t, root)
+
+	customManifest := filepath.Join(root, "custom-vendor.yaml")
+	require.NoError(t, os.WriteFile(customManifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+`), 0o644))
+
+	firstDir := filepath.Join(root, "vendor-first")
+	require.NoError(t, os.MkdirAll(firstDir, 0o755))
+	firstFile := filepath.Join(firstDir, "owned.txt")
+	require.NoError(t, os.WriteFile(firstFile, []byte("first"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	firstFiles, err := lockfile.Inventory(firstDir)
+	require.NoError(t, err)
+
+	lock := lockfile.New()
+	lock.Artifacts["artifact-first"] = lockfile.Artifact{Name: "first", Kind: "source", Target: "vendor-first", Files: firstFiles}
+	require.NoError(t, lockfile.Save(config, lock))
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+	require.NoError(t, cmd.Flags().Set("file", customManifest))
+	err = vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, firstFile, "--file must resolve --tags against the overridden manifest, not ./vendor.yaml")
 }
 
 // TestVendorCleanCmd_NoLockOwnedFilesIsANoop proves an empty/absent lock produces neither an

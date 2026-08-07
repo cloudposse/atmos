@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
@@ -635,11 +636,12 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 	return nil
 }
 
+// shouldSkipSource reports whether s should be skipped for the given --component/--tags filter --
+// the inverse of vendoring.MatchesComponentTags, the shared component-exact/tags-any matcher also
+// used by `vendor update` (pkg/vendoring/update.go's sourceMatchesFilter), so the two commands don't
+// hand-maintain independent copies of the same filter logic.
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
-	// Skip if component or tags do not match
-	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
-	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
+	return !vendoring.MatchesComponentTags(s, component, tags)
 }
 
 // normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.

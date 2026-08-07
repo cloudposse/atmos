@@ -84,11 +84,14 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 			return errVendorSelectorsExclusive()
 		}
 		components, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
-			AtmosConfig: &atmosConfig,
-			Component:   component,
-			Tags:        filterTags,
-			Stack:       stack,
-			Labels:      labels,
+			AtmosConfig:   &atmosConfig,
+			Component:     component,
+			Tags:          filterTags,
+			Stack:         stack,
+			Labels:        labels,
+			VendorFile:    v.GetString("file"),
+			ComponentType: v.GetString("type"),
+			TypeChanged:   cmd.Flags().Changed("type"),
 		})
 		if err != nil {
 			return err
@@ -204,6 +207,8 @@ func createVerifyTable(rows []verifyRow) string {
 func init() {
 	vendorVerifyParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Verify only this component"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
+		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Verify only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
 		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
