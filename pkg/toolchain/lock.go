@@ -3,7 +3,7 @@ package toolchain
 import (
 	"fmt"
 	"sort"
-	"sync"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -64,20 +64,37 @@ func RunLock(toolNames []string, opts LockOptions) error {
 		return nil
 	}
 
-	outcomes := runLockConcurrently(targets, opts)
-	failed := reportLockOutcomes(outcomes)
+	ui.Infof("Locking %d tool(s)...", len(targets))
+
+	// runConcurrentBatchWithLiveProgress live-renders a spinner per in-flight tool plus an
+	// overall N/M progress bar, exactly like `atmos toolchain install`'s batch mode -- each
+	// tool's line prints via the matching ui.* style as soon as it completes, instead of every
+	// result being silently buffered and dumped at once after the whole batch finishes.
+	outcomes := runConcurrentBatchWithLiveProgress(
+		targets,
+		opts.MaxConcurrency,
+		func(tool toolInfo) string { return fmt.Sprintf("%s/%s@%s", tool.owner, tool.repo, tool.version) },
+		lockOneTool,
+		func(outcome lockOutcome) (string, batchLineStyle) {
+			if outcome.result == lockResultFailed {
+				return outcome.message, batchLineError
+			}
+			return outcome.message, batchLineSuccess
+		},
+	)
+	failed := tallyLockOutcomes(outcomes)
 	if failed > 0 {
 		return fmt.Errorf("%w: %d tool lock(s) failed", errUtils.ErrToolInstall, failed)
 	}
 	return nil
 }
 
-// reportLockOutcomes prints each outcome's message (in target order) followed by a
-// one-line summary, and returns the number of failures.
-func reportLockOutcomes(outcomes []lockOutcome) int {
+// tallyLockOutcomes counts each outcome's result and prints the one-line summary. Individual
+// per-tool lines are already printed live as each tool completes by
+// runConcurrentBatchWithLiveProgress, so this only tallies -- it doesn't print them again.
+func tallyLockOutcomes(outcomes []lockOutcome) int {
 	var locked, failed int
 	for _, outcome := range outcomes {
-		ui.Writef("%s\n", outcome.message)
 		switch outcome.result {
 		case lockResultLocked:
 			locked++
@@ -85,7 +102,17 @@ func reportLockOutcomes(outcomes []lockOutcome) int {
 			failed++
 		}
 	}
-	ui.Writef("Locked %d tool(s), %d failed\n", locked, failed)
+	var segments []string
+	if locked > 0 {
+		segments = append(segments, fmt.Sprintf("Locked %d tool(s)", locked))
+	}
+	if failed > 0 {
+		segments = append(segments, fmt.Sprintf("%d failed", failed))
+	}
+	if len(segments) == 0 {
+		segments = append(segments, "Locked 0 tool(s)")
+	}
+	ui.Writef("%s\n", strings.Join(segments, ", "))
 	return failed
 }
 
@@ -126,37 +153,9 @@ func resolveLockTargets(toolVersions *ToolVersions, toolNames []string) ([]toolI
 	return targets, nil
 }
 
-// runLockConcurrently locks every target tool with at most opts.MaxConcurrency workers in
-// flight, returning one outcome per target in the same order as targets.
-func runLockConcurrently(targets []toolInfo, opts LockOptions) []lockOutcome {
-	outcomes := make([]lockOutcome, len(targets))
-	jobs := make(chan int)
-	var workers sync.WaitGroup
-
-	worker := func() {
-		defer workers.Done()
-		for i := range jobs {
-			outcomes[i] = lockOneTool(targets[i])
-		}
-	}
-
-	numWorkers := min(opts.MaxConcurrency, len(targets))
-	for range numWorkers {
-		workers.Add(1)
-		go worker()
-	}
-	for i := range targets {
-		jobs <- i
-	}
-	close(jobs)
-	workers.Wait()
-
-	return outcomes
-}
-
 // lockOneTool resolves tool's version (handling "latest"), fetches its registry metadata,
 // and downloads+verifies the artifact to write its toolchain.lock.yaml entry. Called
-// concurrently by runLockConcurrently, so it must not print directly.
+// concurrently by runConcurrentBatchWithLiveProgress's workers, so it must not print directly.
 func lockOneTool(tool toolInfo) lockOutcome {
 	label := fmt.Sprintf("%s/%s", tool.owner, tool.repo)
 
@@ -165,17 +164,17 @@ func lockOneTool(tool toolInfo) lockOutcome {
 	spinner := &spinnerControl{showingSpinner: false}
 	resolvedVersion, err := resolveLatestVersionWithSpinner(tool.owner, tool.repo, tool.version, tool.version == "latest", spinner)
 	if err != nil {
-		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("✗ %s@%s: failed to resolve version: %v", label, tool.version, err)}
+		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("%s@%s: failed to resolve version: %v", label, tool.version, err)}
 	}
 
 	registryTool, err := installer.FindTool(tool.owner, tool.repo, resolvedVersion)
 	if err != nil {
-		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("✗ %s@%s: %v", label, resolvedVersion, err)}
+		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("%s@%s: %v", label, resolvedVersion, err)}
 	}
 
 	if err := installer.LockTool(registryTool, resolvedVersion); err != nil {
-		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("✗ %s@%s: %v", label, resolvedVersion, err)}
+		return lockOutcome{result: lockResultFailed, message: fmt.Sprintf("%s@%s: %v", label, resolvedVersion, err)}
 	}
 
-	return lockOutcome{result: lockResultLocked, message: fmt.Sprintf("✓ %s@%s locked", label, resolvedVersion)}
+	return lockOutcome{result: lockResultLocked, message: fmt.Sprintf("%s@%s locked", label, resolvedVersion)}
 }

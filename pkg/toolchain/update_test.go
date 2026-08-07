@@ -2,7 +2,6 @@ package toolchain
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,6 +84,40 @@ func TestUpdateOneTool_ExactPin_UpToDate(t *testing.T) {
 	toolVersions, err := LoadToolVersions(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1.11.4"}, toolVersions.Tools["hashicorp/terraform"])
+}
+
+// TestUpdateOneTool_ExactPin_VPrefixMismatchIsUpToDate reproduces a live-usage bug: a tool
+// pinned with a literal "v" prefix (e.g. "peteretelej/tree v1.3.0", written by an earlier `add`
+// that captured the tool's real GitHub tag) was always reported as "updated" even when nothing
+// changed, because pkg/github.GetReleaseVersions unconditionally strips the leading "v" from
+// fetched release tags before returning them, but updateExactPinnedTool compared the (v-less)
+// newest version against the (v-prefixed) current pin with a raw string equality check. This
+// caused three compounding problems on every affected tool's first update run: a misleading
+// "v1.3.0 -> 1.3.0" message implying a real version bump, a wrongly-incremented "updated" count
+// in the summary instead of "up to date", and a wholly unnecessary reinstall + .tool-versions
+// rewrite for a tool that was already current.
+func TestUpdateOneTool_ExactPin_VPrefixMismatchIsUpToDate(t *testing.T) {
+	setupTestIO(t)
+
+	filePath := createTempToolVersionsFile(t, "peteretelej/tree v1.3.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+
+	// Mirrors pkg/github.GetReleaseVersions's real behavior: fetched releases always have the
+	// "v" prefix stripped, regardless of what's pinned in .tool-versions.
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("peteretelej", "tree", []string{"1.3.0"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	outcome := updateOneTool("peteretelej/tree", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultUpToDate, outcome.result, "message: %s", outcome.message)
+	assert.Contains(t, outcome.message, "up to date")
+	assert.NotContains(t, outcome.message, "->", "must not report a version bump when only the 'v' prefix differs")
+
+	// No reinstall or rewrite should have happened -- the pin must survive exactly as written.
+	toolVersions, err := LoadToolVersions(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"v1.3.0"}, toolVersions.Tools["peteretelej/tree"])
 }
 
 // TestUpdateOneTool_ExactPin_DryRunDoesNotMutate verifies --dry-run reports
@@ -199,7 +232,15 @@ func TestDescribeImmutablePin(t *testing.T) {
 // TestRunUpdate_ConcurrencyPreservesOrder verifies that concurrent workers
 // (MaxConcurrency > 1) still report outcomes in the original target order,
 // not completion order.
-func TestRunUpdate_ConcurrencyPreservesOrder(t *testing.T) {
+// TestRunUpdate_ConcurrentAllSkippedReportsEveryTarget confirms every target is reported
+// exactly once and none count as a failure. Lines now print live as each tool completes (via
+// runConcurrentBatchWithLiveProgress, matching `atmos toolchain install`'s batch-mode
+// convention) instead of being buffered and printed in original target order after the whole
+// batch finishes -- so completion order, not target order, is what's observable here. See
+// TestRunConcurrentBatchWithLiveProgress_ResultsPreserveItemOrder (batch_progress_test.go) for
+// the guarantee that still holds regardless of completion order: per-item results are never
+// misattributed to the wrong item.
+func TestRunUpdate_ConcurrentAllSkippedReportsEveryTarget(t *testing.T) {
 	filePath := createTempToolVersionsFile(t, "owner/a pr:1\nowner/b sha:ceb7526\nowner/c ref:main\n")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
 
@@ -209,16 +250,9 @@ func TestRunUpdate_ConcurrencyPreservesOrder(t *testing.T) {
 	})
 	require.NoError(t, err, "all-skipped tools should not count as failures")
 
-	// Assert the reported ordering matches the target (file) order, not completion order --
-	// this is the guarantee runUpdatesConcurrently/reportUpdateOutcomes must preserve.
-	idxA := strings.Index(output, "owner/a")
-	idxB := strings.Index(output, "owner/b")
-	idxC := strings.Index(output, "owner/c")
-	require.NotEqual(t, -1, idxA, "expected owner/a in output, got %q", output)
-	require.NotEqual(t, -1, idxB, "expected owner/b in output, got %q", output)
-	require.NotEqual(t, -1, idxC, "expected owner/c in output, got %q", output)
-	assert.Less(t, idxA, idxB, "owner/a must be reported before owner/b")
-	assert.Less(t, idxB, idxC, "owner/b must be reported before owner/c")
+	assert.Contains(t, output, "owner/a")
+	assert.Contains(t, output, "owner/b")
+	assert.Contains(t, output, "owner/c")
 }
 
 // TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions reproduces a

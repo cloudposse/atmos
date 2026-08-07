@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,7 +78,14 @@ func TestResolveLockTargets(t *testing.T) {
 // same guarantee (and the same regression class) fixed for RunUpdate. Uses tools that
 // don't exist in any registry, so every worker fails at the same FindTool step -- the
 // property under test is reporting order, not success.
-func TestRunLock_ReportsInTargetOrder(t *testing.T) {
+// TestRunLock_ReportsAllTargets confirms every target is reported exactly once. Lines now print
+// live as each tool completes (via runConcurrentBatchWithLiveProgress, matching `atmos toolchain
+// install`'s batch-mode convention) instead of being buffered and printed in original target
+// order after the whole batch finishes -- so completion order, not target order, is what's
+// observable here. See TestRunConcurrentBatchWithLiveProgress_ResultsPreserveItemOrder
+// (batch_progress_test.go) for the guarantee that still holds regardless of completion order:
+// the underlying per-item results are never misattributed to the wrong item.
+func TestRunLock_ReportsAllTargets(t *testing.T) {
 	filePath := createTempToolVersionsFile(t, "nonexistent-owner/aaa 1.0.0\nnonexistent-owner/bbb 1.0.0\nnonexistent-owner/ccc 1.0.0\n")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
 
@@ -89,14 +95,9 @@ func TestRunLock_ReportsInTargetOrder(t *testing.T) {
 	})
 	require.Error(t, err, "tools that don't exist in any registry should be reported as failed")
 
-	idxA := strings.Index(output, "aaa")
-	idxB := strings.Index(output, "bbb")
-	idxC := strings.Index(output, "ccc")
-	require.NotEqual(t, -1, idxA, "expected aaa in output, got %q", output)
-	require.NotEqual(t, -1, idxB, "expected bbb in output, got %q", output)
-	require.NotEqual(t, -1, idxC, "expected ccc in output, got %q", output)
-	assert.Less(t, idxA, idxB, "aaa must be reported before bbb")
-	assert.Less(t, idxB, idxC, "bbb must be reported before ccc")
+	assert.Contains(t, output, "aaa")
+	assert.Contains(t, output, "bbb")
+	assert.Contains(t, output, "ccc")
 }
 
 // TestRunLock_ForceWritesLockFileWithoutInstalling verifies the actual contract `atmos

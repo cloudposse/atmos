@@ -34,7 +34,7 @@ Update everything:
 $ atmos toolchain update
 ✓ terraform: 1.9.8 -> 1.11.4
 ✓ jq: up to date (1.8.2)
-Updated 1 tool(s), 1 up to date, 0 skipped, 0 failed
+Updated 1 tool(s), 1 up to date
 ```
 
 Update one tool, or preview first:
@@ -42,7 +42,7 @@ Update one tool, or preview first:
 ```shell
 $ atmos toolchain update terraform --dry-run
 terraform: 1.9.8 -> 1.11.4 (dry-run)
-Would update 1 tool(s), 0 up to date, 0 skipped, 0 failed
+Would update 1 tool(s)
 ```
 
 Tools are updated concurrently, with the same `--max-concurrency` control `atmos toolchain install` already

@@ -3,7 +3,7 @@ package toolchain
 import (
 	"fmt"
 	"sort"
-	"sync"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -68,20 +68,50 @@ func RunUpdate(toolNames []string, opts UpdateOptions) error {
 		return nil
 	}
 
-	outcomes := runUpdatesConcurrently(targets, opts)
-	failed := reportUpdateOutcomes(outcomes, opts.DryRun)
+	verb := "Checking"
+	if !opts.DryRun {
+		verb = "Updating"
+	}
+	ui.Infof("%s %d tool(s)...", verb, len(targets))
+
+	// runConcurrentBatchWithLiveProgress live-renders a spinner per in-flight tool plus an
+	// overall N/M progress bar, exactly like `atmos toolchain install`'s batch mode -- each
+	// tool's line prints via the matching ui.* style as soon as it completes, instead of every
+	// result being silently buffered and dumped at once after the whole batch finishes.
+	outcomes := runConcurrentBatchWithLiveProgress(
+		targets,
+		opts.MaxConcurrency,
+		func(tool string) string { return tool },
+		func(tool string) updateOutcome { return updateOneTool(tool, opts) },
+		renderUpdateOutcome,
+	)
+	failed := tallyUpdateOutcomes(outcomes, opts.DryRun)
 	if failed > 0 {
 		return fmt.Errorf("%w: %d tool update(s) failed", errUtils.ErrToolInstall, failed)
 	}
 	return nil
 }
 
-// reportUpdateOutcomes prints each outcome's message (in target order) followed by a
-// one-line summary, and returns the number of failures.
-func reportUpdateOutcomes(outcomes []updateOutcome, dryRun bool) int {
+// renderUpdateOutcome maps an update outcome to its live-progress display line and style.
+func renderUpdateOutcome(outcome updateOutcome) (string, batchLineStyle) {
+	switch outcome.result {
+	case updateResultSkipped:
+		return outcome.message, batchLineInfo
+	case updateResultFailed:
+		return outcome.message, batchLineError
+	case updateResultUpdated, updateResultUpToDate:
+		fallthrough
+	default:
+		return outcome.message, batchLineSuccess
+	}
+}
+
+// tallyUpdateOutcomes counts each outcome's result and prints the one-line summary. Individual
+// per-tool lines are already printed live as each tool completes by
+// runConcurrentBatchWithLiveProgress, so this only tallies -- it doesn't print them again.
+func tallyUpdateOutcomes(outcomes []updateOutcome, dryRun bool) int {
 	var updated, upToDate, skipped, failed int
 	for _, outcome := range outcomes {
-		ui.Writef("%s\n", outcome.message)
 		switch outcome.result {
 		case updateResultUpdated:
 			updated++
@@ -95,35 +125,6 @@ func reportUpdateOutcomes(outcomes []updateOutcome, dryRun bool) int {
 	}
 	printUpdateSummary(updated, upToDate, skipped, failed, dryRun)
 	return failed
-}
-
-// runUpdatesConcurrently updates every target tool with at most
-// opts.MaxConcurrency workers in flight, returning one outcome per target in
-// the same order as targets.
-func runUpdatesConcurrently(targets []string, opts UpdateOptions) []updateOutcome {
-	outcomes := make([]updateOutcome, len(targets))
-	jobs := make(chan int)
-	var workers sync.WaitGroup
-
-	worker := func() {
-		defer workers.Done()
-		for i := range jobs {
-			outcomes[i] = updateOneTool(targets[i], opts)
-		}
-	}
-
-	numWorkers := min(opts.MaxConcurrency, len(targets))
-	for range numWorkers {
-		workers.Add(1)
-		go worker()
-	}
-	for i := range targets {
-		jobs <- i
-	}
-	close(jobs)
-	workers.Wait()
-
-	return outcomes
 }
 
 // resolveUpdateTargets resolves the requested tool names (aliases included) to
@@ -160,25 +161,25 @@ func updateOneTool(tool string, opts UpdateOptions) updateOutcome {
 	filePath := GetToolVersionsFilePath()
 	toolVersions, err := LoadToolVersions(filePath)
 	if err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to load .tool-versions: %v", tool, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: failed to load .tool-versions: %v", tool, err)}
 	}
 
 	versions := toolVersions.Tools[tool]
 	if len(versions) == 0 {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: not configured in .tool-versions", tool)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: not configured in .tool-versions", tool)}
 	}
 	current := versions[0]
 
 	if pinDescription, immutable := describeImmutablePin(current); immutable {
 		return updateOutcome{result: updateResultSkipped, message: fmt.Sprintf(
-			"⊘ %s: pinned to %s — not eligible for automatic update, use `add` to change it explicitly", tool, pinDescription,
+			"%s: pinned to %s — not eligible for automatic update, use `add` to change it explicitly", tool, pinDescription,
 		)}
 	}
 
 	installer := NewInstaller()
 	owner, repo, err := installer.ParseToolSpec(tool)
 	if err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to resolve tool: %v", tool, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: failed to resolve tool: %v", tool, err)}
 	}
 
 	if current == "latest" {
@@ -211,9 +212,9 @@ func updateLatestPinnedTool(tool string, opts UpdateOptions) updateOutcome {
 		return updateOutcome{result: updateResultUpToDate, message: fmt.Sprintf("%s: latest (dry-run — re-resolves on install)", tool)}
 	}
 	if err := RunInstall(tool+"@latest", false, true, false, false); err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: %v", tool, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: %v", tool, err)}
 	}
-	return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("✓ %s: latest (re-resolved)", tool)}
+	return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("%s: latest (re-resolved)", tool)}
 }
 
 // updateExactPinnedTool finds the newest available version for a tool pinned
@@ -222,16 +223,20 @@ func updateLatestPinnedTool(tool string, opts UpdateOptions) updateOutcome {
 func updateExactPinnedTool(tool, owner, repo, current string, opts UpdateOptions) updateOutcome {
 	allVersions, err := fetchAllGitHubVersions(owner, repo, defaultVersionLimit)
 	if err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to fetch available versions: %v", tool, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: failed to fetch available versions: %v", tool, err)}
 	}
 	sorted := dedupeAndSort(allVersions)
 	if len(sorted) == 0 {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: no versions found in registry", tool)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: no versions found in registry", tool)}
 	}
 	newest := sorted[len(sorted)-1]
 
-	if newest == current {
-		return updateOutcome{result: updateResultUpToDate, message: fmt.Sprintf("✓ %s: up to date (%s)", tool, current)}
+	// pkg/github.GetReleaseVersions strips a leading "v" from every fetched release tag, but
+	// the current pin in .tool-versions may still have one (e.g. captured verbatim by an
+	// earlier `add`). Comparing raw strings here falsely reported "updated" -- with a real,
+	// unnecessary reinstall and .tool-versions rewrite -- for any unchanged "v"-prefixed pin.
+	if normalizeVersion(newest) == normalizeVersion(current) {
+		return updateOutcome{result: updateResultUpToDate, message: fmt.Sprintf("%s: up to date (%s)", tool, current)}
 	}
 
 	if opts.DryRun {
@@ -248,15 +253,15 @@ func updateExactPinnedTool(tool, owner, repo, current string, opts UpdateOptions
 		ShowInstallDetails: false,
 		ShowHint:           false,
 	}); err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to install %s: %v", tool, newest, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: failed to install %s: %v", tool, newest, err)}
 	}
 
 	filePath := GetToolVersionsFilePath()
 	if err := AddToolToVersionsAsDefault(filePath, tool, newest); err != nil {
-		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("✗ %s: failed to update .tool-versions: %v", tool, err)}
+		return updateOutcome{result: updateResultFailed, message: fmt.Sprintf("%s: failed to update .tool-versions: %v", tool, err)}
 	}
 
-	return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("✓ %s: %s -> %s", tool, current, newest)}
+	return updateOutcome{result: updateResultUpdated, message: fmt.Sprintf("%s: %s -> %s", tool, current, newest)}
 }
 
 // printUpdateSummary prints a one-line summary of an update run.
@@ -265,5 +270,23 @@ func printUpdateSummary(updated, upToDate, skipped, failed int, dryRun bool) {
 	if dryRun {
 		verb = "Would update"
 	}
-	ui.Writef("%s %d tool(s), %d up to date, %d skipped, %d failed\n", verb, updated, upToDate, skipped, failed)
+
+	var segments []string
+	if updated > 0 {
+		segments = append(segments, fmt.Sprintf("%s %d tool(s)", verb, updated))
+	}
+	if upToDate > 0 {
+		segments = append(segments, fmt.Sprintf("%d up to date", upToDate))
+	}
+	if skipped > 0 {
+		segments = append(segments, fmt.Sprintf("%d skipped", skipped))
+	}
+	if failed > 0 {
+		segments = append(segments, fmt.Sprintf("%d failed", failed))
+	}
+	if len(segments) == 0 {
+		segments = append(segments, fmt.Sprintf("%s 0 tool(s)", verb))
+	}
+
+	ui.Writef("%s\n", strings.Join(segments, ", "))
 }
