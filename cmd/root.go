@@ -54,6 +54,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -98,9 +99,11 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	sbomcmd "github.com/cloudposse/atmos/cmd/sbom"
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
+	_ "github.com/cloudposse/atmos/cmd/store"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
@@ -124,6 +127,8 @@ const (
 	ansiEscapePrefix = "\x1b["
 	// ProfileFlagName is the name of the profile flag.
 	profileFlagName = "profile"
+	// EditionFlagName is the name of the edition flag (and the atmos.yaml key it mirrors).
+	editionFlagName = "edition"
 	// RootCommandName is the root command's Use value.
 	rootCommandName = "atmos"
 	// HelpFlagName is the standard --help flag name.
@@ -168,40 +173,10 @@ func parseUseVersionFromArgs() string {
 	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
-// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// parseChdirFromArgsInternal parses --chdir or -C flag from the provided args.
 // This internal version accepts args as a parameter for testability.
 func parseChdirFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --chdir=value format.
-		if strings.HasPrefix(arg, "--chdir=") {
-			return strings.TrimPrefix(arg, "--chdir=")
-		}
-
-		// Check for -C=value format.
-		if strings.HasPrefix(arg, "-C=") {
-			return strings.TrimPrefix(arg, "-C=")
-		}
-
-		// Check for -C<value> format (concatenated, e.g., -C../foo).
-		if strings.HasPrefix(arg, "-C") && len(arg) > 2 {
-			return arg[2:]
-		}
-
-		// Check for --chdir value or -C value format (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return osargs.ParseStringWithShorthand(args, "chdir", "C")
 }
 
 // processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.
@@ -294,6 +269,14 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 	if cmd.Flags().Changed("identity") {
 		if identity, err := cmd.Flags().GetString("identity"); err == nil {
 			v.Set("identity", identity)
+		}
+	}
+
+	// Sync edition flag if explicitly set, so LoadConfig sees the pin
+	// before it applies edition default overrides.
+	if cmd.Flags().Changed(editionFlagName) {
+		if editionPin, err := cmd.Flags().GetString(editionFlagName); err == nil {
+			v.Set(editionFlagName, editionPin)
 		}
 	}
 }
@@ -474,11 +457,16 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+				// The CI git-clone bootstrap clone runs in an empty workspace
+				// (e.g. replacing actions/checkout), where atmos.yaml cannot
+				// exist yet -- NotFound is the expected error for that flow.
+				if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
+					log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
+				}
 			} else if isHelpRequested {
 				// Help screens should always render, even with invalid config.
 				log.Debug("CLI configuration error (continuing for help)", "error", err)
-			} else if isCIGitCloneBootstrapRequested() {
-				tmpConfig.CI.Enabled = true
+			} else if applyCIGitCloneBootstrap(cmd, args, &tmpConfig) {
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
 			} else if isBuiltinConfigValidationCommand(cmd, args) {
 				// The built-in config validation commands must run when config decoding
@@ -640,6 +628,10 @@ var RootCmd = &cobra.Command{
 		// Check for experimental settings (non-command features gated by config values).
 		// This extends the experimental check above to cover settings like key_delimiter.
 		checkExperimentalSettings(&tmpConfig)
+
+		// Honor settings.terminal.max_width everywhere widths are computed
+		// (tables, help output). Zero leaves the detected width unclamped.
+		templates.SetTerminalWidthLimit(tmpConfig.Settings.Terminal.MaxWidth)
 
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
@@ -1107,6 +1099,9 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
 		features = append(features, "settings.yaml.key_delimiter")
 	}
+	if atmosConfig.Edition != "" {
+		features = append(features, editionFlagName)
+	}
 
 	if len(features) == 0 {
 		return
@@ -1279,7 +1274,10 @@ func formatFlagName(f *pflag.Flag) string {
 // configured (config refines, but is never required — help must lay out
 // correctly with no atmos.yaml at all).
 func getTerminalWidth() int {
-	const defaultWidth = 120 // Fang's max width
+	// Fallback ONLY when the width cannot be detected; never a ceiling. The
+	// detected terminal width is used as-is — width is unlimited by default,
+	// and an explicit settings.terminal.max_width acts as the only ceiling.
+	const defaultWidth = 120
 
 	width := castcmd.ActiveRecordingWidth()
 	if width <= 0 {
@@ -1289,11 +1287,7 @@ func getTerminalWidth() int {
 		width = defaultWidth
 	}
 
-	maxWidth := defaultWidth
-	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
-		maxWidth = atmosConfig.Settings.Terminal.MaxWidth
-	}
-	if width > maxWidth {
+	if maxWidth := atmosConfig.Settings.Terminal.MaxWidth; maxWidth > 0 && width > maxWidth {
 		return maxWidth
 	}
 	return width
@@ -1628,12 +1622,6 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		return nil
 	}
 
-	if isCIGitCloneBootstrapRequested() {
-		atmosConfig.CI.Enabled = true
-		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
-		return nil
-	}
-
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1663,6 +1651,10 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 	return initErr
 }
 
+// configCommandToken is the "config" argument/subcommand token shared by all
+// built-in config-validation command spellings.
+const configCommandToken = "config"
+
 // isBuiltinConfigValidationArgs reports whether arguments invoke a built-in
 // command that validates the Atmos configuration itself.
 func isBuiltinConfigValidationArgs(args []string) bool {
@@ -1672,10 +1664,22 @@ func isBuiltinConfigValidationArgs(args []string) bool {
 
 	// Skip only leading root flags. Once a command token is found, remaining
 	// arguments belong to that command and must not be interpreted as commands.
-	args = args[1:]
+	args, ok := skipLeadingRootFlags(args[1:])
+	if !ok {
+		return false
+	}
+
+	return matchesConfigValidationCommand(args)
+}
+
+// skipLeadingRootFlags advances past leading root-level flags in args,
+// returning the remaining arguments. It returns ok=false when a "--" flag
+// terminator or an incomplete value-consuming flag is encountered, since
+// neither case can resolve to a config-validation command.
+func skipLeadingRootFlags(args []string) ([]string, bool) {
 	for len(args) > 0 {
 		if args[0] == "--" {
-			return false
+			return nil, false
 		}
 		skip, consumesValue := isSkippableRootFlag(args[0])
 		if !skip {
@@ -1683,24 +1687,43 @@ func isBuiltinConfigValidationArgs(args []string) bool {
 		}
 		if consumesValue {
 			if len(args) < 2 {
-				return false
+				return nil, false
 			}
 			args = args[2:]
 			continue
 		}
 		args = args[1:]
 	}
+	return args, true
+}
 
+// matchesConfigValidationCommand reports whether the already flag-stripped
+// command arguments invoke one of the built-in config-validation commands.
+func matchesConfigValidationCommand(args []string) bool {
 	switch {
-	case len(args) >= 2 && args[0] == "config" && args[1] == "validate":
+	case matchesLeadingTokens(args, configCommandToken, "validate"):
 		return true
-	case len(args) >= 2 && args[0] == "validate" && args[1] == "config":
+	case matchesLeadingTokens(args, "validate", configCommandToken):
 		return true
-	case len(args) >= 3 && args[0] == "validate" && args[1] == "schema" && args[2] == "config":
+	case matchesLeadingTokens(args, "validate", "schema", configCommandToken):
 		return true
 	default:
 		return false
 	}
+}
+
+// matchesLeadingTokens reports whether args starts with exactly the given
+// tokens, in order.
+func matchesLeadingTokens(args []string, tokens ...string) bool {
+	if len(args) < len(tokens) {
+		return false
+	}
+	for i, token := range tokens {
+		if args[i] != token {
+			return false
+		}
+	}
+	return true
 }
 
 func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
@@ -1708,7 +1731,7 @@ func isBuiltinConfigValidationCommand(cmd *cobra.Command, args []string) bool {
 	case "atmos config validate", "atmos validate config":
 		return true
 	case "atmos validate schema":
-		return len(args) > 0 && args[0] == "config"
+		return len(args) > 0 && args[0] == configCommandToken
 	default:
 		return false
 	}
@@ -1725,115 +1748,25 @@ func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr erro
 	}
 }
 
-func isCIGitCloneBootstrapRequested() bool {
-	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
-}
-
-const (
-	rootFlagChdirShort       = "-C"
-	rootFlagChdirShortPrefix = "-C="
-)
-
-var (
-	gitCloneBootstrapValueFlags = map[string]struct{}{
-		"--repo-uri":       {},
-		"-r":               {},
-		"--branch":         {},
-		"-b":               {},
-		"--remote":         {},
-		"--workdir":        {},
-		"--filter":         {},
-		"--depth":          {},
-		rootFlagChdirShort: {},
-	}
-	rootBootstrapValueFlags = map[string]struct{}{
-		"--chdir":          {},
-		rootFlagChdirShort: {},
-		"--profile":        {},
-		"--config":         {},
-		"--config-path":    {},
-		"--base-path":      {},
-		"--logs-level":     {},
-		"--logs-file":      {},
-		"--use-version":    {},
-	}
-)
-
-func argsRequestNoArgGitClone(args []string) bool {
-	args = stripRootFlagsForBootstrapCheck(args)
-	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+// applyCIGitCloneBootstrap enables CI mode when the invoked command is a
+// no-argument CI git-clone bootstrap (see gitcmd.CICloneBootstrapRequested),
+// and reports whether it did so.
+//
+// It writes CI.Enabled to BOTH the package-level atmosConfig and the
+// PersistentPreRun-local tmpConfig. The global write is the load-bearing one:
+// cmd/git's RunE reads CI.Enabled off atmosConfigPtr, which Execute() points
+// at the package-level atmosConfig (gitcmd.SetAtmosConfig(&atmosConfig))
+// before PersistentPreRun ever runs. The tmpConfig parameter, by contrast, is
+// a separate cfg.InitCliConfig() result that PersistentPreRun uses locally
+// for the rest of this invocation and discards afterward -- writing only
+// tmpConfig would silently never reach the git-clone command that needs it.
+func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *schema.AtmosConfiguration) bool {
+	if !gitcmd.CICloneBootstrapRequested(cmd, args) {
 		return false
 	}
-	return gitCloneArgsAllowBootstrap(args[2:])
-}
-
-type bootstrapArgAction int
-
-const (
-	bootstrapArgAllow bootstrapArgAction = iota
-	bootstrapArgConsumeNext
-	bootstrapArgReject
-)
-
-func gitCloneArgsAllowBootstrap(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		switch gitCloneBootstrapArgAction(args[i]) {
-		case bootstrapArgReject:
-			return false
-		case bootstrapArgConsumeNext:
-			i++
-		}
-	}
+	atmosConfig.CI.Enabled = true
+	tmpConfig.CI.Enabled = true
 	return true
-}
-
-func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
-	switch {
-	case arg == "--" || arg == "--all":
-		return bootstrapArgReject
-	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
-		return bootstrapArgConsumeNext
-	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
-		return bootstrapArgAllow
-	default:
-		return bootstrapArgReject
-	}
-}
-
-func stripRootFlagsForBootstrapCheck(args []string) []string {
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
-			if len(args) < 2 {
-				return nil
-			}
-			args = args[2:]
-		case flagHasInlineValue(arg, rootBootstrapValueFlags):
-			args = args[1:]
-		default:
-			return args
-		}
-	}
-	return args
-}
-
-func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
-	_, ok := flags[arg]
-	return ok
-}
-
-func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
-	for flag := range flags {
-		if strings.HasPrefix(arg, flag+"=") {
-			return true
-		}
-	}
-	return false
-}
-
-func shortChdirHasInlineValue(arg string) bool {
-	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -1880,6 +1813,7 @@ func Execute() error {
 	toolchain.SetAtmosConfig(&atmosConfig)
 	workdir.SetAtmosConfig(&atmosConfig)
 	terraformcache.SetAtmosConfig(&atmosConfig)
+	sbomcmd.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.

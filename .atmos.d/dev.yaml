@@ -144,11 +144,11 @@ commands:
                 content: NOTICE regenerated.
 
           - name: mocks
-            description: Regenerate auth/http mocks using go:generate directives
+            description: Regenerate auth/http/store mocks using go:generate directives
             env: *go_auto_env
             steps:
               - type: atmos
-                command: test generate-auth-http-mocks
+                command: test generate-auth-http-store-mocks
 
           - name: snapshots
             description: Regenerate CLI golden snapshots

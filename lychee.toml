@@ -87,13 +87,15 @@ exclude = [
   "github\\.com/codespaces",
   # Raw file URLs redirect through GitHub's CDN (by design)
   "\\?raw=true",
-  # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
-  "img\\.shields\\.io/github/release/",
-  # Shields badge endpoints intermittently return 503/520 from CI runners even
-  # though the badges resolve in browsers. These are decorative status badges,
-  # so exclude the unstable badge and GitHub-status endpoints from link checks.
-  "shields\\.io/badge/",
-  "img\\.shields\\.io/github/(actions/workflow/status|last-commit)/",
+  # shields.io (both the bare domain and the img. subdomain used for dynamic
+  # GitHub badges) is Cloudflare-fronted and intermittently returns non-200
+  # (500, 520 "Unknown Error") to automated/CI requests -- confirmed across
+  # multiple unrelated badge paths in different files, and reproduced outside
+  # CI too (curl returning 200 and 520 on back-to-back requests to the same
+  # badge). The badges render fine in a browser. Supersedes narrower
+  # path-scoped excludes for the same domain (img.shields.io/github/release/,
+  # shields.io/badge/, img.shields.io/github/(actions/workflow/status|last-commit)/).
+  "shields\\.io",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
@@ -148,6 +150,10 @@ exclude = [
   # it is the canonical NO_COLOR spec site referenced from the help-system and
   # io-handling PRDs, and resolves in a real browser)
   "no-color\\.org",
+  # bixense.com (intermittent 503 Service Unavailable from CI runners; it is the
+  # canonical CLICOLOR spec site referenced alongside NO_COLOR in the help-system
+  # PRD, and resolves fine outside CI)
+  "bixense\\.com",
   # Algolia DocSearch docs (intermittent timeouts from CI runners)
   "docsearch\\.algolia\\.com",
   # Open Group POSIX specs (intermittent timeouts from CI runners)
@@ -164,12 +170,23 @@ exclude = [
   # Server Error from GitHub's gateway in CI; the page is valid and loads in
   # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
   "github\\.com/cloudposse/atmos/releases/tag/v1\\.203\\.0",
+  # NTIA's 2021 SBOM minimum-elements report is authoritative, but its TLS
+  # chain is not trusted by GitHub-hosted runners. It resolves locally and in
+  # browsers; keep the citation while excluding only this known-valid URL.
+  "ntia\\.gov/report/2021/minimum-elements-software-bill-materials-sbom",
   # Otelic (intermittent "Connection reset by peer" from CI runners; the page
   # returns 200 and loads fine outside CI, verified via curl).
   "otelic\\.com",
+  # Docker's docs (CloudFront-fronted) intermittently reset connections from
+  # CI runners; the page 301-redirects then returns 200 outside CI, verified
+  # via curl.
+  "docs\\.docker\\.com",
   # These two blob-file deep links intermittently return 404 from GitHub's
   # gateway in CI even though the files exist on their repo's default branch;
   # both verified to return 200 outside CI via curl.
   "github\\.com/github/github-mcp-server/blob/main/docs/installation-guides/install-gemini-cli\\.md",
   "github\\.com/99designs/aws-vault/blob/master/USAGE\\.md",
+  # This PDF intermittently times out from CI runners across multiple docs
+  # referencing it; verified to return 200 outside CI via curl.
+  "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
 ]

@@ -1,8 +1,7 @@
 
 👽 test linux/amd64
 
-This command generates configuration files to automate and streamline Terraform
-workflows with Atlantis.
+This command generates configuration files to automate and streamline Terraform workflows with Atlantis.
 
 USAGE
 
@@ -20,7 +19,6 @@ FLAGS
 
 
 
-Use atmos atlantis generate [command] --help for more information about a
-command.
+Use atmos atlantis generate [command] --help for more information about a command.
 
 Use --help=usage for examples or --help=all for all flags and full help.
