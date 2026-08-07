@@ -704,6 +704,8 @@ Initial values:
 
 Future values may include explicit patterns or predicates.
 
+Draft GitHub releases are always excluded from candidate resolution, regardless of the `prerelease` policy — a draft is unpublished and has no legitimate resolution target, so there is no opt-in for it.
+
 ### Ignore
 
 Ignore rules for versions or patterns.

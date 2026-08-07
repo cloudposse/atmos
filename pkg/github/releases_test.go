@@ -579,6 +579,59 @@ func TestFilterPrereleases(t *testing.T) {
 	}
 }
 
+// TestFilterDrafts tests the filterDrafts function.
+func TestFilterDrafts(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name        string
+		releases    []*github.RepositoryRelease
+		expectedLen int
+	}{
+		{
+			name: "filters out draft releases",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.226.0"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.225.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedLen: 2,
+		},
+		{
+			name:        "handles empty slice",
+			releases:    []*github.RepositoryRelease{},
+			expectedLen: 0,
+		},
+		{
+			name: "handles all drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v2.0.0-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.1-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedLen: 0,
+		},
+		{
+			name: "handles no drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.1.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDrafts(tt.releases)
+			assert.Len(t, result, tt.expectedLen)
+
+			for _, release := range result {
+				assert.False(t, release.GetDraft(), "Should not contain draft releases")
+			}
+		})
+	}
+}
+
 // TestFilterByDate tests the filterByDate function.
 func TestFilterByDate(t *testing.T) {
 	baseTime := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
