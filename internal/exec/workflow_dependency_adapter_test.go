@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -263,4 +264,153 @@ func TestCommandLookup_UniqueNestedNameResolves(t *testing.T) {
 	assert.True(t, found)
 	require.Len(t, refs, 1)
 	assert.Equal(t, "lint", refs[0].Name)
+}
+
+// TestCommandLookup_UnknownNameReturnsNotFound confirms an unregistered command name resolves
+// to found=false with no error, distinguishing "this command doesn't exist" (a graph-build
+// error surfaced by taskgraph.buildGraph as ErrUnknownDependency) from an actual lookup failure.
+func TestCommandLookup_UnknownNameReturnsNotFound(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{Name: "terraform"},
+		},
+	}
+
+	lookup := CommandLookup(atmosConfig)
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindCommand, Name: "does-not-exist"})
+
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Nil(t, refs)
+}
+
+// TestCommandLookup_NoDependenciesReturnsEmptyFound confirms a resolved command with no
+// dependencies: block at all (Dependencies == nil, not merely an empty one) still reports
+// found=true with a nil/empty ref slice -- a leaf command in the graph, not a lookup failure.
+func TestCommandLookup_NoDependenciesReturnsEmptyFound(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{Name: "lint"},
+		},
+	}
+
+	lookup := CommandLookup(atmosConfig)
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindCommand, Name: "lint"})
+
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Empty(t, refs)
+}
+
+// TestWorkflowLookup_NoFileErrors confirms a command-depends-on-workflow reference (defaultFile
+// == "", since a custom command has no "current workflow file" to fall back to) with no
+// explicit `file:` of its own returns the documented ErrWorkflowNoWorkflow guidance, rather than
+// resolving against an empty/garbage path.
+func TestWorkflowLookup_NoFileErrors(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	lookup := WorkflowLookup(atmosConfig, "")
+
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindWorkflow, Name: "deploy"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
+	assert.False(t, found)
+	assert.Nil(t, refs)
+}
+
+// TestWorkflowLookup_LoadErrorPropagates confirms a defaultFile that doesn't resolve to an
+// existing workflow manifest surfaces LoadWorkflowConfig's own error (ErrWorkflowFileNotFound)
+// through WorkflowLookup, rather than being swallowed as a plain not-found.
+func TestWorkflowLookup_LoadErrorPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	lookup := WorkflowLookup(atmosConfig, "does-not-exist.yaml")
+
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindWorkflow, Name: "deploy"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowFileNotFound)
+	assert.False(t, found)
+	assert.Nil(t, refs)
+}
+
+// TestWorkflowLookup_UnknownWorkflowNameReturnsNotFound confirms a workflow file that loads
+// successfully but doesn't define the requested workflow name resolves to found=false with no
+// error -- the graph builder is the one that turns this into ErrUnknownDependency, not the
+// lookup itself.
+func TestWorkflowLookup_UnknownWorkflowNameReturnsNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "workflows.yaml")
+	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows:\n  build:\n    steps: []\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	lookup := WorkflowLookup(atmosConfig, workflowPath)
+
+	refs, found, err := lookup(taskgraph.Ref{Kind: taskgraph.KindWorkflow, Name: "deploy"})
+
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Nil(t, refs)
+}
+
+// TestWorkflowRunner_LoadErrorPropagates mirrors TestWorkflowLookup_LoadErrorPropagates for the
+// execution side: a defaultFile that doesn't resolve to an existing manifest must fail the
+// dispatch with LoadWorkflowConfig's own error, not silently no-op.
+func TestWorkflowRunner_LoadErrorPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	runner := WorkflowRunner(atmosConfig, "does-not-exist.yaml", false, "")
+
+	err := runner(context.Background(), taskgraph.Ref{Kind: taskgraph.KindWorkflow, Name: "deploy"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowFileNotFound)
+}
+
+// TestWorkflowRunner_UnknownWorkflowNameErrors confirms WorkflowRunner returns a clear
+// ErrWorkflowNoWorkflow (rather than a nil-pointer panic on a zero-value WorkflowDefinition) when
+// dispatched against a ref whose name isn't defined in the resolved file -- this can only happen
+// if a lookup and a runner ever disagree about what "found" means, so the runner must fail
+// loudly on its own instead of assuming the lookup already guaranteed existence.
+func TestWorkflowRunner_UnknownWorkflowNameErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "workflows.yaml")
+	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows:\n  build:\n    steps: []\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	runner := WorkflowRunner(atmosConfig, workflowPath, false, "")
+
+	err := runner(context.Background(), taskgraph.Ref{Kind: taskgraph.KindWorkflow, Name: "deploy"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
+}
+
+// TestCommandRunnerViaSubprocess_InvokesRunningBinaryWithFormattedArgs verifies the actual
+// subprocess dispatch: commandRunnerViaSubprocess must shell out to the CURRENTLY-RUNNING
+// binary (via resolveAtmosBinary/os.Executable, not a bare "atmos" PATH lookup) with the
+// dependency's name, its flags formatted as `--flag=value`, then its positional args. Uses the
+// _ATMOS_TEST_ARGS_FILE test-binary-as-subprocess convention (see testmain_test.go) so this
+// runs the real ExecuteShellCommand/os/exec path end to end instead of only asserting on
+// constructed strings.
+func TestCommandRunnerViaSubprocess_InvokesRunningBinaryWithFormattedArgs(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	t.Setenv("_ATMOS_TEST_ARGS_FILE", argsFile)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	runner := commandRunnerViaSubprocess(atmosConfig)
+
+	err := runner(context.Background(), taskgraph.Ref{
+		Kind:  taskgraph.KindCommand,
+		Name:  "mycommand",
+		Flags: map[string]string{"env": "dev"},
+		Args:  []string{"--foo"},
+	})
+	require.NoError(t, err, "the subprocess (this test binary, intercepted by TestMain) must exit 0")
+
+	content, readErr := os.ReadFile(argsFile)
+	require.NoError(t, readErr, "TestMain must have written the subprocess's argv to _ATMOS_TEST_ARGS_FILE")
+	got := strings.Split(string(content), "\n")
+	require.Len(t, got, 3)
+	assert.Equal(t, "mycommand", got[0], "first arg must be the dependency's command name")
+	assert.Equal(t, "--env=dev", got[1], "flags must be formatted as --name=value")
+	assert.Equal(t, "--foo", got[2], "positional args must be appended after flags")
 }

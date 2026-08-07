@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -636,5 +637,158 @@ func TestBuildFileFacts_HasherErrorPropagates(t *testing.T) {
 
 	checker := NewChecker(WithHasher(func([]string) (string, error) { return "", errors.New("hash failed") }))
 	_, err := checker.buildFileFacts([]string{f})
+	require.Error(t, err)
+}
+
+// artifactsRecordsCondition returns a condition referencing the bare `artifacts` identifier only
+// (not `sources`), used to isolate the artifacts-side of structured-record building from the
+// sources-side (already isolated by sourcesRecordsCondition, which mentions both).
+func artifactsRecordsCondition(t *testing.T) schema.Condition {
+	t.Helper()
+	cond, err := schema.NewCondition("!cel artifacts.exists(a, a.mtime > 0)")
+	require.NoError(t, err)
+	return cond
+}
+
+// TestMentionsAnyFreshnessFact exercises both the early-return-true branch (a freshness
+// identifier is referenced) and the loop-exhaustion return-false branch (none are), including
+// the real zero-value Condition callers hit before a freshness.Checker exists yet (see the
+// function's own doc comment about deferring to Compute's actual facts).
+func TestMentionsAnyFreshnessFact(t *testing.T) {
+	cases := []struct {
+		name string
+		cond schema.Condition
+		want bool
+	}{
+		{name: "zero-value condition mentions nothing", cond: schema.Condition{}, want: false},
+		{name: "unrelated CEL expression mentions nothing", cond: schema.MustCondition("!cel 1 == 1"), want: false},
+		{name: "mentions checksum", cond: checksumChangedCondition(t), want: true},
+		{name: "mentions timestamp", cond: timestampChangedCondition(t), want: true},
+		{name: "mentions precondition", cond: schema.MustCondition("!cel !precondition.success"), want: true},
+		{name: "mentions sources", cond: sourcesRecordsCondition(t), want: true},
+		{name: "mentions artifacts", cond: artifactsRecordsCondition(t), want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, MentionsAnyFreshnessFact(tc.cond))
+		})
+	}
+}
+
+// TestCompute_ArtifactRecordsBuildErrorPropagates targets the artifacts-side branch of
+// buildStructuredRecords in isolation from the sources-side (already covered by
+// TestCompute_SourceRecordsBuildErrorPropagates): a `when:` mentioning bare `artifacts` only
+// must still surface a hasher failure while building the per-file artifact records.
+func TestCompute_ArtifactRecordsBuildErrorPropagates(t *testing.T) {
+	tmpDir := t.TempDir()
+	artifactFile := filepath.Join(tmpDir, "app")
+	require.NoError(t, os.WriteFile(artifactFile, []byte("binary"), 0o644))
+
+	checker := NewChecker(
+		WithGlobber(fakeGlobber{matches: map[string][]string{"app": {artifactFile}}}),
+		WithHasher(func([]string) (string, error) { return "", errors.New("hash failed") }),
+	)
+	artifacts := &schema.Artifacts{Paths: []string{"app"}}
+
+	_, err := computeFor(checker, artifactsRecordsCondition(t), nil, artifacts, nil, tmpDir, tmpDir, "cmd:x", "step")
+	require.Error(t, err)
+}
+
+// erroringStateStore always fails Load, exercising checksumChanged's store-error propagation
+// path distinctly from a hasher failure (already covered by TestChecksumChanged_HasherErrorPropagates).
+type erroringStateStore struct{}
+
+func (erroringStateStore) Load(_, _ string) (Record, bool, error) {
+	return Record{}, false, errors.New("state load failed")
+}
+
+func (erroringStateStore) Save(_, _ string, _ Record) error {
+	return nil
+}
+
+func TestChecksumChanged_StateStoreLoadErrorPropagates(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "main.go")
+	require.NoError(t, os.WriteFile(srcFile, []byte("package main"), 0o644))
+	artifactFile := filepath.Join(tmpDir, "app")
+	require.NoError(t, os.WriteFile(artifactFile, []byte("binary"), 0o644))
+
+	checker := NewChecker(
+		WithGlobber(fakeGlobber{matches: map[string][]string{"*.go": {srcFile}, "app": {artifactFile}}}),
+		WithStateStore(erroringStateStore{}),
+	)
+	inputs := &schema.Inputs{Sources: []string{"*.go"}}
+	artifacts := &schema.Artifacts{Paths: []string{"app"}}
+
+	_, err := computeFor(checker, checksumChangedCondition(t), inputs, artifacts, nil, tmpDir, tmpDir, "cmd:build", "compile")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "state load failed")
+}
+
+func TestDefaultGlobber_InvalidPatternPropagatesUnderlyingError(t *testing.T) {
+	// A malformed glob pattern (unmatched bracket) is a real doublestar error, distinct from the
+	// "base directory doesn't exist yet" case that Glob deliberately treats as "no matches."
+	tmpDir := t.TempDir()
+	g := NewGlobber()
+	_, err := g.Glob(tmpDir, "[")
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrFailedToFindImport),
+		"a malformed pattern must propagate as a real error, not the missing-base-dir sentinel")
+}
+
+func TestFileStateStore_LoadMissingKeyInExistingStateDirIsAMissNotAnError(t *testing.T) {
+	// Distinct from TestFileStateStore_LoadOnNonexistentStateDirIsAMissNotAnError: here stateDir
+	// itself already exists (e.g. another step already recorded state there), but no record has
+	// ever been saved for THIS key -- exercising os.ReadFile's os.IsNotExist(readErr) branch
+	// rather than the earlier os.Stat(stateDir) short-circuit.
+	store := NewStateStore()
+	stateDir := t.TempDir()
+
+	record, found, err := store.Load(stateDir, "never-saved-key")
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Equal(t, Record{}, record)
+}
+
+func TestFileStateStore_LoadNonNotExistReadErrorPropagates(t *testing.T) {
+	// Replace the record file with a directory of the same name: os.ReadFile on a directory
+	// fails with a real (non-ENOENT) error on every supported platform, exercising Load's
+	// readErr-that-isn't-IsNotExist branch, distinct from both the corrupted-JSON case (a cache
+	// miss) and the missing-file case (also a cache miss).
+	stateDir := t.TempDir()
+	key := "a-key"
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, key+".json"), 0o755))
+
+	store := NewStateStore()
+	_, _, err := store.Load(stateDir, key)
+	require.Error(t, err)
+}
+
+func TestFileStateStore_SaveMkdirAllErrorPropagates(t *testing.T) {
+	// stateDir's parent path component is a regular file, not a directory -- os.MkdirAll must
+	// fail, and Save must propagate that failure rather than silently swallowing it.
+	tmpDir := t.TempDir()
+	blocker := filepath.Join(tmpDir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o644))
+	stateDir := filepath.Join(blocker, "state")
+
+	store := NewStateStore()
+	err := store.Save(stateDir, "key", Record{SourcesHash: "abc"})
+	require.Error(t, err)
+}
+
+func TestFileStateStore_SaveRenameErrorPropagates(t *testing.T) {
+	// Pre-create the final record path as a non-empty directory: the closing os.Rename(tmp,
+	// path) must fail (a file can never atomically replace a non-empty directory), and Save must
+	// propagate that failure instead of silently reporting success while leaving a stale temp
+	// file behind.
+	stateDir := t.TempDir()
+	key := "a-key"
+	recordAsDir := filepath.Join(stateDir, key+".json")
+	require.NoError(t, os.MkdirAll(recordAsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(recordAsDir, "inner"), []byte("x"), 0o644))
+
+	store := NewStateStore()
+	err := store.Save(stateDir, key, Record{SourcesHash: "abc"})
 	require.Error(t, err)
 }

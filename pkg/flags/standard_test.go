@@ -2,6 +2,7 @@ package flags
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -472,6 +473,26 @@ func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStandardFlagParser_ValidateSingleFlag_CustomMessageOverridesDefault verifies that when a
+// flag has a custom validation message registered (p.validationMsgs), an invalid value produces
+// that custom message instead of ValidateValue's default "invalid value, valid values" text,
+// while still wrapping the shared errUtils.ErrInvalidFlagValue sentinel.
+func TestStandardFlagParser_ValidateSingleFlag_CustomMessageOverridesDefault(t *testing.T) {
+	validValues := []string{"json", "yaml", "table"}
+	parser := NewStandardFlagParser(
+		WithStringFlag("format", "f", "json", "Output format"),
+		WithValidValues("format", validValues...),
+	)
+	parser.validationMsgs["format"] = "format must be one of: json, yaml, table"
+
+	err := parser.validateSingleFlag("format", validValues, map[string]interface{}{"format": "xml"}, nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidFlagValue))
+	assert.Contains(t, err.Error(), "format must be one of: json, yaml, table")
+	assert.NotContains(t, err.Error(), "invalid value \"xml\"", "the custom message must replace, not append to, the default text")
 }
 
 // TestStandardFlagParser_ParseWithPositionalArgs tests parsing with positional arguments.

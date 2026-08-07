@@ -204,6 +204,66 @@ func TestCustomCommandRunner_NoPreRunIsOptional(t *testing.T) {
 	assert.True(t, ran)
 }
 
+// TestRecordDependencyError covers both branches of RecordDependencyError's sink lookup: no sink
+// present in context (a no-op, must not panic) and a sink present (the error must actually be
+// recorded so CustomCommandRunner's caller can read it back).
+func TestRecordDependencyError(t *testing.T) {
+	t.Run("no sink in context is a no-op", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "x"}
+		cmd.SetContext(context.Background())
+		assert.NotPanics(t, func() {
+			RecordDependencyError(cmd, errors.New("boom"))
+		})
+	})
+
+	t.Run("sink present records the error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "x"}
+		ctx, sink := WithDependencyErrorSink(context.Background())
+		cmd.SetContext(ctx)
+
+		boom := errors.New("boom")
+		RecordDependencyError(cmd, boom)
+
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		assert.Same(t, boom, sink.err)
+	})
+}
+
+// TestCustomCommandRunner_ResetsUnspecifiedFlagsToDeclaredDefaults is the regression case for
+// resetFlagsToDeclaredDefaults: a dispatch that does NOT override a given flag must revert it to
+// its declared default, not silently inherit whatever a PRIOR dispatch sharing the same
+// *cobra.Command last set -- exactly the `dependencies.commands: [compile, {name: compile,
+// flags: {target: test}}]` scenario described in resetFlagsToDeclaredDefaults' doc comment.
+func TestCustomCommandRunner_ResetsUnspecifiedFlagsToDeclaredDefaults(t *testing.T) {
+	root := newFakeRoot()
+	var observedEnv []string
+
+	target := markCustom(&cobra.Command{Use: "build"})
+	target.PersistentFlags().String("env", "dev", "")
+	target.Run = func(cmd *cobra.Command, _ []string) {
+		val, err := cmd.PersistentFlags().GetString("env")
+		require.NoError(t, err)
+		observedEnv = append(observedEnv, val)
+	}
+	root.AddCommand(target)
+
+	runner := CustomCommandRunner(root, isCustomForTest)
+
+	// First dispatch overrides env=prod.
+	require.NoError(t, runner(context.Background(), taskgraph.Ref{
+		Kind: taskgraph.KindCommand, Name: "build", Flags: map[string]string{"env": "prod"},
+	}))
+	// Second dispatch has NO override -- without resetFlagsToDeclaredDefaults, this would
+	// silently inherit "prod" from the prior dispatch instead of reverting to the declared
+	// default.
+	require.NoError(t, runner(context.Background(), taskgraph.Ref{
+		Kind: taskgraph.KindCommand, Name: "build",
+	}))
+
+	require.Equal(t, []string{"prod", "dev"}, observedEnv)
+}
+
 func TestCustomCommandDependencyOptions_ReturnsAllFourOptions(t *testing.T) {
 	root := newFakeRoot()
 	opts := CustomCommandDependencyOptions(&schema.AtmosConfiguration{}, root, isCustomForTest)

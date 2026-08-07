@@ -1657,7 +1657,8 @@
           "enum": ["wait_all", "fail_fast", "best_effort"],
           "description": "Controls failure propagation for this dependency: wait_all (default), fail_fast, or best_effort."
         }
-      }
+      },
+      "required": ["name"]
     },
     "unit_dependencies": {
       "title": "unit_dependencies",

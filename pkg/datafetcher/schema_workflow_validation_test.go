@@ -65,6 +65,32 @@ func TestManifestSchema_WorkflowDependenciesCommandsAndWorkflows(t *testing.T) {
 	assertSchemaValid(t, loadStackConfigSchemaBytes(t), manifest)
 }
 
+// TestManifestSchema_UnitDependencyRequiresName guards against a real schema gap in the
+// unit_dependency definition added alongside dependencies.commands/dependencies.workflows: without
+// "required": ["name"], a nameless entry like {} or {flags: {env: dev}} validated successfully and
+// only failed later during graph construction, instead of failing fast at schema-validation time.
+func TestManifestSchema_UnitDependencyRequiresName(t *testing.T) {
+	nameless := map[string]any{
+		"workflows": map[string]any{
+			"deploy": map[string]any{
+				"description": "Deploy",
+				"dependencies": map[string]any{
+					"commands": []any{
+						map[string]any{"flags": map[string]any{"env": "dev"}},
+					},
+				},
+				"steps": []any{
+					map[string]any{"command": "echo deploy"},
+				},
+			},
+		},
+	}
+
+	assertSchemaInvalid(t, loadEmbeddedSchemaBytes(t), nameless)
+	assertSchemaInvalid(t, loadWebsiteSchemaBytes(t), nameless)
+	assertSchemaInvalid(t, loadStackConfigSchemaBytes(t), nameless)
+}
+
 // TestManifestSchema_Issue2708_InteractiveChooseAndInputSteps reproduces the second snippet:
 // `type: choose` with `options` + `default`, and `type: input` with `default`.
 func TestManifestSchema_Issue2708_InteractiveChooseAndInputSteps(t *testing.T) {

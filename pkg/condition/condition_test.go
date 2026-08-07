@@ -367,6 +367,19 @@ func TestConditionMentionsCELIdentifier(t *testing.T) {
 	assert.False(t, Condition{}.MentionsCELIdentifier("checksum"), "a zero-value condition mentions nothing")
 }
 
+func TestConditionMentionsCELIdentifier_RecursesThroughCompoundChildren(t *testing.T) {
+	// A single bare CEL condition never exercises mentionsCELIdentifier's recursive branch --
+	// only a compound (all/any/not) condition wrapping a CEL child does, since only those Kinds
+	// populate Node.Children (see mentionsCELIdentifier's `for _, child := range n.Children`).
+	cond, err := New(map[string]any{
+		"all": []any{"ci", "!cel checksum.changed"},
+	})
+	require.NoError(t, err)
+
+	assert.True(t, cond.MentionsCELIdentifier("checksum"), "must find checksum in a nested CEL child")
+	assert.False(t, cond.MentionsCELIdentifier("timestamp"), "must not falsely match an identifier absent from every child")
+}
+
 func TestConditionEvaluate_EmptySourcesArtifactsActivateCleanly(t *testing.T) {
 	// A step with no inputs.sources/artifacts.paths declared must still evaluate a `when:`
 	// expression that references sources/artifacts (as an empty list), not panic or error --

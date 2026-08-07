@@ -9,6 +9,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// isInteractiveFn and promptForValueFn are seams over IsInteractive/PromptForValue so tests can
+// exercise the required-and-missing prompt branches below without a real interactive TTY (mirrors
+// the promptForValueFn seam already used by cmd/secret/deps.go).
+var (
+	isInteractiveFn  = IsInteractive
+	promptForValueFn = PromptForValue
+)
+
 // ValidateConstrainedFields enforces schema.CommandFlag/CommandArgument's `values:` constraint
 // for a custom command: static validation for any value already provided (reusing ValidateValue,
 // the same check built-in commands' `valid_values:` already uses so both surfaces report
@@ -33,10 +41,10 @@ func validateConstrainedArguments(arguments []schema.CommandArgument, argumentsD
 		}
 		current := argumentsData[arg.Name]
 		if current == "" {
-			if !arg.Required || !IsInteractive() {
+			if !arg.Required || !isInteractiveFn() {
 				continue
 			}
-			selected, err := PromptForValue(arg.Name, fmt.Sprintf("Choose %s", arg.Name), arg.Values)
+			selected, err := promptForValueFn(arg.Name, fmt.Sprintf("Choose %s", arg.Name), arg.Values)
 			if err != nil {
 				return err
 			}
@@ -75,10 +83,10 @@ func validateConstrainedFlags(cmd *cobra.Command, flags []schema.CommandFlag, fl
 // flagsData and the actual flag so later steps in a multi-step command read the resolved value
 // back from cmd.Flag(fl.Name) instead of re-prompting.
 func promptForMissingConstrainedFlag(cmd *cobra.Command, fl *schema.CommandFlag, flagsData map[string]any) error {
-	if !fl.Required || !IsInteractive() {
+	if !fl.Required || !isInteractiveFn() {
 		return nil
 	}
-	selected, err := PromptForValue(fl.Name, fmt.Sprintf("Choose %s", fl.Name), fl.Values)
+	selected, err := promptForValueFn(fl.Name, fmt.Sprintf("Choose %s", fl.Name), fl.Values)
 	if err != nil {
 		return err
 	}

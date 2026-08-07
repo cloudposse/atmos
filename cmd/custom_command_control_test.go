@@ -290,3 +290,69 @@ func TestCustomCommandIntegration_UnforgivenFailureSkipsPlainStepsButRunsFailure
 	assert.NoFileExists(t, skippedFile, "a plain step (implicit when: success) after an unforgiven failure must be skipped")
 	assert.FileExists(t, handlerFile, "a when: failure step must still run after an unforgiven failure")
 }
+
+// TestCustomCommandIntegration_ParallelStepWithUnknownNeedsFailsValidation verifies that
+// executeCustomCommand now runs commandConfig.Steps through schema.ValidateWorkflowSteps -- the
+// same needs:-graph validator workflows already use -- before doing anything else (including
+// resolving dependencies.commands/dependencies.workflows or running any step). A `needs:`
+// reference to a sibling step name that does not exist inside a `type: parallel` group must be
+// rejected up front, and none of the command's steps must ever run.
+func TestCustomCommandIntegration_ParallelStepWithUnknownNeedsFailsValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	ranFile := filepath.Join(tmpDir, "ran.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-parallel-unknown-needs",
+		Description: "Test a parallel step's needs: referencing an unknown sibling fails validation before any step runs",
+		Steps: schema.Tasks{
+			{
+				Name: "checks",
+				Type: schema.TaskTypeParallel,
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "first",
+						Type:    "shell",
+						Command: customCommandWriteHelperCommand(t, ranFile, "first"),
+						Needs:   []string{"does-not-exist"},
+					},
+				},
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, c := range RootCmd.Commands() {
+		if c.Name() == "test-parallel-unknown-needs" {
+			customCmd = c
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+	errUtils.OsExit = func(code int) { panic(code) }
+
+	assert.Panics(t, func() {
+		customCmd.Run(customCmd, []string{})
+	}, "an unknown needs: reference must fail validation and exit non-zero")
+
+	assert.NoFileExists(t, ranFile, "no step may run once needs:-graph validation rejects the command")
+}

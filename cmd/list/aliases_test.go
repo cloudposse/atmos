@@ -134,6 +134,26 @@ func TestBuildAliasFooterSingular(t *testing.T) {
 	assert.Contains(t, footer, "0 configured")
 }
 
+// TestBuildAliasFooterWithCustomAliases verifies that an aliasTypeCustom entry (an alias declared
+// natively on an atmos.yaml `commands:` custom command) is tallied into its own "%d custom" bucket
+// -- distinct from both built-in and configured -- exercising the switch statement's
+// case aliasTypeCustom branch added alongside categorizing custom-command aliases.
+func TestBuildAliasFooterWithCustomAliases(t *testing.T) {
+	aliases := []AliasInfo{
+		{Alias: "ls", Command: "list stacks", Type: aliasTypeConfigured},
+		{Alias: "tf", Command: "terraform", Type: aliasTypeBuiltIn},
+		{Alias: "dp", Command: "deploy", Type: aliasTypeCustom},
+		{Alias: "dp2", Command: "deploy", Type: aliasTypeCustom},
+	}
+
+	footer := buildAliasFooter(aliases)
+
+	assert.Contains(t, footer, "4 aliases")
+	assert.Contains(t, footer, "1 built-in")
+	assert.Contains(t, footer, "2 custom")
+	assert.Contains(t, footer, "1 configured")
+}
+
 // TestAliasesFormatFlag tests that the format flag is registered.
 func TestAliasesFormatFlag(t *testing.T) {
 	formatFlag := aliasesCmd.Flags().Lookup("format")

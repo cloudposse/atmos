@@ -1,6 +1,7 @@
 package hashfile
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,74 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// erroringWriter fails on its failOn'th Write call (1-indexed), succeeding on every call before
+// that -- used to force the length/size-prefix write-error branches in writeRecord and
+// hashFileContent, which take an io.Writer parameter specifically to make those branches
+// reachable in tests without touching the real sha256.Hash writer (which never errors).
+type erroringWriter struct {
+	failOn int
+	calls  int
+	err    error
+}
+
+func (w *erroringWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.calls == w.failOn {
+		return 0, w.err
+	}
+	return len(p), nil
+}
+
+// TestWriteRecord_PropagatesLengthWriteError asserts writeRecord surfaces the underlying writer's
+// error unchanged when the length-prefix write itself fails, rather than swallowing it -- a
+// silently-dropped record here is exactly the kind of ambiguity length-prefixing exists to
+// prevent (see writeRecord's doc comment).
+func TestWriteRecord_PropagatesLengthWriteError(t *testing.T) {
+	wantErr := errors.New("boom: length write failed")
+	w := &erroringWriter{failOn: 1, err: wantErr}
+
+	err := writeRecord(w, []byte("some/path"))
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, wantErr), "expected the writer's own error to be returned unwrapped")
+}
+
+// TestHashFileContent_PropagatesSizeWriteError asserts hashFileContent surfaces the underlying
+// writer's error when writing the length-prefixed size record fails, even though the file itself
+// opened and stat'd successfully -- the content copy (call 2) must never run against a writer
+// already known to be broken.
+func TestHashFileContent_PropagatesSizeWriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "a.txt")
+	require.NoError(t, os.WriteFile(f, []byte("hello"), 0o644))
+
+	wantErr := errors.New("boom: size write failed")
+	w := &erroringWriter{failOn: 1, err: wantErr}
+
+	err := hashFileContent(w, f)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, wantErr), "expected the writer's own error to be returned unwrapped")
+}
+
+// TestHashFileContent_PropagatesContentWriteError asserts hashFileContent surfaces the
+// underlying writer's error when streaming the file's content (after the size prefix already
+// succeeded) fails.
+func TestHashFileContent_PropagatesContentWriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "a.txt")
+	require.NoError(t, os.WriteFile(f, []byte("hello"), 0o644))
+
+	wantErr := errors.New("boom: content write failed")
+	// failOn=2 lets the size-prefix write (call 1) succeed, then fails the content copy (call 2).
+	w := &erroringWriter{failOn: 2, err: wantErr}
+
+	err := hashFileContent(w, f)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, wantErr), "expected the writer's own error to be returned unwrapped")
+}
 
 func TestHashFiles_Deterministic(t *testing.T) {
 	tmpDir := t.TempDir()
