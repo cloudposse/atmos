@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cockroachdberrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -972,6 +973,41 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
+
+	// Issue #1055: store-write hooks bound to `after.terraform.output` let users
+	// backfill a store from already-deployed infrastructure without re-running
+	// apply. Pin the same event-matching contract for the new output/refresh events.
+	t.Run("after-output hook runs on after-output event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-output hook must fire on after-output event")
+	})
+
+	t.Run("after-output hook does not run on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.output"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-output must not fire on after-apply")
+	})
+
+	t.Run("after-apply hook does not run on after-output event", func(t *testing.T) {
+		// The converse of the above: existing hooks scoped to apply/plan/etc.
+		// must not suddenly start firing just because output now fires hooks.
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformOutput, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "a hook scoped to after-apply must not fire on after-output")
+	})
+
+	t.Run("after-refresh hook runs on after-refresh event", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.refresh"})
+		err := h.RunAll(AfterTerraformRefresh, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-refresh hook must fire on after-refresh event")
+	})
 }
 
 // TestRunAll_SkipHooksFromCobraFlag is the regression guard for the before-event
@@ -1218,10 +1254,9 @@ func TestHooksPreflight_NoOpBranches(t *testing.T) {
 }
 
 func TestHooksVerifyAllBinaries(t *testing.T) {
-	t.Run("skips deprecated unknown skipped and no-command hooks", func(t *testing.T) {
+	t.Run("skips deprecated skipped and no-command hooks", func(t *testing.T) {
 		h := Hooks{items: map[string]Hook{
 			"deprecated": {Kind: "ci.summary", Command: "definitely-not-on-path-atmos-test"},
-			"unknown":    {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
 			"store":      {Kind: "store"},
 			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
@@ -1233,6 +1268,32 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			isCI:          false,
 		})
 		require.NoError(t, err)
+	})
+
+	t.Run("errors on an unregistered kind instead of silently skipping it", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"unknown": {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUnknownHookKind)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "not-registered")
+	})
+
+	t.Run("errors on an invalid on_failure value instead of silently treating it as warn", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"typo": {Kind: "store", OnFailure: "waarn"},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidHookOnFailure)
+		details := cockroachdberrors.GetAllDetails(err)
+		require.NotEmpty(t, details)
+		assert.Contains(t, details[0], "waarn")
 	})
 
 	t.Run("skips hooks for other events", func(t *testing.T) {

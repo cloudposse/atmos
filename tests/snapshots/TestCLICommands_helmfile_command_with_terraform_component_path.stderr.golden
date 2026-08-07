@@ -4,7 +4,6 @@
 
 **Error:** path component type does not match command
 
-Path resolves to terraform component but command expects helmfile component You ran: atmos helmfile <command> . The path
-points to: terraform component
+Path resolves to terraform component but command expects helmfile component You ran: atmos helmfile <command> . The path points to: terraform component
 
 💡 Run the correct command for this component type

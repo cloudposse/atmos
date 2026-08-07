@@ -47,6 +47,12 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 
 	setEnv(v)
 
+	// Apply the edition pin (if any) before unmarshaling, same as the main
+	// LoadConfig flow (this path returns early and skips that hook).
+	if err := applyEditionDefaults(v); err != nil {
+		return err
+	}
+
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
@@ -61,6 +67,16 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	// Preserve case-sensitive map keys (same as in main LoadConfig flow).
 	preserveCaseSensitiveMaps(v, atmosConfig)
 	restoreCaseSensitiveEnvMaps(atmosConfig)
+
+	// Apply git root discovery for default base path (same as the main LoadConfig
+	// auto-discovery flow, load.go). Without this, a config loaded via --config/
+	// --config-path with an empty (or ".") base_path never resolves to the git
+	// repository root, breaking component/stack path resolution that the exact
+	// same atmos.yaml would get right via plain auto-discovery (cloudposse/atmos#2863).
+	if err := applyGitRootBasePath(atmosConfig); err != nil {
+		log.Debug("Failed to apply git root base path", "error", err)
+		// Don't fail config loading if this step fails, just log it (mirrors load.go).
+	}
 
 	atmosConfig.CliConfigPath = connectPaths(configPaths)
 	return nil
