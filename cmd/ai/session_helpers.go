@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // execSession bundles the session manager, storage, resolved session, and
@@ -27,12 +28,20 @@ type execSession struct {
 // sessions are enabled and a --session value was given. It returns (nil, nil)
 // — not an error — when sessions aren't in play, so the default (no session
 // storage opened, no perf cost, behavior unchanged) stays the common case.
+// When --session was given but sessions are disabled, that's surfaced as a
+// warning rather than a silent no-op: without it, a user could run
+// `--session foo` across multiple invocations believing conversation context
+// was being carried over, with nothing persisted and no indication why.
 // Model should be the actually-resolved model from the constructed AI client
 // (client.GetModel()); see getModelFromConfig's doc comment (chat.go) for why
 // that matters more than an independent provider-config lookup when a new
 // session has to be created.
 func prepareSession(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sessionID, model string) (*execSession, error) {
-	if !atmosConfig.AI.Sessions.Enabled || sessionID == "" {
+	if sessionID == "" {
+		return nil, nil
+	}
+	if !atmosConfig.AI.Sessions.Enabled {
+		ui.Warning(fmt.Sprintf("--session %q was ignored: enable sessions with `ai.sessions.enabled: true` in atmos.yaml", sessionID))
 		return nil, nil
 	}
 	return loadOrCreateSession(ctx, atmosConfig, sessionID, model)

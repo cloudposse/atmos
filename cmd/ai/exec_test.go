@@ -24,8 +24,45 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// execTestStreams is a minimal iolib.Streams implementation that captures UI
+// output to buffers, so tests can assert on ui.Warning content.
+type execTestStreams struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (s *execTestStreams) Input() io.Reader     { return s.stdin }
+func (s *execTestStreams) Output() io.Writer    { return s.stdout }
+func (s *execTestStreams) Error() io.Writer     { return s.stderr }
+func (s *execTestStreams) RawOutput() io.Writer { return s.stdout }
+func (s *execTestStreams) RawError() io.Writer  { return s.stderr }
+
+// captureUIOutput initializes the UI formatter against a buffer so ui.Warning
+// (and other ui.* calls) can be asserted on, and returns that buffer.
+func captureUIOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stderr := &bytes.Buffer{}
+	streams := &execTestStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	return stderr
+}
+
+// plainUIOutput strips ANSI styling from captured ui.* output and collapses
+// whitespace down to single spaces, so content assertions aren't coupled to
+// rendering/word-wrap details (see the identical helper and rationale in
+// pkg/ai/session/checkpoint_test.go).
+func plainUIOutput(buf *bytes.Buffer) string {
+	return strings.Join(strings.Fields(ansi.Strip(buf.String())), " ")
+}
 
 func TestExecCommand_BasicProperties(t *testing.T) {
 	t.Run("exec command properties", func(t *testing.T) {
@@ -3114,6 +3151,79 @@ ai:
 	assert.Equal(t, "Second question", messages[2].Content)
 	assert.Equal(t, "assistant", messages[3].Role)
 	assert.Equal(t, "Second answer", messages[3].Content)
+}
+
+// TestExecCommand_SessionFlagWarnsWhenSessionsDisabled is a regression test:
+// passing --session while ai.sessions.enabled is false (the default) must
+// warn, not silently no-op. Before this fix, prepareSession returned (nil,
+// nil) for this exact case with zero signal -- a user could run `exec
+// --session foo` twice believing conversation context was being carried
+// over, only to discover via `sessions list` erroring "sessions are not
+// enabled" that nothing was ever persisted.
+func TestExecCommand_SessionFlagWarnsWhenSessionsDisabled(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index":         0,
+					"message":       map[string]interface{}{"role": "assistant", "content": "an answer"},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+		})
+	}))
+	defer mockServer.Close()
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      base_url: "` + mockServer.URL + `"
+      model: "llama3.3:70b"
+      max_tokens: 4096
+  sessions:
+    enabled: false
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	stderr := captureUIOutput(t)
+	cmd := createTestExecCmd()
+	require.NoError(t, cmd.Flags().Set("session", "ignored-session"))
+	require.NoError(t, cmd.Flags().Set("no-tools", "true"))
+	require.NoError(t, execCmd.RunE(cmd, []string{"a question"}))
+
+	plain := plainUIOutput(stderr)
+	assert.Contains(t, plain, "ignored-session")
+	assert.Contains(t, plain, "ignored")
 }
 
 // TestExecCommand_APIErrorHandling tests error handling when the AI API returns errors.
