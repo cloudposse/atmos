@@ -235,6 +235,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentProvider = baseComponentConfig.BaseComponentProvider
 	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
 	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
+	result.BaseComponentValidate = baseComponentConfig.BaseComponentValidate
 	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
 	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
 	// BaseComponentRetry flows from the inheritance chain through to merge — see

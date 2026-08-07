@@ -53,6 +53,7 @@ type ComponentProcessorOptions struct {
 	GlobalKubernetesPaths     any
 	GlobalKubernetesManifests any
 	GlobalKubernetesRender    map[string]any
+	GlobalKubernetesValidate  any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -70,6 +71,7 @@ type ComponentProcessorResult struct {
 	ComponentProvider     string
 	ComponentPaths        any
 	ComponentManifests    any
+	ComponentValidate     any
 	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
 	ComponentPlugins any
 	ComponentRender  map[string]any
@@ -94,6 +96,7 @@ type ComponentProcessorResult struct {
 	BaseComponentProvider      string
 	BaseComponentPaths         any
 	BaseComponentManifests     any
+	BaseComponentValidate      any
 	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any
