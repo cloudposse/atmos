@@ -574,13 +574,30 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 
 	cfgPtr := getConfigOrDefault(atmosConfig)
 
-	// Process each deferred field.
-	for pathKey, deferredValues := range dctx.GetDeferredValues() {
+	// Process ancestor paths before descendant paths (e.g. "vars.combo" before
+	// "vars.combo.nested"). Each pathKey's resolution ends in an unconditional
+	// SetValueAtPath call that replaces whatever currently exists at that exact path — if a
+	// descendant were processed before its ancestor, the ancestor's later wholesale replace of
+	// the shared parent map would silently discard the descendant's already-resolved value.
+	// dctx.GetDeferredValues() is a plain Go map, and Go randomizes map iteration order per
+	// range, so without this explicit order the outcome was nondeterministic (confirmed via
+	// live field-testing: the same command produced a correct result, a silently dropped value,
+	// or an unresolved function string leaking into output, all from the same input).
+	allDeferred := dctx.GetDeferredValues()
+	pathKeys := make([]string, 0, len(allDeferred))
+	for pathKey, deferredValues := range allDeferred {
 		if len(deferredValues) == 0 {
 			continue
 		}
+		pathKeys = append(pathKeys, pathKey)
+	}
+	sort.Slice(pathKeys, func(i, j int) bool {
+		return len(allDeferred[pathKeys[i]][0].Path) < len(allDeferred[pathKeys[j]][0].Path)
+	})
 
-		if err := processDeferredField(pathKey, deferredValues, result, cfgPtr, processor); err != nil {
+	// Process each deferred field.
+	for _, pathKey := range pathKeys {
+		if err := processDeferredField(pathKey, allDeferred[pathKey], result, cfgPtr, processor); err != nil {
 			return err
 		}
 	}

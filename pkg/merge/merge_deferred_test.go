@@ -994,6 +994,82 @@ func TestApplyDeferredMerges(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "resolved", result2["config"])
 	})
+
+	// Regression test for a nondeterministic data-loss bug found by field-testing PR #2892
+	// (github.com/cloudposse/atmos/issues/2888's fix): when a deferred function occupies a
+	// PARENT path in one layer (e.g. "vars.combo": !template producing a map) while a DIFFERENT
+	// deferred function occupies a CHILD key of that same path in a higher-precedence layer
+	// (e.g. "vars.combo.nested": !template), the two paths get separate DeferredMergeContext
+	// entries ("vars.combo" and "vars.combo.nested"). ApplyDeferredMerges previously iterated
+	// dctx.GetDeferredValues() — a plain Go map — directly; Go randomizes map iteration order
+	// per range, so "vars.combo" and "vars.combo.nested" could be processed in either order.
+	// Each pathKey's resolution ends in an unconditional SetValueAtPath call that replaces
+	// whatever currently exists at that exact path: if "vars.combo" (parent) is processed AFTER
+	// "vars.combo.nested" (child), the parent's wholesale replace of the "combo" map silently
+	// discards the child's already-resolved "nested" value. Live CLI reproduction against the
+	// atmos-yaml-functions-merge fixture showed this failing ~40% of runs — not just discarding
+	// data (final value nil) but sometimes leaking the child's raw, still-unresolved function
+	// string straight into command output. Run many iterations here since a single run can pass
+	// by chance depending on that random map order.
+	t.Run("resolves deterministically when a parent path and a child path both defer functions", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: ListMergeStrategyReplace,
+			},
+		}
+
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				switch value {
+				case "!template parent":
+					return map[string]interface{}{"a": "1", "b": "2"}, nil
+				case "!template child":
+					return "nested-value", nil
+				default:
+					return value, nil
+				}
+			},
+		}
+
+		expected := map[string]interface{}{
+			"a":      "1",
+			"b":      "2",
+			"nested": "nested-value",
+			"plain":  "concrete",
+		}
+
+		const iterations = 200
+		for i := 0; i < iterations; i++ {
+			inputs := []map[string]any{
+				{
+					"vars": map[string]any{
+						"combo": "!template parent",
+					},
+				},
+				{
+					"vars": map[string]any{
+						"combo": map[string]any{
+							"nested": "!template child",
+							"plain":  "concrete",
+						},
+					},
+				},
+			}
+
+			result, dctx, err := MergeWithDeferred(cfg, inputs)
+			require.NoError(t, err)
+
+			err = ApplyDeferredMerges(dctx, result, cfg, processor)
+			require.NoError(t, err, "iteration %d", i)
+
+			vars, ok := result["vars"].(map[string]any)
+			require.True(t, ok, "iteration %d: vars should be a map", i)
+			combo, ok := vars["combo"].(map[string]interface{})
+			require.True(t, ok, "iteration %d: combo should be a map", i)
+
+			assert.Equal(t, expected, combo, "iteration %d: parent function's map and child function's leaf must both survive the deep merge, in every iteration order", i)
+		}
+	})
 }
 
 // TestProcessYAMLFunctions tests the processYAMLFunctions helper function.

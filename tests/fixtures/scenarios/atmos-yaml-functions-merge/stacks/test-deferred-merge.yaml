@@ -105,3 +105,60 @@ components:
         # This must merge (append) with the !tags-produced list ["X", "Y"], not replace it.
         tag_list:
           - "Z"
+
+    # Field-test fixture (2026-08-07): overrides one field of the "web" list item, whose sibling
+    # field ("stage") is a deferred !env function. With list_merge_strategy: merge, the item at
+    # index 0 should deep-merge {name: "web", stage: <resolved>} with {name: "web", region: ...}.
+    test-list-nested-function:
+      component: base-component-list-nested
+      vars:
+        servers:
+          - name: "web"
+            region: "us-east-1"
+
+    test-typeflip-3layer:
+      component: base-component-typeflip
+      metadata:
+        inherits:
+          - base-component-typeflip-mixin
+      vars:
+        flip_config:
+          c: "3"
+          highest: "wins"
+
+    # Field-test fixture (2026-08-07): a plain scalar overrides the deferred function's OWN leaf
+    # path directly (not an ancestor path), where the function produces a map. Untested by the
+    # existing suite, which only overrides map-producing functions with other maps.
+    test-scalar-overrides-map-function:
+      component: base-component
+      vars:
+        template_config: "just-a-plain-string"
+
+    # Field-test fixture (2026-08-07): same !tags list-producing function as test-labels-override,
+    # but under the fixture-WIDE DEFAULT list_merge_strategy ("replace") rather than an explicit
+    # "append" opt-in. Confirms replace semantics are honored (not silently merged) — the mirror
+    # check to test-labels-override's append case.
+    test-labels-override-default-strategy:
+      component: base-component-labels
+      vars:
+        tag_list:
+          - "Z"
+
+    test-nested-function-collision:
+      component: base-component-nested-collision
+      vars:
+        combo:
+          nested: !template '{{ "nested-value" }}'
+          plain: "concrete"
+
+    test-untracked-function-override:
+      component: base-component-untracked-func
+      vars:
+        git_info:
+          extra: "value"
+
+    test-backend-override:
+      component: base-component-backend
+      backend:
+        s3:
+          region: "us-east-1"
