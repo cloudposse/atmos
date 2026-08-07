@@ -1048,6 +1048,21 @@ func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) 
 	assert.NoDirExists(t, installDir)
 }
 
+// quoteExecutablePath wraps an os.Executable() path in plain double quotes for embedding in a
+// shell command string. Deliberately NOT %q: %q applies Go-syntax escaping, doubling every
+// Windows path backslash (`\` -> `\\`). Steps nested in a `type: parallel`/`type: matrix` group
+// run through pkg/workflow/control_executor.go's controlShellInvocationForOS, which -- absent a
+// wired ShellRunner (see internal/exec/custom_command_control_adapter.go) -- shells out to the
+// REAL host shell (`cmd.exe /C` on Windows), not the in-process mvdan/sh interpreter used by
+// top-level shell steps. Native cmd.exe does not collapse a doubled backslash back to a single
+// one the way mvdan/sh's POSIX-correct double-quote parsing does, so %q corrupts the path there,
+// producing a Windows CI failure where cmd.exe reports the executable path as unrecognized.
+// Plain double quotes with no escaping are valid, unambiguous syntax in both dialects for a path
+// with no embedded quote characters.
+func quoteExecutablePath(path string) string {
+	return `"` + path + `"`
+}
+
 func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	t.Helper()
 
@@ -1055,7 +1070,7 @@ func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", quoteExecutablePath(exe), encodedPath, encodedValue)
 }
 
 func customCommandAtmosWriteHelperArgs(path, value string) string {
@@ -1070,7 +1085,7 @@ func customCommandRetryHelperCommand(t *testing.T, path string) string {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationRetryHelper -- %s", exe, encodedPath)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationRetryHelper -- %s", quoteExecutablePath(exe), encodedPath)
 }
 
 func customCommandAttemptHelperCommand(t *testing.T, path string) string {
@@ -1079,7 +1094,7 @@ func customCommandAttemptHelperCommand(t *testing.T, path string) string {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", quoteExecutablePath(exe), encodedPath)
 }
 
 func customCommandAtmosAttemptHelperArgs(path string) string {
@@ -1180,7 +1195,7 @@ func customCommandAppendHelperCommand(t *testing.T, path, value string) string {
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAppendHelper -- %s %s", exe, encodedPath, encodedValue)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationAppendHelper -- %s %s", quoteExecutablePath(exe), encodedPath, encodedValue)
 }
 
 func TestCustomCommandIntegrationAppendHelper(t *testing.T) {
@@ -1222,7 +1237,7 @@ func customCommandWriteAndExitHelperCommand(t *testing.T, path, value string, ex
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteAndExitHelper -- %s %s %d", exe, encodedPath, encodedValue, exitCode)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationWriteAndExitHelper -- %s %s %d", quoteExecutablePath(exe), encodedPath, encodedValue, exitCode)
 }
 
 func TestCustomCommandIntegrationWriteAndExitHelper(t *testing.T) {
@@ -1262,7 +1277,7 @@ func customCommandMatrixWriteHelperCommand(t *testing.T, path string) string {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationMatrixWriteHelper -- {{ .matrix.component }} {{ .matrix.stack }} %s", exe, encodedPath)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationMatrixWriteHelper -- {{ .matrix.component }} {{ .matrix.stack }} %s", quoteExecutablePath(exe), encodedPath)
 }
 
 func TestCustomCommandIntegrationMatrixWriteHelper(t *testing.T) {
