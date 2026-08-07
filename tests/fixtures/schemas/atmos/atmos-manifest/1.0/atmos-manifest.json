@@ -912,7 +912,9 @@
               "$ref": "#/definitions/validation"
             },
             "depends_on": {
-              "$ref": "#/definitions/depends_on"
+              "$ref": "#/definitions/depends_on",
+              "deprecated": true,
+              "x-atmos-replacement": "dependencies.components"
             },
             "spacelift": {
               "$ref": "#/definitions/spacelift"
@@ -1243,7 +1245,9 @@
     },
     "depends_on": {
       "title": "depends_on",
-      "description": "Depends_on section",
+      "description": "Depends_on section. Deprecated: use `dependencies.components` instead, which uses a simpler list syntax with append merge behavior. Still supported for backward compatibility.",
+      "deprecated": true,
+      "x-atmos-replacement": "dependencies.components",
       "oneOf": [
         {
           "type": "string",
@@ -1271,26 +1275,37 @@
         {
           "type": "object",
           "properties": {
+            "stack": {
+              "type": "string",
+              "description": "Atmos stack where the `component` is provisioned (e.g. `tenant1-ue2-prod`). Takes precedence over `namespace`, `tenant`, `environment` and `stage`, which are ignored when `stack` is set. Supports Go templates."
+            },
             "namespace": {
-              "type": "string"
+              "type": "string",
+              "description": "The `namespace` where the `component` is provisioned. Ignored when `stack` is set."
             },
             "tenant": {
-              "type": "string"
+              "type": "string",
+              "description": "The `tenant` where the `component` is provisioned. Ignored when `stack` is set."
             },
             "environment": {
-              "type": "string"
+              "type": "string",
+              "description": "The `environment` where the `component` is provisioned. Ignored when `stack` is set."
             },
             "stage": {
-              "type": "string"
+              "type": "string",
+              "description": "The `stage` where the `component` is provisioned. Ignored when `stack` is set."
             },
             "component": {
-              "type": "string"
+              "type": "string",
+              "description": "An Atmos component that the current component depends on."
             },
             "file": {
-              "type": "string"
+              "type": "string",
+              "description": "A file on the local filesystem that the current component depends on."
             },
             "folder": {
-              "type": "string"
+              "type": "string",
+              "description": "A folder on the local filesystem that the current component depends on."
             }
           },
           "oneOf": [
