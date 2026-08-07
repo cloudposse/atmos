@@ -293,8 +293,8 @@ func TestInstall_BundledSkill_ValidationFailureCleansUp(t *testing.T) {
 
 // TestInstallOneBundledSkill_ValidationFailure covers the same validate-before-
 // register gate on the InstallAllBundled batch path (installOneBundledSkill),
-// which must report outcomeFailed and clean up rather than register an invalid
-// skill.
+// which must report outcomeRejected (an expected, per-skill compatibility skip,
+// not a batch failure) and clean up rather than register an invalid skill.
 func TestInstallOneBundledSkill_ValidationFailure(t *testing.T) {
 	installer := newBundledTestInstaller(t)
 	installer.validator = &mockValidator{
@@ -307,7 +307,7 @@ func TestInstallOneBundledSkill_ValidationFailure(t *testing.T) {
 	require.True(t, ok)
 
 	opts := &InstallOptions{SkipConfirm: true}
-	assert.Equal(t, outcomeFailed, installer.installOneBundledSkill(&available, opts, nil))
+	assert.Equal(t, outcomeRejected, installer.installOneBundledSkill(&available, opts, nil))
 
 	_, getErr := installer.Get("atmos-terraform")
 	assert.True(t, errors.Is(getErr, ErrSkillNotFound))

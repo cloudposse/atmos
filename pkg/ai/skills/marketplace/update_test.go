@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,4 +142,55 @@ func TestUpdateAllBundled_UpdatesOnlyOutdatedSkills(t *testing.T) {
 	available, ok := LookupBundledSkill("atmos-terraform")
 	require.True(t, ok)
 	assert.Equal(t, available.Version, skill.Version)
+}
+
+// TestUpdateAllBundled_PartialFailureSurfacesError is a regression test: a batch
+// update where one skill genuinely fails to reinstall must not report overall
+// success. Before this fix, UpdateAllBundled (via tallyBatchOutcomes/
+// runBatchInstallWithSpinner) only logged a warning per failed skill and always
+// returned nil -- a user (or a script checking the exit code) had no way to tell
+// a batch "update" actually left a skill un-updated. This forces a real,
+// deterministic failure the same way TestPrepareInstallPath_ForceRefusesSymlink
+// does: replacing one skill's installed directory with a symlink, which
+// prepareInstallPath's --force path refuses to delete.
+func TestUpdateAllBundled_PartialFailureSurfacesError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, installer.Install(ctx, "atmos-terraform", InstallOptions{SkipConfirm: true}))
+	require.NoError(t, installer.Install(ctx, "atmos-config", InstallOptions{SkipConfirm: true}))
+
+	for _, name := range []string{"atmos-terraform", "atmos-config"} {
+		require.NoError(t, installer.localRegistry.Update(name, func(s *InstalledSkill) error {
+			s.Version = "0.0.1-old"
+			return nil
+		}))
+	}
+
+	configSkill, err := installer.Get("atmos-config")
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(configSkill.Path))
+	symlinkTarget := t.TempDir()
+	if err := os.Symlink(symlinkTarget, configSkill.Path); err != nil {
+		t.Skipf("Skipping symlink-based failure test: %v", err)
+	}
+
+	err = installer.UpdateAllBundled(&InstallOptions{SkipConfirm: true, BasePath: tempDir})
+	require.Error(t, err, "a batch update with a real per-skill failure must not report overall success")
+
+	terraformSkill, err := installer.Get("atmos-terraform")
+	require.NoError(t, err)
+	available, ok := LookupBundledSkill("atmos-terraform")
+	require.True(t, ok)
+	assert.Equal(t, available.Version, terraformSkill.Version,
+		"an unrelated skill's update must still succeed despite another skill's failure")
+
+	configSkill, err = installer.Get("atmos-config")
+	require.NoError(t, err)
+	assert.Equal(t, "0.0.1-old", configSkill.Version, "the failed skill's recorded version must be unchanged")
 }

@@ -25,7 +25,8 @@ var (
 	ErrNoYAMLFrontmatter       = errors.New("no YAML frontmatter found")
 
 	// Update errors.
-	ErrSkillUpdateNotSupported = errors.New("update not supported for this skill")
+	ErrSkillUpdateNotSupported   = errors.New("update not supported for this skill")
+	ErrSkillBatchOperationFailed = errors.New("one or more skills failed during batch operation")
 
 	// Registry errors.
 	ErrSkillNotFound     = errors.New("skill not found")

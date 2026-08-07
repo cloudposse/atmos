@@ -318,24 +318,46 @@ const (
 	outcomeInstalled batchInstallOutcome = iota // Freshly installed; wasn't registered before.
 	outcomeUpdated                              // Was already registered; --force reinstalled it.
 	outcomeSkipped                              // Was already registered; --force not set.
-	outcomeFailed                               // Install attempt failed (see the logged warning).
+	outcomeRejected                             // Failed compatibility/structure validation; an expected, per-skill skip.
+	outcomeFailed                               // Install attempt failed unexpectedly (see the logged warning).
 )
 
+// batchOutcomeTally is the per-outcome-type count from a batch install loop,
+// returned as a single struct (rather than four separate results) to stay
+// within revive's function-result-limit. Failed is reported separately from
+// Installed/Updated/Skipped (each occurrence already logged its own warning)
+// so callers can still surface an overall batch error instead of reporting
+// success while a skill silently never got updated. Rejected is kept
+// distinct from Failed: a skill that fails compatibility/structure
+// validation is an expected, per-skill outcome (e.g. a multi-skill package
+// with one skill requiring a newer Atmos version) and must not fail the
+// whole batch, unlike a genuine install-time error.
+type batchOutcomeTally struct {
+	Installed int
+	Updated   int
+	Skipped   int
+	Rejected  int
+	Failed    int
+}
+
 // tallyBatchOutcomes counts each outcome type from a batch install loop.
-func tallyBatchOutcomes(outcomes []batchInstallOutcome) (installed, updated, skipped int) {
+func tallyBatchOutcomes(outcomes []batchInstallOutcome) batchOutcomeTally {
+	var tally batchOutcomeTally
 	for _, outcome := range outcomes {
 		switch outcome {
 		case outcomeInstalled:
-			installed++
+			tally.Installed++
 		case outcomeUpdated:
-			updated++
+			tally.Updated++
 		case outcomeSkipped:
-			skipped++
+			tally.Skipped++
+		case outcomeRejected:
+			tally.Rejected++
 		case outcomeFailed:
-			// Already logged a warning; not counted in any tally.
+			tally.Failed++
 		}
 	}
-	return installed, updated, skipped
+	return tally
 }
 
 // formatBatchInstallSummary renders the final tally for a batch install as
@@ -455,7 +477,7 @@ func (i *Installer) installOneBundledSkill(available *AvailableSkill, opts *Inst
 		if removeErr := os.RemoveAll(installPath); removeErr != nil {
 			log.Warnf("Failed to remove invalid installation at %s: %v", installPath, removeErr)
 		}
-		return outcomeFailed
+		return outcomeRejected
 	}
 
 	if err := i.registerBundledSkill(available, installName, installPath, metadata); err != nil {
@@ -645,7 +667,7 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 	// bundled paths always did.
 	if err := i.validator.Validate(skill.dir, skill.metadata); err != nil {
 		log.Warnf("Skipping %s: skill validation failed: %v", skillName, err)
-		return outcomeFailed
+		return outcomeRejected
 	}
 
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
@@ -1097,22 +1119,24 @@ func (i *Installer) runBatchInstallWithSpinner(
 		progressMsg = "Distributing to: " + description
 	}
 
-	var skipped int
+	var tally batchOutcomeTally
 	err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
-		var installed, updated int
-		installed, updated, skipped = tallyBatchOutcomes(installFn(clients))
+		tally = tallyBatchOutcomes(installFn(clients))
 
 		skillsDir, dirErr := ResolveSkillsDir(opts.Path)
 		if dirErr != nil {
 			skillsDir = opts.Path
 		}
-		return formatBatchInstallSummary(installed, updated, skillsDir, description), nil
+		return formatBatchInstallSummary(tally.Installed, tally.Updated, skillsDir, description), nil
 	})
 	if err != nil {
 		return err
 	}
-	if skipped > 0 {
-		ui.Infof("%d already installed (use `--force` to reinstall)", skipped)
+	if tally.Skipped > 0 {
+		ui.Infof("%d already installed (use `--force` to reinstall)", tally.Skipped)
+	}
+	if tally.Failed > 0 {
+		return fmt.Errorf("%w: %d skill(s) failed (see warnings above)", ErrSkillBatchOperationFailed, tally.Failed)
 	}
 	return nil
 }
