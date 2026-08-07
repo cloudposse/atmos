@@ -745,7 +745,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
 		res.ComponentValidate = false
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"an explicit component-instance validate:false must override a base-component validate:true")
@@ -759,7 +759,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"base-component validate:true must flow through when the component instance sets nothing")
@@ -772,7 +772,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			AtmosConfig:   atmosCfg,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		_, ok := comp[cfg.ValidateSectionName]
 		assert.False(t, ok, "validate must be absent (not defaulted to any value) when unset at every layer")
@@ -786,7 +786,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			GlobalKubernetesValidate: true,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"global validate:true must flow through when base and component set nothing")
@@ -800,7 +800,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			GlobalKubernetesValidate: false,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"global validate:false must flow through when base and component set nothing")
@@ -815,7 +815,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"base-component validate:true must override a global validate:false when the component sets nothing")
@@ -831,7 +831,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
 		res.ComponentValidate = false
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"component validate:false must win over both global and base validate:true")

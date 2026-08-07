@@ -423,7 +423,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		result.ComponentValidate,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var finalComponentRender map[string]any
