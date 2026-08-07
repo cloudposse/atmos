@@ -57,3 +57,40 @@ func (dmc *DeferredMergeContext) GetDeferredValues() map[string][]*DeferredValue
 func (dmc *DeferredMergeContext) HasDeferredValues() bool {
 	return len(dmc.deferredValues) > 0
 }
+
+// Clone creates a deep copy of the deferred merge context, including new
+// *DeferredValue instances for every entry. ApplyDeferredMerges mutates the
+// DeferredValue.Value/IsFunction fields of the context it's given in place;
+// callers that recover a context from shared/cached storage (e.g. a
+// FindStacksMap cache entry reused across concurrent invocations) must clone
+// before resolving, so that resolving one caller's copy can't corrupt another
+// concurrent caller's unresolved view of the same context.
+func (dmc *DeferredMergeContext) Clone() *DeferredMergeContext {
+	defer perf.Track(nil, "merge.DeferredMergeContext.Clone")()
+
+	if dmc == nil {
+		return nil
+	}
+
+	newDmc := &DeferredMergeContext{
+		deferredValues: make(map[string][]*DeferredValue, len(dmc.deferredValues)),
+		precedence:     dmc.precedence,
+	}
+
+	for key, values := range dmc.deferredValues {
+		clonedValues := make([]*DeferredValue, len(values))
+		for i, dv := range values {
+			clonedPath := make([]string, len(dv.Path))
+			copy(clonedPath, dv.Path)
+			clonedValues[i] = &DeferredValue{
+				Path:       clonedPath,
+				Value:      dv.Value,
+				Precedence: dv.Precedence,
+				IsFunction: dv.IsFunction,
+			}
+		}
+		newDmc.deferredValues[key] = clonedValues
+	}
+
+	return newDmc
+}

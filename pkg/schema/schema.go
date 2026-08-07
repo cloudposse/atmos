@@ -1612,6 +1612,17 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
+	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
+	// providers, required_providers, hooks, test, generate). A later, per-invocation stage
+	// resolves the deferred YAML functions they hold (!template, !terraform.output, !labels,
+	// etc.) with a real processor and deep-merges the result against any concrete override at
+	// the same path.
+	//
+	// Type is 'any' (concretely internal/exec.ComponentDeferredContexts) for the same reason as
+	// AuthManager above: pkg/merge imports pkg/schema, so a concretely-typed field naming an
+	// internal/exec or pkg/merge type here would risk an import cycle. Type-assert at usage sites.
+	DeferredMergeContexts any
 	// SecretsMaskOnly indicates an inspection command (describe/list) is resolving YAML
 	// functions with masking enabled. When true, the `!secret` resolver returns the mask
 	// replacement WITHOUT retrieving from the backend (no credentials required). Value-

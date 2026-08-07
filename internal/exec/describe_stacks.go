@@ -402,7 +402,7 @@ func executeDescribeStacks(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, _, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}
