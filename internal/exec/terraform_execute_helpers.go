@@ -242,7 +242,7 @@ var provisionAndResolveTerraformComponentPath = component.ProvisionAndResolveCom
 // The before-init provisioner function is a seam for testing context propagation.
 var executeBeforeInitProvisioners = provisioner.ExecuteProvisioners
 
-func resolveAndProvisionComponentPath(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+func resolveAndProvisionComponentPath(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
@@ -257,7 +257,7 @@ func resolveAndProvisionComponentPath(ctx context.Context, atmosConfig *schema.A
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
-		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
 		return "", err
@@ -900,7 +900,7 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 // directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
-func prepareInitExecution(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
+func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir {
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
@@ -918,6 +918,7 @@ func prepareInitExecution(ctx context.Context, atmosConfig *schema.AtmosConfigur
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		writers,
 	); err != nil {
 		return componentPath, fmt.Errorf("provisioner execution failed: %w", err)
 	}
@@ -940,7 +941,7 @@ func prepareInitExecution(ctx context.Context, atmosConfig *schema.AtmosConfigur
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
 func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
-	newPath, err := prepareInitExecution(shellCommandProvisionerContext(opts...), atmosConfig, info, componentPath)
+	newPath, err := prepareInitExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
 	}
@@ -1010,7 +1011,7 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(shellCommandProvisionerContext(opts...), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(shellCommandContext(opts...), 5*time.Minute)
 	defer cancel()
 
 	if err := provisioner.ExecuteProvisioners(
@@ -1019,6 +1020,7 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		shellCommandOutputWriters(opts...),
 		execCtx,
 	); err != nil {
 		log.Warn("Failed to complete multi-platform provider lock", "error", err)

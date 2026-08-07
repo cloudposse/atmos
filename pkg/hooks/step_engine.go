@@ -83,7 +83,7 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	runCtx := context.Background()
 	if ctx.Stdout != nil || ctx.Stderr != nil {
 		runCtx = runnerstep.WithOutputSuppressed(runCtx)
-		runCtx = runnerstep.WithOutputWriters(runCtx, runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+		executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
 	}
 
 	var result *runnerstep.StepResult
@@ -184,7 +184,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 		runCtx := context.Background()
 		if ctx.Stdout != nil || ctx.Stderr != nil {
 			runCtx = runnerstep.WithOutputSuppressed(runCtx)
-			runCtx = runnerstep.WithOutputWriters(runCtx, runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
 		}
 		for i, rawStep := range rawSteps {
 			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)

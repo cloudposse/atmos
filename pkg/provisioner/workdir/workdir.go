@@ -25,8 +25,8 @@ func init() {
 		HookEvent: HookEventBeforeTerraformInit,
 		// Adapt ProvisionWorkdir (a public function with many direct callers) to the
 		// ProvisionerFunc signature; the before-init event carries no exec context.
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *provisioner.TerraformExecContext) error {
-			return ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, writers provisioner.OutputWriters, _ *provisioner.TerraformExecContext) error {
+			return ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext, writers)
 		},
 	})
 }
@@ -83,11 +83,12 @@ func ProvisionWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers provisioner.OutputWriters,
 ) error {
 	defer perf.Track(atmosConfig, "workdir.ProvisionWorkdir")()
 
 	service := NewService()
-	return service.Provision(ctx, atmosConfig, componentConfig)
+	return service.Provision(ctx, atmosConfig, componentConfig, writers)
 }
 
 // Provision creates an isolated working directory and populates it with component files.
@@ -95,6 +96,7 @@ func (s *Service) Provision(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
+	writers provisioner.OutputWriters,
 ) error {
 	defer perf.Track(atmosConfig, "workdir.Service.Provision")()
 
@@ -164,7 +166,7 @@ func (s *Service) Provision(
 	if !suppressOutput {
 		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
-	} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+	} else if writers.Stderr != nil {
 		_, _ = fmt.Fprintf(writers.Stderr, "Provisioning workdir for component '%s'\n", workdirComponent)
 	}
 
@@ -176,7 +178,7 @@ func (s *Service) Provision(
 
 	// 2. Sync local component files to workdir (incremental, per-file checksum).
 	// Use sourceComponent for finding the source directory, workdirComponent for metadata.
-	metadata, changed, err := s.syncLocalToWorkdir(ctx, atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack)
+	metadata, changed, err := s.syncLocalToWorkdir(ctx, atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack, writers)
 	if err != nil {
 		return err
 	}
@@ -206,14 +208,14 @@ func (s *Service) Provision(
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
-		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		} else if writers.Stderr != nil {
 			_, _ = fmt.Fprintf(writers.Stderr, "Workdir provisioned: %s\n", workdirPath)
 		}
 	} else {
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
-		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		} else if writers.Stderr != nil {
 			_, _ = fmt.Fprintf(writers.Stderr, "Workdir ready (no changes): %s\n", workdirPath)
 		}
 	}
@@ -253,6 +255,7 @@ func (s *Service) syncLocalToWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	workdirPath, workdirComponent, sourceComponent, stack string,
+	writers provisioner.OutputWriters,
 ) (*WorkdirMetadata, bool, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
@@ -281,12 +284,12 @@ func (s *Service) syncLocalToWorkdir(
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Info(message)
-		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		} else if writers.Stderr != nil {
 			_, _ = fmt.Fprintln(writers.Stderr, message)
 		}
 	}
 
-	contentHash := s.computeContentHash(ctx, workdirPath)
+	contentHash := s.computeContentHash(ctx, workdirPath, writers)
 	// Use workdirComponent (instance name) in metadata for identification.
 	metadata := buildLocalMetadata(&localMetadataParams{
 		component:        workdirComponent,
@@ -326,14 +329,15 @@ func (s *Service) validateComponentPath(
 }
 
 // computeContentHash computes the content hash, logging a warning on failure.
-func (s *Service) computeContentHash(ctx context.Context, workdirPath string) string {
+func (s *Service) computeContentHash(ctx context.Context, workdirPath string, writers provisioner.OutputWriters) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
-		if !OutputSuppressed(ctx) {
+		switch {
+		case !OutputSuppressed(ctx):
 			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
-		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		case writers.Stderr != nil:
 			_, _ = fmt.Fprintf(writers.Stderr, "WARNING: Failed to compute content hash: %s\n", err)
-		} else {
+		default:
 			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
 		}
 		return ""

@@ -17,7 +17,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	process "github.com/cloudposse/atmos/pkg/process"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -248,9 +247,9 @@ func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.
 		WithProcessContext(ctx),
 		WithProcessStreams(process.Streams{Stdout: &stdout, Stderr: &stderr}),
 	))
-	assert.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
+	require.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
 	assert.True(t, provWorkdir.OutputSuppressed(shellCommandContext(dispatchOpts...)))
-	writers := provisioner.OutputWritersFromContext(shellCommandProvisionerContext(dispatchOpts...))
+	writers := shellCommandOutputWriters(dispatchOpts...)
 	assert.Same(t, &stdout, writers.Stdout)
 	assert.Same(t, &stderr, writers.Stderr)
 }

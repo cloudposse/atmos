@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -540,7 +541,7 @@ func TestProvisionAndResolveComponentPath_NoSourceReturnsFallback(t *testing.T) 
 	}
 
 	got, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, componentDir,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentDir,
 	)
 
 	require.NoError(t, err)
@@ -567,7 +568,7 @@ func TestProvisionAndResolveComponentPath_NoSourceFallbackIsRegularFile(t *testi
 	}
 
 	_, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, regularFile,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, regularFile,
 	)
 
 	require.Error(t, err)
@@ -591,7 +592,7 @@ func TestProvisionAndResolveComponentPath_NoSourceMissingDir(t *testing.T) {
 	}
 
 	got, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, missingDir,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, missingDir,
 	)
 
 	require.NoError(t, err, "missing dir is not an error — caller decides what to do")

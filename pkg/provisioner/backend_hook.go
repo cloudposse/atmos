@@ -38,6 +38,7 @@ func autoProvisionBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers OutputWriters,
 	_ *TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.autoProvisionBackend")()
@@ -108,7 +109,6 @@ func autoProvisionBackend(
 		return err
 	}
 
-	writers := OutputWritersFromContext(ctx)
 	if OutputSuppressed(ctx) && writers.Stderr != nil {
 		_, _ = fmt.Fprintln(writers.Stderr, completedMsg)
 	}

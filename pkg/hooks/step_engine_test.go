@@ -56,10 +56,10 @@ type outputSuppressionCaptureHandler struct {
 
 func (h *outputSuppressionCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
 
-func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
 	*h.suppressed = runnerstep.OutputSuppressed(ctx)
 	if h.writers != nil {
-		*h.writers = runnerstep.OutputWritersFromContext(ctx)
+		*h.writers = vars.OutputWriters
 	}
 	return runnerstep.NewStepResult("ok"), nil
 }
@@ -425,7 +425,7 @@ func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
 	}
 }
 
-func TestStepEngineForwardsOutputWriters(t *testing.T) {
+func TestStepEnginesForwardOutputWriters(t *testing.T) {
 	var suppressed bool
 	var writers runnerstep.OutputWriters
 	runnerstep.Register(&outputSuppressionCaptureHandler{
@@ -433,17 +433,41 @@ func TestStepEngineForwardsOutputWriters(t *testing.T) {
 		suppressed:  &suppressed,
 		writers:     &writers,
 	})
-	var stdout, stderr bytes.Buffer
-	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "output-writer-capture-test"})
-	ctx.Stdout = &stdout
-	ctx.Stderr = &stderr
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		run  func(*ExecContext) (*Output, error)
+	}{
+		{
+			name: "step",
+			ctx:  stepExecContext(&Hook{Kind: stepKindName, Type: "output-writer-capture-test"}),
+			run:  stepEngine{}.Run,
+		},
+		{
+			name: "steps",
+			ctx: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-writer-capture-test"},
+			}}),
+			run: stepsEngine{}.Run,
+		},
+	}
 
-	_, err := stepEngine{}.Run(ctx)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			tt.ctx.Stdout = &stdout
+			tt.ctx.Stderr = &stderr
+			suppressed = false
+			writers = runnerstep.OutputWriters{}
 
-	require.NoError(t, err)
-	assert.True(t, suppressed)
-	assert.Same(t, &stdout, writers.Stdout)
-	assert.Same(t, &stderr, writers.Stderr)
+			_, err := tt.run(tt.ctx)
+
+			require.NoError(t, err)
+			assert.True(t, suppressed)
+			assert.Same(t, &stdout, writers.Stdout)
+			assert.Same(t, &stderr, writers.Stderr)
+		})
+	}
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
