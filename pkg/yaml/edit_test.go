@@ -118,7 +118,9 @@ func TestSetWithType_InvalidValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := SetWithType([]byte(fixtureWithComments), "vars.region", tt.value, tt.valueType)
 			require.Error(t, err)
-			assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
+			assert.ErrorIs(t, err, ErrInvalidTypedValue)
+			assert.NotErrorIs(t, err, ErrInvalidYAMLExpression,
+				"a value/type validation failure is not a path/expression problem -- must not share a headline with those")
 		})
 	}
 }
@@ -151,6 +153,90 @@ func TestGetTyped(t *testing.T) {
 	_, err = GetTyped[int]([]byte(fixtureWithComments), "vars.region")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrParseYAML)
+}
+
+func TestGetType(t *testing.T) {
+	typ, ok := GetType([]byte(fixtureWithComments), "vars.enabled")
+	assert.True(t, ok)
+	assert.Equal(t, TypeBool, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "vars.count")
+	assert.True(t, ok)
+	assert.Equal(t, TypeInt, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "vars.region")
+	assert.True(t, ok)
+	assert.Equal(t, TypeString, typ)
+}
+
+// TestGetType_ListAndMap is a regression test: GetType used to fall through
+// to (TypeString, true) for a !!seq or !!map tag, which callers read as a
+// confidently resolved scalar inference -- letting --type=auto silently
+// replace an existing list/map with a plain string. It must report
+// (TypeYAML, true) instead, so callers can tell "there's a typed answer, but
+// it isn't a scalar" apart from "this really is a string".
+func TestGetType_ListAndMap(t *testing.T) {
+	typ, ok := GetType([]byte(fixtureWithComments), "sources")
+	assert.True(t, ok)
+	assert.Equal(t, TypeYAML, typ)
+
+	typ, ok = GetType([]byte(fixtureWithComments), "components.terraform.vpc.vars")
+	assert.True(t, ok)
+	assert.Equal(t, TypeYAML, typ)
+}
+
+func TestGetType_NotFound(t *testing.T) {
+	_, ok := GetType([]byte(fixtureWithComments), "vars.does_not_exist")
+	assert.False(t, ok)
+}
+
+// TestGetType_ExplicitNull is a regression test: an explicit YAML null is a
+// real, present value -- distinct from a missing path -- so GetType must
+// report (TypeNull, true) for it rather than folding it into the same
+// ok=false result used for "nothing to infer from".
+func TestGetType_ExplicitNull(t *testing.T) {
+	content := []byte("vars:\n  explicit_null: null\n  region: us-east-1\n")
+
+	typ, ok := GetType(content, "vars.explicit_null")
+	assert.True(t, ok)
+	assert.Equal(t, TypeNull, typ)
+}
+
+// TestGetType_RawPathExplicitNull is a regression test for a CodeRabbit
+// finding: pathIsExplicitlyPresent fell back to Get's collapsed null/missing
+// check for any raw yq path (one starting with "."), even a plain dot-path
+// like ".vars.explicit_null" that could have been decomposed into segments
+// like its non-raw counterpart. That made an explicit null under a raw path
+// look "missing" (ok=false) instead of reporting (TypeNull, true).
+func TestGetType_RawPathExplicitNull(t *testing.T) {
+	content := []byte("vars:\n  explicit_null: null\n  region: us-east-1\n")
+
+	typ, ok := GetType(content, ".vars.explicit_null")
+	assert.True(t, ok, "a raw dot-path pointing at an explicit null must report present")
+	assert.Equal(t, TypeNull, typ)
+
+	// A genuinely missing raw path must still report absent.
+	_, ok = GetType(content, ".vars.does_not_exist")
+	assert.False(t, ok)
+}
+
+// TestGetType_MissingNestedPath covers a path whose ancestor segment doesn't
+// exist at all (as opposed to a leaf segment that's explicitly null),
+// exercising the has()-on-null-parent short-circuit in
+// pathIsExplicitlyPresent.
+func TestGetType_MissingNestedPath(t *testing.T) {
+	content := []byte("vars:\n  region: us-east-1\n")
+
+	_, ok := GetType(content, "vars.deeply.nested.missing")
+	assert.False(t, ok)
+}
+
+// TestGetType_ArrayIndexOutOfBounds covers an array-index path segment past
+// the end of the array, another shape of "missing" that pathIsExplicitlyPresent
+// must not confuse with an explicit null.
+func TestGetType_ArrayIndexOutOfBounds(t *testing.T) {
+	_, ok := GetType([]byte(fixtureWithComments), "sources[5].component")
+	assert.False(t, ok)
 }
 
 func TestDelete(t *testing.T) {
@@ -188,6 +274,10 @@ func TestSet_EditThroughAliasIsRejected(t *testing.T) {
 	_, err := Set([]byte(fixtureWithAnchors), "components.vpc.tags.Team", "networking")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
+	// Regression for a field-test finding: the error must name the practical
+	// workaround (an explicit override key), not just "restructure".
+	assert.Contains(t, err.Error(), "add an explicit key at this path to override",
+		"error should point at the actionable fix, not just say to restructure")
 }
 
 func TestSet_EditAnchorDefinitionIsRejected(t *testing.T) {
@@ -196,6 +286,30 @@ func TestSet_EditAnchorDefinitionIsRejected(t *testing.T) {
 	_, err := Set([]byte(fixtureWithAnchors), "vars.tags.Team", "networking")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
+}
+
+const fixtureWithScalarAlias = `components:
+  vpc:
+    region: &shared_region "us-east-1"
+  rds:
+    region: *shared_region
+`
+
+func TestSet_EditAliasUseSiteIsRejected(t *testing.T) {
+	// Regression for a field-test finding: replacing an alias node itself
+	// (components.rds.region IS *shared_region, not a child key inside it,
+	// and not the anchor definition) flattens the alias to a literal -- a
+	// distinct code path (aliasCount changed, not content changed) from
+	// TestSet_EditThroughAliasIsRejected / TestSet_EditAnchorDefinitionIsRejected
+	// above, previously untested through a real Set call.
+	_, err := Set([]byte(fixtureWithScalarAlias), "components.rds.region", "us-west-2")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
+	assert.Contains(t, err.Error(), "alias references changed from 1 to 0")
+	assert.Contains(t, err.Error(), "edit the anchor definition explicitly",
+		"error should explain the real options, not stay silent")
+	assert.NotContains(t, err.Error(), "add an explicit key at this path",
+		"that hint is for the content-diff branch and is misleading here -- attempting it is exactly what triggers this branch")
 }
 
 // --- File wrapper tests ------------------------------------------------------
@@ -227,6 +341,22 @@ func TestGetFile(t *testing.T) {
 	got, err := GetFile(file, "components.terraform.vpc.vars.cidr")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.0/16", got)
+}
+
+func TestGetFileType(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+
+	typ, ok := GetFileType(file, "vars.enabled")
+	assert.True(t, ok)
+	assert.Equal(t, TypeBool, typ)
+
+	_, ok = GetFileType(file, "vars.does_not_exist")
+	assert.False(t, ok)
+
+	_, ok = GetFileType(filepath.Join(dir, "missing.yaml"), "vars.enabled")
+	assert.False(t, ok)
 }
 
 func TestFileWrappers(t *testing.T) {
@@ -322,7 +452,7 @@ func TestFileWrappers_ReadAndValidationErrors(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
 	_, err = SetFileWithType(file, "vars.region", "not-bool", TypeBool)
-	assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
+	assert.ErrorIs(t, err, ErrInvalidTypedValue)
 	assert.ErrorIs(t, EvalFile(file, "bad["), ErrInvalidYAMLExpression)
 }
 
