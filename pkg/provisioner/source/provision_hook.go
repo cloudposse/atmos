@@ -127,8 +127,8 @@ func AutoProvisionSource(
 	}
 
 	// Log reason for re-provisioning.
-	if reason != "" && !workdir.OutputSuppressed(ctx) {
-		ui.Info(reason)
+	if reason != "" {
+		writeInfo(ctx, reason)
 	}
 
 	// Vendor the source to target directory.
@@ -256,6 +256,16 @@ func writeWarning(ctx context.Context, message string) {
 	}
 	if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
 		_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", message)
+	}
+}
+
+func writeInfo(ctx context.Context, message string) {
+	if !workdir.OutputSuppressed(ctx) {
+		ui.Info(message)
+		return
+	}
+	if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		_, _ = fmt.Fprintln(writers.Stderr, message)
 	}
 }
 

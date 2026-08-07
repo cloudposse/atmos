@@ -1504,6 +1504,15 @@ func TestWriteWarning_UsesComponentWriterWhenSuppressed(t *testing.T) {
 	assert.Equal(t, "WARNING: metadata update failed\n", output.String())
 }
 
+func TestWriteInfo_UsesComponentWriterWhenSuppressed(t *testing.T) {
+	var output bytes.Buffer
+	ctx := provisioner.WithOutputWriters(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{Stderr: &output})
+
+	writeInfo(ctx, "Source version changed")
+
+	assert.Equal(t, "Source version changed\n", output.String())
+}
+
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
 // that a provisioning failure removes the target directory this attempt
 // created. A leftover directory is worse than none: an empty one misleads path

@@ -276,9 +276,14 @@ func (s *Service) syncLocalToWorkdir(
 			Err()
 	}
 
-	if changed && !suppressOutput {
-		ui.ClearLine()
-		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
+	if changed {
+		message := fmt.Sprintf("Local component files synced: %s", componentPath)
+		if !suppressOutput {
+			ui.ClearLine()
+			ui.Info(message)
+		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+			_, _ = fmt.Fprintln(writers.Stderr, message)
+		}
 	}
 
 	contentHash := s.computeContentHash(ctx, workdirPath)
