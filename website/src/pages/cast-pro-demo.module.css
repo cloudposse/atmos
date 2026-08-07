@@ -1,0 +1,20 @@
+.page {
+  display: grid;
+  gap: 2rem;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--ifm-navbar-height));
+  padding: 24px 20px 64px;
+  width: min(96vw, 1200px);
+}
+
+.section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
