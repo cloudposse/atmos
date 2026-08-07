@@ -166,6 +166,7 @@ func ProcessStackConfig(
 	var kubernetesPaths any
 	var kubernetesManifests any
 	kubernetesRender := map[string]any{}
+	var kubernetesValidate any
 
 	helmVars := map[string]any{}
 	helmSettings := map[string]any{}
@@ -819,6 +820,10 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := globalKubernetesSection[cfg.ValidateSectionName]; ok {
+		kubernetesValidate = i
+	}
+
 	// Helm section.
 	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
 		helmCommand, ok = i.(string)
@@ -1161,6 +1166,7 @@ func ProcessStackConfig(
 					GlobalKubernetesPaths:      kubernetesPaths,
 					GlobalKubernetesManifests:  kubernetesManifests,
 					GlobalKubernetesRender:     kubernetesRender,
+					GlobalKubernetesValidate:   kubernetesValidate,
 					AtmosConfig:                atmosConfig,
 				}, nil
 			}

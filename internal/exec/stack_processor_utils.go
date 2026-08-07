@@ -2324,6 +2324,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentProvider string
 	var baseComponentPaths any
 	var baseComponentManifests any
+	var baseComponentValidate any
 	var baseComponentPlugins any
 	var baseComponentRender map[string]any
 	var baseComponentHelm map[string]any
@@ -2550,6 +2551,10 @@ func processBaseComponentConfigInternal(
 
 		if baseComponentManifestsSection, baseComponentManifestsSectionExist := baseComponentMap[cfg.ManifestsSectionName]; baseComponentManifestsSectionExist {
 			baseComponentManifests = baseComponentManifestsSection
+		}
+
+		if baseComponentValidateSection, baseComponentValidateSectionExist := baseComponentMap[cfg.ValidateSectionName]; baseComponentValidateSectionExist {
+			baseComponentValidate = baseComponentValidateSection
 		}
 
 		if baseComponentPluginsSection, baseComponentPluginsSectionExist := baseComponentMap[cfg.PluginsSectionName]; baseComponentPluginsSectionExist {
@@ -2788,6 +2793,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentManifests = mergedAny
+
+		// Base component `validate`.
+		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.ValidateSectionName, baseComponentConfig.BaseComponentValidate, baseComponentValidate)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentValidate = mergedAny
 
 		// Base component `plugins` (Helm CLI plugins list).
 		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.PluginsSectionName, baseComponentConfig.BaseComponentPlugins, baseComponentPlugins)
