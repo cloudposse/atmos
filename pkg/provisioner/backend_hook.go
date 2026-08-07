@@ -94,7 +94,10 @@ func autoProvisionBackend(
 
 		var createErr error
 		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext)
-		return createErr
+		if createErr != nil {
+			return fmt.Errorf("failed to provision %s backend: %w", backendType, createErr)
+		}
+		return nil
 	}
 	if OutputSuppressed(ctx) {
 		err = operation()
