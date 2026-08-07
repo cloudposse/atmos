@@ -1734,3 +1734,144 @@ func TestProcessStackConfig_HooksWrongScopeNotInherited(t *testing.T) {
 		assert.False(t, leaked, "component must NOT inherit a hook placed under components.terraform.hooks (wrong scope)")
 	}
 }
+
+// TestProcessStackConfig_ComponentMergeErrorPropagates verifies that a per-component merge
+// failure inside mergeComponentConfigurations (here: a deferred vars value at a nested path whose
+// parent segment is then overridden by a higher-precedence scalar, so the nil-processor
+// ApplyDeferredMerges write-back can no longer navigate to it — see
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the same technique applied
+// directly) propagates all the way out through processComponentsInParallel and ProcessStackConfig,
+// for every component type that runs its own parallel processing pass.
+func TestProcessStackConfig_ComponentMergeErrorPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	deferredVars := map[string]any{
+		"nested": map[string]any{"field": "!template 'deferred-value'"},
+	}
+	overrideVars := map[string]any{
+		cfg.VarsSectionName: map[string]any{"nested": "concrete-scalar"},
+	}
+
+	tests := []struct {
+		name          string
+		globalSection string
+		componentType string
+	}{
+		{"helmfile", cfg.HelmfileSectionName, cfg.HelmfileComponentType},
+		{"packer", cfg.PackerSectionName, cfg.PackerComponentType},
+		{"ansible", cfg.AnsibleSectionName, cfg.AnsibleComponentType},
+		{"kubernetes", cfg.KubernetesSectionName, cfg.KubernetesComponentType},
+		{"helm", cfg.HelmSectionName, cfg.HelmComponentType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := map[string]any{
+				tt.globalSection: map[string]any{
+					cfg.VarsSectionName: deferredVars,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					tt.componentType: map[string]any{
+						"my-component": overrideVars,
+					},
+				},
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+		})
+	}
+}
+
+// TestProcessStackConfig_CustomComponentTypeInvalidInherits verifies that a custom component
+// type's malformed metadata.inherits (must be a list of strings) surfaces as an error from
+// resolveCustomComponentInheritance/customComponentInheritsBases, propagated all the way out
+// through ProcessStackConfig.
+func TestProcessStackConfig_CustomComponentTypeInvalidInherits(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.MetadataSectionName: map[string]any{
+						cfg.InheritsSectionName: "not-a-list",
+					},
+				},
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMetadataInherits)
+}
+
+// TestProcessStackConfig_ComponentValueNotAMap verifies that a single malformed component entry
+// (its value isn't a map) inside an otherwise-valid components.terraform section is caught by
+// buildComponentWork/processComponentsInParallel, rather than only being caught by the coarser
+// "is the whole components.terraform section a map" check.
+func TestProcessStackConfig_ComponentValueNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "vpc"},
+				},
+				"bad-component": "not-a-map",
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMapType)
+}

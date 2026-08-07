@@ -1692,3 +1692,300 @@ func TestProcessAuthConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestMergeComponentConfigurations_RequiredVersion verifies the required_version precedence
+// chain (lowest to highest): global command-line opts -> base component -> component -> overrides.
+func TestMergeComponentConfigurations_RequiredVersion(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-opts-value-used-when-nothing-else-set", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.TerraformComponentType,
+			Component:                "vpc",
+			AtmosConfig:              atmosCfg,
+			TerraformRequiredVersion: ">= 1.5.0",
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.5.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("base-component-overrides-global-opts", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.TerraformComponentType,
+			Component:                "vpc",
+			AtmosConfig:              atmosCfg,
+			TerraformRequiredVersion: ">= 1.5.0",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.6.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("component-overrides-base-component", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		res.ComponentRequiredVersion = ">= 1.7.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.7.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("component-overrides-section-wins-over-everything", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		res.ComponentRequiredVersion = ">= 1.7.0"
+		res.ComponentOverridesRequiredVersion = ">= 1.8.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.8.0", comp[cfg.RequiredVersionSectionName])
+	})
+}
+
+// TestMergeComponentConfigurations_Locals verifies that base-component and component-level
+// locals are deep-merged (component wins on conflicting keys), and that the locals section is
+// omitted entirely when neither layer provides any.
+func TestMergeComponentConfigurations_Locals(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("deep-merges-base-and-component-locals", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentLocals = map[string]any{"account_name": "core", "stage": "base"}
+		res.ComponentLocals = map[string]any{"stage": "prod"}
+
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		locals, ok := comp[cfg.LocalsSectionName].(map[string]any)
+		require.True(t, ok, "locals section must be present and a map")
+		assert.Equal(t, map[string]any{"account_name": "core", "stage": "prod"}, locals)
+	})
+
+	t.Run("only-base-component-locals-set", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentLocals = map[string]any{"account_name": "core"}
+
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		locals, ok := comp[cfg.LocalsSectionName].(map[string]any)
+		require.True(t, ok, "locals section must be present and a map")
+		assert.Equal(t, map[string]any{"account_name": "core"}, locals)
+	})
+
+	t.Run("no-locals-anywhere-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, hasLocals := comp[cfg.LocalsSectionName]
+		assert.False(t, hasLocals, "locals section must be omitted when neither layer provides any")
+	})
+}
+
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError verifies that the nil-processor
+// ApplyDeferredMerges write-back for auth (which places each deferred path's unresolved function
+// string back into the raw-merged result, see mergeComponentConfigurations' doc comment) surfaces
+// a real error rather than swallowing it: a deferred value recorded at a nested path
+// (auth.nested.field) whose parent segment is then overwritten by a higher-precedence, non-map
+// concrete value can no longer be navigated to, and SetValueAtPath must fail loudly.
+func TestMergeComponentConfigurations_AuthDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAuth: map[string]any{
+			"nested": map[string]any{
+				"field": "!template 'deferred-value'",
+			},
+		},
+	}
+	res := minimalComponentResult()
+	// Higher precedence than GlobalAuth: overrides "nested" with a scalar, so by the time the
+	// write-back tries to navigate auth.nested.field, auth.nested is no longer a map.
+	res.ComponentOverridesAuth = map[string]any{
+		"nested": "concrete-scalar",
+	}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_ProvidersDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific
+// providers section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_ProvidersDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		TerraformProviders: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesProviders = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_RequiredProvidersDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific
+// required_providers section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_RequiredProvidersDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		TerraformRequiredProviders: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesRequiredProviders = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_HooksDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the hooks-capable-component-type
+// hooks section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_HooksDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformHooks: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesHooks = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_GenerateDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the generate-capable-component-type
+// generate section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_GenerateDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformGenerate: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesGenerate = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_TestDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific test
+// section's nil-processor ApplyDeferredMerges write-back. Unlike the sections above, test config
+// only has two merge layers (base component -> component), no global or overrides layer.
+func TestMergeComponentConfigurations_TestDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		"nested": map[string]any{"field": "!template 'deferred-value'"},
+	}
+	res.ComponentTest = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestProcessAuthConfig_DeferredWriteBackError verifies that processAuthConfig's own nil-processor
+// ApplyDeferredMerges write-back (the second, Terraform-specific auth-merge pass) surfaces a real
+// error rather than swallowing it, using the same nested-path-collides-with-a-scalar-override
+// technique as TestMergeComponentConfigurations_AuthDeferredWriteBackError.
+func TestProcessAuthConfig_DeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	globalAuthConfig := map[string]any{
+		"nested": map[string]any{"field": "!template 'deferred-value'"},
+	}
+	authConfig := map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := processAuthConfig(atmosCfg, globalAuthConfig, authConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_RemoteStateBackendError verifies that
+// processTerraformRemoteStateBackend's error (here: a remote state backend section whose
+// backend-type key holds a non-map value, from extractBackendTypeMap) propagates out of
+// mergeComponentConfigurations rather than being swallowed.
+func TestMergeComponentConfigurations_RemoteStateBackendError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType:     cfg.TerraformComponentType,
+		Component:         "vpc",
+		AtmosConfig:       atmosCfg,
+		GlobalBackendType: "s3",
+	}
+	res := minimalComponentResult()
+	res.BaseComponentBackendType = "s3"
+	res.BaseComponentRemoteStateBackendSection = map[string]any{
+		"s3": "not-a-map",
+	}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformRemoteStateBackend)
+}
