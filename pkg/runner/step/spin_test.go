@@ -3,7 +3,9 @@ package step
 import (
 	"bytes"
 	"context"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -462,23 +464,27 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	handler, ok := Get("spin")
 	require.True(t, ok)
 	spinHandler := handler.(*SpinHandler)
+	executable, err := os.Executable()
+	require.NoError(t, err)
 	var stdout, stderr bytes.Buffer
 	ctx := WithOutputWriters(WithOutputSuppressed(t.Context()), OutputWriters{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
 
+	vars := NewVariables()
+	vars.Env["_ATMOS_STEP_FAKE"] = "spin-output"
 	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
 		Name:    "run",
 		Title:   "Run",
-		Command: "echo stdout; echo stderr >&2",
-	}, NewVariables())
+		Command: strconv.Quote(executable) + " -test.run=^$",
+	}, vars)
 
 	require.NoError(t, err)
-	assert.Contains(t, stdout.String(), "stdout")
-	assert.Contains(t, stderr.String(), "stderr")
-	assert.Contains(t, result.Metadata["stdout"], "stdout")
-	assert.Contains(t, result.Metadata["stderr"], "stderr")
+	assert.Contains(t, stdout.String(), "spin-stdout")
+	assert.Contains(t, stderr.String(), "spin-stderr")
+	assert.Contains(t, result.Metadata["stdout"], "spin-stdout")
+	assert.Contains(t, result.Metadata["stderr"], "spin-stderr")
 }
 
 // TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY

@@ -176,7 +176,7 @@ func (s *Service) Provision(
 
 	// 2. Sync local component files to workdir (incremental, per-file checksum).
 	// Use sourceComponent for finding the source directory, workdirComponent for metadata.
-	metadata, changed, err := s.syncLocalToWorkdir(atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack, suppressOutput)
+	metadata, changed, err := s.syncLocalToWorkdir(ctx, atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack, suppressOutput)
 	if err != nil {
 		return err
 	}
@@ -249,6 +249,7 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 // sourceComponent is the base component name (e.g., "elasticache") used to find the source directory.
 // Returns the metadata and a boolean indicating if any changes were made.
 func (s *Service) syncLocalToWorkdir(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	workdirPath, workdirComponent, sourceComponent, stack string, suppressOutput bool,
@@ -278,7 +279,7 @@ func (s *Service) syncLocalToWorkdir(
 		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
 	}
 
-	contentHash := s.computeContentHash(workdirPath, suppressOutput)
+	contentHash := s.computeContentHash(ctx, workdirPath)
 	// Use workdirComponent (instance name) in metadata for identification.
 	metadata := buildLocalMetadata(&localMetadataParams{
 		component:        workdirComponent,
@@ -318,11 +319,13 @@ func (s *Service) validateComponentPath(
 }
 
 // computeContentHash computes the content hash, logging a warning on failure.
-func (s *Service) computeContentHash(workdirPath string, suppressOutput bool) string {
+func (s *Service) computeContentHash(ctx context.Context, workdirPath string) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
-		if !suppressOutput {
+		if !OutputSuppressed(ctx) {
 			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		} else if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+			_, _ = fmt.Fprintf(writers.Stderr, "WARNING: Failed to compute content hash: %s\n", err)
 		}
 		return ""
 	}

@@ -119,9 +119,7 @@ func AutoProvisionSource(
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
-				if !workdir.OutputSuppressed(ctx) {
-					ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
-				}
+				writeWarning(ctx, fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
 			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
@@ -142,9 +140,7 @@ func AutoProvisionSource(
 	if isWorkdir {
 		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
-			if !workdir.OutputSuppressed(ctx) {
-				ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
-			}
+			writeWarning(ctx, fmt.Sprintf("Failed to write workdir metadata: %s", err))
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
@@ -226,9 +222,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
 			if createdTarget {
 				if rmErr := os.RemoveAll(targetDir); rmErr != nil {
-					if !workdir.OutputSuppressed(ctx) {
-						ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
-					}
+					writeWarning(ctx, fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
 				}
 			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
@@ -253,6 +247,16 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		return nil
 	}
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
+}
+
+func writeWarning(ctx context.Context, message string) {
+	if !workdir.OutputSuppressed(ctx) {
+		ui.Warning(message)
+		return
+	}
+	if writers := provisioner.OutputWritersFromContext(ctx); writers.Stderr != nil {
+		_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", message)
+	}
 }
 
 // wrapProvisionError wraps an error with provision context.
