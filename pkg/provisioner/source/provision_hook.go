@@ -264,6 +264,8 @@ func writeWarning(ctx context.Context, writers provisioner.OutputWriters, messag
 	}
 	if writers.Stderr != nil {
 		_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", message)
+	} else {
+		ui.Warning(message)
 	}
 }
 
