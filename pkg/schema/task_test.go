@@ -1290,6 +1290,86 @@ func TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *tes
 	assert.Nil(t, commandStep.With, "with: must not also leak into the generic With map for a container step")
 }
 
+// containerStepOverrideYAML has two ordinary `type: shell` (default) steps:
+// one with a mapping-form step-level `container:` override, and one that
+// opts out of an ambient container sandbox with the bare boolean form
+// `container: false`. Both forms are handled by WorkflowContainer.UnmarshalYAML
+// (workflow.go) for the workflow-file path; decodeTaskFromMap must reproduce
+// the exact same result for the custom-command/mapstructure path.
+const containerStepOverrideYAML = `
+- name: run-in-sandbox
+  command: echo hello
+  container:
+    image: alpine
+    provider: docker
+    workspace: /workspace
+- name: run-on-host
+  command: echo skip
+  container: false
+`
+
+// TestContainerStepOverride_WorkflowAndCustomCommandDecodeIdentically confirms
+// a step's `container:` override (mapping config or bare boolean opt-out)
+// decodes identically whether parsed as a standalone workflow file (direct
+// yaml.Node.Decode -> Task.UnmarshalYAML -> WorkflowContainer.UnmarshalYAML)
+// or as a commands.yaml custom command merged into Viper's config tree
+// (mapstructure -> TasksDecodeHook -> decodeTaskFromMap). Before the fix,
+// the mapstructure path either failed the boolean form outright ("'container'
+// expected a map or struct, got bool") -- breaking the ENTIRE atmos.yaml load,
+// not just this one step/command -- or, for the mapping form, decoded without
+// error but left Container fields un-typed relative to the workflow path.
+func TestContainerStepOverride_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideYAML), &fromYAML))
+	require.Len(t, fromYAML, 2)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	// Before the fix, this failed outright for the boolean-opt-out step:
+	// mapstructure has no notion of WorkflowContainer.UnmarshalYAML and
+	// rejects a bare `false` for a struct-typed field.
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 2)
+
+	// Mapping-form container override.
+	workflowOverride := fromYAML[0]
+	commandOverride := fromMapstructure[0]
+	require.NotNil(t, workflowOverride.Container, "workflow-file path must decode container: into a WorkflowContainer")
+	require.NotNil(t, commandOverride.Container, "custom-command path must decode container: into a WorkflowContainer")
+	assert.Equal(t, workflowOverride.Container, commandOverride.Container,
+		"a step's mapping-form container: block must decode identically for workflow files and custom commands")
+	assert.Equal(t, "alpine", commandOverride.Container.Image)
+	assert.True(t, commandOverride.Container.IsEnabled())
+
+	// Boolean-false opt-out form.
+	workflowDisabled := fromYAML[1]
+	commandDisabled := fromMapstructure[1]
+	require.NotNil(t, workflowDisabled.Container)
+	require.NotNil(t, commandDisabled.Container)
+	assert.False(t, workflowDisabled.Container.IsEnabled())
+	assert.False(t, commandDisabled.Container.IsEnabled())
+	assert.Equal(t, workflowDisabled.Container, commandDisabled.Container,
+		"a step's boolean container: false opt-out must decode identically for workflow files and custom commands")
+}
+
 // TestDecodeTaskItem_MapAnyAny verifies the default branch of decodeTaskItem that
 // stringifies a map[any]any item before decoding it as a task map.
 func TestDecodeTaskItem_MapAnyAny(t *testing.T) {

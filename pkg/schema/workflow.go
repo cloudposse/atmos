@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -273,6 +274,53 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("%w: container must be a mapping or boolean, got YAML node kind %d", ErrInvalidWorkflowContainer, value.Kind)
 	}
+}
+
+// workflowContainerJSON mirrors WorkflowContainer's fields for JSON
+// marshaling, adding an explicit "enabled" key. WorkflowContainer's own
+// struct tag hides Enabled from JSON (`json:"-"`) because it's normally
+// populated only by UnmarshalYAML's polymorphic bool-or-mapping decode, not
+// by generic reflection-based decoding. That's fine for the YAML config-load
+// path, but it means a generic JSON-based deep copy -- e.g.
+// cmd/cmd_utils.go's cloneCommand, which round-trips a schema.Command
+// (including any step's Container) through json.Marshal/json.Unmarshal to
+// give each custom command's Cobra closure an independent copy -- silently
+// dropped a step's `container: false` opt-out: Enabled came back nil, which
+// IsEnabled() treats as enabled, inverting the opt-out. MarshalJSON/
+// UnmarshalJSON below make WorkflowContainer round-trip through JSON
+// losslessly, the same way UnmarshalYAML already does for YAML.
+type workflowContainerJSON struct {
+	Enabled           *bool             `json:"enabled,omitempty"`
+	Image             string            `json:"image,omitempty"`
+	Shell             string            `json:"shell,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+	RuntimeAutoStart  bool              `json:"runtime_auto_start,omitempty"`
+	Pull              string            `json:"pull,omitempty"`
+	Workspace         string            `json:"workspace,omitempty"`
+	WorkspaceReadOnly bool              `json:"workspace_read_only,omitempty"`
+	Cleanup           string            `json:"cleanup,omitempty"`
+	User              string            `json:"user,omitempty"`
+	RunArgs           []string          `json:"run_args,omitempty"`
+	Mounts            []ContainerMount  `json:"mounts,omitempty"`
+	Ports             []ContainerPort   `json:"ports,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+}
+
+// MarshalJSON serializes Enabled alongside the rest of the fields; see
+// workflowContainerJSON for why this is needed.
+func (c *WorkflowContainer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(workflowContainerJSON(*c))
+}
+
+// UnmarshalJSON is the counterpart to MarshalJSON; see workflowContainerJSON
+// for why this is needed.
+func (c *WorkflowContainer) UnmarshalJSON(data []byte) error {
+	var decoded workflowContainerJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*c = WorkflowContainer(decoded)
+	return nil
 }
 
 // IsEnabled reports whether the container config should be applied.
