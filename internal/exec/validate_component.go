@@ -40,8 +40,10 @@ func getWorkflowsDirToUse(atmosConfig *schema.AtmosConfiguration) string {
 		return atmosConfig.WorkflowsDirAbsolutePath
 	}
 	// u.JoinPath (unlike filepath.Join) returns an already-absolute Workflows.BasePath as-is
-	// instead of nesting it under BasePath.
-	return u.JoinPath(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+	// instead of nesting it under BasePath. getBasePathToUse (not raw atmosConfig.BasePath)
+	// keeps this consistent with the same relative/absolute handling getVendorDirToUse and every
+	// other BasePath-anchored resolution in this file already applies.
+	return u.JoinPath(getBasePathToUse(atmosConfig), atmosConfig.Workflows.BasePath)
 }
 
 // enableProvenanceForRichOutput sets atmosConfig.TrackProvenance when the

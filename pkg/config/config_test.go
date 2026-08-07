@@ -559,6 +559,44 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, filepath.Join(baseDir, "vendor.yaml"), config.VendorDirAbsolutePath)
 		assert.Equal(t, filepath.Join(baseDir, "stacks", "workflows"), config.WorkflowsDirAbsolutePath)
 	})
+
+	// An already-absolute Vendor.BasePath/Workflows.BasePath must pass through unchanged --
+	// u.JoinPath returns providedPath as-is when it's absolute, regardless of basePath.
+	t.Run("computes absolute nested vendor and workflows paths unchanged", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		vendorAbsPath := filepath.Join(os.TempDir(), "atmos-vendor-elsewhere")
+		workflowsAbsPath := filepath.Join(os.TempDir(), "atmos-workflows-elsewhere")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: vendorAbsPath},
+			Workflows: schema.Workflows{BasePath: workflowsAbsPath},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.True(t, filepath.IsAbs(config.VendorDirAbsolutePath))
+		assert.True(t, filepath.IsAbs(config.WorkflowsDirAbsolutePath))
+		assert.Equal(t, vendorAbsPath, config.VendorDirAbsolutePath)
+		assert.Equal(t, workflowsAbsPath, config.WorkflowsDirAbsolutePath)
+	})
+
+	// An empty Vendor.BasePath/Workflows.BasePath (the default -- no vendor/workflows section
+	// configured) must resolve to the base path itself, not an error or empty string.
+	t.Run("computes vendor and workflows absolute paths from empty nested base_path", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: ""},
+			Workflows: schema.Workflows{BasePath: ""},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, baseDir, config.VendorDirAbsolutePath)
+		assert.Equal(t, baseDir, config.WorkflowsDirAbsolutePath)
+	})
 }
 
 // Helper functions.

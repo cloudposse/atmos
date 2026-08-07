@@ -122,17 +122,22 @@ stacks:
 		"stage 1 (after main.yaml): sanity check on the starting value")
 
 	// Stage 2: after merging fragment.yaml on top (mergeConfigFile only, no mergeImports yet).
+	// Plain v.MergeConfig() already replaces the whole slice with fragment.yaml's superset here
+	// -- if a regression made this stage revert to main.yaml's original single-element value (or
+	// anything else), this must fail here rather than only at the final stage 4 assertion below.
 	require.NoError(t, mergeConfigFile(fragmentFile, v))
 	afterMergeConfigFile := v.Get("stacks.included_paths")
-	t.Logf("stage 2 (after mergeConfigFile(fragment.yaml)): %#v", afterMergeConfigFile)
+	require.Equal(t, []interface{}{"deploy/**/*", "other/**/*"}, afterMergeConfigFile,
+		"stage 2 (after mergeConfigFile(fragment.yaml)): the raw viper value")
 
 	// Stage 3: after mergeImports runs (a no-op for files with no `import:` key, per
-	// processConfigImportsWithFSAndBasePathSource's early return -- confirming that,
-	// or finding it ISN'T a no-op, is the point of this checkpoint).
+	// processConfigImportsWithFSAndBasePathSource's early return). Asserting stage 2's exact
+	// value against stage 3's confirms that no-op claim directly, instead of only logging it.
 	_, err := mergeImports(v, tmpDir, "", "")
 	require.NoError(t, err)
 	afterMergeImports := v.Get("stacks.included_paths")
-	t.Logf("stage 3 (after mergeImports): %#v", afterMergeImports)
+	require.Equal(t, afterMergeConfigFile, afterMergeImports,
+		"stage 3 (after mergeImports): must be unchanged from stage 2 -- mergeImports is a no-op here")
 
 	// Stage 4: after the final v.Unmarshal into the typed struct (what loadConfigFromCLIArgs
 	// itself does last).

@@ -141,8 +141,9 @@ func getVendorDirToUse(atmosConfig *schema.AtmosConfiguration) string {
 		return atmosConfig.VendorDirAbsolutePath
 	}
 	// u.JoinPath (unlike filepath.Join) returns an already-absolute Vendor.BasePath as-is
-	// instead of nesting it under BasePath.
-	return u.JoinPath(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+	// instead of nesting it under BasePath. getBasePathToUse (not raw atmosConfig.BasePath)
+	// keeps this consistent with getWorkflowsDirToUse's identical fallback.
+	return u.JoinPath(getBasePathToUse(atmosConfig), atmosConfig.Vendor.BasePath)
 }
 
 // Helper function to resolve the vendor config file path.

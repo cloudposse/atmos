@@ -1430,7 +1430,10 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 8. **Profile precedence logic:**
     - Multiple profiles: left-to-right (first profile lowest precedence)
     - Multiple locations: configurable > project-local hidden > XDG > project-local non-hidden
-    - Configuration loading chain: embedded defaults → system → home → working dir → env vars → config path → `.atmos.d/` → **profiles** → local `atmos.yaml`
+    - Configuration loading chain: see FR3.1 for the authoritative order (embedded defaults →
+      `--config`/`--config-path` CLI flags, which skip the rest of discovery when given →
+      `ATMOS_CLI_CONFIG_PATH` → current dir → git root → parent search → home → system →
+      `.atmos.d/` → **profiles** → local `atmos.yaml`)
 
 **Deliverables:**
 - Shared config directory loading function in `pkg/config/load.go`

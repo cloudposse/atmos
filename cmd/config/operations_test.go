@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	stdio "io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/data"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -176,20 +172,6 @@ func TestConfigGetCommand_MissingValue(t *testing.T) {
 	require.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
 }
 
-// configGetTestStreams is a minimal io.Streams implementation for capturing data output,
-// mirroring configSchemaTestStreams in schema_test.go.
-type configGetTestStreams struct {
-	stdin  stdio.Reader
-	stdout *bytes.Buffer
-	stderr *bytes.Buffer
-}
-
-func (ts *configGetTestStreams) Input() stdio.Reader     { return ts.stdin }
-func (ts *configGetTestStreams) Output() stdio.Writer    { return ts.stdout }
-func (ts *configGetTestStreams) Error() stdio.Writer     { return ts.stderr }
-func (ts *configGetTestStreams) RawOutput() stdio.Writer { return ts.stdout }
-func (ts *configGetTestStreams) RawError() stdio.Writer  { return ts.stderr }
-
 // TestConfigGetCommand_ReportsEffectiveMergedValue reproduces the "stale value" half of
 // cloudposse/atmos#2867: `atmos config get` used to read only the FIRST --config file
 // directly off disk (resolveConfigFile picked cfgFiles[0]), so a second --config file's
@@ -215,11 +197,7 @@ stacks:
     - "other/**/*"
 `), 0o644))
 
-	streams := &configGetTestStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
-	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-	t.Cleanup(data.Reset)
+	stdout := initConfigTestWriter(t)
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)
@@ -230,7 +208,7 @@ stacks:
 
 	require.NoError(t, configGetCmd.RunE(configGetCmd, []string{"stacks.included_paths"}))
 
-	output := streams.stdout.String()
+	output := stdout.String()
 	assert.True(t, strings.Contains(output, "deploy/**/*"), "output should contain the first file's value: %s", output)
 	assert.True(t, strings.Contains(output, "other/**/*"),
 		"output must reflect the SECOND --config file's override, not just the first file's stale value: %s", output)

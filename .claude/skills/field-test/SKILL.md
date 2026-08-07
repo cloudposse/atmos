@@ -20,15 +20,21 @@ when no PR exists yet. Do NOT use the upstream tracking branch (`@{u}`) as the b
 feature branch that tracks `origin/<same-branch-name>`, diffing against its own upstream produces
 an empty or near-empty diff, not the PR's actual changes, once the branch has been pushed.
 
-A branch NAME from `gh` (e.g. `main`) is not guaranteed to be a usable git ref in THIS checkout —
-shallow clones, detached HEADs, and worktrees with a narrow fetch refspec can have the name
+A branch NAME from `gh` (e.g. `develop`) is not guaranteed to be a usable git ref in THIS checkout
+— shallow clones, detached HEADs, and worktrees with a narrow fetch refspec can have the name
 without the commits. Before running any diff, verify the base actually resolves here
 (`git rev-parse --verify --quiet <candidate>^{commit}`), trying in order: `origin/<resolved-name>`,
-`<resolved-name>`, `origin/main`, `main` — take the first that verifies. If `gh` itself isn't
-available or returns nothing, skip straight to the `origin/main`/`main` candidates. If NONE of
-these resolve, stop and ask the user which base to diff against — do not run `git diff <base>...`
-against an unverified ref and let it fail with a confusing git error. Once a real base is
-confirmed, inspect the FULL set of
+`<resolved-name>` — take the first that verifies. **Do not fall back to `origin/main`/`main` when
+`resolved-name` came from an actual PR base other than the default branch** (e.g. a PR targeting
+`develop`) — diffing against `main` instead of the PR's real base compares against the wrong
+history and can silently miss real changes or include unrelated ones. `origin/main`/`main` are
+legitimate fallback candidates only in the no-PR case (`gh pr view` returned nothing, so
+`resolved-name` already IS the repository's default branch) or when `gh` itself isn't available at
+all. If a known, non-default PR base doesn't resolve as either `origin/<resolved-name>` or
+`<resolved-name>`, stop and ask the user which base to diff against — do not run `git diff
+<base>...` against an unverified ref and let it fail with a confusing git error, and do not
+silently substitute a different branch for a known PR base. Once a real base is confirmed, inspect
+the FULL set of
 changes relative to that base — content, not just a file-list summary: `git diff <base>...HEAD`
 (the full patch, not `--stat`, since `--stat` only shows file names and line counts, not what
 those lines actually do) for committed history; `git diff HEAD` for any staged/unstaged changes
