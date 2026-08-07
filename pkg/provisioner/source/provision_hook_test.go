@@ -1504,6 +1504,20 @@ func TestWriteWarning_UsesComponentWriterWhenSuppressed(t *testing.T) {
 	assert.Equal(t, "WARNING: metadata update failed\n", output.String())
 }
 
+func TestWriteWarning_FallsBackToUIWithoutComponentWriter(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&output)
+	t.Cleanup(restoreUI)
+
+	writeWarning(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, "metadata update failed")
+
+	assert.Contains(t, output.String(), "metadata update failed")
+}
+
 func TestWriteInfo_UsesComponentWriterWhenSuppressed(t *testing.T) {
 	var output bytes.Buffer
 	ctx := workdir.WithOutputSuppressed(t.Context())
