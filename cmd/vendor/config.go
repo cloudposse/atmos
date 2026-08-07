@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,11 +118,20 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 		if err != nil {
 			return err
 		}
-		if err := runVendorConfigSet(file, args[0], args[1], valueType); err != nil {
-			return err
+		if valueType == atmosyaml.TypeAuto {
+			return errUtils.Build(fmt.Errorf("%w: %q", atmosyaml.ErrInvalidTypedValue, atmosyaml.TypeAuto)).
+				WithHintf("vendor config set has no schema or existing-value inference to draw on, so --type defaults to %q and doesn't support %q. "+
+					"Pass an explicit --type (string, int, bool, float, null, or yaml), or omit --type entirely.",
+					atmosyaml.TypeString, atmosyaml.TypeAuto).
+				Err()
 		}
-		if !cmd.Flags().Changed("type") && valueType == atmosyaml.TypeString {
-			warnIfVendorValueLooksNonString(args[1])
+		// warnIfNonString is gated on this cobra command's own --type flag: the
+		// `vendor set` alias (cmd/vendor/edit.go) always passes false here,
+		// since it has no --type flag of its own and always writes TypeString
+		// deliberately, not by default.
+		warnIfNonString := !cmd.Flags().Changed("type") && valueType == atmosyaml.TypeString
+		if err := runVendorConfigSet(file, args[0], args[1], valueType, warnIfNonString); err != nil {
+			return err
 		}
 		return nil
 	},
@@ -143,11 +153,21 @@ func warnIfVendorValueLooksNonString(value string) {
 }
 
 // runVendorConfigSet writes value at path in a vendor manifest file. Shared by
-// vendor config set and its vendor set alias.
-func runVendorConfigSet(file, path, value, valueType string) error {
+// vendor config set and its vendor set alias. The warnIfNonString parameter
+// controls whether a LooksNonString warning is considered at all (the vendor
+// set alias always passes false; see the call site in cmd/vendor/edit.go). The warning,
+// when considered, is printed after the write succeeds (so a failed write
+// never claims a value "is being stored") but before the success message --
+// matching `config set`/`stack set`'s warn-then-succeed order, unlike this
+// function's previous behavior of leaving the warning to be printed by the
+// caller after this function had already printed success.
+func runVendorConfigSet(file, path, value, valueType string, warnIfNonString bool) error {
 	created, err := atmosyaml.SetFileWithType(file, path, value, valueType)
 	if err != nil {
 		return wrapVendorConfigError(file, err)
+	}
+	if warnIfNonString {
+		warnIfVendorValueLooksNonString(value)
 	}
 	if created {
 		ui.Successf("Created `%s` = `%s` in `%s`", path, value, atmosyaml.DisplayPath(file))

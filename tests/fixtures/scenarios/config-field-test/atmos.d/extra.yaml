@@ -2,6 +2,12 @@
 # (`atmos describe config`) view -- `atmos config get/set` targets the root
 # atmos.yaml file only, so a value defined ONLY here should not be visible
 # to those edit commands. Used to field-test that gap.
+#
+# logs.level here is a decoy, not the actual test: root atmos.yaml also sets
+# logs.level (to Info) and root's explicit value always wins over this
+# fragment, so this key does NOT demonstrate root-vs-merged visibility on its
+# own. settings.fragment_only_setting below is the real test, since it has no
+# counterpart in root atmos.yaml at all.
 logs:
   level: Debug
 

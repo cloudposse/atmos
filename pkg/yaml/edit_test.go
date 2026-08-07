@@ -118,7 +118,9 @@ func TestSetWithType_InvalidValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := SetWithType([]byte(fixtureWithComments), "vars.region", tt.value, tt.valueType)
 			require.Error(t, err)
-			assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
+			assert.ErrorIs(t, err, ErrInvalidTypedValue)
+			assert.NotErrorIs(t, err, ErrInvalidYAMLExpression,
+				"a value/type validation failure is not a path/expression problem -- must not share a headline with those")
 		})
 	}
 }
@@ -270,6 +272,30 @@ func TestSet_EditAnchorDefinitionIsRejected(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
 }
 
+const fixtureWithScalarAlias = `components:
+  vpc:
+    region: &shared_region "us-east-1"
+  rds:
+    region: *shared_region
+`
+
+func TestSet_EditAliasUseSiteIsRejected(t *testing.T) {
+	// Regression for a field-test finding: replacing an alias node itself
+	// (components.rds.region IS *shared_region, not a child key inside it,
+	// and not the anchor definition) flattens the alias to a literal -- a
+	// distinct code path (aliasCount changed, not content changed) from
+	// TestSet_EditThroughAliasIsRejected / TestSet_EditAnchorDefinitionIsRejected
+	// above, previously untested through a real Set call.
+	_, err := Set([]byte(fixtureWithScalarAlias), "components.rds.region", "us-west-2")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrYAMLAnchorAltered), "got: %v", err)
+	assert.Contains(t, err.Error(), "alias references changed from 1 to 0")
+	assert.Contains(t, err.Error(), "edit the anchor definition explicitly",
+		"error should explain the real options, not stay silent")
+	assert.NotContains(t, err.Error(), "add an explicit key at this path",
+		"that hint is for the content-diff branch and is misleading here -- attempting it is exactly what triggers this branch")
+}
+
 // --- File wrapper tests ------------------------------------------------------
 
 func TestSetFile_AtomicAndPreservesMode(t *testing.T) {
@@ -410,7 +436,7 @@ func TestFileWrappers_ReadAndValidationErrors(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
 	_, err = SetFileWithType(file, "vars.region", "not-bool", TypeBool)
-	assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
+	assert.ErrorIs(t, err, ErrInvalidTypedValue)
 	assert.ErrorIs(t, EvalFile(file, "bad["), ErrInvalidYAMLExpression)
 }
 

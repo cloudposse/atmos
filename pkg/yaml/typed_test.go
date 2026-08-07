@@ -27,6 +27,19 @@ func TestLooksNonString(t *testing.T) {
 		{"empty string", "", false},
 		{"string containing a number", "v1.2.3", false},
 		{"bare exponent letter", "e", false},
+		// Regression: underscore-separated digits and "nan" are accepted by
+		// strconv.ParseFloat today, so warning for them is safe and accurate.
+		{"underscore-separated integer", "1_000", true},
+		{"underscore-separated float", "1_000.5", true},
+		{"nan lowercase", "nan", true},
+		{"NaN mixed case", "NaN", true},
+		// Regression: hex/octal/.inf are deliberately NOT warned about, since
+		// strconv.ParseInt/ParseFloat at base 10 reject them -- warning would
+		// send a user toward --type=int/float only to hit a parser error.
+		{"hex literal", "0x1A", false},
+		{"octal literal", "0o17", false},
+		{"leading-dot inf", ".inf", false},
+		{"negative leading-dot inf", "-.inf", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

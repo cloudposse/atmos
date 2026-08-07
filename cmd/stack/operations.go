@@ -33,12 +33,14 @@ var (
 // editTarget holds the resolved file and in-file path for an edit, plus the
 // effective merged value and where it currently resolves from.
 type editTarget struct {
-	file       string // manifest file to edit
-	inFilePath string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
-	yqPath     string // escaped dot-path used to address the YAML node safely
-	value      string // effective merged value of the path
-	provFile   string // file provenance attributes the value to
-	provLine   int    // line within provFile
+	file               string // manifest file to edit
+	inFilePath         string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
+	yqPath             string // escaped dot-path used to address the YAML node safely
+	value              string // effective merged value of the path
+	provFile           string // file provenance attributes the value to
+	provLine           int    // line within provFile
+	mergedType         string // type of the effective merged value (e.g. inherited from an abstract component), if any
+	mergedTypeResolved bool   // whether mergedType reflects a real, present value (see atmosyaml.GetType)
 }
 
 var stackGetCmd = &cobra.Command{
@@ -147,17 +149,22 @@ func runStackSet(args []string) error {
 
 // effectiveStackValueType resolves --type=auto (the default) to a concrete
 // type: component vars have no fixed schema to infer from (unlike `config
-// set`), so the only available signal is the type of the value already at
-// tgt.yqPath in tgt.file, if any. Resolved is false only when there's nothing
-// to infer from and atmosyaml.TypeString was used as a bare default (a
-// brand-new key) -- as opposed to a genuinely inferred string. An explicit
-// (non-auto) --type is always returned unchanged, with resolved true.
+// set`), so the primary signal is the type of the value already at
+// tgt.yqPath in tgt.file, if any. When tgt.file doesn't itself define the
+// path -- which happens whenever --file targets a manifest that doesn't
+// contain the value, e.g. the only way to set a value inherited from an
+// abstract/base component -- fall back to tgt.mergedType, the type of the
+// effective (post-inheritance) merged value computed in resolveEditTarget.
+// Resolved is false only when neither signal has anything to infer from and
+// atmosyaml.TypeString was used as a bare default (a brand-new key) -- as
+// opposed to a genuinely inferred string. An explicit (non-auto) --type is
+// always returned unchanged, with resolved true.
 //
 // An existing value of TypeNull is deliberately not treated as a resolved
-// inference: buildRHS's TypeNull case always writes the literal `null`,
-// ignoring the value argument, which makes sense for an explicit
-// `--type=null` but would silently discard the new value being set if
-// auto-inference forced it here. So a null-typed existing value falls
+// inference in either signal: buildRHS's TypeNull case always writes the
+// literal `null`, ignoring the value argument, which makes sense for an
+// explicit `--type=null` but would silently discard the new value being set
+// if auto-inference forced it here. So a null-typed existing value falls
 // through to the same unresolved/string-fallback path as "nothing to infer
 // from".
 func effectiveStackValueType(tgt *editTarget) (valType string, resolved bool) {
@@ -166,6 +173,9 @@ func effectiveStackValueType(tgt *editTarget) (valType string, resolved bool) {
 	}
 	if inferred, ok := atmosyaml.GetFileType(tgt.file, tgt.yqPath); ok && inferred != atmosyaml.TypeNull {
 		return inferred, true
+	}
+	if tgt.mergedTypeResolved && tgt.mergedType != atmosyaml.TypeNull {
+		return tgt.mergedType, true
 	}
 	return atmosyaml.TypeString, false
 }
@@ -284,11 +294,15 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 		yqPath:     pkgstack.BuildComponentYqPath(componentType, flagComponent, dotPath),
 	}
 
-	// Effective merged value (best-effort; used by get and for messaging).
+	// Effective merged value (best-effort; used by get and for messaging), plus
+	// its type -- this is the only place a --file target's type inference can
+	// draw on an *inherited* value, since GetFileType only ever sees the
+	// literal target file's own bytes.
 	if sectionYAML, convErr := u.ConvertToYAML(result.ComponentSection); convErr == nil {
 		if v, getErr := atmosyaml.Get([]byte(sectionYAML), dotPath); getErr == nil {
 			tgt.value = v
 		}
+		tgt.mergedType, tgt.mergedTypeResolved = atmosyaml.GetType([]byte(sectionYAML), dotPath)
 	}
 
 	// Explicit file override bypasses provenance resolution.

@@ -263,6 +263,31 @@ func chdirToValidAtmosProject(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 }
 
+// chdirToConfigFieldTestProject is chdirToValidAtmosProject's sibling for the
+// config-field-test fixture, which (unlike "basic") has a component that
+// inherits a typed value via metadata.inherits with no local override
+// anywhere -- needed to regression-test type inference on the --file path.
+func chdirToConfigFieldTestProject(t *testing.T) {
+	t.Helper()
+
+	exec.ClearBaseComponentConfigCache()
+	exec.ClearMergeContexts()
+	exec.ClearLastMergeContext()
+	exec.ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	src := filepath.Join(wd, "..", "..", "tests", "fixtures", "scenarios", "config-field-test")
+	dst := t.TempDir()
+	require.NoError(t, copyDirRecursive(src, dst))
+
+	t.Chdir(dst)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+}
+
 // copyDirRecursive copies a directory tree (files and subdirectories) from
 // src to dst, preserving each file's permissions. Used to give each test its
 // own disposable copy of a checked-in fixture rather than mutating the
@@ -431,6 +456,32 @@ func TestRunStackSet_ExplicitFile_AutoInfersFromExistingValue(t *testing.T) {
 	assert.NotContains(t, content, `enabled: "true"`)
 }
 
+// TestRunStackSet_ExplicitFile_AutoInfersFromInheritedValue reproduces a
+// field-test finding: mycomponent inherits vars.replicas (int 1) from
+// abstract-component via metadata.inherits and never overrides it locally
+// anywhere, so the only way to set it is --file. Type inference used to
+// bypass the merged/inherited value entirely on the --file path (it only
+// consulted the literal target file's own bytes via GetFileType), storing
+// "3" as a quoted string with a warning inaccurately claiming there was
+// nothing to infer from. It must now fall back to the inherited value's type.
+func TestRunStackSet_ExplicitFile_AutoInfersFromInheritedValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = "stacks/deploy/nonprod.yaml"
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "3"}))
+
+	raw, err := os.ReadFile("stacks/deploy/nonprod.yaml")
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "replicas: 3")
+	assert.NotContains(t, content, `replicas: "3"`)
+}
+
 func TestRunStackSet_ExplicitFile_AutoFallsBackToStringForNewKey(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)
@@ -513,7 +564,9 @@ func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	flagType = "not-a-real-type"
 
 	err := runStackSet([]string{"vars.region", "us-west-2"})
-	require.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+	require.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	require.NotErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression,
+		"an unknown --type value is a type problem, not a path/expression problem -- must not share a headline with those")
 }
 
 func TestRunStackDelete_ExplicitFile(t *testing.T) {

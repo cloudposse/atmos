@@ -185,6 +185,31 @@ func TestVendorConfigSetCmd_NoWarningWhenTypeExplicit(t *testing.T) {
 	assert.NotContains(t, got, "looks like it could be a bool/int/float", "warning must not fire when --type was explicit")
 }
 
+// TestVendorConfigSetCmd_WarningPrintedBeforeSuccess is a regression test for
+// a field-test finding: unlike `config set`/`stack set` (which print their
+// non-string warning before the success message), vendor config set used to
+// print success first and the warning after -- same underlying feature,
+// inconsistent order.
+func TestVendorConfigSetCmd_WarningPrintedBeforeSuccess(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+	stderr := setupVendorUICapture(t)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+
+	// spec.sources[0].version already exists in vendorConfigFixture, so this
+	// hits the "Updated" branch (not "Created") -- the message text this test
+	// asserts on.
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].version", "42"}))
+
+	got := plainOutput(stderr.String())
+	warnIdx := strings.Index(got, "looks like it could be a bool/int/float")
+	successIdx := strings.Index(got, "Updated")
+	require.NotEqual(t, -1, warnIdx, "warning must be present")
+	require.NotEqual(t, -1, successIdx, "success message must be present")
+	assert.Less(t, warnIdx, successIdx, "warning must print before the success message, matching config set/stack set")
+}
+
 // TestVendorConfigSetCmd_NoWarningOnFailedWrite is a regression test for a
 // CodeRabbit finding: the warning used to fire before the write was
 // attempted, so a failed write (e.g. a missing file) still claimed the value
@@ -212,7 +237,24 @@ func TestVendorConfigSetCmd_InvalidTypeValue(t *testing.T) {
 
 	err := vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].version", "not-a-bool"})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+	assert.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	assert.NotErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression,
+		"a bad --type value is a type problem, not a path/expression problem -- must not share a headline with those")
+}
+
+func TestVendorConfigSetCmd_TypeAutoRejected(t *testing.T) {
+	resetCommandFlags(t, vendorConfigSetCmd)
+
+	file := writeCommandVendorManifest(t, vendorConfigFixture)
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("type", atmosyaml.TypeAuto))
+
+	err := vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{"spec.sources[0].version", "1.0.0"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	assert.Contains(t, err.Error(), "auto", "error should name the unsupported value")
+	assert.Contains(t, hintText(err), "--type",
+		"hint should mention the flag so the user knows what to change")
 }
 
 // --- vendorConfigDeleteCmd ----------------------------------------------------

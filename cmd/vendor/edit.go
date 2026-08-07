@@ -79,7 +79,7 @@ The source is matched by component name, so manifest ordering does not matter.`,
 		if err != nil {
 			return err
 		}
-		return runVendorConfigSet(declaringFile, path, args[1], atmosyaml.TypeString)
+		return runVendorConfigSet(declaringFile, path, args[1], atmosyaml.TypeString, false)
 	},
 }
 

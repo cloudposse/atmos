@@ -24,6 +24,12 @@ var (
 	// ErrInvalidYAMLExpression is returned when a dot-path or yq expression cannot be parsed or evaluated.
 	ErrInvalidYAMLExpression = errors.New("invalid YAML path or expression")
 
+	// ErrInvalidTypedValue is returned when a value fails validation against an explicitly
+	// requested --type (e.g. "abc" isn't a valid int/float/bool) or an unknown --type name is
+	// given. Distinct from ErrInvalidYAMLExpression: the path is fine here, only the value/type
+	// is the problem, and the two must render different error headlines.
+	ErrInvalidTypedValue = errors.New("value does not match the requested type")
+
 	// ErrYAMLPathNotFound is returned when a requested path does not exist in the document.
 	ErrYAMLPathNotFound = errors.New("YAML path not found")
 

@@ -374,7 +374,9 @@ func TestConfigSetCommand_InvalidType(t *testing.T) {
 
 	valueType = atmosyaml.TypeInt
 	err = configSetCmd.RunE(configSetCmd, []string{"settings.count", "not-an-int"})
-	require.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+	require.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	require.NotErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression,
+		"a bad --type value is a type problem, not a path/expression problem -- must not share a headline with those")
 }
 
 func TestConfigDeleteCommand_InvalidPath(t *testing.T) {
