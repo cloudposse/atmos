@@ -23,11 +23,14 @@ By default, `vendor clean` preserves any lock-owned file whose content doesn't m
 checksum. It refuses to run and names every such file. Pass `--force` to delete them anyway. After
 a successful clean, `vendor clean` drops the removed artifacts from `vendor.lock.yaml`.
 
-At most one selector may be given: `--component`, `--tags` (vendor.yaml's own declared source
-tags), or `--stack`/`--labels` (a stack-resolved component set, composable with each other, like
-<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). Omit every
-selector to clean everything. A selector that matches nothing is an error, not a silent "clean
-everything" fallback.
+At most one base selector may be given: `--component` or `--stack`/`--labels` (a stack-resolved
+component set, composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). `--tags`
+(vendor.yaml's own declared source tags) is a separate, independent filter that composes with
+either base selector, or stands on its own — narrowing the cleaned set to only components whose
+declared tags also match; a component with no `vendor.yaml` entry has no tags to match and is
+excluded by a non-empty `--tags` filter. Omit every selector to clean everything. A selector that
+matches nothing is an error, not a silent "clean everything" fallback.
 
 ## Examples
 
@@ -48,6 +51,9 @@ atmos vendor clean --tags networking
 atmos vendor clean --stack dev-us-west-2
 atmos vendor clean --labels tier=1
 
+# Remove a stack's components, narrowed further by declared vendor.yaml tags.
+atmos vendor clean --stack dev-us-west-2 --tags networking
+
 # Delete lock-owned files even if they were modified since vendoring.
 atmos vendor clean --force
 ```
@@ -56,13 +62,13 @@ atmos vendor clean --force
 
 <dl>
   <dt>`--component` / `-c` (string)</dt>
-  <dd>Clean only this component. Mutually exclusive with `--tags` and `--stack`/`--labels`.</dd>
+  <dd>Clean only this component. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Clean only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). Mutually exclusive with `--component` and `--stack`/`--labels`.</dd>
+  <dd>Clean only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
   <dt>`--stack` / `-s` (string)</dt>
-  <dd>Clean only components belonging to the specified stack. Composes with `--labels` to narrow further. Mutually exclusive with `--component` and `--tags`.</dd>
+  <dd>Clean only components belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
   <dt>`--labels` (string)</dt>
-  <dd>Clean only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack`. Mutually exclusive with `--component` and `--tags`.</dd>
+  <dd>Clean only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
   <dt>`--force` (boolean)</dt>
   <dd>Delete modified lock-owned files instead of refusing to run.</dd>
   <dt>`--dry-run` (boolean)</dt>

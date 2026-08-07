@@ -95,21 +95,21 @@ func normalizeComponentSelectors(components []string) []string {
 	return result
 }
 
-// validateUpdateSelectorFlags rejects combinations across vendor update's four selector concepts:
-// --component (an explicit name list), --stack/--labels (both resolve a stack-declared component
-// set via ResolveVendorComponentSelector), and --tags (vendor.yaml's own declared source tags, a
-// distinct manifest concept -- see the same rationale documented on
-// internal/exec.ErrValidateTagsLabelsFlag). --stack and --labels compose with each other (--labels
-// narrows further within --stack), but neither composes with --component or --tags.
+// validateUpdateSelectorFlags rejects only one combination: an explicit --component together with
+// --stack/--labels (both resolve a stack-declared component set via ResolveVendorComponentSelector,
+// so a single --component target doesn't compose with that resolution). --stack and --labels
+// compose with each other (--labels narrows further within --stack).
 //
-// --component DOES compose with --tags, deliberately: both operate on the same vendor.yaml
-// Sources[] domain (vendoring.MatchesComponentTags applies component-exact-AND-tags-any against a
-// single source), so "--component vpc --tags networking" has a coherent meaning -- "update vpc, but
-// only if its declared source is tagged networking" -- already implemented by
-// pkg/vendoring/update.go's sourceMatchesFilter/checkAndUpdateSource. When the combination matches
-// nothing, updater.UpdateSelectedComponents reports that explicitly rather than succeeding silently
-// with an empty report (see its own doc comment).
-func validateUpdateSelectorFlags(cmd *cobra.Command, stack string, labels map[string]string, sourceTags []string) error {
+// --tags composes with everything -- --component, --stack/--labels, or standing alone -- since it's
+// an independent filter over vendor.yaml Sources[] (vendoring.MatchesComponentTags), not a fourth
+// mutually exclusive selector "mode": "--component vpc --tags networking" means "update vpc, but
+// only if its declared source is tagged networking"; "--stack dev --tags networking" means "update
+// dev's resolved components, but only the networking-tagged ones". Both are already implemented by
+// pkg/vendoring/update.go's sourceMatchesFilter/checkAndUpdateSource, which apply --tags to every
+// resolved component regardless of how it was selected. When a combination matches nothing,
+// updater.UpdateSelectedComponents reports that explicitly rather than succeeding silently with an
+// empty report (see its own doc comment).
+func validateUpdateSelectorFlags(cmd *cobra.Command, stack string, labels map[string]string) error {
 	hasStackOrLabels := stack != "" || len(labels) > 0
 	if !hasStackOrLabels {
 		return nil
@@ -118,12 +118,6 @@ func validateUpdateSelectorFlags(cmd *cobra.Command, stack string, labels map[st
 		return errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation("--component cannot be combined with --stack or --labels.").
 			WithHint("--stack/--labels already resolve a set of components; pass just one selector.").
-			Err()
-	}
-	if len(sourceTags) > 0 {
-		return errUtils.Build(errUtils.ErrInvalidArgumentError).
-			WithExplanation("--tags cannot be combined with --stack or --labels.").
-			WithHint("--tags filters vendor.yaml's own declared source tags; --stack/--labels filter stack-resolved component metadata.labels. Pass just one selector.").
 			Err()
 	}
 	return nil

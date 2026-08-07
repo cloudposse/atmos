@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,7 +18,6 @@ import (
 
 var (
 	ErrNoVendorSourcesFound   = errors.New("no vendor.yaml found and no component.yaml manifests were discovered under any component type")
-	ErrValidateComponentFlag  = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateEverythingFlag = errors.New("'--everything' flag cannot be combined with '--component', '--stack', '--tags', or '--labels' flags")
 	// ErrValidateComponentStackFlag guards the stack-based vendoring path (handleStackVendor):
 	// --stack resolves and vendors every component declared in the stack, so a single
@@ -27,17 +27,7 @@ var (
 	// ErrValidateComponentStackFlag: --labels resolves a set of stack-declared components (like
 	// --stack), so a single --component target doesn't compose with it either.
 	ErrValidateComponentLabelsFlag = errors.New("either '--component' or '--labels' flag can be provided, but not both")
-	// ErrValidateTagsLabelsFlag guards two mutually exclusive selector universes: --tags filters
-	// vendor.yaml's own declared source tags (a manifest concept), while --labels filters
-	// stack-resolved component metadata.labels (a component concept, the same one --stack resolves
-	// against) -- they can't be combined into one selection.
-	ErrValidateTagsLabelsFlag = errors.New("either '--tags' or '--labels' flag can be provided, but not both")
-	// ErrValidateStackTagsFlag guards the same stack-resolution path as ErrValidateComponentStackFlag/
-	// ErrValidateComponentLabelsFlag: --tags filters vendor.yaml's own declared source tags (a
-	// manifest concept), a different universe from the stack-resolved component set --stack
-	// resolves, so they don't compose -- matching --tags' existing exclusivity with --labels.
-	ErrValidateStackTagsFlag = errors.New("either '--stack' or '--tags' flag can be provided, but not both")
-	ErrMissingComponent      = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+	ErrMissingComponent            = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
 		"Example: atmos vendor pull -c <component>")
 	ErrInvalidLockEnforcement = errors.New("'--lock-enforcement' must be one of: strict, warn, silent")
 	// ErrSingleComponentRequired guards the 'vendor update --pull' delegation path, where
@@ -82,7 +72,7 @@ type VendorFlags struct {
 	Tags  []string
 	// Labels filters the stack-resolved component set (the same resolution --stack performs) by
 	// metadata.labels, matching ALL key=value pairs (AND). Composes with --stack (narrows further)
-	// but is a distinct concept from Tags -- see ErrValidateTagsLabelsFlag.
+	// and with Tags (a distinct, independent filter over vendor.yaml-declared source tags).
 	Labels        map[string]string
 	Everything    bool
 	ComponentType string
@@ -288,6 +278,13 @@ func setDefaultEverythingFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) {
 	}
 }
 
+// validateVendorFlags rejects --component combined with --stack/--labels (both resolve a
+// stack-declared component set that a single explicit name doesn't compose with) and --everything
+// combined with any selector (it means "skip selection entirely"). --tags is deliberately not
+// checked against anything here: it's an independent filter, not a fourth mutually exclusive
+// selector "mode", so it composes with --component (handleComponentVendor/ExecuteAtmosVendorInternal
+// already AND it via shouldSkipSource), and with --stack/--labels (handleStackVendor narrows its
+// resolved set via vendoring.FilterComponentsByDeclaredTags).
 func validateVendorFlags(flg *VendorFlags) error {
 	if flg.Component != "" && flg.Stack != "" {
 		return ErrValidateComponentStackFlag
@@ -295,18 +292,6 @@ func validateVendorFlags(flg *VendorFlags) error {
 
 	if flg.Component != "" && len(flg.Labels) > 0 {
 		return ErrValidateComponentLabelsFlag
-	}
-
-	if len(flg.Tags) > 0 && len(flg.Labels) > 0 {
-		return ErrValidateTagsLabelsFlag
-	}
-
-	if flg.Stack != "" && len(flg.Tags) > 0 {
-		return ErrValidateStackTagsFlag
-	}
-
-	if flg.Component != "" && len(flg.Tags) > 0 {
-		return ErrValidateComponentFlag
 	}
 
 	if flg.Everything && (flg.Component != "" || flg.Stack != "" || len(flg.Tags) > 0 || len(flg.Labels) > 0) {
@@ -354,6 +339,16 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 	}
 
 	if flg.Component != "" {
+		// No vendor.yaml exists, so flg.Component resolves via its own component.yaml, which has
+		// no tags concept at all -- a non-empty --tags filter can never match it. Consistent with
+		// --tags composing as an independent filter everywhere else in this feature: a candidate
+		// with no declared tags is excluded by any non-empty tags filter, not a special case.
+		if len(flg.Tags) > 0 {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithExplanation("No components matched the given selector.").
+				WithHint("--component resolved via its own component.yaml, which has no tags to match against --tags.").
+				Err()
+		}
 		return handleComponentVendor(atmosConfig, flg)
 	}
 

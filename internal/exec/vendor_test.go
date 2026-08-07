@@ -269,8 +269,9 @@ func TestParseVendorFlags_Stack(t *testing.T) {
 }
 
 // TestValidateVendorFlags_Stack proves validateVendorFlags rejects --stack combined with
-// --component, --tags, or --everything, matching the existing --tags mutual-exclusivity rules,
-// while allowing --stack on its own.
+// --component or --everything, while allowing --stack on its own and together with --tags -- --tags
+// is an independent filter that composes with --stack (narrowed downstream by handleStackVendor via
+// filterStackComponentsByTags), not a fourth mutually exclusive selector "mode".
 func TestValidateVendorFlags_Stack(t *testing.T) {
 	t.Run("stack alone is valid", func(t *testing.T) {
 		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2"}))
@@ -282,10 +283,8 @@ func TestValidateVendorFlags_Stack(t *testing.T) {
 		require.ErrorIs(t, err, ErrValidateComponentStackFlag)
 	})
 
-	t.Run("stack and tags together is rejected", func(t *testing.T) {
-		err := validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Tags: []string{"networking"}})
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrValidateStackTagsFlag)
+	t.Run("stack and tags together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Tags: []string{"networking"}}))
 	})
 
 	t.Run("everything and stack together is rejected", func(t *testing.T) {
@@ -296,9 +295,10 @@ func TestValidateVendorFlags_Stack(t *testing.T) {
 }
 
 // TestValidateVendorFlags_Labels proves validateVendorFlags rejects --labels combined with
-// --component, --tags, or --everything (mirroring --stack's own exclusivity rules), while allowing
-// --labels on its own and together with --stack (both resolve the same stack-declared component set
-// -- --labels narrows it further, not a separate mode).
+// --component or --everything (mirroring --stack's own exclusivity rules), while allowing --labels
+// on its own, together with --stack (both resolve the same stack-declared component set --
+// --labels narrows it further, not a separate mode), and together with --tags (an independent
+// filter that composes with --stack/--labels, same as it does with --stack alone).
 func TestValidateVendorFlags_Labels(t *testing.T) {
 	t.Run("labels alone is valid", func(t *testing.T) {
 		require.NoError(t, validateVendorFlags(&VendorFlags{Labels: map[string]string{"tier": "1"}}))
@@ -314,10 +314,8 @@ func TestValidateVendorFlags_Labels(t *testing.T) {
 		require.ErrorIs(t, err, ErrValidateComponentLabelsFlag)
 	})
 
-	t.Run("tags and labels together is rejected", func(t *testing.T) {
-		err := validateVendorFlags(&VendorFlags{Tags: []string{"networking"}, Labels: map[string]string{"tier": "1"}})
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrValidateTagsLabelsFlag)
+	t.Run("tags and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Tags: []string{"networking"}, Labels: map[string]string{"tier": "1"}}))
 	})
 
 	t.Run("everything and labels together is rejected", func(t *testing.T) {
@@ -325,6 +323,15 @@ func TestValidateVendorFlags_Labels(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrValidateEverythingFlag)
 	})
+}
+
+// TestValidateVendorFlags_ComponentAndTagsCompose proves --component and --tags are no longer
+// rejected together: both operate on vendor.yaml Sources[] (ExecuteAtmosVendorInternal already ANDs
+// them via shouldSkipSource) or, when no vendor.yaml exists, handleVendorConfig treats a component
+// with no declared tags as excluded by a non-empty --tags filter (see its own doc comment) rather
+// than rejecting the flag combination up front.
+func TestValidateVendorFlags_ComponentAndTagsCompose(t *testing.T) {
+	require.NoError(t, validateVendorFlags(&VendorFlags{Component: "vpc", Tags: []string{"networking"}}))
 }
 
 // TestParseOptionalLabelsFlag proves parseOptionalLabelsFlag reads --labels when the calling

@@ -336,6 +336,39 @@ func TestVendorCleanCmd_LabelsFilterScopesRemoval(t *testing.T) {
 	assert.FileExists(t, secondFile, "a non-matching component must be left alone")
 }
 
+// TestVendorCleanCmd_StackAndTagsCompose proves --stack and --tags compose instead of being
+// rejected as mutually exclusive selectors: --tags narrows the --stack-resolved candidate set by
+// vendor.yaml-declared tags (vendoring.FilterComponentsByDeclaredTags), so "first" (declared, tagged
+// networking) is removed while "second" (declared, no matching tag) is left alone, even though both
+// belong to the "dev" stack.
+func TestVendorCleanCmd_StackAndTagsCompose(t *testing.T) {
+	firstFile, secondFile := writeCleanStackLabelsFixture(t, "vars:\n  stage: dev\ncomponents:\n  terraform:\n    first: {}\n    second: {}\n")
+	require.NoError(t, os.WriteFile(DefaultVendorManifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+    - component: second
+      source: oci://ghcr.io/cloudposse/mock-second:{{.Version}}
+      version: v0.1.0
+      targets: ["vendor-second"]
+`), 0o644))
+
+	setupVendorUICapture(t)
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, firstFile, "the stack-resolved AND tag-matched component's file must be removed")
+	assert.FileExists(t, secondFile, "a stack-resolved but non-tag-matching component must be left alone")
+}
+
 // TestVendorCleanCmd_TypeFilterScopesRemoval proves --stack --type narrows the stack-resolved
 // component set to a single component type, leaving components of other types (even within the
 // same stack) untouched -- clean never wired --type into its selector before this fix.

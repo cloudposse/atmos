@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // writeSweepComponentManifestFixture writes a component.yaml for componentName under
@@ -237,13 +239,14 @@ func TestExecuteVendorPullCommand_Everything_NoVendorFile_RefreshLock_ForcesReDo
 	assert.Equal(t, "# v2\n", string(content), "--refresh-lock must force a re-download even when already materialized")
 }
 
-// TestExecuteVendorPullCommand_StackAndTagsRejected is the end-to-end regression test for
-// ErrValidateStackTagsFlag: "atmos vendor pull --stack X --tags Y" must fail validation rather than
-// silently ignoring --tags. Before this fix, validateVendorFlags never checked Stack×Tags, and
-// handleStackVendor (the --stack dispatch target) never reads flg.Tags at all, so the flag was
-// accepted and quietly dropped -- every sibling subcommand (diff/clean/verify/update) already
-// rejects the same combination.
-func TestExecuteVendorPullCommand_StackAndTagsRejected(t *testing.T) {
+// TestExecuteVendorPullCommand_StackAndTagsExcludesUntaggedComponents is the end-to-end regression
+// test for --stack/--tags composition. Vendor pull with both --stack and --tags set must narrow the
+// stack-resolved component set by vendor.yaml-declared tags. It must not silently ignore --tags,
+// and it must not reject the combination outright. The fixture's dev stack resolves to a vpc
+// component that only has a component.yaml, with no vendor.yaml entry and therefore no declared
+// tags at all, so a non-empty tags filter excludes it -- proving the filter actually applies rather
+// than being a no-op, with the zero-match result surfaced as an explicit error.
+func TestExecuteVendorPullCommand_StackAndTagsExcludesUntaggedComponents(t *testing.T) {
 	buildHandleStackVendorFixture(t)
 
 	cmd := newVendorPullSweepTestCmd()
@@ -253,5 +256,35 @@ func TestExecuteVendorPullCommand_StackAndTagsRejected(t *testing.T) {
 	err := ExecuteVendorPullCommand(cmd, nil)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrValidateStackTagsFlag)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestExecuteVendorPullCommand_StackAndTagsMatchesDeclaredComponent proves the positive case of
+// --stack/--tags composition: when a stack-resolved component DOES have a matching vendor.yaml
+// entry, --tags keeps it (and drops any sibling that doesn't match), and it still installs via its
+// own component.yaml -- --tags only narrows which stack-resolved names survive the filter, it never
+// changes how a surviving one is installed (that's still entirely component.yaml-driven).
+func TestExecuteVendorPullCommand_StackAndTagsMatchesDeclaredComponent(t *testing.T) {
+	buildHandleStackVendorFixture(t)
+	require.NoError(t, os.WriteFile("vendor.yaml", []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.NoError(t, err)
+	content, readErr := os.ReadFile(filepath.Join("components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# vpc\n", string(content), "vpc must install via its own component.yaml, unaffected by the vendor.yaml entry used only for tag matching")
 }

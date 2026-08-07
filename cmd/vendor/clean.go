@@ -67,7 +67,7 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if vendorSelectorGroupCount(component, filterTags, stack, labels) > 1 {
+		if vendorSelectorGroupCount(component, stack, labels) > 1 {
 			return errVendorSelectorsExclusive()
 		}
 		components, err := resolveVendorSelectorComponents(&VendorSelectorOptions{

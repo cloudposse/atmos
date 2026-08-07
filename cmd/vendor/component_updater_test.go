@@ -50,11 +50,12 @@ func TestNormalizeComponentSelectors(t *testing.T) {
 }
 
 // TestValidateUpdateSelectorFlags proves --stack/--labels reject combining with an explicitly
-// passed --component or with --tags (two distinct selector universes -- see the shared
-// resolveVendorSelectorComponents/vendorSelectorGroupCount doc comments), while allowing --stack or
-// --labels alone, or together with each other, and while allowing --component and --tags together
-// (both operate on the same vendor.yaml Sources[] domain -- see validateUpdateSelectorFlags' own
-// doc comment).
+// passed --component (a single explicit target doesn't compose with a resolved set), while allowing
+// --stack or --labels alone, or together with each other. --tags is not part of this function at
+// all anymore -- it's an independent filter that composes with everything (--component,
+// --stack/--labels, or standing alone), applied downstream by
+// pkg/vendoring/update.go's sourceMatchesFilter/checkAndUpdateSource regardless of how the
+// candidate component list was selected -- see validateUpdateSelectorFlags' own doc comment.
 func TestValidateUpdateSelectorFlags(t *testing.T) {
 	newCmd := func(componentChanged bool) *cobra.Command {
 		c := &cobra.Command{Use: "update"}
@@ -65,30 +66,24 @@ func TestValidateUpdateSelectorFlags(t *testing.T) {
 		return c
 	}
 
-	t.Run("no stack or labels is always valid, even with --component or --tags", func(t *testing.T) {
-		require.NoError(t, validateUpdateSelectorFlags(newCmd(true), "", nil, []string{"networking"}))
+	t.Run("no stack or labels is always valid, even with --component", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(true), "", nil))
 	})
 
 	t.Run("stack alone is valid", func(t *testing.T) {
-		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", nil, nil))
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", nil))
 	})
 
 	t.Run("labels alone is valid", func(t *testing.T) {
-		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "", map[string]string{"tier": "1"}, nil))
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "", map[string]string{"tier": "1"}))
 	})
 
 	t.Run("stack and labels together is valid", func(t *testing.T) {
-		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", map[string]string{"tier": "1"}, nil))
+		require.NoError(t, validateUpdateSelectorFlags(newCmd(false), "dev", map[string]string{"tier": "1"}))
 	})
 
 	t.Run("explicitly passed --component together with stack/labels is rejected", func(t *testing.T) {
-		err := validateUpdateSelectorFlags(newCmd(true), "dev", nil, nil)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
-	})
-
-	t.Run("--tags together with stack/labels is rejected", func(t *testing.T) {
-		err := validateUpdateSelectorFlags(newCmd(false), "dev", nil, []string{"networking"})
+		err := validateUpdateSelectorFlags(newCmd(true), "dev", nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 	})

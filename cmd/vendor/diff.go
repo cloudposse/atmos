@@ -56,7 +56,8 @@ metadata.labels) -- see 'atmos vendor pull --help' for the distinction between -
 	},
 }
 
-// resolveDiffComponents resolves exactly one selector (--component, --tags, --stack/--labels) into
+// resolveDiffComponents resolves at most one base selector (--component or --stack/--labels),
+// optionally narrowed further by --tags (which composes with either, or resolves on its own), into
 // the list of component names to diff.
 func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error) {
 	component := v.GetString("component")
@@ -67,15 +68,13 @@ func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error)
 		return nil, err
 	}
 
-	switch vendorSelectorGroupCount(component, filterTags, stack, labels) {
-	case 0:
+	if component == "" && stack == "" && len(labels) == 0 && len(filterTags) == 0 {
 		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation("One of --component, --tags, --stack, or --labels is required.").
 			WithHint("Specify which component(s) to diff, e.g. atmos vendor diff --component vpc.").
 			Err()
-	case 1:
-		// Exactly one selector -- proceed.
-	default:
+	}
+	if vendorSelectorGroupCount(component, stack, labels) > 1 {
 		return nil, errVendorSelectorsExclusive()
 	}
 

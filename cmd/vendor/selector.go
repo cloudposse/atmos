@@ -11,14 +11,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
-// vendorSelectorGroupCount reports how many of the three mutually exclusive vendor selector
-// concepts are in use: --component (a single explicit name), --tags (vendor.yaml's own declared
-// source tags), and --stack/--labels (the stack-resolved component set -- --stack and --labels
-// compose with each other, so together they count as one group). Shared by `vendor diff`, `vendor
-// clean`, and `vendor verify` to validate their selector flags before resolving components.
-func vendorSelectorGroupCount(component string, filterTags []string, stack string, labels map[string]string) int {
+// vendorSelectorGroupCount reports how many of the two mutually exclusive vendor "base" selectors
+// are in use: --component (a single explicit name) and --stack/--labels (the stack-resolved
+// component set -- --stack and --labels compose with each other, so together they count as one
+// group). --tags is NOT part of this exclusivity: it's an independent filter that composes with
+// either base selector (or stands alone), narrowed via vendoring.FilterComponentsByDeclaredTags in
+// resolveVendorSelectorComponents below -- not a third mutually exclusive "mode". Shared by `vendor
+// diff`, `vendor clean`, and `vendor verify` to validate their selector flags before resolving
+// components.
+func vendorSelectorGroupCount(component string, stack string, labels map[string]string) int {
 	count := 0
-	for _, present := range []bool{component != "", len(filterTags) > 0, stack != "" || len(labels) > 0} {
+	for _, present := range []bool{component != "", stack != "" || len(labels) > 0} {
 		if present {
 			count++
 		}
@@ -26,13 +29,13 @@ func vendorSelectorGroupCount(component string, filterTags []string, stack strin
 	return count
 }
 
-// errVendorSelectorsExclusive builds the shared "pick exactly one selector" error for
-// --component/--tags/--stack/--labels, worded identically across `vendor diff`, `vendor clean`, and
-// `vendor verify`.
+// errVendorSelectorsExclusive builds the shared "pick at most one base selector" error for
+// --component/--stack/--labels, worded identically across `vendor diff`, `vendor clean`, and `vendor
+// verify`. --tags is deliberately not named here: it composes with either, so it never conflicts.
 func errVendorSelectorsExclusive() error {
 	return errUtils.Build(errUtils.ErrInvalidArgumentError).
-		WithExplanation("--component, --tags, and --stack/--labels are mutually exclusive selectors.").
-		WithHint("Pass at most one: --component for a single target, --tags for vendor.yaml source tags, or --stack/--labels for a stack-resolved component set.").
+		WithExplanation("--component and --stack/--labels are mutually exclusive selectors.").
+		WithHint("Pass at most one: --component for a single target, or --stack/--labels for a stack-resolved component set. --tags composes with either to narrow further.").
 		Err()
 }
 
@@ -51,33 +54,48 @@ type VendorSelectorOptions struct {
 	TypeChanged   bool
 }
 
-// resolveVendorSelectorComponents resolves --component/--tags/--stack/--labels (already validated
-// mutually exclusive by the caller) into a component-name list. A nil result with no error means no
-// selector was given at all -- callers decide what that means for them (e.g. `vendor clean`/`vendor
-// verify` treat it as "operate on everything"; `vendor diff` rejects it as "selector required").
+// resolveVendorSelectorComponents resolves --component/--stack/--labels (a base selector, already
+// validated mutually exclusive by the caller) into a component-name list, then narrows it with
+// --tags when given -- --tags is an independent filter, not a third exclusive base selector, so it
+// composes with either --component or --stack/--labels (or resolves entirely on its own when
+// neither base selector is given). A nil result with no error means no selector at all was given --
+// callers decide what that means for them (e.g. `vendor clean`/`vendor verify` treat it as "operate
+// on everything"; `vendor diff` rejects it as "selector required").
 //
-// When a selector WAS given (--tags or --stack/--labels) but resolves to zero components (e.g. an
-// unknown stack name, or tags/labels matching nothing), this returns an error rather than nil --
-// silently falling through to nil here would be indistinguishable from "no selector given" to every
-// caller, making `vendor clean --stack typo-d-stack-name` clean EVERYTHING instead of reporting no
-// match. --component can't hit this path: an explicit single name always resolves to exactly itself.
+// When a real selector WAS given but resolves to zero components (e.g. an unknown stack name, tags
+// matching nothing, or --tags excluding every stack-resolved name), this returns an error rather
+// than nil -- silently falling through to nil here would be indistinguishable from "no selector
+// given" to every caller, making `vendor clean --stack typo-d-stack-name` clean EVERYTHING instead
+// of reporting no match.
 func resolveVendorSelectorComponents(opts *VendorSelectorOptions) ([]string, error) {
 	var components []string
 	var err error
+	tags := opts.Tags
 
 	switch {
 	case opts.Component != "":
-		return []string{opts.Component}, nil
-	case len(opts.Tags) > 0:
-		components, err = resolveVendorTagsSelector(opts.VendorFile, opts.Tags)
+		components = []string{opts.Component}
 	case opts.Stack != "" || len(opts.Labels) > 0:
 		components, err = resolveVendorStackLabelsSelector(opts.AtmosConfig, opts.Stack, opts.Labels, opts.ComponentType, opts.TypeChanged)
+	case len(tags) > 0:
+		// --tags alone, no base selector: resolve directly off vendor.yaml's own declared sources
+		// (already tag-filtered), so the narrowing pass below is a no-op for this branch.
+		components, err = resolveVendorTagsSelector(opts.VendorFile, tags)
+		tags = nil
 	default:
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+
+	if len(tags) > 0 {
+		components, err = vendoring.FilterComponentsByDeclaredTags(opts.VendorFile, components, tags)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if len(components) == 0 {
 		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation("No components matched the given selector.").

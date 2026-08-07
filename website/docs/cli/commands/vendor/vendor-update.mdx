@@ -54,12 +54,17 @@ atmos vendor update --component vpc
 atmos vendor update --component vpc --component eks
 atmos vendor update --tags networking,aws
 
+# Update a named component, but only if its declared vendor.yaml source is also tagged.
+atmos vendor update --component vpc --tags networking
+
 # Update every component belonging to a stack, or matching stack metadata.labels.
 # --stack/--labels resolve a component set (like `vendor pull --stack/--labels`); --tags
-# instead filters vendor.yaml's own declared source tags -- the two aren't combinable.
+# is a separate, independent filter that composes with either of them, narrowing the
+# resolved set to only components whose declared vendor.yaml source also matches.
 atmos vendor update --stack dev-us-west-2
 atmos vendor update --labels tier=1
 atmos vendor update --stack dev-us-west-2 --labels tier=1
+atmos vendor update --stack dev-us-west-2 --tags networking
 
 # Show only sources with an available update.
 atmos vendor update --check --outdated
@@ -105,13 +110,13 @@ sources:
   <dt>`--all`</dt>
   <dd>Update all discoverable vendor sources. This is the default when you give no `--component`, `--tags`, or `--group` selector.</dd>
   <dt>`--component` / `-c` (string, repeatable)</dt>
-  <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`).</dd>
+  <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`). Cannot be combined with `--stack`/`--labels`. Composes with `--tags` (narrows to these components only if their declared `vendor.yaml` tags also match).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags (a manifest concept -- see `--labels` for the component-level equivalent). Cannot be combined with `--stack`/`--labels`.</dd>
+  <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
   <dt>`--stack` / `-s` (string)</dt>
-  <dd>Update only components belonging to the specified stack. Composes with `--labels` to narrow further. Cannot be combined with an explicit `--component` or with `--tags`.</dd>
+  <dd>Update only components belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Cannot be combined with an explicit `--component`.</dd>
   <dt>`--labels` (string)</dt>
-  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Cannot be combined with an explicit `--component` or with `--tags`.</dd>
+  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Composes with `--stack` and `--tags`. Cannot be combined with an explicit `--component`.</dd>
   <dt>`--group` (string)</dt>
   <dd>Update only the named `vendor.update.groups` selection.</dd>
   <dt>`--pull-request`</dt>

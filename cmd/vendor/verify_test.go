@@ -293,6 +293,39 @@ func TestVendorVerifyCmd_LabelsFilterScopesResults(t *testing.T) {
 	assert.NotContains(t, output, "second")
 }
 
+// TestVendorVerifyCmd_StackAndTagsCompose proves --stack and --tags compose instead of being
+// rejected as mutually exclusive selectors: --tags narrows the --stack-resolved candidate set by
+// vendor.yaml-declared tags, so drift reporting is scoped to "first" (declared, tagged networking)
+// and excludes "second" (declared, no matching tag), even though both belong to the "dev" stack.
+func TestVendorVerifyCmd_StackAndTagsCompose(t *testing.T) {
+	writeVerifyStackLabelsFixture(t, "vars:\n  stage: dev\ncomponents:\n  terraform:\n    first: {}\n    second: {}\n")
+	require.NoError(t, os.WriteFile(DefaultVendorManifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+    - component: second
+      source: oci://ghcr.io/cloudposse/mock-second:{{.Version}}
+      version: v0.1.0
+      targets: ["vendor-second"]
+`), 0o644))
+
+	stderr := setupVendorUICapture(t)
+	cmd := newVendorVerifyTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+	err := vendorVerifyCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
+	output := plainOutput(stderr.String())
+	assert.Contains(t, output, "first")
+	assert.NotContains(t, output, "second")
+}
+
 // TestVendorVerifyCmd_UnmatchedStackErrors proves --stack matching no components is a hard error,
 // not a silent fall-through to verifying everything -- mirroring clean's own
 // TestVendorCleanCmd_UnmatchedStackErrors, which verify lacked before this test.

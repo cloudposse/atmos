@@ -12,30 +12,29 @@ import (
 )
 
 // TestVendorSelectorGroupCount proves --stack and --labels count as ONE selector group (they
-// compose with each other, resolving the same stack-declared component set), while --component and
-// --tags each count as their own group (a distinct, mutually exclusive selection universe).
+// compose with each other, resolving the same stack-declared component set), while --component
+// counts as its own, mutually exclusive group. --tags is not a parameter at all anymore: it's an
+// independent filter that composes with either base selector (or stands alone), applied downstream
+// by resolveVendorSelectorComponents via vendoring.FilterComponentsByDeclaredTags, not a third
+// mutually exclusive selector "mode".
 func TestVendorSelectorGroupCount(t *testing.T) {
 	tests := []struct {
 		name      string
 		component string
-		tags      []string
 		stack     string
 		labels    map[string]string
 		want      int
 	}{
 		{name: "none", want: 0},
 		{name: "component only", component: "vpc", want: 1},
-		{name: "tags only", tags: []string{"networking"}, want: 1},
 		{name: "stack only", stack: "dev", want: 1},
 		{name: "labels only", labels: map[string]string{"tier": "1"}, want: 1},
 		{name: "stack and labels count as one group", stack: "dev", labels: map[string]string{"tier": "1"}, want: 1},
-		{name: "component and tags", component: "vpc", tags: []string{"networking"}, want: 2},
 		{name: "component and stack", component: "vpc", stack: "dev", want: 2},
-		{name: "tags and stack", tags: []string{"networking"}, stack: "dev", want: 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, vendorSelectorGroupCount(tt.component, tt.tags, tt.stack, tt.labels))
+			assert.Equal(t, tt.want, vendorSelectorGroupCount(tt.component, tt.stack, tt.labels))
 		})
 	}
 }
@@ -119,7 +118,8 @@ func TestResolveVendorSelectorComponents_NoSelectorReturnsNilNoError(t *testing.
 }
 
 // TestResolveVendorSelectorComponents_ComponentAlwaysResolvesToItself proves --component never hits
-// the "matched nothing" error path -- it always resolves to exactly the name given.
+// the "matched nothing" error path when --tags isn't also given -- it always resolves to exactly
+// the name given.
 func TestResolveVendorSelectorComponents_ComponentAlwaysResolvesToItself(t *testing.T) {
 	got, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -128,4 +128,38 @@ func TestResolveVendorSelectorComponents_ComponentAlwaysResolvesToItself(t *test
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"vpc"}, got)
+}
+
+// TestResolveVendorSelectorComponents_ComponentAndTagsCompose proves --tags composes with
+// --component instead of being rejected as a conflicting selector: "vpc" (declared, tagged
+// networking) survives a --tags=networking filter.
+func TestResolveVendorSelectorComponents_ComponentAndTagsCompose(t *testing.T) {
+	vendorFile := writeSelectorVendorManifest(t)
+
+	got, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Component:   "vpc",
+		Tags:        []string{"networking"},
+		VendorFile:  vendorFile,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, got)
+}
+
+// TestResolveVendorSelectorComponents_ComponentAndTagsExcludesMismatch proves --tags composing with
+// --component can exclude it: "rds" (declared, no tags at all) doesn't survive a non-empty --tags
+// filter, and the result is the same "matched nothing" error an unmatched --stack/--labels/--tags
+// selector produces -- not a silent empty success.
+func TestResolveVendorSelectorComponents_ComponentAndTagsExcludesMismatch(t *testing.T) {
+	vendorFile := writeSelectorVendorManifest(t)
+
+	_, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Component:   "rds",
+		Tags:        []string{"networking"},
+		VendorFile:  vendorFile,
+	})
+
+	require.Error(t, err)
 }

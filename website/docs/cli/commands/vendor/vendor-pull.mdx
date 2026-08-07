@@ -293,10 +293,10 @@ Components in the stack without their own `component.yaml` are silently skipped 
 
 ### Pull by Labels
 
-`--tags` and `--labels` filter two different things. `--tags` filters the tags declared directly on
-each `vendor.yaml` source (a manifest concept). `--labels` filters by each component's stack
-`metadata.labels` (a component concept) -- the same resolution `--stack` performs, and it composes
-with `--stack` to narrow further:
+`--tags` and `--labels` filter two different things, but they compose. `--tags` filters the tags
+declared directly on each `vendor.yaml` source (a manifest concept). `--labels` filters by each
+component's stack `metadata.labels` (a component concept) -- the same resolution `--stack`
+performs, and it composes with `--stack` to narrow further:
 
 ```shell
 # Vendor every component (across all stacks) whose metadata.labels match
@@ -307,9 +307,17 @@ atmos vendor pull --stack dev-us-west-2 --labels tier=1
 
 # Either "=" or ":" works as the key/value separator
 atmos vendor pull --labels tier:1,cost-center:platform
+
+# Narrow a stack/labels selection further by declared vendor.yaml tags
+atmos vendor pull --stack dev-us-west-2 --labels tier=1 --tags networking
 ```
 
-`--labels` cannot be combined with `--component` or `--tags`.
+`--labels` cannot be combined with `--component` (a stack-resolved set doesn't compose with a
+single explicit target). `--tags` composes with `--stack`/`--labels` as an independent filter: it
+narrows the stack-resolved set to only components whose `vendor.yaml` source also declares a
+matching tag. A component with no `vendor.yaml` entry at all (the common case for `--stack`, which
+installs via `component.yaml` regardless) has no tags to match and is excluded by a non-empty
+`--tags` filter -- the same way any filter excludes an entity missing the filtered attribute.
 
 :::note
 
@@ -317,14 +325,17 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 - If `--stack` and/or `--labels` is specified, Atmos vendors every resolved component (declared in the given stack, and/or matching the given
   `metadata.labels` across all stacks) that has its own `component.yaml`, regardless of whether a `vendor.yaml` also exists. Neither flag can be
-  combined with `--component`, and `--labels` cannot be combined with `--tags` (they filter different things -- see [Pull by Labels](#pull-by-labels)).
+  combined with `--component`. `--tags` composes with `--stack`/`--labels` to narrow the resolved set further by declared `vendor.yaml` tags --
+  see [Pull by Labels](#pull-by-labels).
 
 - Otherwise, if `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the
   command against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
-  If the flag `--component` is passed in, Atmos will vendor only that component
+  If the flag `--component` is passed in, Atmos will vendor only that component. `--tags` composes with `--component` too (narrows to that
+  component only if its declared tags also match) or filters the whole manifest on its own.
 
 - If `vendor.yaml` is not found, Atmos will look for the `component.yaml` manifest in the component's folder. If `component.yaml` is not found,
-  an error will be thrown. The flag `--component` is required in this case
+  an error will be thrown. The flag `--component` is required in this case. `component.yaml` has no tags concept, so `--component` combined
+  with `--tags` in this path never matches.
 
 :::
 
@@ -332,19 +343,19 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 <dl>
   <dt>`--component` / `-c` <em>(optional)</em></dt>
-  <dd>Atmos component to pull.</dd>
+  <dd>Atmos component to pull. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match, when a `vendor.yaml` exists).</dd>
 
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
-  <dd>Only vendor components belonging to the specified stack. Vendors every resolved component that has its own `component.yaml`, bypassing `vendor.yaml`. Cannot be combined with `--component`. Composes with `--labels` to narrow further.</dd>
+  <dd>Only vendor components belonging to the specified stack. Vendors every resolved component that has its own `component.yaml`, bypassing `vendor.yaml` for installation. Cannot be combined with `--component`. Composes with `--labels` to narrow further, and with `--tags` to filter by declared `vendor.yaml` source tags.</dd>
 
   <dt>`--everything` <em>(optional)</em></dt>
   <dd>Vendor all components.</dd>
 
   <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Only vendor the components whose `vendor.yaml` source declares any of the specified tags (a manifest concept -- see `--labels` for the component-level equivalent).<br/>`tags` is a comma-separated values (CSV) string.</dd>
+  <dd>Only vendor the components whose `vendor.yaml` source declares any of the specified tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>`tags` is a comma-separated values (CSV) string.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). Comma-separated `key=value` or `key:value` pairs, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component` or `--tags`; composes with `--stack`.</dd>
+  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). Comma-separated `key=value` or `key:value` pairs, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component`; composes with `--stack` and `--tags`.</dd>
 
   <dt>`--type` / `-t` <em>(optional)</em></dt>
   <dd>Component type: `terraform` or `helmfile` (`terraform` is default).</dd>

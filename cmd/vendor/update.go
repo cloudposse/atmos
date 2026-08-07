@@ -67,7 +67,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		if labelsErr != nil {
 			return labelsErr
 		}
-		if err := validateUpdateSelectorFlags(cmd, stack, labels, tags); err != nil {
+		if err := validateUpdateSelectorFlags(cmd, stack, labels); err != nil {
 			return err
 		}
 		if stack != "" || len(labels) > 0 {

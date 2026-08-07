@@ -199,14 +199,73 @@ func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 	return errors.Join(errs...)
 }
 
+// filterStackComponentsByTags narrows a --stack/--labels-resolved, type-grouped component set to
+// just the ones whose vendor.yaml source declares one of the given tags -- --tags is an independent
+// filter that composes with --stack/--labels (see handleStackVendor's own doc comment), not a
+// rejected combination. A component with no vendor.yaml entry at all (the common case for --stack,
+// which bypasses vendor.yaml for installation -- see handleVendorConfig) has no declared tags and is
+// naturally excluded by a non-empty tags filter, the same way any filter excludes an entity missing
+// the filtered attribute.
+func filterStackComponentsByTags(componentsByType map[string][]string, tags []string) (map[string][]string, error) {
+	filtered := make(map[string][]string, len(componentsByType))
+	for componentType, names := range componentsByType {
+		kept, err := vendoring.FilterComponentsByDeclaredTags("", names, tags)
+		if err != nil {
+			return nil, err
+		}
+		if len(kept) > 0 {
+			filtered[componentType] = kept
+		}
+	}
+	return filtered, nil
+}
+
+// resolveAndFilterStackComponents resolves --stack/--labels' type-grouped component set (via
+// resolveStackVendorComponents) and, when tags is non-empty, narrows it further via
+// filterStackComponentsByTags -- the combined "resolve then optionally filter" step
+// handleStackVendor delegates to, kept separate to stay within this repo's cyclomatic-complexity
+// budget (CLAUDE.md: extract into a named helper, keep the caller a flat pipeline). A nil, nil
+// result means there's nothing to vendor for reasons unrelated to tags (the stack's components have
+// no component.yaml at all); the caller treats that as success, not an error. A tags filter that
+// empties an otherwise non-empty set is reported as an explicit "matched nothing" error instead.
+func resolveAndFilterStackComponents(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksMap map[string]any,
+	componentTypes []string,
+	tags []string,
+) (map[string][]string, error) {
+	componentsByType, err := resolveStackVendorComponents(atmosConfig, stacksMap, componentTypes)
+	if err != nil {
+		return nil, err
+	}
+	if len(componentsByType) == 0 || len(tags) == 0 {
+		return componentsByType, nil
+	}
+
+	filtered, err := filterStackComponentsByTags(componentsByType, tags)
+	if err != nil {
+		return nil, err
+	}
+	if len(filtered) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No components matched the given selector.").
+			Err()
+	}
+	return filtered, nil
+}
+
 // handleStackVendor implements "atmos vendor pull --stack <stack>" and/or "atmos vendor pull
 // --labels <labels>": vendors every component declared in the stack (or, with --labels and no
 // --stack, across all stacks) that has its own component.yaml, regardless of whether the repo also
-// has a vendor.yaml (this path bypasses vendor.yaml entirely -- see handleVendorConfig). --labels
-// composes with --stack as a further narrowing (both resolve the same stack-declared component
-// set; --labels just filters it by metadata.labels). Many repos vendor purely through
-// per-component component.yaml manifests declared under the components a stack references, with
-// no repo-wide vendor.yaml at all.
+// has a vendor.yaml (this path bypasses vendor.yaml entirely for installation -- see
+// handleVendorConfig). --labels composes with --stack as a further narrowing (both resolve the same
+// stack-declared component set; --labels just filters it by metadata.labels), and --tags composes
+// with either (or both) as yet another independent filter, this time against vendor.yaml's declared
+// source tags (see filterStackComponentsByTags) -- installation still happens via each component's
+// own component.yaml regardless of whether --tags is used, since --tags only narrows the candidate
+// set here, it never changes how a selected component is installed. Many repos vendor purely
+// through per-component component.yaml manifests declared under the components a stack references,
+// with no repo-wide vendor.yaml at all.
 func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
 	defer perf.Track(atmosConfig, "exec.handleStackVendor")()
 
@@ -244,23 +303,35 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 			Err()
 	}
 
-	componentsByType, err := resolveStackVendorComponents(atmosConfig, stacksMap, componentTypes)
+	componentsByType, err := resolveAndFilterStackComponents(atmosConfig, stacksMap, componentTypes, flg.Tags)
 	if err != nil {
 		return err
 	}
 	if len(componentsByType) == 0 {
+		// The stack resolved components, but none has its own component.yaml -- nothing to do here,
+		// unrelated to --tags (there's no candidate set left for it to narrow).
 		return nil
 	}
 
-	// Sort the type keys so pull order, progress output, and any joined error text are stable
-	// across runs (map iteration order is nondeterministic).
+	return pullStackComponentsByType(atmosConfig, componentsByType, install.InstallOptions{
+		DryRun:          flg.DryRun,
+		RefreshLock:     flg.RefreshLock,
+		LockEnforcement: flg.LockEnforcement,
+	})
+}
+
+// pullStackComponentsByType vendors componentsByType (already resolved and, when applicable,
+// tags-filtered), one ExecuteComponentVendorPullBatch call per component type, sorted for stable
+// pull order/progress output/joined-error text across runs (map iteration order is
+// nondeterministic). Per-type failures are joined and returned together rather than aborting on
+// the first one, so every type still gets attempted.
+func pullStackComponentsByType(atmosConfig *schema.AtmosConfiguration, componentsByType map[string][]string, opts install.InstallOptions) error {
 	types := make([]string, 0, len(componentsByType))
 	for componentType := range componentsByType {
 		types = append(types, componentType)
 	}
 	sort.Strings(types)
 
-	opts := install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement}
 	var errs []error
 	for _, componentType := range types {
 		if err := ExecuteComponentVendorPullBatch(atmosConfig, componentsByType[componentType], componentType, opts); err != nil {

@@ -494,6 +494,44 @@ spec:
 	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
+// TestVendorUpdateCommand_StackAndTagsMismatchErrors proves --stack and --tags compose instead of
+// being rejected: --tags applies to every stack-resolved component the same way it applies to a
+// --component-resolved one (via pkg/vendoring/update.go's sourceMatchesFilter, downstream of
+// updater.UpdateSelectedComponents, regardless of how the candidate list was selected). "dev"'s
+// only component, "vpc", is declared tagged networking, so a --tags=compute filter excludes it and
+// errors explicitly instead of silently succeeding with an empty report.
+func TestVendorUpdateCommand_StackAndTagsMismatchErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("stack", "dev"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("tags", "compute"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
 // writeComponentManifestFixture writes a "vpc" component.yaml pinned at v0.1.0 under
 // <base>/vpc/component.yaml and points ATMOS_COMPONENTS_TERRAFORM_BASE_PATH at base, so
 // DefaultComponentDirResolver resolves it without needing a real atmos.yaml.
@@ -674,6 +712,48 @@ spec:
 	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
 	assert.Contains(t, err.Error(), "eks")
 	assert.Contains(t, err.Error(), "vpc")
+}
+
+// TestVendorDiffCommand_StackAndTagsCompose proves --stack and --tags compose instead of being
+// rejected as mutually exclusive selectors: --tags narrows "dev"'s stack-resolved {vpc, eks} down
+// to just "vpc" (declared, tagged networking), so only vpc is diffed -- not the batch-mode both-fail
+// error TestVendorDiffCommand_StackSelectorBatchMode proves for the untagged case.
+func TestVendorDiffCommand_StackAndTagsCompose(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n    eks: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "dev"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "mock-vpc", "only the tag-matched vpc must be diffed")
+	assert.NotContains(t, err.Error(), "mock-eks", "the stack-resolved but non-tag-matching eks must be excluded")
 }
 
 // TestVendorDiffCommand_LabelsSelector proves --labels (AND-matching stack metadata.labels)

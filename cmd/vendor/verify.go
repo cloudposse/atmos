@@ -80,7 +80,7 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		if err != nil {
 			return err
 		}
-		if vendorSelectorGroupCount(component, filterTags, stack, labels) > 1 {
+		if vendorSelectorGroupCount(component, stack, labels) > 1 {
 			return errVendorSelectorsExclusive()
 		}
 		components, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
