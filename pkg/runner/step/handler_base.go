@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -228,11 +229,51 @@ func (h BaseHandler) ResolveInWorkingDirectory(step *schema.WorkflowStep, vars *
 	return filepath.Join(workDir, resolved), nil
 }
 
+// isDotPrefixedWorkingDirectory reports whether an already-resolved,
+// non-empty, non-absolute working_directory value is "Dot" per
+// docs/prd/base-path-resolution-semantics.md's classify() convention: an
+// explicit "HERE" anchor. A false result means "Bare" — a value with no
+// dot-anchor, which pkg/hooks-invoked steps may instead anchor to the
+// step's component working directory rather than the process cwd (see
+// resolveWorkingDirectory below).
+//
+// This mirrors the PRD's Dot-detection precisely, including the bare ".."
+// case (not just "../"-prefixed) and the Windows ".\" / "..\" variants. It
+// intentionally does NOT delegate to pkg/component.IsExplicitComponentPath,
+// which is missing that bare ".." case and is scoped to component-path
+// arguments, not working_directory values. Also, this package must not
+// import pkg/hooks (which imports pkg/runner/step) to avoid a cycle, so this
+// small, dedicated mirror is preferable to introducing a shared dependency
+// for six string comparisons.
+func isDotPrefixedWorkingDirectory(value string) bool {
+	return value == "." || value == ".." ||
+		strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") ||
+		strings.HasPrefix(value, `.\`) || strings.HasPrefix(value, `..\`)
+}
+
 // resolveWorkingDirectory resolves step.WorkingDirectory (itself a possible
-// template) to an absolute base directory, falling back to the process's
-// current working directory when unset — preserving the historical
-// filepath.Abs-against-cwd behavior for steps that never set
-// working_directory.
+// template) to an absolute base directory.
+//
+// An explicit, non-empty, non-absolute value is classified per
+// docs/prd/base-path-resolution-semantics.md's Dot/Bare convention (see
+// isDotPrefixedWorkingDirectory):
+//
+//   - Dot-prefixed ("." , "..", "./x", "../x", ".\x", "..\x") always anchors
+//     to the process cwd — unchanged historical behavior.
+//   - Bare relative anchors to vars.componentWorkingDir when it is set to an
+//     absolute path (populated only by pkg/hooks, via ComponentPath(ctx));
+//     otherwise it falls back to the process cwd, exactly like Dot — so
+//     workflows and custom commands, which never set componentWorkingDir,
+//     are unaffected.
+//
+// An empty step.WorkingDirectory falls back to the process cwd, which is
+// already absolute and therefore never reaches the Dot/Bare branch below —
+// preserving the historical filepath.Abs-against-cwd behavior for steps
+// that never set working_directory. (Hooks instead default an unset
+// step.WorkingDirectory to ComponentPath(ctx) *before* this function ever
+// runs, via setDefaultStepWorkingDirectory in pkg/hooks/step_engine.go, so
+// this empty-value fallback is effectively workflow/custom-command-only in
+// practice.)
 func (h BaseHandler) resolveWorkingDirectory(step *schema.WorkflowStep, vars *Variables) (string, error) {
 	defer perf.Track(nil, "step.BaseHandler.resolveWorkingDirectory")()
 
@@ -259,6 +300,10 @@ func (h BaseHandler) resolveWorkingDirectory(step *schema.WorkflowStep, vars *Va
 		workDir = cwd
 	}
 	if !filepath.IsAbs(workDir) {
+		if anchor := vars.componentWorkingDir; anchor != "" && filepath.IsAbs(anchor) &&
+			!isDotPrefixedWorkingDirectory(workDir) {
+			return filepath.Join(anchor, workDir), nil
+		}
 		abs, err := filepath.Abs(workDir)
 		if err != nil {
 			return "", errUtils.Build(errUtils.ErrPathResolution).

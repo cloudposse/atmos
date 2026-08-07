@@ -26,3 +26,9 @@ workflows:
 Use step-level `working_directory` for commands that need a different current directory from the rest of the workflow.
 
 When a workflow-level container sandbox is active, Atmos resolves the path on the host and maps it into the container workspace before execution.
+
+Every relative `working_directory` value — whether or not it starts with `./` — resolves against the
+current working directory in a workflow step. There is no component-relative resolution here, since a
+workflow step isn't necessarily scoped to a single component. A [`kind: step` hook](/stacks/hooks#kind-step-run-a-step-type)
+resolves a plain relative value (no `./` prefix) against the component's own working directory instead —
+see that page for the full rule.

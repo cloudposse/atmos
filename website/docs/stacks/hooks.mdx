@@ -624,6 +624,29 @@ hooks:
       destination: handler.zip
 ```
 
+#### Working directory
+
+A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and similar
+step-specific fields) resolve against `with: { working_directory: ... }` when it's set, or against
+the component's own directory when it isn't — so the `archive` example above packages `src/` from
+inside the component, not from wherever `atmos` happens to be running.
+
+An explicit `working_directory:` value resolves differently depending on its shape:
+
+| `working_directory` value | Resolves against |
+|---|---|
+| Not set | The component's working directory (a provisioned/vendored working copy when the component has one, otherwise its in-repo source directory) |
+| `.`, `..`, `./foo`, `../foo` | The directory Atmos was run from |
+| `foo`, `foo/bar` | The component's working directory + `foo` (or `foo/bar`) |
+| `/absolute/path` | Used as-is |
+
+In short: a plain relative value like `foo` behaves like the unset default (component-relative),
+while a `./`- or `../`-prefixed value is an explicit signal to resolve against the directory you
+ran `atmos` from instead. This distinction only applies to `kind: step`/`kind: steps` hooks — a
+[workflow step's `working_directory`](/workflows/steps/working-directory) or a [custom
+command's](/cli/configuration/commands/working-directory) always resolves against the current
+working directory, since neither has a single component in scope the way a hook does.
+
 <dl>
   <dt>`type`</dt>
   <dd>The step type to run — any registered workflow/custom-command step type. A typo fails the **preflight** check before Terraform runs.</dd>

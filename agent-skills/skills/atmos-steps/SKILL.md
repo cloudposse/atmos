@@ -139,6 +139,11 @@ Do not use `--chdir` or `cd` for real workflow, custom-command, or step executio
 and still configure `working_directory` on every real step. Relative paths must be checked
 against the surface's base path rules.
 
+In workflows and custom commands, every relative `working_directory` value resolves against the
+current working directory, whether or not it starts with `./`. `kind: step`/`kind: steps` hooks are
+the one exception: a plain relative value with no `./` prefix resolves against the component's own
+working directory instead. See `atmos-hooks` for the full rule.
+
 ## Output
 
 Use output modes instead of pipe redirection:

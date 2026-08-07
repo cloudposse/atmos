@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -350,6 +351,61 @@ func TestBaseHandler_ResolveInWorkingDirectory(t *testing.T) {
 		t.Chdir(cwd)
 		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
 		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("bare relative working directory anchors to component working directory when set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(componentDir, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("dot-prefixed working directory stays cwd-relative even when a component anchor is set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		// Deliberately not filepath.Join'd: filepath.Join calls Clean and would
+		// strip the "./" prefix, defeating the point of this case.
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: "./relative/workdir"}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("bare-dot-dot working directory stays cwd-relative even when a component anchor is set", func(t *testing.T) {
+		// ".." (not "../x") is the case pkg/component.IsExplicitComponentPath
+		// would miss; this proves the dedicated classifier handles it.
+		cwd := filepath.Join(t.TempDir(), "nested")
+		require.NoError(t, os.MkdirAll(cwd, 0o755))
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: ".."}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(filepath.Dir(cwd), "file.txt"), result)
+	})
+
+	t.Run("bare relative working directory falls back to process cwd when no component anchor is set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables() // no SetComponentWorkingDirectory call — workflows/custom-commands never call it
 
 		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
 		require.NoError(t, err)
