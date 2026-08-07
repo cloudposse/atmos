@@ -27,6 +27,12 @@ type LinePrefixWriter struct {
 	prefix  string
 	w       stdio.Writer
 	buffer  []byte
+	// pending holds the already-prefixed, already-normalized suffix of a line
+	// that a prior write to w left unwritten (a short write or a write error
+	// after n > 0 bytes). It is retried byte-for-byte before any new line, so
+	// bytes w already accepted are never re-sent and the line's prefix is
+	// never re-applied.
+	pending []byte
 }
 
 // NewLinePrefixWriter creates a writer that prefixes every rendered line with
@@ -78,7 +84,7 @@ func (w *LinePrefixWriter) Flush() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if len(w.buffer) == 0 {
+	if len(w.buffer) == 0 && len(w.pending) == 0 {
 		return nil
 	}
 	lines, rest := splitBufferedLines(w.buffer)
@@ -121,9 +127,12 @@ func splitBufferedLines(buf []byte) (lines [][]byte, rest []byte) {
 // so the whole batch lands on the shared underlying writer as one contiguous
 // block instead of being interleaved line-by-line with a concurrent writer's
 // own batch -- e.g. a \r-terminated segment held back by a prior Write plus
-// the line that completes it in the next Write. On error, the line that
-// failed and everything after it, plus rest, are restored to w.buffer so a
-// later Write or Flush can retry them; nothing already written is repeated.
+// the line that completes it in the next Write. Any pending suffix left over
+// from a prior short or failed write is retried first. On error, only the
+// unwritten suffix of the line in progress is kept (in w.pending, already
+// encoded); the untouched lines after it, plus rest, are restored to
+// w.buffer so a later Write or Flush can retry them. Nothing already
+// accepted by w is repeated, and a failed line's prefix is never re-applied.
 // The caller must already hold w.mu.
 func (w *LinePrefixWriter) writeLinesLocked(lines [][]byte, rest []byte) error {
 	if w.w == nil {
@@ -133,22 +142,46 @@ func (w *LinePrefixWriter) writeLinesLocked(lines [][]byte, rest []byte) error {
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
 
+	if len(w.pending) > 0 {
+		if err := w.writePendingLocked(); err != nil {
+			w.buffer = append(joinLines(lines), rest...)
+			return err
+		}
+	}
+
 	for i, line := range lines {
 		normalized := bytes.ReplaceAll(line, crlfBytes, lfBytes)
 		normalized = bytes.ReplaceAll(normalized, crBytes, lfBytes)
 
-		var err error
 		if w.prefix == "" {
-			_, err = w.w.Write(normalized)
+			w.pending = normalized
 		} else {
-			_, err = stdio.WriteString(w.w, w.prefix+string(normalized))
+			w.pending = append([]byte(w.prefix), normalized...)
 		}
-		if err != nil {
-			w.buffer = append(joinLines(lines[i:]), rest...)
+		if err := w.writePendingLocked(); err != nil {
+			w.buffer = append(joinLines(lines[i+1:]), rest...)
 			return err
 		}
 	}
 	w.buffer = rest
+	return nil
+}
+
+// writePendingLocked writes w.pending to the underlying writer, retaining
+// only the unwritten suffix if the write is short or fails. A nil-error
+// short write (n < len(w.pending) with err == nil) is treated as
+// stdio.ErrShortWrite so callers still see and retry it. The caller must
+// already hold w.writeMu.
+func (w *LinePrefixWriter) writePendingLocked() error {
+	n, err := w.w.Write(w.pending)
+	if err == nil && n < len(w.pending) {
+		err = stdio.ErrShortWrite
+	}
+	if err != nil {
+		w.pending = append([]byte(nil), w.pending[n:]...)
+		return err
+	}
+	w.pending = nil
 	return nil
 }
 
