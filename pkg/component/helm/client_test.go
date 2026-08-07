@@ -9,7 +9,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"

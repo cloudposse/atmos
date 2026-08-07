@@ -145,10 +145,8 @@ require (
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.1
-	k8s.io/client-go v0.36.3
 	helm.sh/helm/v4 v4.2.3
-	k8s.io/client-go v0.36.2
+	k8s.io/client-go v0.36.3
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -452,11 +450,6 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.47.0
-	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
