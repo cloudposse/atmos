@@ -11,7 +11,7 @@ underlying IaC tool, as in the common Terramate quickstart shape.
 | Signal in the repo                                                 | Terramate construct                   |
 |----------------------------------------------------------------------|----------------------------------------|
 | Any `*.tm.hcl` file                                                   | Terramate config file (any kind)       |
-| `stack.tm.hcl` in a directory                                        | Stack definition                       |
+| A `stack {}` block in any `.tm.hcl` file (conventionally `stack.tm.hcl`) | Stack definition                       |
 | `terramate { config { ... } }` block                                 | Root Terramate config                  |
 | `globals "a" "b" { }` blocks                                         | Namespaced globals                     |
 | `generate_hcl "file.tf" { ... }`                                     | Code generator                         |
@@ -34,7 +34,7 @@ If any of these are present, this is a Terramate migration -- use this reference
 | `generate_hcl` generators (module wiring) | Component `vars:` + vendored/sourced component | Full (different mental model) |
 | `script { job { commands } }` | `workflows:` + `commands:` + `dependencies.components` | Partial -- 3-way decomposition |
 | Tags/labels (`tags=[...]`, `--tags`) | `metadata.tags`/`metadata.labels` + stack-wide defaults + `--tags`/`--labels` CLI flags | Full |
-| `after = ["tag:x"]` dependency ordering | `dependencies.components[].name` (declarative) or `--tags x --include-dependents` (CLI closure) | Partial |
+| `after = ["tag:x"]` dependency ordering | `dependencies.components[].name` (the only way to declare the edge) + `--include-dependencies`/`--include-dependents` to expand a seed through it | Partial |
 | `tm_*` functions | Go templates (Sprig/Gomplate/`atmos.*`) + YAML functions incl. `!tags`/`!labels`/`!labels.keys`/`!labels.values` | Full (superset) |
 | Terramate Cloud sync flags | Atmos Pro `settings.pro` | Full (GitHub-centric today) |
 | `_bootstrap/` two-phase pattern | One-time bootstrap component/stack, run outside the dependency graph | Full (pattern) |
@@ -71,10 +71,14 @@ Atmos's stack concept is **not filesystem-bound**. A Terramate stack directory t
 one component instance inside a named Atmos stack (org/tenant/account/region/stage), not a 1:1
 directory mapping -- do not create one Atmos stack file per Terramate directory by default.
 
-**Preserving existing state:** Terramate's `id` (a stable UUID) is the backend state key. Atmos
-derives its backend key from stack context by default. To keep reading/writing the same state file
-after migration, set the backend `key`/`workspace_key_prefix` explicitly to match the old
-Terramate-generated key -- this is the same "must match exactly" risk pattern documented in
+**Preserving existing state:** Terramate's `id` is stack metadata (used for Cloud sync) that's
+commonly interpolated into a `generate_hcl` backend template, e.g.
+`key = "terraform/stacks/by-id/${terramate.stack.id}/terraform.tfstate"` -- the UUID is only one
+piece of the full generated key, not the key itself. Atmos derives its backend key from stack
+context by default. To keep reading/writing the same state file after migration, inspect the
+actual backend mixin template and set the Atmos backend `key`/`workspace_key_prefix` explicitly to
+match the *full* existing path (prefix, UUID, and filename) exactly -- this is the same "must match
+exactly" risk pattern documented in
 [from-terraform-workspaces.md](from-terraform-workspaces.md#path-1-keep-the-workspace-state-easiest).
 
 ## Recipe: Globals → `vars:`/`locals:`
@@ -128,10 +132,12 @@ terraform:
 ```
 
 Atmos auto-generates `backend.tf.json` from `terraform.backend`/`backend_type` at plan/apply
-time -- no hand-written `generate_hcl` block needed. The same applies to
-`imports/mixins/terraform.tm.hcl` (required-provider/version pins) and
-`imports/mixins/kubernetes.tm.hcl`: both collapse into the stack-level `providers:` section, which
-Atmos generates into a `providers_override.tf.json`. See `website/docs/stacks/backend.mdx` and
+time -- no hand-written `generate_hcl` block needed. `imports/mixins/kubernetes.tm.hcl` (and any
+other provider-block wiring) collapses into the stack-level `providers:` section, which Atmos
+generates into `providers_override.tf.json`. `imports/mixins/terraform.tm.hcl`'s
+`required_version`/`required_providers` pins are a separate concern -- they map to the stack-level
+`terraform.required_version`/`terraform.required_providers` sections, generated into a *different*
+file, `terraform_override.tf.json`. See `website/docs/stacks/backend.mdx` and
 `website/docs/stacks/providers.mdx`.
 
 ## Recipe: `generate_hcl` Generators (Module Wiring) → Component Instantiation
@@ -300,27 +306,34 @@ with Atmos Pro drift status.
 
 **`after = ["tag:vpc"]` dependency ordering -- the one remaining nuance, not a full 1:1.** No
 manifest-level tag selector exists on `dependencies.components[]` (still only
-`name`/`component`/`stack`/`kind`/`path`). Two migration paths depending on intent:
+`name`/`component`/`stack`/`kind`/`path`), and the closure flags below don't derive ordering from
+tags either -- they only expand an *already-declared* dependency graph. There is exactly one way
+to express the ordering itself:
 
-- **Declarative/permanent ordering** -- expand into explicit `dependencies.components[].name`
-  entries:
-  ```yaml
-  components:
-    terraform:
-      subnet:
-        dependencies:
-          components:
-            - name: vpc
-  ```
-- **Ad hoc/CI-scoped runs** -- use `--tags vpc --include-dependents`/`--include-dependencies` to
-  expand a tag-selected seed set through the existing dependency graph at CLI runtime. Composes
-  with `--tags`/`--labels`/`--all`/`--components`/`--query`/`-s`/`--affected`:
-  ```bash
-  atmos terraform plan --labels=env=dev --include-dependencies
-  ```
-  Expanded prerequisite/dependent components are processed even when they don't themselves match
-  the tag/label filter -- they're prerequisites (or dependents) of what was selected, and can live
-  in other stacks.
+```yaml
+components:
+  terraform:
+    eks:
+      dependencies:
+        components:
+          - name: vpc
+```
+
+Once that edge is declared, `--include-dependencies`/`--include-dependents` become useful for ad
+hoc/CI-scoped runs on top of it: `--tags`/`--labels`/`--affected` pick a seed set, and the closure
+flag expands it through the graph -- `--include-dependencies` pulls in the seed's prerequisites
+(what it depends on), `--include-dependents` pulls in what depends on the seed:
+
+```bash
+# eks (tagged kubernetes) plus whatever it depends on, e.g. vpc
+atmos terraform plan --tags kubernetes --include-dependencies
+
+# vpc (tagged vpc) plus everything that depends on it, e.g. eks
+atmos terraform plan --tags vpc --include-dependents
+```
+
+Expanded prerequisite/dependent components are processed even when they don't themselves match
+the tag/label filter, and can live in other stacks.
 
 **Selector purity constraint:** `metadata.tags` and `metadata.labels` values are evaluated
 *before* authentication, template processing, and YAML function execution, so they must be
@@ -409,9 +422,10 @@ for the full workflow.
   stack files -- Atmos stacks are named contexts, not directories.
 - **Confusing tags(OR)/labels(AND) filter semantics.** `--tags` matches any given tag; `--labels`
   requires all given key=value pairs.
-- **Expecting `dependencies.components[]` itself to accept a `tags:` selector.** It doesn't -- use
-  `--tags`/`--include-dependents` at the CLI/workflow level for closure-based selection, or
-  explicit `name:` entries for declarative ordering.
+- **Expecting `dependencies.components[]` itself to accept a `tags:` selector, or expecting
+  `--tags`/`--include-dependents` to derive ordering without one.** Neither works -- the edge must
+  be declared with an explicit `name:` entry first; `--tags`/`--labels` + `--include-dependencies`/
+  `--include-dependents` only expand an already-declared graph at CLI runtime.
 - **Setting stack-root `metadata:` keys outside the allowlist.** Only `labels`, `tags`, `custom`,
   `enabled`, `locked`, `terraform_workspace_pattern` are valid at global scope -- anything else
   (`component`, `inherits`, `type`, `name`, `terraform_workspace`) is a hard schema error.

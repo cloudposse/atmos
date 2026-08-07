@@ -30,7 +30,7 @@ Terramate and Atmos solve a similar problem—managing Terraform/OpenTofu at sca
 | **Orchestration** | `script {}` blocks + `terramate script run` | [`workflows:`](/workflows) + [custom commands](/cli/configuration/commands) + `dependencies.components` |
 | **Change Detection** | `terramate list --changed` | [`atmos list affected`](/cli/commands/list/affected) / [`atmos describe affected`](/cli/commands/describe/affected) |
 | **Module Source** | `generate_hcl` module block, or a plain `source = "..."` | `source:` for JIT provisioning, or `vendor.yaml` for vendoring |
-| **Stacks** | Directory containing `stack.tm.hcl` | Stack file (YAML), not directory-bound |
+| **Stacks** | Directory containing a `stack {}` block (conventionally in `stack.tm.hcl`) | Stack file (YAML), not directory-bound |
 | **Cloud Dashboard** | Terramate Cloud | [Atmos Pro](/pro) |
 | **CLI** | `terramate script run -- deploy` | `atmos terraform plan/apply/deploy`, `atmos workflow <name>` |
 
@@ -51,7 +51,7 @@ Terramate and Atmos solve a similar problem—managing Terraform/OpenTofu at sca
 
 <Tabs>
   <TabItem value="terramate" label="Terramate" default>
-    Terramate stacks are directories. A `stack.tm.hcl` file marks the directory as a plannable unit, and `generate_hcl` blocks in `imports/` templates emit the actual `.tf` files into each stack directory before Terraform runs.
+    Terramate stacks are directories. A `stack {}` block—conventionally defined in a file named `stack.tm.hcl`, though Terramate detects it regardless of filename—marks the directory as a plannable unit, and `generate_hcl` blocks in `imports/` templates emit the actual `.tf` files into each stack directory before Terraform runs.
 
     ```plaintext
     infrastructure/
@@ -115,13 +115,15 @@ Terramate and Atmos solve a similar problem—managing Terraform/OpenTofu at sca
 
 **Key difference:** Terramate typically treats each stack's Terraform code as an output of code generation; Atmos treats it as a fixed, portable artifact and only varies configuration around it. This is why a Terramate migration has an extra step the [Terragrunt](/migration/terragrunt) or [Native Terraform](/migration/native-terraform) migrations don't: decompiling a `generate_hcl` generator's templated output back into a real, static `.tf` file once.
 
-:::info Configuration Lives in YAML, Not the Filesystem
-Atmos treats the filesystem as **organization only**—it doesn't influence behavior. All configuration semantics live in YAML stack files and their imports, not in directory position. This means:
+:::info Configuration Inheritance Lives in YAML, Not the Filesystem
+Configuration inheritance and merging in Atmos come from YAML stack files and their `import:` graph, not from directory position. This means:
 - You can query any component's fully-resolved configuration with `atmos describe component`
 - You can trace where any value came from with `atmos describe component --provenance`
-- Directory structure is purely for human organization, not runtime behavior
+- A component's `vars`/`locals`/`metadata` never depend on which directory its stack file happens to live in
 
-This differs from Terramate, where a stack's identity, its `globals` inheritance, and (commonly) its generated Terraform code all derive from where the `stack.tm.hcl` file sits in the directory tree.
+This differs from Terramate, where a stack's identity, its `globals` inheritance, and (commonly) its generated Terraform code all derive from where the `stack {}` block sits in the directory tree.
+
+One place the filesystem still matters in Atmos: when a stack has no explicit `name`, no `name_template`, and no `name_pattern`, Atmos falls back to the stack **filename**'s basename (e.g., `prod.yaml` → `prod`) as its logical name—and that name drives `-s` selection, `dependencies.components[].stack`, and Terraform workspace naming. Set an explicit `name` (or a consistent `name_template`) on migrated stacks rather than relying on this fallback. See [Stack Names](/stacks/name) for the full precedence order.
 :::
 
 ## Concept Mapping
@@ -132,7 +134,7 @@ If you're familiar with Terramate, the sections below translate what you already
 
 <Tabs>
   <TabItem value="terramate" label="Terramate" default>
-    A Terramate stack is a directory marked by `stack.tm.hcl`. The `id` is a stable UUID used as the backend state key—it survives directory renames. `tags` categorize the stack; `after` declares ordering against other tagged stacks.
+    A Terramate stack is a directory containing a `stack {}` block (conventionally in a file named `stack.tm.hcl`). The `id` is a stable UUID—used for Cloud sync and commonly interpolated into a `generate_hcl` backend template, e.g. `key = "terraform/stacks/by-id/${terramate.stack.id}/terraform.tfstate"`—so it survives directory renames, but it's only one piece of the full generated backend key, not the key itself. `tags` categorize the stack; `after` declares ordering against other tagged stacks.
 
     <File title="stacks/prod/vpc/stack.tm.hcl">
     ```hcl
@@ -161,7 +163,7 @@ If you're familiar with Terramate, the sections below translate what you already
     ```
     </File>
 
-    To preserve existing state, set the backend `key`/`workspace_key_prefix` to match Terramate's old `id`-derived key exactly—see [Stack Naming for Migrations](#stack-naming-for-migrations) below.
+    To preserve existing state, inspect the actual `generate_hcl` backend template and set the backend `key`/`workspace_key_prefix` to match the *full* existing key exactly (prefix, UUID, and filename—not just the `id`)—see [Stack Naming for Migrations](#stack-naming-for-migrations) below.
   </TabItem>
 </Tabs>
 
@@ -327,7 +329,7 @@ If you're familiar with Terramate, the sections below translate what you already
     atmos workflow deploy -s prod-us-east-1
     ```
 
-    `atmos workflow <name>` is already the direct equivalent of `terramate script run -- <name>`—wrapping it in a custom command is optional. Terramate Cloud's `sync_deployment`/`sync_preview`/`sync_drift_status` map to [Atmos Pro](/pro)'s `settings.pro.drift_detection`, `atmos pro lock`/`unlock`, and `atmos pro commit`.
+    `atmos workflow <name>` is already the direct equivalent of `terramate script run -- <name>`—wrapping it in a custom command is optional. Terramate Cloud's sync flags map to distinct [Atmos Pro](/pro) mechanisms: `sync_preview`/`sync_deployment` (PR-triggered plan/apply dispatch) → `settings.pro.pull_request`; `sync_drift_status` → `settings.pro.drift_detection` plus `--upload-status` on the relevant `atmos terraform plan` step. `atmos pro lock`/`unlock` only guard against concurrent operations on a stack—they don't report status. `atmos pro commit` creates Git commits through the Atmos Pro GitHub App (e.g. committing `terraform fmt` output)—it isn't a deployment/preview/drift reporting mechanism either.
   </TabItem>
 </Tabs>
 
@@ -373,7 +375,7 @@ If you're familiar with Terramate, the sections below translate what you already
 
     Read a component's own tags/labels at runtime with the [`!tags`](/functions/yaml/tags)/[`!labels`](/functions/yaml/labels) YAML functions—rarely needed the way Terramate needs `tm_contains(terramate.stack.tags, ...)`, since Atmos components don't hand-generate conditional HCL.
 
-    **The one remaining nuance:** Terramate's `after = ["tag:vpc"]` has no manifest-level equivalent—`dependencies.components[]` only accepts `name`/`component`/`stack`/`kind`, not a tag selector. For declarative ordering, list explicit `dependencies.components[].name` entries. For ad hoc/CI-scoped runs, use `--tags vpc --include-dependents` to expand a tag-selected seed set through the dependency graph at CLI runtime.
+    **The one remaining nuance:** Terramate's `after = ["tag:vpc"]` has no manifest-level equivalent—`dependencies.components[]` only accepts `name`/`component`/`stack`/`kind`, not a tag selector, and `--include-dependencies`/`--include-dependents` don't derive ordering from tags either—they only expand an *already-declared* graph. The edge itself must be declared once with an explicit `name:` entry (`eks` depends on `vpc`). After that, tags/labels pick a seed for ad hoc/CI-scoped runs and the closure flags expand it: `--tags kubernetes --include-dependencies` runs `eks` plus what it depends on (`vpc`); `--tags vpc --include-dependents` runs `vpc` plus everything that depends on it (`eks`).
   </TabItem>
 </Tabs>
 
@@ -542,7 +544,7 @@ In Terraform, a **root module** is the top-level directory where you run `terraf
     ```
     </File>
 
-    Atmos generates `backend.tf.json` automatically before `terraform init`—no mixin required. To keep reading/writing the same state Terramate wrote, set the backend `key`/`workspace_key_prefix` to match Terramate's old `id`-derived key exactly.
+    Atmos generates `backend.tf.json` automatically before `terraform init`—no mixin required. To keep reading/writing the same state Terramate wrote, inspect the actual `generate_hcl` backend template and set the backend `key`/`workspace_key_prefix` to match the *full* existing key exactly (prefix, UUID, and filename—not just the `id`).
   </TabItem>
 </Tabs>
 
@@ -573,6 +575,8 @@ In Terraform, a **root module** is the top-level directory where you run `terraf
             command: terraform deploy vpc
     ```
     </File>
+
+    Unlike the Terramate example, this intentionally re-plans immediately before applying rather than reusing a separately saved `out.tfplan`—the recommended default, since it applies against the freshest possible plan. To instead apply an exact, previously reviewed plan (matching Terramate's saved-plan semantics), generate one with `atmos terraform plan vpc` (Atmos saves it automatically) and apply that exact plan with `atmos terraform deploy vpc --from-plan`.
   </TabItem>
 </Tabs>
 
