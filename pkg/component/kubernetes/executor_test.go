@@ -661,6 +661,53 @@ func TestRunOperationApplyGateSkippedWhenValidateDisabled(t *testing.T) {
 	assert.Equal(t, 1, result.ObjectsTotal)
 }
 
+// TestRunOperationApplyPropagatesValidateSectionError verifies apply fails
+// closed and never contacts the cluster when the component's "validate"
+// section is present but not a bool (e.g. a quoted "false").
+func TestRunOperationApplyPropagatesValidateSectionError(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("apply must fail closed on an invalid 'validate' section before contacting the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	_, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": "false"}},
+		OperationApply,
+		objects,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
+}
+
+// TestRunOperationValidatePropagatesValidateSectionError mirrors
+// TestRunOperationApplyPropagatesValidateSectionError for the validate
+// operation: an invalid "validate" section must fail closed rather than
+// silently defaulting to enabled or disabled.
+func TestRunOperationValidatePropagatesValidateSectionError(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("validate must fail closed on an invalid 'validate' section before any structural or cluster check")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	_, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": "false"}},
+		OperationValidate,
+		objects,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
+}
+
 func TestRunOperationValidateSkippedWhenValidateDisabled(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })

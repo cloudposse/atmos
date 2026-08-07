@@ -61,7 +61,7 @@ repository.
 ## GitOps Guidance
 
 - Use managed repositories for deployment repos, generated config repos, and promotion workflows.
-- Use signed commits where repository policy requires them; prefer `signing.mode: auto` unless the
+- Use signed commits where repository policy requires them; prefer `commit.signing: auto` unless the
   workflow requires `always` or `never`.
 - Use `github/sts` in CI so Git subprocesses receive short-lived GitHub App credentials.
 - Use `atmos pro commit` when CI-generated commits must trigger follow-on GitHub Actions workflows.

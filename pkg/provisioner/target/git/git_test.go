@@ -121,6 +121,38 @@ func TestDeliverRepositoryNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
 }
 
+// TestDeliverRejectsNonBoolSplit verifies Deliver fails closed on a
+// config parse error (a typo'd, non-bool "split" value) instead of silently
+// falling through to repository resolution with a zero-value config.
+func TestDeliverRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	// Must fail before repository resolution -- a repository-not-found error
+	// would mean the parse error was silently swallowed.
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+// TestFetchRejectsNonBoolSplit mirrors TestDeliverRejectsNonBoolSplit for the
+// read-only Fetch path: a typo'd, non-bool "split" value must fail closed
+// before repository resolution is even attempted.
+func TestFetchRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	_, err := g.Fetch(context.Background(), &target.FetchInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
 func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
 	workdir := t.TempDir()
 	path := "clusters/dev/argocd"
