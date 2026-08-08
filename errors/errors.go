@@ -1263,6 +1263,9 @@ var (
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
 
+	// RDS IAM authentication errors.
+	ErrRDSTokenGeneration = errors.New("failed to generate RDS IAM authentication token")
+
 	// Atmos Pro authentication (atmos/pro provider) errors.
 	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
 	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")

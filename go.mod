@@ -32,7 +32,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.42.1
+	github.com/aws/aws-sdk-go-v2 v1.43.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.17
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.52.0
@@ -479,6 +479,7 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
 require (
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.31
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/minamijoyo/hcledit v0.2.18
