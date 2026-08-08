@@ -4,6 +4,7 @@ description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/secur
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Hooks
