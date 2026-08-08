@@ -77,8 +77,10 @@ jobs:
           # not found" / "configuration error" -- even though nothing is
           # actually wrong. Results can't be meaningfully associated with a ref
           # that no longer exists by the time the queue re-evaluates, so only
-          # upload on pull_request/push, where the ref is stable.
-          upload: ${{ github.event_name != 'merge_group' }}
+          # upload on pull_request/push, where the ref is stable. `upload`
+          # only accepts the string enum always/failure-only/never, not a
+          # boolean.
+          upload: ${{ case(github.event_name == 'merge_group', 'never', 'always') }}
 
   lint-golangci:
     name: "Lint (golangci)"
