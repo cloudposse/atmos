@@ -1,0 +1,164 @@
+---
+slug: taskfile-convergence
+title: "Custom Commands and Workflows Are Now a Complete Task Runner Replacement"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+If you've ever tried to move a `Taskfile.yml` over to Atmos, you've hit the gap: `deps:` had no
+clean equivalent in custom commands, `sources:`/`generates:` up-to-date checking didn't exist at
+all, and a failed lint step stopped your whole release pipeline even when you just wanted to see
+every check's result. So teams ended up running two tools side by side — go-task for the parts
+Atmos couldn't do, Atmos for everything else — instead of one.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos workflows and custom commands already covered most of what a task runner needs: steps,
+templating, conditionals, parallel execution. But a handful of real gaps kept people from fully
+retiring go-task:
+
+- **No dependency ordering between named commands or workflows.** You could make steps *within*
+  one command run in parallel, but you couldn't say "run `build` before `test` and `lint`, and
+  don't run `build` twice just because two things depend on it."
+- **No up-to-date checking.** go-task's `sources:`/`generates:` skip a task when nothing has
+  changed. Atmos had nothing like it — every step ran every time, even a slow compile step whose
+  inputs hadn't changed since the last successful run.
+- **No continue-on-error.** A single failing step stopped everything downstream, even for
+  steps — like a linter — where you'd rather collect every result and report at the end.
+- **No precondition shortcut.** Skipping an install step when a tool is already on `PATH` meant
+  hand-rolling a shell check.
+- **Custom commands couldn't use `parallel`/`matrix` at all.** The migration guide's own suggested
+  workaround — wrap dependents in a `parallel` step with `needs:` — silently failed on custom
+  commands; it only worked in workflows.
+
+## The Fix
+
+Custom commands and workflows now cover all of it, using the same `when:`/CEL condition engine and
+scheduler Atmos already had — no second, bespoke mechanism bolted on.
+
+### Dependencies between commands and workflows
+
+```yaml
+commands:
+  - name: build
+    steps: [...]
+  - name: test
+    dependencies:
+      commands: [build]
+    steps: [...]
+  - name: lint
+    dependencies:
+      commands: [build]
+    steps: [...]
+  - name: release
+    dependencies:
+      commands: [test, lint]
+    steps: [...]
+```
+
+`build` is declared as a dependency of both `test` and `lint`, but it only runs once — the graph
+dedups identical dependency invocations automatically. Dependencies run concurrently by default.
+Need the same command with different inputs? Parameterize it:
+
+```yaml
+dependencies:
+  commands:
+    - name: build
+      flags: { env: dev }
+    - name: build
+      flags: { env: prod }
+```
+
+Both invocations run — different parameters mean different graph nodes. Workflows get the same
+`dependencies.workflows`, including cross-file references via `file:`.
+
+### Skip steps that are already up to date
+
+```yaml
+steps:
+  - name: compile
+    inputs:
+      sources: ["cmd/**/*.go", "go.sum"]
+    artifacts:
+      paths: ["bin/handler"]
+    command: go build -o bin/handler ./cmd/handler
+```
+
+No extra configuration needed — declaring `inputs`/`artifacts` alone means "skip this step unless
+`sources` changed since the last successful run." Run it twice in a row and the second run skips
+entirely. Power users can reference the underlying facts directly (`checksum.changed`,
+`timestamp.changed`, or the raw per-file `sources`/`artifacts` records) for custom logic.
+
+### Skip a step when a tool is already installed
+
+```yaml
+steps:
+  - name: install-stringer
+    precondition:
+      tools: ["stringer"]
+    command: go install golang.org/x/tools/cmd/stringer@latest
+```
+
+Resolved via Go's `exec.LookPath` — no shell, so it works identically on Linux, macOS, and
+Windows.
+
+### Continue past a failing step
+
+```yaml
+steps:
+  - type: shell
+    command: golangci-lint run ./...
+    continue: always
+  - type: atmos
+    command: terraform apply vpc -auto-approve
+```
+
+`continue: always` mirrors GitHub Actions' `continue-on-error`: the step's own failure is still
+visible, later steps still run, and the overall exit status is unaffected.
+
+### `parallel`/`matrix` now works in custom commands
+
+The exact recipe that used to only work in workflows now works identically in custom commands:
+
+```yaml
+commands:
+  - name: release
+    steps:
+      - type: parallel
+        steps:
+          - name: test
+            command: go test ./...
+          - name: lint
+            needs: [test]
+            command: golangci-lint run ./...
+```
+
+## Also Shipped
+
+A handful of smaller gaps closed alongside the above:
+
+- **`platforms` via `when:`** — `when: "os == 'darwin'"` instead of a dedicated field, reusing
+  facts already available everywhere else `when:` is.
+- **Native command aliases** — `aliases: [dep, d]` on a custom command, registered in-process,
+  distinct from the top-level subprocess-redirect `aliases:` config.
+- **`internal: true`** — hide a command from `atmos help`/`atmos list` while leaving it fully
+  invocable, for commands meant only to be run as someone else's dependency.
+- **`values:`** on flags and arguments — restrict a flag to a fixed set of choices, with static
+  validation and an interactive picker when a required value is missing.
+
+## How to Use It
+
+All of this is available today in custom commands and workflows — no flags to enable, no config
+migration required. See [dependencies](/cli/configuration/commands/dependencies),
+[`inputs`](/workflows/steps/inputs), [`artifacts`](/workflows/steps/artifacts),
+[`precondition`](/workflows/steps/precondition), and [`continue`](/workflows/steps/continue) for
+the full field references, or the [Alternatives](/reference/alternatives) page for how Atmos
+compares to go-task more broadly.
+
+## Get Involved
+
+If you're still running go-task alongside Atmos for one of these reasons, we'd like to hear about
+it — open a discussion on [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) and
+tell us what's still missing.

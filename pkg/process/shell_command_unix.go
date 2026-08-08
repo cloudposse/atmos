@@ -5,10 +5,20 @@ package process
 import (
 	"context"
 	"os/exec"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// newShellCommand builds the system-shell invocation for a session command
+// NewShellCommand builds the system-shell invocation for a session command
 // string: `sh -c <command>`.
-func newShellCommand(ctx context.Context, command string) *exec.Cmd {
+func NewShellCommand(ctx context.Context, command string) *exec.Cmd {
+	defer perf.Track(nil, "process.NewShellCommand")()
+
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }
+
+// applyWindowsCmdExeQuoting is a no-op outside Windows: POSIX's exec.Cmd
+// passes Args to execve verbatim (no shell-style re-parsing), so the
+// cmd.exe-specific quoting problem this works around on Windows (see the
+// windows-build variant) doesn't exist here.
+func applyWindowsCmdExeQuoting(cmd *exec.Cmd, program string, args []string) {}
