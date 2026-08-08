@@ -4,6 +4,7 @@ description: "Component vendoring: vendor.yaml and component.yaml manifests, imm
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - references/component-updater.md
 ---
