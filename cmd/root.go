@@ -1622,6 +1622,18 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		return nil
 	}
 
+	if isCIGitCloneBootstrapArgs(args) {
+		// The CI git-clone bootstrap clone runs in an empty workspace (e.g.
+		// replacing actions/checkout), where atmos.yaml and any profile it
+		// references cannot exist yet. This mirrors PersistentPreRun's later,
+		// cmd-aware applyCIGitCloneBootstrap tolerance (see that function),
+		// but is needed here too since this handler runs before Cobra ever
+		// resolves the command -- a config/profile error at this point would
+		// otherwise abort Execute() before PersistentPreRun's check runs.
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1649,6 +1661,29 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// isCIGitCloneBootstrapArgs reports whether args represent a no-argument
+// `atmos git clone` invocation under a detected CI provider -- the same
+// bootstrap shape gitcmd.CICloneBootstrapRequested recognizes once Cobra has
+// resolved the command, but checked directly against raw args before Cobra
+// has parsed anything (see handleConfigInitErrorWithArgs's caller).
+//
+// After isolating the clone-specific arguments (stripping "atmos [rootflags]
+// git clone"), this defers to gitcmd.CIGitCloneBootstrapRequestedFromRawArgs,
+// which parses them against the real clone flag set so value-taking flags,
+// such as --depth 0 or --branch main, are correctly distinguished from a
+// positional repo name/URI, rather than guessing from a "-"-prefix
+// heuristic.
+func isCIGitCloneBootstrapArgs(args []string) bool {
+	if len(args) < 1 {
+		return false
+	}
+	rest, ok := skipLeadingRootFlags(args[1:])
+	if !ok || !matchesLeadingTokens(rest, "git", "clone") {
+		return false
+	}
+	return gitcmd.CIGitCloneBootstrapRequestedFromRawArgs(rest[2:])
 }
 
 // configCommandToken is the "config" argument/subcommand token shared by all

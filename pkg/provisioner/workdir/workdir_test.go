@@ -547,6 +547,63 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath is a regression test for
+// createWorkdirDirectory independently re-deriving the pre-fix, unsanitized "%s-%s" workdir
+// name formula that workdir.BuildPath's doc comment explicitly warns every caller must share.
+// A nested component name (e.g. "app/local-nested", used by LOCAL non-source components with
+// provision.workdir.enabled: true) must collapse "/" to "-" exactly like BuildPath does, so the
+// workdir lands as a sibling of flat components at the same stack rather than one directory
+// level deeper. See docs/fixes/2026-08-05-workdir-nested-component-path-depth.md (the original
+// BuildPath fix) and the matching createWorkdirDirectory fix doc.
+func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	// Path args are asserted after Provision returns (against the real, sanitized workdir
+	// path), not pinned here, so this test fails cleanly on a clear diff rather than an
+	// opaque "unexpected call" mock error when the pre-fix, unsanitized path is used instead.
+	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists("/custom/path/to/component").Return(true)
+	mockFS.EXPECT().SyncDir("/custom/path/to/component", gomock.Any(), mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"atmos_component": "app/local-nested",
+		"component":       "mock",
+		"atmos_stack":     "dev",
+		"component_path":  "/custom/path/to/component",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	require.NoError(t, err)
+
+	gotPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "WorkdirPathKey must be set to a string")
+
+	// The single canonical formula every workdir caller must share.
+	expectedPath := BuildPath(tempDir, "terraform", "app/local-nested", "dev", componentConfig)
+	assert.Equal(t, expectedPath, gotPath, "createWorkdirDirectory must sanitize nested component names identically to BuildPath")
+
+	// Guard against a nested directory ("app/local-nested" -> real subdirectories) being
+	// created instead of the sanitized sibling directory.
+	unsanitizedPath := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-app", "local-nested")
+	_, statErr := os.Stat(unsanitizedPath)
+	assert.True(t, os.IsNotExist(statErr), "workdir must not be created as a nested directory: %s", unsanitizedPath)
+}
+
 func TestServiceProvision_EmptyBasePath(t *testing.T) {
 	// Create a temp dir as current working directory for this test.
 	// When BasePath is empty, it defaults to ".".

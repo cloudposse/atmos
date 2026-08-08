@@ -161,6 +161,8 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 		PullPolicy:        run.Pull,
 		CleanupPolicy:     run.Cleanup,
 		Host:              runtimeHost(run.Runtime),
+		Restart:           container.RestartPolicyFromStep(&run),
+		HealthCheck:       container.HealthCheckFromStep(&run),
 		TTY:               step.Tty,
 		Interactive:       step.Interactive,
 		Labels: map[string]string{

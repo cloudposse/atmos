@@ -227,8 +227,17 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 		basePath = "."
 	}
 
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
+	// Delegate to the single canonical formula every workdir caller must share (see
+	// BuildPath's doc comment). component here is already the resolved instance name
+	// (atmos_component, with extractComponentName as fallback - see the caller in
+	// Provision), so a nil componentConfig is fine: BuildPath's atmos_component lookup
+	// is only a redundant re-derivation of what the caller already resolved. Re-deriving
+	// the workdir name inline here previously reintroduced the exact unsanitized
+	// "%s-%s" formula BuildPath's fix (see
+	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md) patched, so a nested
+	// component name (e.g. "app/local-nested") created a real nested directory instead of
+	// a sanitized sibling.
+	workdirPath := BuildPath(basePath, "terraform", component, stack, nil)
 
 	if err := s.fs.MkdirAll(workdirPath, DirPermissions); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -724,6 +725,107 @@ func TestHandleConfigInitError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandleConfigInitError_CIGitCloneBootstrap covers the pre-Cobra config-init
+// error path (Execute()'s first cfg.InitCliConfig call, before PersistentPreRun
+// ever runs). A no-argument `atmos git clone` under a detected CI provider must
+// tolerate a missing/unresolved profile here too, not just in PersistentPreRun's
+// later, cmd-aware handling (applyCIGitCloneBootstrap) -- the bootstrap clone runs
+// in an empty workspace (replacing actions/checkout) where atmos.yaml and any
+// profile it references cannot exist yet. Before this fix, ErrProfileNotFound hit
+// the final "return other errors as-is" branch and aborted Execute() before Cobra
+// ever resolved the command, so ATMOS_CI=true had no effect.
+func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		ciEnabled bool
+		wantErr   bool
+	}{
+		{
+			name:      "bootstrap clone under CI tolerates profile not found",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			// The exact reported reproduction: a space-separated value flag
+			// (--depth 0) must not be misread as a positional repo argument.
+			name:      "bootstrap clone with --ci --depth 0 tolerates profile not found",
+			args:      []string{"atmos", "git", "clone", "--ci", "--depth", "0"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			name:      "explicit repo argument is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "flux-deploy"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "bulk --all clone is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "--all"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "outside a detected CI provider the error is not swallowed",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: false,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_ACTIONS", strconv.FormatBool(tt.ciEnabled))
+			t.Setenv("ATMOS_CI", "true")
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			err := handleConfigInitErrorWithArgs(errUtils.ErrProfileNotFound, atmosConfig, tt.args)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestIsCIGitCloneBootstrapArgs covers isCIGitCloneBootstrapArgs directly,
+// including the len(args) < 1 guard (no argv[0] at all), which
+// handleConfigInitErrorWithArgs's real callers (os.Args, always containing at
+// least the program name) never exercise but the helper must still handle
+// defensively since it's called with an explicit, test-controllable args slice.
+func TestIsCIGitCloneBootstrapArgs(t *testing.T) {
+	// These cases resolve to false before ever consulting CI detection
+	// (either the len(args) < 1 guard fires directly, or the shape doesn't
+	// match "git clone" / has a positional argument), so no env setup is
+	// needed for a deterministic result.
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "empty args slice returns false", args: []string{}, want: false},
+		{name: "nil args returns false", args: nil, want: false},
+		{name: "explicit repo argument is not the bootstrap case", args: []string{"atmos", "git", "clone", "flux-deploy"}, want: false},
+		{name: "not a git clone command", args: []string{"atmos", "terraform", "plan"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isCIGitCloneBootstrapArgs(tt.args))
+		})
+	}
+
+	t.Run("bootstrap clone with no extra args under detected CI", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("ATMOS_CI", "true")
+		assert.True(t, isCIGitCloneBootstrapArgs([]string{"atmos", "git", "clone"}))
+	})
 }
 
 func TestIsBuiltinConfigValidationCommand(t *testing.T) {

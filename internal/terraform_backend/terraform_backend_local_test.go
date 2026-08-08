@@ -309,11 +309,15 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		}
 	}`
 
-	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
+	// assertJITStateFound places stateJSON at
+	// tempDir/.workdir/terraform/<workdirName>/terraform.tfstate.d/demo/terraform.tfstate
+	// (the BuildPath formula for stack "demo"), then asserts
+	// ReadTerraformBackendLocal finds it for a component whose
+	// atmos_component/component is componentName.
+	assertJITStateFound := func(t *testing.T, workdirName, componentName string) {
+		t.Helper()
 		tempDir := t.TempDir()
-		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
-		// workspace "demo" → terraform.tfstate.d/demo/terraform.tfstate.
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label", "terraform.tfstate.d", "demo")
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", workdirName, "terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
 
@@ -326,18 +330,33 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 				"workdir": map[string]any{"enabled": true},
 			},
 			"atmos_stack":     "demo",
-			"atmos_component": "null-label",
-			"component":       "null-label", // base component (metadata.component); also used by static fallback.
+			"atmos_component": componentName,
+			"component":       componentName, // base component (metadata.component); also used by static fallback.
 			"workspace":       "demo",
 		}
 
 		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
 		require.NoError(t, err)
-		require.NotNil(t, content, "expected state file to be found at JIT workdir path")
+		require.NotNil(t, content, "expected state file to be found at the JIT workdir path")
 
 		result, err := tb.ProcessTerraformStateFile(content)
 		require.NoError(t, err)
 		assert.Equal(t, "eg-test-demo", result["id"])
+	}
+
+	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
+		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
+		assertJITStateFound(t, "demo-null-label", "null-label")
+	})
+
+	t.Run("nested component name does not shift the workdir root", func(t *testing.T) {
+		// BuildPath must sanitize "/" in the component name to a single path
+		// segment (demo-ecs-cluster), not a real subdirectory (demo-ecs/cluster)
+		// -- otherwise this nested component's workdir sits one level deeper
+		// than a flat component's at the same stack, and any path computed
+		// relative to it (e.g. a relative local backend path) silently climbs
+		// to a different ancestor.
+		assertJITStateFound(t, "demo-ecs-cluster", "ecs/cluster")
 	})
 
 	t.Run("_workdir_path set (apply path — provisioner already ran)", func(t *testing.T) {

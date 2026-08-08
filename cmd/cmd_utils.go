@@ -46,6 +46,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 //go:embed markdown/getting_started.md
@@ -1126,6 +1127,32 @@ func executeCustomCommand(
 				// Steps with tty/interactive attach the user's terminal so commands
 				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+				// A step-level `container:` override (mapping config, or the
+				// bare `false` opt-out) routes the step through the same
+				// pkg/workflow session/merge logic internal/exec/workflow_utils.go
+				// uses for workflow-file steps, instead of always running on
+				// the host. Custom commands have no ambient command-level
+				// container block (unlike schema.WorkflowDefinition.Container
+				// for workflow files), so the merge base is always nil and
+				// the step's own `container:` block is the whole config.
+				workflowStep := step.ToWorkflowStep()
+				if workflowPkg.StepContainerOverride(&workflowStep) {
+					return runCommandStep(func(stdout, stderr io.Writer) error {
+						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+							Workflow:      commandConfig.Name,
+							WorkflowPath:  atmosConfig.CliConfigPath,
+							BasePath:      atmosConfig.BasePath,
+							WorkflowDef:   &schema.WorkflowDefinition{},
+							Step:          &workflowStep,
+							HostWorkDir:   stepWorkDir,
+							Command:       commandToRun,
+							StepEnv:       env,
+							RuntimeEnv:    env,
+							StdoutCapture: stdout,
+							StderrCapture: stderr,
+						})
+					})
+				}
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
 						Command:     commandToRun,

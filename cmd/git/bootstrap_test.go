@@ -143,3 +143,81 @@ func TestCICloneBootstrapRequested_WrongCommand(t *testing.T) {
 	assert.False(t, CICloneBootstrapRequested(plan, nil))
 	assert.False(t, CICloneBootstrapRequested(nil, nil))
 }
+
+// TestCIGitCloneBootstrapRequestedFromRawArgs covers the pre-Cobra entry
+// point cmd/root.go uses (via isCIGitCloneBootstrapArgs), where flags haven't
+// been parsed by the real command tree yet. The critical case is a
+// value-taking flag given in space-separated form (--depth 0): a naive
+// "-"-prefix heuristic misreads the bare "0" token as a positional repo
+// name/URI and wrongly disqualifies the bootstrap. Parsing rawArgs against
+// the real clone flag set must get this right.
+func TestCIGitCloneBootstrapRequestedFromRawArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawArgs     []string
+		ciDetected  bool
+		wantRequest bool
+	}{
+		{
+			name:        "no args, CI detected",
+			rawArgs:     nil,
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth 0 (space-separated value flag)",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth=0 (equals-form value flag)",
+			rawArgs:     []string{"--ci", "--depth=0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--branch main (space-separated string value flag)",
+			rawArgs:     []string{"--branch", "main"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "explicit positional repo URI disqualifies bootstrap",
+			rawArgs:     []string{"flux-deploy", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "--all disqualifies bootstrap",
+			rawArgs:     []string{"--all"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "no CI provider detected",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  false,
+			wantRequest: false,
+		},
+		{
+			name:        "malformed flag value returns false, deferring to RunE",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ciDetected {
+				t.Setenv("GITHUB_ACTIONS", "true")
+			} else {
+				t.Setenv("GITHUB_ACTIONS", "false")
+			}
+			withCleanATMOSCIEnv(t, "")
+
+			assert.Equal(t, tt.wantRequest, CIGitCloneBootstrapRequestedFromRawArgs(tt.rawArgs))
+		})
+	}
+}

@@ -132,11 +132,18 @@ func (h BaseHandler) ValidateRequired(step *schema.WorkflowStep, field, value st
 	defer perf.Track(nil, "step.BaseHandler.ValidateRequired")()
 
 	if value == "" {
-		return errUtils.Build(errUtils.ErrStepFieldRequired).
+		builder := errUtils.Build(errUtils.ErrStepFieldRequired).
 			WithContext("step", step.Name).
 			WithContext("type", step.Type).
-			WithContext("field", field).
-			Err()
+			WithContext("field", field)
+		// The field/step/type are already known here, so surface them directly in the
+		// default (non-verbose) message instead of hiding them behind --verbose context.
+		if step.Type != "" {
+			builder = builder.WithExplanationf("Step `%s` (type `%s`) is missing required field `%s`", step.Name, step.Type, field)
+		} else {
+			builder = builder.WithExplanationf("Step `%s` is missing required field `%s`", step.Name, field)
+		}
+		return builder.Err()
 	}
 	return nil
 }

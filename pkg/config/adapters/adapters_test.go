@@ -1,8 +1,10 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	stdio "io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,8 +18,37 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// testStreams is a minimal io.Streams implementation for capturing UI-channel
+// (stderr) output emitted via pkg/ui during tests.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// captureUIWarnings redirects the pkg/ui formatter to a buffer for the duration of the test
+// so warnings emitted via ui.Warning/ui.Warningf can be asserted against.
+func captureUIWarnings(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	return stderr
+}
 
 // TestGoGetterAdapter_Schemes tests that GoGetterAdapter returns expected schemes.
 func TestGoGetterAdapter_Schemes(t *testing.T) {
@@ -96,6 +127,7 @@ func TestLocalAdapter_SearchConfigError(t *testing.T) {
 // TestLocalAdapter_ReadConfigError tests error path for invalid YAML.
 func TestLocalAdapter_ReadConfigError(t *testing.T) {
 	tempDir := t.TempDir()
+	stderr := captureUIWarnings(t)
 
 	// Create invalid YAML file.
 	invalidContent := `invalid: [yaml: content`
@@ -110,6 +142,13 @@ func TestLocalAdapter_ReadConfigError(t *testing.T) {
 	// Should not error but should skip files that fail to load.
 	assert.NoError(t, err)
 	_ = paths
+
+	// A file that fails to parse must not be silently swallowed: a default-visible
+	// warning naming the file and the parse error should be printed to the UI (stderr)
+	// channel, since --logs-level=Trace is the only other place this surfaces.
+	warning := stderr.String()
+	assert.Contains(t, warning, invalidPath, "warning should name the file that failed to load")
+	assert.Contains(t, warning, "did not find expected", "warning should include the underlying parse error")
 }
 
 // TestLocalAdapter_ValidFile tests successful resolution of a valid file.

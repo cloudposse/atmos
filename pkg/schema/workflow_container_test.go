@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -93,4 +94,51 @@ func TestWorkflowContainerUnmarshalRejectsSequence(t *testing.T) {
 	err := yaml.Unmarshal([]byte("- a\n- b\n"), &c)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+}
+
+// TestWorkflowContainerJSONRoundTripPreservesEnabled reproduces the third leg
+// of a field-test finding sibling to https://github.com/cloudposse/atmos/issues/2876:
+// cmd/cmd_utils.go's cloneCommand deep-copies a schema.Command (including any
+// step's Container) via json.Marshal/json.Unmarshal to give each custom
+// command's Cobra closure an independent copy. Before MarshalJSON/UnmarshalJSON
+// were added, WorkflowContainer's `Enabled *bool` field carried `json:"-"`
+// (deliberately, since it's normally populated only by UnmarshalYAML's
+// polymorphic bool-or-mapping decode) and was silently dropped by that
+// generic JSON round-trip: a step's `container: false` opt-out came back as
+// Enabled == nil, which IsEnabled() treats as *enabled*, inverting the
+// opt-out and sending the step into a container it explicitly opted out of.
+func TestWorkflowContainerJSONRoundTripPreservesEnabled(t *testing.T) {
+	disabled := false
+	original := &WorkflowContainer{
+		Enabled:  &disabled,
+		Image:    "alpine",
+		Provider: "docker",
+		Env:      map[string]string{"FOO": "bar"},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var round WorkflowContainer
+	require.NoError(t, json.Unmarshal(data, &round))
+
+	require.NotNil(t, round.Enabled, "Enabled must survive a JSON round-trip, not come back nil")
+	assert.False(t, round.IsEnabled(), "container: false opt-out must survive a JSON round-trip")
+	assert.Equal(t, original, &round)
+}
+
+// TestWorkflowContainerJSONRoundTripEnabledOmittedWhenNil confirms the
+// "enabled" key is entirely absent (not just omitted-as-false) when Enabled
+// is unset, matching `omitempty` on a *bool.
+func TestWorkflowContainerJSONRoundTripEnabledOmittedWhenNil(t *testing.T) {
+	original := &WorkflowContainer{Image: "alpine"}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"enabled"`)
+
+	var round WorkflowContainer
+	require.NoError(t, json.Unmarshal(data, &round))
+	assert.Nil(t, round.Enabled)
+	assert.True(t, round.IsEnabled())
 }

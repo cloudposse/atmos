@@ -782,6 +782,39 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
 	}
+
+	// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
+	// `type: container` steps, or the generic With map otherwise -- exactly
+	// as Task.UnmarshalYAML's applyStepPolymorphicNodes handles it for a step
+	// loaded directly from a workflow YAML file. This mapstructure-based
+	// decode path (used for custom commands merged into atmos.yaml's Viper
+	// config tree) never invokes that yaml.Unmarshaler method, so it must
+	// pull `with:` out and replay the same polymorphic decode explicitly.
+	// Without this, `with:` only reaches the plain mapstructure struct
+	// decode below (which has no notion of the polymorphism) and
+	// Build/Run/Push/Inspect stay nil regardless of what `with:` contains.
+	withValue, hasWith := m["with"]
+	if hasWith {
+		delete(m, "with")
+	}
+
+	// `container:` is likewise polymorphic (a mapping config, or a bare
+	// `false` to opt a step out of an ambient container sandbox) and relies
+	// on WorkflowContainer.UnmarshalYAML (workflow.go), which is only ever
+	// invoked by go-yaml's node.Decode -- never by mapstructure. Left in
+	// place, mapstructure either errors outright on the boolean form
+	// ("'container' expected a map or struct, got bool"), breaking the
+	// entire atmos.yaml load for every command, or -- for the mapping form --
+	// silently decodes the struct fields without ever setting Enabled,
+	// which happens to look fine but only by accident of shared field
+	// names; it must go through the same typed decode as the workflow-file
+	// path so the two can't drift apart. Pull it out for the same reason
+	// `with:` is pulled out above.
+	containerValue, hasContainer := m["container"]
+	if hasContainer {
+		delete(m, "container")
+	}
+
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
@@ -803,7 +836,80 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if task.Type == "" {
 		task.Type = TaskTypeShell
 	}
+
+	if hasWith {
+		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
+			generic:   &task.With,
+			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+		}); err != nil {
+			return Task{}, fmt.Errorf("failed to decode task with-block at index %d: %w", index, err)
+		}
+	}
+
+	if hasContainer {
+		container, err := decodeTaskContainerFromMapValue(containerValue)
+		if err != nil {
+			return Task{}, fmt.Errorf("failed to decode task container-block at index %d: %w", index, err)
+		}
+		task.Container = container
+	}
+
 	return task, nil
+}
+
+// decodeStepWithFromMapValue applies the same `with:` polymorphic decode as
+// decodeStepWith (see workflow.go), but starting from a plain Go value
+// (as produced by mapstructure/Viper's merged config tree) instead of a
+// *yaml.Node. It round-trips the value through YAML so both the direct
+// workflow-file path (yaml.Node.Decode -> UnmarshalYAML) and this
+// mapstructure-based path share one implementation of the with:->Build/
+// Run/Push/Inspect promotion and can't drift apart.
+func decodeStepWithFromMapValue(withValue any, stepType, action string, t *stepPolyTargets) error {
+	node, err := yamlNodeFromMapValue(withValue)
+	if err != nil {
+		return err
+	}
+	return decodeStepWith(node, stepType, action, t)
+}
+
+// decodeTaskContainerFromMapValue applies the same `container:` polymorphic
+// decode WorkflowContainer.UnmarshalYAML performs (workflow.go) -- a mapping
+// config, or a bare boolean opt-out -- but starting from a plain Go value
+// instead of a *yaml.Node, reusing the same round-trip yamlNodeFromMapValue
+// uses for `with:` so both `with:` and `container:` share one YAML
+// round-trip implementation and the workflow-file and custom-command paths
+// can't drift apart.
+func decodeTaskContainerFromMapValue(containerValue any) (*WorkflowContainer, error) {
+	node, err := yamlNodeFromMapValue(containerValue)
+	if err != nil {
+		return nil, err
+	}
+	var container WorkflowContainer
+	if err := container.UnmarshalYAML(node); err != nil {
+		return nil, err
+	}
+	return &container, nil
+}
+
+// yamlNodeFromMapValue round-trips a plain Go value (as produced by
+// mapstructure/Viper's merged config tree) through YAML marshal/unmarshal
+// into a *yaml.Node, so callers can reuse a `yaml.Unmarshaler` implementation
+// (e.g. decodeStepWith, WorkflowContainer.UnmarshalYAML) that only mapstructure's
+// caller-side code, not mapstructure itself, ever invokes.
+func yamlNodeFromMapValue(value any) (*yaml.Node, error) {
+	valueBytes, err := yaml.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(valueBytes, &doc); err != nil {
+		return nil, err
+	}
+	node := &doc
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
+		node = doc.Content[0]
+	}
+	return node, nil
 }
 
 func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {

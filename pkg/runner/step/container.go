@@ -202,7 +202,7 @@ func invalidContainerField(step *schema.WorkflowStep, field, value, explanation 
 		WithContext("step", step.Name).
 		WithContext("field", field).
 		WithContext("value", value).
-		WithExplanation(explanation).
+		WithExplanationf("%s (got `%s`)", explanation, value).
 		Err()
 }
 

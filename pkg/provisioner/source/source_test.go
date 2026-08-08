@@ -205,6 +205,30 @@ func TestDetermineTargetDirectory(t *testing.T) {
 			expectedDir:     "",
 			expectError:     errUtils.ErrInvalidConfig,
 		},
+		{
+			// Regression test: the non-workdir (default vendoring) fallback used
+			// filepath.Join(componentBasePath, component) with zero containment guard.
+			// A component named "../escape-test-nowd" (source: set, workdir NOT enabled -
+			// the default JIT-vendoring path) resolves outside components/terraform/ into a
+			// sibling components/escape-test-nowd/ directory. Confirmed on disk via
+			// tests/fixtures/scenarios/source-provisioner-workdir-nested. Two other BuildPath
+			// callers (internal/terraform_backend/terraform_backend_local.go and
+			// pkg/terraform/output/config.go) already guard against exactly this; this
+			// caller must too.
+			name: "component name with .. escapes component base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			componentType:   "terraform",
+			component:       "../escape-test-nowd",
+			componentConfig: map[string]any{},
+			expectedDir:     "",
+			expectError:     errUtils.ErrPathTraversal,
+		},
 	}
 
 	for _, tt := range tests {

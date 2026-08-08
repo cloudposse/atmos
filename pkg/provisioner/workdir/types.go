@@ -3,6 +3,7 @@ package workdir
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -136,6 +137,17 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
 		workdirComponent = atmosComponent
 	}
+
+	// A nested component name (e.g. "ecs/cluster") must not add an extra path
+	// segment: filepath.Join would otherwise turn it into a real subdirectory,
+	// making the workdir one level deeper than a flat component's at the same
+	// stack. That silently changes how many ".." a relative backend path (or
+	// any other path computed relative to the workdir) needs to reach the
+	// same ancestor, so equivalent components would write state under
+	// different roots solely because one component name contains "/". Mirror
+	// the same sanitization already used for backend template context (see
+	// internal/exec/terraform_generate_backends.go).
+	workdirComponent = strings.ReplaceAll(workdirComponent, "/", "-")
 
 	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
 	return filepath.Join(basePath, WorkdirPath, componentType, workdirName)

@@ -1,0 +1,53 @@
+# Test fixture for the workdir.BuildPath nested-component-name fix
+# (see docs/fixes/2026-08-05-workdir-nested-component-path-depth.md).
+#
+# Combines, in one scenario, everything the existing source-provisioner-workdir
+# and terraform-*-jit-workdir fixtures each cover only in isolation:
+#   - source:-based JIT provisioning (local, network-free source module)
+#   - provision.workdir.enabled: true
+#   - backend_type: local with a RELATIVE backend.local.path containing ../
+#     segments, so a workdir depth regression silently changes where state
+#     lands instead of erroring
+#   - sibling components with flat, one-level-nested, and two-level-nested
+#     names at the SAME stack, to prove workdir depth (and therefore where
+#     the relative backend path resolves) is independent of component name
+#     nesting.
+#
+# Manual testing (run from this directory):
+#   atmos terraform apply vpc --stack dev
+#   atmos terraform apply "ecs/cluster" --stack dev
+#   atmos terraform apply "ecs/cluster/subnet" --stack dev
+#   atmos terraform output vpc --stack dev
+#   atmos terraform output "ecs/cluster" --stack dev
+#   atmos describe component "ecs/cluster" --stack dev
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+    # Disabled so Terraform's local backend uses its "default" workspace,
+    # which is the only workspace the local backend's configured `path`
+    # actually governs -- non-default workspaces instead use `workspace_dir`
+    # (default "terraform.tfstate.d", relative to CWD/workdir), ignoring
+    # `path` entirely. With workspaces enabled (Atmos's normal default),
+    # the relative backend.local.path below would silently go unused.
+    workspaces_enabled: false
+    # Required for the !terraform.output/!terraform.state consumers below to
+    # JIT-provision their producer's workdir via pkg/terraform/output/config.go's
+    # extractComponentPath resolver (workdir.BuildPath caller #5).
+    auto_provision_workdir_for_outputs: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

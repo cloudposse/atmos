@@ -1140,6 +1140,33 @@ func TestBuildBuildArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "buildx build with driver, cache, custom dockerfile/context, and tags together",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "docker/Dockerfile.prod",
+				Context:    "./app",
+				Tags:       []string{"myapp:latest", "myapp:v1.0"},
+				Driver:     &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+				Cache: &CacheConfig{
+					From: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache"},
+					},
+					To: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"},
+					},
+				},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "my-builder",
+				"--cache-from", "ref=registry.example.com/app:buildcache,type=registry",
+				"--cache-to", "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"-t", "myapp:latest",
+				"-t", "myapp:v1.0",
+				"-f", "docker/Dockerfile.prod", "./app",
+			},
+		},
+		{
 			name: "cache is ignored on plain docker build",
 			config: &BuildConfig{
 				Dockerfile: "Dockerfile",

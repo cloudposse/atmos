@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # Flat component name (control case).
+    # Workdir: .workdir/terraform/dev-vpc/ (3 segments below fixture root).
+    # 3 "../" from there reaches the fixture root.
+    vpc:
+      source:
+        uri: "./source-modules/mock"
+      provision:
+        workdir:
+          enabled: true
+      backend_type: local
+      backend:
+        local:
+          path: "../../../.context/tfstate/dev/vpc/terraform.tfstate"
+      vars:
+        environment: "dev-vpc"
+
+    # One-level nested component name.
+    # Pre-fix: workdir was .workdir/terraform/dev-ecs/cluster/ (4 segments
+    # below fixture root -- one deeper than "vpc" above), so the SAME 3
+    # "../" would land one directory short of the fixture root.
+    # Post-fix: workdir is .workdir/terraform/dev-ecs-cluster/ (sanitized to
+    # a single segment), matching vpc's depth exactly.
+    "ecs/cluster":
+      source:
+        uri: "./source-modules/mock"
+      provision:
+        workdir:
+          enabled: true
+      backend_type: local
+      backend:
+        local:
+          path: "../../../.context/tfstate/dev/ecs-cluster/terraform.tfstate"
+      vars:
+        environment: "dev-ecs-cluster"
+
+    # Two-level nested component name, to confirm the sanitize logic
+    # collapses depth > 1 the same way as depth == 1.
+    "ecs/cluster/subnet":
+      source:
+        uri: "./source-modules/mock"
+      provision:
+        workdir:
+          enabled: true
+      backend_type: local
+      backend:
+        local:
+          path: "../../../.context/tfstate/dev/ecs-cluster-subnet/terraform.tfstate"
+      vars:
+        environment: "dev-ecs-cluster-subnet"
+
+    # Path-traversal probe: a component name containing ".." segments, under
+    # source-based provisioning (pkg/provisioner/source/provision_hook.go's
+    # determineSourceTargetDirectory has NO containment guard, unlike the
+    # backend/output resolvers). Investigation only -- do not expect this to
+    # be "fixed"; just observe where files actually land.
+    "../escape-test":
+      source:
+        uri: "./source-modules/mock"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        environment: "dev-escape-test"
+
+    # LOCAL (non-source) nested component with workdir enabled -- exercises a
+    # DIFFERENT code path than "ecs/cluster" above: pkg/provisioner/workdir/
+    # workdir.go's Service.Provision -> createWorkdirDirectory, the "workdir"
+    # provisioner registered for local components with no source:. This is
+    # NOT workdir.BuildPath -- it reimplements the same
+    # `fmt.Sprintf("%s-%s", stack, component)` + filepath.Join formula
+    # inline (see createWorkdirDirectory, pkg/provisioner/workdir/workdir.go
+    # ~line 222) and does NOT call the fixed BuildPath function at all, so it
+    # was not touched by this fix. Investigation target: does this local,
+    # non-source nested component's workdir land as a sibling of the others,
+    # or does it reproduce the original bug?
+    "app/local-nested":
+      metadata:
+        component: mock
+      provision:
+        workdir:
+          enabled: true
+      backend_type: local
+      backend:
+        local:
+          # Same "../../../" prefix, and same intended destination pattern,
+          # as vpc/ecs-cluster/ecs-cluster-subnet above -- see whether it
+          # lands in the same .context/tfstate/dev/... ancestor, or one
+          # level short (under .workdir/) because this component's workdir
+          # is actually 4 segments deep, not 3.
+          path: "../../../.context/tfstate/dev/app-local-nested/terraform.tfstate"
+      vars:
+        environment: "dev-app-local-nested"
+
+    # Consumers that exercise pkg/terraform/output/config.go's extractComponentPath
+    # resolver (workdir.BuildPath caller #5) via the !terraform.output and
+    # !terraform.state YAML functions, reading from the FLAT producer above.
+    consumer-flat-output:
+      metadata:
+        component: mock
+      vars:
+        environment: !terraform.output vpc dev environment
+
+    consumer-flat-state:
+      metadata:
+        component: mock
+      vars:
+        environment: !terraform.state vpc dev environment
+
+    # Same, but reading from the NESTED producer -- this is the untested case:
+    # does extractComponentPath's BuildPath call correctly find the
+    # already-provisioned nested workdir/state?
+    consumer-nested-output:
+      metadata:
+        component: mock
+      vars:
+        environment: !terraform.output ecs/cluster dev environment
+
+    consumer-nested-state:
+      metadata:
+        component: mock
+      vars:
+        environment: !terraform.state ecs/cluster dev environment
+
+    # Path-traversal probe #2: same idea, but WITHOUT workdir enabled -- this
+    # exercises DetermineTargetDirectory's non-workdir fallback branch
+    # (pkg/provisioner/source/source.go), which is `filepath.Join(componentBasePath, component)`
+    # with NO sanitization at all (not even the incidental "/"->"-" protection
+    # that workdir.BuildPath provides). This is the DEFAULT source-vendoring
+    # path (provision.workdir.enabled is opt-in), so it is far more commonly
+    # hit than the workdir-enabled probe above.
+    "../escape-test-nowd":
+      source:
+        uri: "./source-modules/mock"
+      vars:
+        environment: "dev-escape-test-nowd"
