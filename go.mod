@@ -137,15 +137,15 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/term v0.44.0
-	golang.org/x/text v0.38.0
+	golang.org/x/term v0.45.0
+	golang.org/x/text v0.40.0
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
 	google.golang.org/grpc v1.82.1
 	gopkg.in/ini.v1 v1.67.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.1
+	helm.sh/helm/v4 v4.2.3
 	k8s.io/client-go v0.36.2
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1
@@ -442,13 +442,13 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	gocloud.dev v0.41.0 // indirect; Pinned: gomplate/v3's s3blob code references s3blob.URLOpener.ConfigProvider, which was removed in gocloud.dev v0.42+. Bump when gomplate/v3 updates or when we migrate the gomplate/v3 usages to gomplate/v4.
-	golang.org/x/crypto v0.53.0
+	golang.org/x/crypto v0.54.0
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.46.0
+	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.47.0
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.45.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260523011958-0a33c5d7ca68 // indirect

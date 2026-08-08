@@ -190,6 +190,16 @@ func TestExecuteBulkInitializesConfigAndGraph(t *testing.T) {
 	assert.Equal(t, cfg.HelmComponentType, graphOpts.ComponentType)
 	assert.Equal(t, "template", graphOpts.SubCommand)
 	assert.Equal(t, ctx.Flags, graphOpts.Flags)
+	assert.False(t, graphOpts.ReverseOrder)
+
+	graphOpts = nil
+	require.NoError(t, executeBulk(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
+		All:        true,
+		Stack:      "dev",
+		SubCommand: "delete",
+	}, OperationDelete))
+	require.NotNil(t, graphOpts)
+	assert.True(t, graphOpts.ReverseOrder)
 }
 
 func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {

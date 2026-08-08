@@ -99,6 +99,27 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	assert.True(t, uninstall.DryRun)
 }
 
+func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
+	cause := context.DeadlineExceeded
+	err := releaseOperationError("upgrade", &chartSpec{
+		ReleaseName: "demo",
+		Namespace:   "apps",
+		Lifecycle: releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+			WaitStrategy: kube.StatusWatcherStrategy,
+			Timeout:      7 * time.Minute,
+		}, TimeoutField: "release.upgrade.timeout"},
+	}, cause)
+
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.True(t, errUtils.HasContext(err, "operation", "upgrade"))
+	assert.True(t, errUtils.HasContext(err, "release", "demo"))
+	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
+	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
+	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", "release.upgrade.timeout"))
+}
+
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })

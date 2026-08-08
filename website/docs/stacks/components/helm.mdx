@@ -73,7 +73,125 @@ included in affected runs.
 
   <dt>`provision`</dt>
   <dd>Delivery targets for <code>apply</code>/<code>deploy</code> — the cluster (default) or an external target such as a Git deployment repository.</dd>
+
+  <dt>`secrets`</dt>
+  <dd>Component-scoped secret declarations and providers. Helm components support the same secret processing as other component types.</dd>
 </dl>
+
+## Type-Level Defaults and Overrides
+
+The top-level `helm` section in a stack manifest can provide defaults for every
+native Helm component in that stack. Use `helm.values` for shared chart values;
+component and inherited `values` are merged over those defaults.
+
+Use `helm.overrides` when a stack must enforce values after component-level
+configuration is resolved. Type-level overrides are deep-merged over each
+component's `overrides`, including components supplied by imported manifests.
+The block accepts `values` plus the common component override sections such as
+`vars`, `env`, `settings`, `auth`, `secrets`, and `retry`.
+
+```yaml
+helm:
+  values:
+    cluster: shared
+  overrides:
+    values:
+      environment: production
+
+components:
+  helm:
+    monitoring:
+      chart: ./charts/monitoring
+      values:
+        replicaCount: 2
+      overrides:
+        values:
+          image:
+            tag: stable
+```
+
+In this example, every Helm component receives `cluster: shared`, while the
+stack-level override enforces `environment: production` after component
+inheritance and component overrides are merged.
+
+## Release Lifecycle
+
+Cluster-backed `apply`, `deploy`, and `delete` operations can use Helm 4 release
+lifecycle controls under `release`. Configure the tree at the top-level
+`helm.release` section as defaults, on an abstract component for inheritance, or
+on a concrete component. Atmos first deep-merges that complete tree, then
+overlays the selected `install`, `upgrade`, or `delete` section. Explicit command
+flags have the highest precedence.
+
+| Field | Default | Operations | Behavior |
+| --- | --- | --- | --- |
+| `release.wait.strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
+| `release.wait.jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
+| `release.timeout` | `0s` during migration | install, upgrade, delete | Release-wide operation timeout. Each operation can override it. Explicit `0s` remains unbounded. |
+| `release.history.max` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
+| `release.chart_hooks` | `true` | install, upgrade, delete | Enable Helm chart hooks. This does not control Atmos `hooks:`. |
+| `release.install.crds` | `create` | install | Create or skip CRDs from the chart on first install. |
+| `release.install.on_failure` | `keep` | install | `uninstall` removes a failed first install; `keep` preserves partial state. |
+| `release.upgrade.on_failure` | `keep` | upgrade | `rollback` restores the prior release; `keep` preserves failed state. |
+| `release.upgrade.cleanup_on_failure` | `false` | upgrade | Independently remove resources newly created by a failed upgrade. |
+
+`release.install.timeout`, `release.upgrade.timeout`, and
+`release.delete.timeout` override the release-wide timeout only for that action.
+The same operation sections can override `chart_hooks` and `wait`.
+
+:::warning Timeout and history migration
+For one minor release, omitting `release.timeout` and the selected operation
+timeout preserves the previous unbounded `0s`
+behavior and emits a warning. The following minor changes the omitted default to
+`5m`. Set `release.timeout: 0s` explicitly to remain unbounded, or set a duration
+such as `30m`. An omitted `release.history.max` retains ten revisions; set it to
+`0` if unlimited release history is required.
+:::
+
+<File title="stacks/catalog/demo-release.yaml">
+```yaml
+helm:
+  release:
+    wait:
+      strategy: watcher
+    timeout: 10m
+    history:
+      max: 10
+
+components:
+  helm:
+    release-policy:
+      metadata:
+        type: abstract
+      release:
+        upgrade:
+          on_failure: rollback
+          cleanup_on_failure: true
+
+    demo-release:
+      metadata:
+        inherits:
+          - release-policy
+      chart: ./charts/demo-release
+      namespace: demo
+      release:
+        install:
+          timeout: 60m
+          on_failure: uninstall
+        upgrade:
+          timeout: 30m
+```
+</File>
+
+With `dependencies.components`, a successful Helm DAG node means the selected
+Helm action completed under this effective policy. `watcher` and `legacy` gate
+dependents on resource readiness; `hookOnly` intentionally does not wait for
+ordinary chart resources. A failed or rolled-back node remains failed, so its
+dependents do not start.
+
+Lifecycle policy applies only to the Kubernetes target. Stored lifecycle values
+are ignored and reported as bypassed for external Git delivery; explicitly
+passing lifecycle flags with an external target is an error.
 
 Reusable repository defaults can also be configured under
 `components.helm.repositories` in `atmos.yaml`. Component-level repositories
@@ -101,6 +219,17 @@ components:
         - name: prometheus-community
           url: https://prometheus-community.github.io/helm-charts
       namespace: monitoring
+      release:
+        timeout: 20m
+        wait:
+          strategy: watcher
+          jobs: true
+        history:
+          max: 10
+        install:
+          on_failure: uninstall
+        upgrade:
+          on_failure: rollback
       values:
         grafana:
           enabled: true

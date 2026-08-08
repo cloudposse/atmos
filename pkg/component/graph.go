@@ -37,6 +37,13 @@ type GraphExecutionOptions struct {
 	SubCommand    string
 	Flags         map[string]any
 	Selection     *GraphSelection
+	ReverseOrder  bool
+}
+
+// GraphNodeSkipObserver is implemented by providers that need to record graph
+// nodes skipped after execution stops before reaching them.
+type GraphNodeSkipObserver interface {
+	OnGraphNodeSkipped(node *dependency.Node)
 }
 
 // ExecuteGraph runs selected components in dependency order and stops before
@@ -59,26 +66,43 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		return nil
 	}
 
-	log.Info("Processing components in dependency order", "component_type", opts.ComponentType, "count", len(order))
+	orderName := "dependency"
+	if opts.ReverseOrder {
+		orderName = "reverse_dependency"
+	}
+	log.Info("Processing components", "component_type", opts.ComponentType, "order", orderName, "count", len(order))
 	for i := range order {
 		select {
 		case <-ctx.Done():
+			notifyGraphNodeSkips(opts.Provider, order[i:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctx.Err())
 		default:
 		}
 
 		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
 			}
 			return err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
 	return nil
+}
+
+func notifyGraphNodeSkips(provider ComponentProvider, nodes dependency.ExecutionOrder) {
+	observer, ok := provider.(GraphNodeSkipObserver)
+	if !ok {
+		return
+	}
+	for i := range nodes {
+		observer.OnGraphNodeSkipped(&nodes[i])
+	}
 }
 
 // prepareExecutionOrder validates options, builds and filters the graph, and returns
@@ -108,7 +132,16 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrTopologicalOrder, err)
 	}
+	if opts.ReverseOrder {
+		reverseExecutionOrder(order)
+	}
 	return order, nil
+}
+
+func reverseExecutionOrder(order dependency.ExecutionOrder) {
+	for left, right := 0, len(order)-1; left < right; left, right = left+1, right-1 {
+		order[left], order[right] = order[right], order[left]
+	}
 }
 
 // executeGraphNode executes a single graph node through the component provider.

@@ -18,6 +18,9 @@ import Intro from "@site/src/components/Intro";
 atmos helm delete <component> --stack <stack> [options]
 atmos helm delete monitoring -s plat-ue2-dev
 
+# Preview without removing release state or Kubernetes resources
+atmos helm delete monitoring -s plat-ue2-dev --dry-run --wait=watcher --timeout=10m
+
 # Delete components filtered by tags or labels (composes with --all/--affected)
 atmos helm delete --all --tags production,tier-1
 ```
@@ -29,8 +32,20 @@ atmos helm delete --all --tags production,tier-1
   <dd>Atmos stack.</dd>
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
-  <dd>Process multiple Helm components in dependency order.</dd>
+  <dd>Process multiple Helm components in reverse dependency order, deleting dependents before their dependencies.</dd>
 
   <dt>`--tags` / `--labels` <em>(optional)</em></dt>
   <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--wait[=strategy]` <em>(optional)</em></dt>
+  <dd>Use `watcher`, `hookOnly`, or `legacy` while deleting. Passing `--wait` without a value selects `watcher`. Boolean values remain accepted temporarily but are deprecated.</dd>
+
+  <dt>`--timeout` <em>(optional)</em></dt>
+  <dd>Helm uninstall timeout, such as `10m`. `0s` is explicitly unbounded.</dd>
+
+  <dt>`--no-hooks` <em>(optional)</em></dt>
+  <dd>Disable Helm chart uninstall hooks. Atmos lifecycle hooks are unaffected.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Preview the uninstall without deleting release history or Kubernetes resources.</dd>
 </dl>
