@@ -240,12 +240,20 @@ func TestDescribeImmutablePin(t *testing.T) {
 // TestRunConcurrentBatchWithLiveProgress_ResultsPreserveItemOrder (batch_progress_test.go) for
 // the guarantee that still holds regardless of completion order: per-item results are never
 // misattributed to the wrong item.
+//
+// Uses captureUITestOutput, not captureCleanTestOutput: the latter forces TTY mode and redirects
+// stderr through an os.Pipe that's only drained after the tested function returns. Combined with
+// this test's real concurrent batch (which activates the live, ticker-driven renderer under
+// force-tty), that redirect deadlocked on Windows CI: the renderer's repeated writes filled the
+// pipe's bounded OS buffer, and since nothing reads it until RunUpdate returns, the write blocked
+// forever, hanging the test for the full 40-minute Go test timeout. See
+// docs/fixes/2026-08-08-toolchain-live-renderer-windows-ci-deadlock.md.
 func TestRunUpdate_ConcurrentAllSkippedReportsEveryTarget(t *testing.T) {
 	filePath := createTempToolVersionsFile(t, "owner/a pr:1\nowner/b sha:ceb7526\nowner/c ref:main\n")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
 
 	var err error
-	output := captureCleanTestOutput(t, func() {
+	output := captureUITestOutput(t, func() {
 		err = RunUpdate(nil, UpdateOptions{MaxConcurrency: 4})
 	})
 	require.NoError(t, err, "all-skipped tools should not count as failures")

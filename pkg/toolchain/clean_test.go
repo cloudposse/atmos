@@ -146,6 +146,40 @@ func captureCleanTestOutput(t *testing.T, f func()) string {
 	return buf.String()
 }
 
+// captureUITestOutput redirects the ui package's output to an in-memory buffer for the duration
+// of f, without forcing TTY mode or touching the real os.Stderr file descriptor. Unlike
+// captureCleanTestOutput's os.Pipe()-based redirect (which is only drained after f returns), a
+// bytes.Buffer never blocks on write -- required for any test that exercises a live,
+// ticker-driven renderer (see batch_progress.go's liveBatchRenderer): with force-tty forcing the
+// renderer active, repeated writes into an os.Pipe that's never concurrently drained can fill the
+// pipe's bounded OS buffer and block forever once the batch takes more than a few seconds,
+// deadlocking the test (observed hanging a full 40 minutes on Windows CI before Go's own test
+// timeout killed it). Use this helper instead of captureCleanTestOutput for any test that runs a
+// real concurrent RunUpdate/RunLock batch and only needs to assert on output content, not exact
+// non-wrapped column widths.
+func captureUITestOutput(t *testing.T, f func()) string {
+	t.Helper()
+
+	// Defensively force TTY detection off regardless of global viper state another test may
+	// have left behind (force-tty is a process-wide setting) -- the live batch renderer must
+	// never activate against this buffer-backed, unread-until-return stream.
+	previousForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", previousForceTTY) })
+
+	var buf bytes.Buffer
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &buf}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create IO context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+
+	f()
+
+	return buf.String()
+}
+
 // cleanTestCase represents a test case for CleanToolsAndCaches.
 type cleanTestCase struct {
 	name           string

@@ -85,12 +85,20 @@ func TestResolveLockTargets(t *testing.T) {
 // observable here. See TestRunConcurrentBatchWithLiveProgress_ResultsPreserveItemOrder
 // (batch_progress_test.go) for the guarantee that still holds regardless of completion order:
 // the underlying per-item results are never misattributed to the wrong item.
+//
+// Uses captureUITestOutput, not captureCleanTestOutput: the latter forces TTY mode and redirects
+// stderr through an os.Pipe that's only drained after the tested function returns. Combined with
+// this test's real concurrent batch (which activates the live, ticker-driven renderer under
+// force-tty), that redirect deadlocked on Windows CI: the renderer's repeated writes filled the
+// pipe's bounded OS buffer, and since nothing reads it until RunLock returns, the write blocked
+// forever, hanging the test for the full 40-minute Go test timeout. See
+// docs/fixes/2026-08-08-toolchain-live-renderer-windows-ci-deadlock.md.
 func TestRunLock_ReportsAllTargets(t *testing.T) {
 	filePath := createTempToolVersionsFile(t, "nonexistent-owner/aaa 1.0.0\nnonexistent-owner/bbb 1.0.0\nnonexistent-owner/ccc 1.0.0\n")
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
 
 	var err error
-	output := captureCleanTestOutput(t, func() {
+	output := captureUITestOutput(t, func() {
 		err = RunLock(nil, LockOptions{MaxConcurrency: 4})
 	})
 	require.Error(t, err, "tools that don't exist in any registry should be reported as failed")
