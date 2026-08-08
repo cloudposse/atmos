@@ -11,26 +11,26 @@ more issues, all specific to `vendor pull`'s vendor.yaml-driven code path
 `diff`/`clean`/`verify`/`update` already use (`cmd/vendor/selector.go`):
 
 1. **Silent no-op (highest severity):** `atmos vendor pull -c vpc --tags compute`, where `vpc` is
-   declared in `vendor.yaml` but its own tags don't include `compute` while some *other* declared
-   component's tags do, exited 0 and installed nothing — no error, no warning.
-   `validateTagsAndComponents` checked tag existence *globally* across every declared source
-   instead of scoping the check to the named `--component`, so an out-of-scope component's tag
-   could vouch for a mismatched one. This is the same silent-no-op bug class 2026-08-07's fix
-   addressed for `vendor update --component --tags`, but that fix never reached `pull`.
+  declared in `vendor.yaml` but its own tags don't include `compute` while some *other* declared
+  component's tags do, exited 0 and installed nothing — no error, no warning.
+  `validateTagsAndComponents` checked tag existence *globally* across every declared source
+  instead of scoping the check to the named `--component`, so an out-of-scope component's tag
+  could vouch for a mismatched one. This is the same silent-no-op bug class 2026-08-07's fix
+  addressed for `vendor update --component --tags`, but that fix never reached `pull`.
 2. **Misleading error ordering:** `-c <undeclared-component> --tags <tag-matching-nothing>`
-   reported a generic "no components tagged with X" message instead of "component X is not
-   defined," because the (global, now per-component) tags check ran before the component-existence
-   check.
+  reported a generic "no components tagged with X" message instead of "component X is not
+  defined," because the (global, now per-component) tags check ran before the component-existence
+  check.
 3. **Silent flag drop:** `atmos vendor pull -c vpc -c eks` silently kept only `eks` (pflag's
-   last-occurrence-wins default for a plain string flag), dropping `vpc` with no error — surprising
-   given `vendor update --component` is a repeatable slice that accumulates instead.
+  last-occurrence-wins default for a plain string flag), dropping `vpc` with no error — surprising
+  given `vendor update --component` is a repeatable slice that accumulates instead.
 4. **Silent install-source divergence:** when a `--stack`/`--labels`-resolved component has *both*
-   its own `component.yaml` and a `vendor.yaml` entry, `atmos vendor pull -c <name>` and
-   `atmos vendor pull --stack ...` install from different sources for the identical target
-   directory, with no indication either way. This is documented, intentional precedence (see
-   `vendor-pull.mdx`'s selection-precedence note) — `--stack`/`--labels` always install from
-   `component.yaml` "regardless of vendor.yaml" — so this fix does not change behavior, it only
-   warns when the divergence risk exists.
+  its own `component.yaml` and a `vendor.yaml` entry, `atmos vendor pull -c <name>` and
+  `atmos vendor pull --stack ...` install from different sources for the identical target
+  directory, with no indication either way. This is documented, intentional precedence (see
+  `vendor-pull.mdx`'s selection-precedence note) — `--stack`/`--labels` always install from
+  `component.yaml` "regardless of vendor.yaml" — so this fix does not change behavior, it only
+  warns when the divergence risk exists.
 
 ## Context
 
