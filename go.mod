@@ -145,7 +145,7 @@ require (
 	gopkg.in/ini.v1 v1.67.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.1
+	helm.sh/helm/v4 v4.2.2
 	k8s.io/client-go v0.36.2
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1

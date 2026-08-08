@@ -731,7 +731,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - helm.sh/helm/v4
     License: Apache-2.0
-    URL: https://github.com/helm/helm/blob/v4.2.1/LICENSE
+    URL: https://github.com/helm/helm/blob/v4.2.2/LICENSE
 
   - k8s.io/api
     License: Apache-2.0
