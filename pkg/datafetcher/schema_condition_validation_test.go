@@ -210,6 +210,57 @@ func TestManifestSchema_KubernetesComponentValidateField(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_KubernetesComponentProvisionTargetSplitField(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts split true", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(true))
+		})
+
+		t.Run(schemaName+"/accepts split false", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(false))
+		})
+
+		t.Run(schemaName+"/rejects non-bool split", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, kubernetesComponentManifestWithProvisionSplit("yes"))
+		})
+	}
+}
+
+func kubernetesComponentManifestWithProvisionSplit(split any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"kubernetes": map[string]any{
+				"gitops-target": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"manifests": []any{
+						map[string]any{
+							"apiVersion": "v1",
+							"kind":       "ConfigMap",
+						},
+					},
+					"provision": map[string]any{
+						"targets": map[string]any{
+							"deployment-repo": map[string]any{
+								"kind":  "git",
+								"path":  "clusters/dev/demo",
+								"split": split,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func kubernetesComponentManifestWithValidate(validate bool) map[string]any {
 	return map[string]any{
 		"components": map[string]any{
