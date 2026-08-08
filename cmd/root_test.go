@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,9 +14,73 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+
+	boolPtr := func(value bool) *bool { return &value }
+	tests := []struct {
+		name       string
+		configured bool
+		root       *bool
+		group      *bool
+		leaf       *bool
+		want       bool
+	}{
+		{
+			name:       "changed leaf wins over changed group",
+			configured: true,
+			group:      boolPtr(false),
+			leaf:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "changed root wins without child override",
+			configured: false,
+			root:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "no local override preserves reconciled viper state",
+			configured: false,
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iolib.Reset()
+			viper.Reset()
+			viper.Set("mask", tt.configured)
+			require.NoError(t, iolib.Initialize())
+
+			root := &cobra.Command{Use: "root"}
+			root.PersistentFlags().Bool("mask", true, "")
+			group := &cobra.Command{Use: "group"}
+			group.PersistentFlags().Bool("mask", true, "")
+			leaf := &cobra.Command{Use: "leaf"}
+			leaf.PersistentFlags().Bool("mask", true, "")
+			root.AddCommand(group)
+			group.AddCommand(leaf)
+
+			for command, value := range map[*cobra.Command]*bool{root: tt.root, group: tt.group, leaf: tt.leaf} {
+				if value != nil {
+					require.NoError(t, command.PersistentFlags().Set("mask", strconv.FormatBool(*value)))
+				}
+			}
+
+			reconcileMaskingForCommand(leaf)
+			assert.Equal(t, tt.want, iolib.MaskingEnabled())
+		})
+	}
+}
 
 func TestNoColorLog(t *testing.T) {
 	// Skip in CI environments without TTY.

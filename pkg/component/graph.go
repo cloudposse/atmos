@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -38,6 +39,8 @@ type GraphExecutionOptions struct {
 	Selection     *GraphSelection
 }
 
+// ExecuteGraph runs selected components in dependency order and stops before
+// starting another component when the caller context is canceled.
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	defer perf.Track(nil, "component.ExecuteGraph")()
 
@@ -64,8 +67,14 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		default:
 		}
 
-		if err := executeGraphNode(opts, &order[i]); err != nil {
+		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
+			}
 			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
@@ -103,7 +112,7 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 }
 
 // executeGraphNode executes a single graph node through the component provider.
-func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error {
+func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *dependency.Node) error {
 	nodeInfo := *opts.Info
 	nodeInfo.ComponentType = opts.ComponentType
 	nodeInfo.ComponentFromArg = node.Component
@@ -113,8 +122,25 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	nodeInfo.Query = ""
+	nodeInfo.Components = nil
+	nodeInfo.Tags = nil
+	nodeInfo.Labels = nil
+
+	// Selection flags belong to the outer graph dispatch. Passing them to a node
+	// can make providers treat the node as another bulk invocation and recurse.
+	nodeFlags := make(map[string]any, len(opts.Flags))
+	for key, value := range opts.Flags {
+		switch key {
+		case "all", "affected", "components", "query", "tags", "labels", "include-dependents":
+			continue
+		default:
+			nodeFlags[key] = value
+		}
+	}
 
 	if err := opts.Provider.Execute(&ExecutionContext{
+		Context:             ctx,
 		AtmosConfig:         opts.AtmosConfig,
 		ComponentType:       opts.ComponentType,
 		Component:           node.Component,
@@ -123,7 +149,7 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 		SubCommand:          opts.SubCommand,
 		ComponentConfig:     node.Metadata,
 		ConfigAndStacksInfo: nodeInfo,
-		Flags:               opts.Flags,
+		Flags:               nodeFlags,
 	}); err != nil {
 		return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, node.Component, node.Stack, err)
 	}

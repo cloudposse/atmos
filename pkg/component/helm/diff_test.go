@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,7 +112,7 @@ func TestResolveDiffBaseline_FromManifestFile(t *testing.T) {
 	spec := &chartSpec{ReleaseName: "app", Namespace: "demo"}
 	flags := map[string]any{flagFromManifest: path}
 
-	got, err := resolveDiffBaseline(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, spec)
+	got, err := resolveDiffBaseline(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, spec)
 	require.NoError(t, err)
 	assert.Equal(t, baseConfigMap, got)
 }
@@ -120,7 +121,17 @@ func TestResolveDiffBaseline_FromManifestFileMissing(t *testing.T) {
 	spec := &chartSpec{ReleaseName: "app", Namespace: "demo"}
 	flags := map[string]any{flagFromManifest: filepath.Join(t.TempDir(), "nope.yaml")}
 
-	_, err := resolveDiffBaseline(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, spec)
+	_, err := resolveDiffBaseline(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, spec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHelmBaselineRead)
+}
+
+func TestResolveDiffBaseline_FromManifestHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	flags := map[string]any{flagFromManifest: filepath.Join(t.TempDir(), "nope.yaml")}
+
+	_, err := resolveDiffBaseline(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, flags, &chartSpec{})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmBaselineRead)
 }

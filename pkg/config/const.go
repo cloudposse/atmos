@@ -146,6 +146,7 @@ const (
 	HelmHistoryMaxSectionName         = "max"
 	HelmChartHooksSectionName         = "chart_hooks"
 	HelmCRDsSectionName               = "crds"
+	HelmDependencyUpdateSectionName   = "dependency_update"
 	HelmDefaultMaxHistory             = 10
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"

@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const helmExecutorManifest = `apiVersion: v1
@@ -59,7 +60,7 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	}
 	var deletedRelease, deletedNamespace string
 	var deleteDryRun bool
-	deleteHelmRelease = func(spec *chartSpec, dryRun bool) error {
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, dryRun bool) error {
 		deletedRelease = spec.ReleaseName
 		deletedNamespace = spec.Namespace
 		deleteDryRun = dryRun
@@ -281,9 +282,12 @@ func TestSummaryHelpers(t *testing.T) {
 	summary := helmSummary(info, spec, map[string]any{})
 	assert.Equal(t, "kubernetes", summary["target"])
 	assert.Equal(t, "release", summary["release_name"])
+	assert.Equal(t, false, summary["dependency_update"])
 
+	spec.DependencyUpdate = true
 	summary = helmSummary(info, spec, map[string]any{"target": "git"})
 	assert.Equal(t, "git", summary["target"])
+	assert.Equal(t, true, summary["dependency_update"])
 
 	mergeSummary(summary, map[string]any{"target": "gitops", "extra": true})
 	assert.Equal(t, "gitops", summary["target"])
@@ -404,7 +408,7 @@ func TestRenderInputTemplates(t *testing.T) {
 		cfg.ChartSectionName:       "./{{ .name }}",
 		cfg.ValuesFilesSectionName: []string{"{{ .name }}.yaml"},
 		cfg.ValuesSectionName: map[string]any{
-			"image": "{{ .name }}:1.0",
+			"password": "{{ .Values.kafka.password }}",
 		},
 		cfg.RepositoriesSectionName: []any{
 			map[string]any{"name": "{{ .name }}", "url": "https://example.com/{{ .name }}"},
@@ -425,9 +429,23 @@ func TestRenderInputTemplates(t *testing.T) {
 	assert.Equal(t, "1.2.3", section["version"])
 	assert.Equal(t, "https://repo.example.com/demo", section["repository"])
 	assert.Equal(t, []any{"demo.yaml"}, section[cfg.ValuesFilesSectionName])
-	assert.Equal(t, "demo:1.0", section[cfg.ValuesSectionName].(map[string]any)["image"])
+	assert.Equal(t, "{{ .Values.kafka.password }}", section[cfg.ValuesSectionName].(map[string]any)["password"])
 	assert.Equal(t, "demo.rendered.yaml", section[cfg.RenderSectionName].(map[string]any)["output"].(map[string]any)["path"])
 	assert.Equal(t, "demo", section[cfg.RepositoriesSectionName].([]any)[0].(map[string]any)["name"])
+}
+
+func TestRenderInputTemplatesPreservesLiteralHelmValues(t *testing.T) {
+	section, err := u.UnmarshalYAML[map[string]any](`
+name: demo
+values:
+  password: !literal "{{ .Values.kafka.password }}"
+`)
+	require.NoError(t, err)
+
+	require.NoError(t, renderInputTemplates(&schema.AtmosConfiguration{}, section))
+	values, ok := section[cfg.ValuesSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "{{ .Values.kafka.password }}", values["password"])
 }
 
 func TestBulkAffectedFlagsAndSelection(t *testing.T) {

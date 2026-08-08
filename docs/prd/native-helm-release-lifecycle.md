@@ -53,6 +53,7 @@ These gaps force users migrating from Helm or Helmfile to choose between depende
 - Fix apply dry-run propagation as a release-blocking safety prerequisite, then correctly propagate delete dry-run, cancellation, and deadlines through cluster operations.
 - Validate configuration before chart download or cluster mutation.
 - Keep template and diff complete by including Helm chart hook resources alongside the ordinary release manifest.
+- Allow callers to opt into fetching missing chart dependencies with Helm-compatible `--dependency-update` semantics.
 - Keep the design compatible with future pre-rollback diagnostics without requiring another public configuration rename.
 - Follow Atmos schema, stack-processing, command parsing, provider, error, logging, and testing conventions.
 
@@ -60,7 +61,7 @@ These gaps force users migrating from Helm or Helmfile to choose between depende
 
 - Collecting Pod status, Kubernetes Events, or container logs before rollback. This release uses Helm's built-in rollback behavior; failure diagnostics require separate orchestration.
 - Configuring chart download, OCI registry, client-side render, or external provision-target delivery timeouts.
-- Automatically running `helm dependency build` after chart provisioning. Atmos MUST report missing dependencies with the explicit build command. Dependency acquisition remains caller-controlled: Atmos only fetches missing dependencies when the user explicitly passes `--dependency-update`.
+- Implicitly running `helm dependency build` after chart provisioning. Atmos MUST report missing dependencies with the explicit build command and the `--dependency-update` alternative. Dependency acquisition remains caller-controlled and occurs only when the user explicitly passes `--dependency-update`, avoiding unexpected network access and chart-directory mutation.
 - Adding `--set-file`; Atmos `!include.raw` already covers byte-preserving file-backed value content, including a source file's terminal newline. Content normalization is separate from Helm lifecycle behavior.
 - Supporting Helm CLI subcommand, getter, downloader, post-renderer, or Wasm plugins in native SDK operations.
 - Adding force replacement, server-side apply selection, value reuse/reset, ownership takeover, validation bypass, or uninstall history/cascade options. In particular, Helm `Uninstall.KeepHistory`, the `--keep-history` flag, and a `keep_history` component field are deferred from R1.
@@ -238,6 +239,8 @@ atmos helm delete demo-api -s example-prod \
 ```
 
 `template`, `diff`, and `plan` do not register release-lifecycle flags because they do not perform a release operation.
+
+All chart-loading operations (`template`, `diff`, `plan`, `apply`, and `deploy`) accept `--dependency-update`. Atmos invokes Helm's dependency manager only when a declared dependency is missing. The flag is intentionally invocation-scoped: without it, Atmos does not access dependency repositories or mutate the chart directory and instead reports both the equivalent `helm dependency build <chart>` command and the opt-in flag.
 
 ## Configuration Contract
 
