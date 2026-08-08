@@ -512,9 +512,20 @@ func TestManager_CleanOldSessions(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name:          "uses default for zero",
+			// retentionDays == 0 is now honored literally: it means "delete
+			// everything now" (cutoff == time.Now()), not "use the default".
+			// This is intentionally different from RetentionUnset (-1) below.
+			name:          "explicit zero deletes all sessions",
 			retentionDays: 0,
-			wantCount:     1, // Old session is 40 days old, default is 30, so it gets deleted
+			wantCount:     2, // Both the 40-day-old and 10-day-old sessions are older than "now".
+			wantErr:       false,
+		},
+		{
+			// RetentionUnset (-1) is the sentinel for "caller did not specify a
+			// retention period" and falls back to DefaultRetentionDays (30).
+			name:          "unset sentinel uses default retention",
+			retentionDays: RetentionUnset,
+			wantCount:     1, // Old session is 40 days old, default is 30, so only it gets deleted.
 			wantErr:       false,
 		},
 		{
