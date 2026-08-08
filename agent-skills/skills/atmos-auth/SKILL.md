@@ -4,6 +4,7 @@ description: "Authentication and identity management: providers (SSO/SAML/OIDC/G
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: security
 ---
 
 # Atmos Authentication and Identity Management

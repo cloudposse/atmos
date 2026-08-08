@@ -4,6 +4,7 @@ description: "Atmos profiles: profile directories, --profile and ATMOS_PROFILE a
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Profiles
