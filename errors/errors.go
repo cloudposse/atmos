@@ -125,8 +125,6 @@ var (
 	ErrVersionEntryExists            = errors.New("version entry already exists")
 	ErrVersionEntryNotFound          = errors.New("version entry not found")
 	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
-	ErrVersionRenderFileRequired     = errors.New("--file is required")
-	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
 	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
