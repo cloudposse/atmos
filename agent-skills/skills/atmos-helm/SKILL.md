@@ -4,6 +4,7 @@ description: "Native Helm components (experimental): Helm Go SDK rendering/apply
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Native Helm Components
