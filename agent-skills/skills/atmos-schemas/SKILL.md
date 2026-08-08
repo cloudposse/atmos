@@ -4,6 +4,7 @@ description: "JSON Schema for Atmos: stack-manifest and atmos.yaml config schema
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.1.0"
+  category: core-config
 ---
 
 # Atmos JSON Schema System

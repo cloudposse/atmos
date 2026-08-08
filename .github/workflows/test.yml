@@ -180,7 +180,16 @@ jobs:
           - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 75
+    # Linux is the tightest target: its timed steps alone (registry cache test 25m +
+    # coverage-enabled acceptance tests 60m + coverage upload 5m) already sum to 90m,
+    # before checkout, Go/Atmos setup, and toolchain installs. windows-latest and
+    # macos-15 sum to 85m (registry cache test 25m + acceptance tests 60m) for the
+    # same reason - a run that hit exactly 75.0 minutes was force-cancelled by the
+    # previous ceiling with every step, including the full go test suite, already
+    # completed successfully in the logs. Same variance documented on the
+    # "Acceptance tests" step's own timeout below; give the job-level ceiling real
+    # headroom above the step-budget sum, not just equal to it.
+    timeout-minutes: 120
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
