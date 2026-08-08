@@ -62,8 +62,8 @@ atmos config set logs.level Trace --config ./atmos.yaml
 <dl>
   <dt>`--type` (string, default: inferred from the schema, falling back to `string`)</dt>
   <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (a raw YAML/yq literal inserted verbatim). Overrides the type Atmos would otherwise infer from `<path>`.</dd>
-  <dt>`--config` (string, inherited)</dt>
-  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
+  <dt>`--config` (string slice, inherited)</dt>
+  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root. Must name exactly one file: `config set` edits a single concrete file on disk, so passing more than one `--config` value is rejected as ambiguous.</dd>
 </dl>
 
 :::note
