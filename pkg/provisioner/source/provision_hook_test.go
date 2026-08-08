@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -1401,7 +1402,7 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
 }
 
@@ -1450,7 +1451,7 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// The guard marker must now be present in componentConfig.
@@ -1471,6 +1472,7 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 	var uiOutput bytes.Buffer
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -1486,9 +1488,43 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 		},
 	}
 
-	err = AutoProvisionSource(workdir.WithOutputSuppressed(t.Context()), atmosConfig, "terraform", componentConfig, nil)
+	ctx := workdir.WithOutputSuppressed(t.Context())
+	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{Stderr: &componentOutput})
 	require.NoError(t, err)
 	assert.Empty(t, uiOutput.String())
+	assert.Contains(t, componentOutput.String(), "Auto-provisioned source to")
+}
+
+func TestWriteWarning_UsesComponentWriterWhenSuppressed(t *testing.T) {
+	var output bytes.Buffer
+	ctx := workdir.WithOutputSuppressed(t.Context())
+
+	writeWarning(ctx, provisioner.OutputWriters{Stderr: &output}, "metadata update failed")
+
+	assert.Equal(t, "WARNING: metadata update failed\n", output.String())
+}
+
+func TestWriteWarning_FallsBackToUIWithoutComponentWriter(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&output)
+	t.Cleanup(restoreUI)
+
+	writeWarning(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, "metadata update failed")
+
+	assert.Contains(t, output.String(), "metadata update failed")
+}
+
+func TestWriteInfo_UsesComponentWriterWhenSuppressed(t *testing.T) {
+	var output bytes.Buffer
+	ctx := workdir.WithOutputSuppressed(t.Context())
+
+	writeInfo(ctx, provisioner.OutputWriters{Stderr: &output}, "Source version changed")
+
+	assert.Equal(t, "Source version changed\n", output.String())
 }
 
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
@@ -1508,7 +1544,7 @@ func TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir(t *testi
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.NoDirExists(t, filepath.Join(tmpDir, "app"),
@@ -1533,7 +1569,7 @@ func TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir(t *test
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.DirExists(t, targetDir,

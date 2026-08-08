@@ -157,7 +157,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
-	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
+	execCtx, err := prepareComponentExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
