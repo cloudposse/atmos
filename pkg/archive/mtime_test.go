@@ -2,6 +2,7 @@ package archive
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -135,6 +136,51 @@ func TestNewMtimeConfig_FallsBackWhenSourceHasNoCommitHistory(t *testing.T) {
 
 	rt := newMtimeConfig(MtimeEpoch, src)
 	assert.Equal(t, mtimeFallbackEpoch, rt.modTimeFor(filepath.Join(src, "x.txt")))
+}
+
+// linkedWorktree adds a linked worktree (`git worktree add`) for the fixture
+// repo and returns its path. go-git cannot create linked worktrees, so this
+// shells out to the git CLI and skips when git isn't installed.
+func linkedWorktree(t *testing.T, repoRoot string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git CLI not available")
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	cmd := exec.Command("git", "worktree", "add", "--detach", wt, "HEAD")
+	cmd.Dir = repoRoot
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git worktree add: %s", out)
+	return wt
+}
+
+func TestNewMtimeConfig_GitMode_LinkedWorktree(t *testing.T) {
+	root, t1, t2, _ := gitFixture(t)
+	wt := linkedWorktree(t, root)
+	src := filepath.Join(wt, "src")
+
+	// In a linked worktree .git is a gitdir pointer file, not a directory.
+	// The same committed content must resolve the same per-file commit
+	// timestamps as a plain checkout, not silently degrade to the fixed
+	// fallback epoch (which makes worktree-built archives differ
+	// byte-for-byte from checkout-built archives of the same commit).
+	rt := newMtimeConfig(MtimeGit, src)
+
+	assert.Equal(t, t1, rt.modTimeFor(filepath.Join(src, "a.txt")))
+	assert.Equal(t, t2, rt.modTimeFor(filepath.Join(src, "nested", "b.txt")))
+}
+
+func TestNewMtimeConfig_EpochMode_LinkedWorktree(t *testing.T) {
+	root, _, t2, _ := gitFixture(t)
+	wt := linkedWorktree(t, root)
+	src := filepath.Join(wt, "src")
+
+	rt := newMtimeConfig(MtimeEpoch, src)
+
+	// Same subtree rule as the plain-checkout case: the most recent commit
+	// touching anything under src/ (t2), not the fallback epoch and not the
+	// repo-wide latest commit.
+	assert.Equal(t, t2, rt.modTimeFor(filepath.Join(src, "a.txt")))
 }
 
 func TestValidateMtimeMode(t *testing.T) {

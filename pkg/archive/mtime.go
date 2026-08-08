@@ -126,7 +126,25 @@ func newMtimeConfig(mode, source string) *mtimeConfig {
 	if err != nil {
 		return rt
 	}
-	repo, err := git.PlainOpenWithOptions(absSource, &git.PlainOpenOptions{DetectDotGit: true})
+	// EnableDotGitCommonDir follows the gitdir pointer file that linked
+	// worktrees (`git worktree add`) use in place of a .git directory, and
+	// resolves shared object/ref storage through its commondir. Without it
+	// the open still succeeds, but storage is rooted at the per-worktree
+	// admin directory (.git/worktrees/<name>), which holds only per-worktree
+	// state: HEAD, index, logs, an empty refs/, and no objects/. Every commit
+	// lookup then fails and each entry silently gets the fallback epoch, so
+	// worktree-built archives differ byte-for-byte from checkout-built
+	// archives of the same commit.
+	//
+	// The two worktree forms fail at different points, both ending in that
+	// same fallback: a detached worktree has a raw SHA in HEAD and reaches
+	// object lookup, while an attached one has `ref: refs/heads/<branch>`
+	// whose ref lives in the common .git/refs/heads and fails earlier at ref
+	// resolution.
+	repo, err := git.PlainOpenWithOptions(absSource, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
 	if err != nil {
 		return rt
 	}
