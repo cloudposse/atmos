@@ -16,3 +16,9 @@ func NewShellCommand(ctx context.Context, command string) *exec.Cmd {
 
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }
+
+// applyWindowsCmdExeQuoting is a no-op outside Windows: POSIX's exec.Cmd
+// passes Args to execve verbatim (no shell-style re-parsing), so the
+// cmd.exe-specific quoting problem this works around on Windows (see the
+// windows-build variant) doesn't exist here.
+func applyWindowsCmdExeQuoting(cmd *exec.Cmd, program string, args []string) {}
