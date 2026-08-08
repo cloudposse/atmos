@@ -353,6 +353,11 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 			t.Skip("skipping on Windows: directory permissions work differently")
 		}
 
+		// Root bypasses the read-only directory this case relies on, so the write would succeed.
+		if os.Getuid() == 0 {
+			t.Skip("Skipping permission test when running as root")
+		}
+
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
 		err := os.Mkdir(readOnlyDir, 0o555)

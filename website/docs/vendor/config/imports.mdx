@@ -30,6 +30,15 @@ The `imports` section defines additional vendoring manifests that are merged int
 The imported file extensions are optional. Imports that do not include file extensions will default to the `.yaml` extension.
 :::
 
+### Relative paths in imported manifests
+
+A relative local [`source`](/vendor/config/sources) declared in an imported manifest is resolved against that imported manifest's own
+directory, so a manifest stays self-contained no matter which manifest imports it.
+
+Relative [`targets`](/vendor/config/sources) behave differently on purpose: they describe where artifacts land in your project, so every
+source resolves them against the same root — the Atmos `base_path` when [`vendor.base_path`](/cli/configuration/vendor) is configured,
+otherwise the directory of the top-level manifest. Splitting a manifest into imports therefore never changes where components are vendored to.
+
 ## Glob Pattern Support
 
 Import paths support [POSIX-style glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)) for matching multiple files:

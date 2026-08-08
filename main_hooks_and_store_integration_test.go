@@ -7,9 +7,14 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestMainHooksAndStoreIntegration(t *testing.T) {
+	// The fixture runs `atmos terraform deploy`, which shells out to terraform.
+	tests.RequireTerraform(t)
+
 	// Run the miniredis server so we can store values across calls to main().
 	s := miniredis.RunT(t)
 	defer s.Close()

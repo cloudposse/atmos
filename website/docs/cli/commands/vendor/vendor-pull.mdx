@@ -64,9 +64,10 @@ configurations.
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
   [OCI registries](https://opencontainers.org). See [Vendor URL Syntax](/vendor/url-syntax) for complete documentation on supported URL formats and authentication.
 
-- The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
-  are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
-  will be considered relative to the `base_path`. Multiple targets can be specified.
+- The `targets` in the `sources` support absolute paths and relative paths. Multiple targets can be specified. Relative targets are resolved
+  against the directory containing the `vendor.yaml` file, unless `atmos.yaml` declares where the manifest lives via the
+  [`vendor.base_path`](/cli/configuration/vendor) setting — in that case they're resolved against the Atmos `base_path`, so vendored artifacts
+  land in the same tree as the components and stacks instead of next to the manifest.
 
 - `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths
   (double-star/globstar `**` is supported as well).
