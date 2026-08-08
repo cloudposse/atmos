@@ -4,6 +4,7 @@ description: "Atmos AI and MCP integrations: connect external AI assistants to A
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ai
 ---
 
 # Atmos AI and MCP
