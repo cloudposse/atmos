@@ -180,6 +180,7 @@ type Installer struct {
 	registryFactory    RegistryFactory       // Factory for creating Aqua registry instances.
 	verificationPolicy verification.Policy
 	useLockFile        bool
+	verifyAgainstLock  bool // Distinct from useLockFile: false for lock's own force-write/refresh path.
 	lockFilePath       string
 	downloadProgress   func(downloaded, total int64)
 }
@@ -244,8 +245,28 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 		if config != nil {
 			i.verificationPolicy = verification.PolicyFromConfig(config.Toolchain.Verification)
 			i.useLockFile = config.Toolchain.UseLockFile
+			i.verifyAgainstLock = config.Toolchain.UseLockFile
 			i.lockFilePath = resolveLockFilePath(config)
 		}
+	}
+}
+
+// WithForceLockFile forces lock-file writes to be enabled regardless of
+// toolchain.use_lock_file, for commands (like `atmos toolchain lock`) whose entire
+// purpose is to populate the lock file even before the user has opted into runtime
+// verification against it. Call after WithAtmosConfig, which resolves lockFilePath (to
+// toolchain.lock_file, or <install_path>/toolchain.lock.yaml by default) regardless of
+// the use_lock_file toggle -- this option only flips the write-gating bool.
+//
+// The verifyAgainstLock field is deliberately left false here (overriding whatever
+// WithAtmosConfig set): `atmos toolchain lock` intentionally re-locks/refreshes entries, so it
+// must never fail on its own previously-recorded checksum the way a normal `install` would.
+func WithForceLockFile() Option {
+	defer perf.Track(nil, "installer.WithForceLockFile")()
+
+	return func(i *Installer) {
+		i.useLockFile = true
+		i.verifyAgainstLock = false
 	}
 }
 
@@ -423,6 +444,47 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 		return "", err
 	}
 	return binaryPath, nil
+}
+
+// LockTool downloads and verifies the artifact for tool at version and writes/updates its
+// toolchain.lock.yaml entry, without extracting a binary into the install tree. Used by
+// `atmos toolchain lock` to populate lock entries -- including for tools that aren't
+// (yet) installed -- without requiring a full install.
+//
+// Mirrors installFromTool's download/verify steps exactly (platform overrides, asset URL,
+// download-with-fallback, verification) and shares its cleanup-on-verification-failure
+// behavior, but stops before extractAndInstall/chmod/chtimes since updateLockFile only
+// needs the download and verification results, not a placed binary.
+func (i *Installer) LockTool(tool *registry.Tool, version string) error {
+	defer perf.Track(nil, "installer.Installer.LockTool")()
+
+	tool.Version = version
+
+	ApplyPlatformOverrides(tool)
+
+	if platformErr := CheckPlatformSupport(tool); platformErr != nil {
+		return buildPlatformNotSupportedError(platformErr)
+	}
+
+	assetURL, err := i.BuildAssetURL(tool, version)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)
+	}
+	log.Debug("Downloading tool for locking", "owner", tool.RepoOwner, "repo", tool.RepoName, logFieldVersion, version, "url", assetURL)
+
+	downloadResult, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
+	}
+	tool.Version = downloadResult.effectiveVersion
+
+	verificationResult, err := i.verifyDownloadedAsset(tool, version, downloadResult.effectiveURL, downloadResult.assetPath)
+	if err != nil {
+		_ = os.Remove(downloadResult.assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
+		return err
+	}
+
+	return i.updateLockFile(tool, version, downloadResult.effectiveURL, verificationResult)
 }
 
 func (i *Installer) verifyDownloadedAsset(tool *registry.Tool, version, assetURL, assetPath string) (*verification.Result, error) {

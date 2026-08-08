@@ -63,6 +63,24 @@ plausibly do:
 - Idempotency/rerun-safety — run the same operation twice; does the second run behave correctly?
 - Determinism — run the same read-only command several times with no state change between runs —
   is the output identical every time?
+- Any command that does real work across multiple items (batch installs/updates, concurrent
+  workers, multi-resource loops) — does it show *live* progress, or does it silently buffer
+  everything and dump it all at once when the whole batch finishes? A command that takes 10+
+  seconds with zero output is indistinguishable from a hang to a real user. Also check whether its
+  status lines actually use `ui.Success`/`ui.Error`/`ui.Warning`/`ui.Info` (icon + theme color) per
+  CLAUDE.md's I/O and UI Usage section, rather than a hand-rolled glyph (`"✓ %s"`, `"✗ %s"`) printed
+  through the plain `ui.Writef`/`ui.Write` — the two are easy to conflate since both compile and
+  both "print a checkmark," but only the semantic function is themed/colored. **This class of bug
+  is easy to miss when every command in this pass has been run through the Bash tool** — captured
+  output can look fine in the transcript even when the real behavior (silent hang, unstyled text)
+  would be obvious to a human watching a real terminal. Verify directly: run with `--force-color`
+  and pipe through `cat -v` (or grep for the raw `\x1b[` / `^[[` escape sequence) to confirm color
+  codes are actually present around each status line, not just plain text with a Unicode glyph.
+- Any "N -> M" / diff-style report line — construct a case where N and M are the *same value in
+  different string forms* (e.g. `v1.2.3` vs `1.2.3`, differing casing, trailing metadata). A raw
+  string-equality comparison will misreport a no-op as a change, which also tends to corrupt
+  whatever summary/count line tallies outcomes — check the tally against the individual lines
+  above it, don't just trust it.
 
 ## Phase 3 — Build real, durable fixtures
 
@@ -95,6 +113,10 @@ plausibly do:
   just that a command exited 0).
 - When something surprises you, reduce it to the smallest reproducible case and verify the repro
   twice.
+- For any command with a summary/tally line (`Updated N, up to date M, failed K`), manually
+  recount the individual lines above it and compare — don't trust the tally at face value. A
+  miscounted summary is a strong signal the classification logic feeding it is wrong somewhere,
+  not just a cosmetic issue.
 - If Phase 1 research made a claim, verify it live before trusting it — code-reading can miss
   control flow (e.g. assuming a flag is silently ignored when it actually errors, or vice versa).
   Correct the record explicitly when research turns out wrong.

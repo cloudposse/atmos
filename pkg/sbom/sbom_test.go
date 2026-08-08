@@ -81,9 +81,12 @@ func TestBuildDependenciesScopeIncludesToolchainAndVersionTrackEvidence(t *testi
 
 	tools := toolchainlock.New()
 	tools.Tools["terraform"] = &toolchainlock.Tool{
-		Version: "1.10.0",
-		Platforms: map[string]*toolchainlock.PlatformEntry{
-			"darwin_arm64": {URL: "https://releases.hashicorp.com/terraform.zip", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+		Versions: map[string]*toolchainlock.VersionEntry{
+			"1.10.0": {
+				Platforms: map[string]*toolchainlock.PlatformEntry{
+					"darwin_arm64": {URL: "https://releases.hashicorp.com/terraform.zip", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+				},
+			},
 		},
 	}
 	require.NoError(t, toolchainlock.Save(filepath.Join(base, config.Toolchain.LockFile), tools))
@@ -97,7 +100,7 @@ func TestBuildDependenciesScopeIncludesToolchainAndVersionTrackEvidence(t *testi
 	require.NoError(t, err)
 	ids := componentIDs(graph)
 	require.Contains(t, ids, "vendor:vpc")
-	require.Contains(t, ids, "toolchain:terraform:darwin_arm64")
+	require.Contains(t, ids, "toolchain:terraform:1.10.0:darwin_arm64")
 	require.Contains(t, ids, "version:stable:aws")
 }
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cockroachdberrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -259,6 +260,30 @@ func TestAddCommand_RunE_ErrorPaths(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "my-special-tool")
 	})
+
+	// TestAddCommand_RunE_ErrorPaths/range_syntax_error_preserves_hints_and_explanation
+	// reproduces a field-test finding: runAdd wraps every error with
+	// fmt.Errorf("%w: failed to add '%s': %w", ErrToolVersionsFileOperation, arg, err) -- two
+	// %w verbs in one call. That produces a Go 1.20 multi-wrap error that
+	// github.com/cockroachdb/errors' GetAllHints/GetAllDetails cannot traverse, so the helpful,
+	// hand-written hint ValidateVersionSpec attaches for range/constraint syntax (e.g.
+	// "^1.7.0") is completely invisible to `atmos toolchain add` users, even though
+	// `atmos toolchain install`/`atmos toolchain set` (which don't double-wrap) show it
+	// correctly. errors.Is still matches ErrVersionFormatInvalid -- only the human-facing
+	// hint/explanation content is lost.
+	t.Run("range syntax error preserves hints and explanation", func(t *testing.T) {
+		cleanup, _ := setupTestEnvironment(t)
+		defer cleanup()
+
+		err := addCmd.RunE(addCmd, []string{"hashicorp/terraform@~>1.0"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+		assert.NotEmpty(t, cockroachdberrors.GetAllHints(err),
+			"the range/constraint hint (use dependencies.tools or atmos version track) must survive error wrapping")
+		assert.NotEmpty(t, cockroachdberrors.GetAllDetails(err),
+			"the explanation of why the version was rejected must survive error wrapping")
+	})
 }
 
 // TestAddCommandProvider_AllMethods tests all CommandProvider interface methods.
@@ -273,8 +298,8 @@ func TestAddCommandProvider_AllMethods(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
 	})
 
-	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
-		assert.Nil(t, provider.GetFlagsBuilder())
+	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
+		assert.NotNil(t, provider.GetFlagsBuilder())
 	})
 
 	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {

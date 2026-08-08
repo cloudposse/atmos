@@ -614,3 +614,38 @@ func TestStrictLinkifyExtension(t *testing.T) {
 		})
 	}
 }
+
+// TestStrictLinkifyExtension_PreservesSourcePosition reproduces a bug where the
+// plain-text node substituted for an unlinked package reference used ast.NewString,
+// whose Pos() always returns -1 ("not associated with a source text"). Renderers
+// that rely on Pos() to order inline content (e.g. glamour's ANSI renderer) then
+// rendered the replacement text out of order relative to its surrounding words, or
+// dropped it entirely since glamour has no built-in node renderer for ast.String.
+// The replacement must instead be an ast.Text node anchored to the label's real
+// source offset, and each occurrence of a repeated label must resolve to its own
+// (increasing) position rather than always the first.
+func TestStrictLinkifyExtension_PreservesSourcePosition(t *testing.T) {
+	source := []byte("Use foo/bar@1.0.0 then upgrade to foo/bar@2.0.0")
+
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM, NewStrictLinkifyExtension()))
+	doc := md.Parser().Parse(text.NewReader(source))
+
+	var positions []int
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if textNode, ok := n.(*ast.Text); ok {
+			value := string(textNode.Segment.Value(source))
+			if value == "foo/bar@1.0.0" || value == "foo/bar@2.0.0" {
+				positions = append(positions, textNode.Pos())
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+
+	require.Len(t, positions, 2, "expected both package references to be un-linked into position-aware ast.Text nodes")
+	assert.NotEqual(t, -1, positions[0], "first occurrence must have a real source position, not ast.String's -1")
+	assert.NotEqual(t, -1, positions[1], "second occurrence must have a real source position, not ast.String's -1")
+	assert.Less(t, positions[0], positions[1], "repeated labels must resolve to increasing positions in document order")
+}
