@@ -1,0 +1,284 @@
+---
+title: RDS Authentication
+sidebar_label: RDS Authentication
+sidebar_position: 13
+id: rds-authentication
+description: Complete guide for connecting to AWS RDS and Aurora databases using Atmos identities and IAM authentication tokens.
+---
+
+This guide shows you how to configure RDS/Aurora IAM database authentication using Atmos integrations, so you can connect with `atmos aws rds connect <name>` instead of managing a static database password.
+
+## Overview
+
+Atmos provides native RDS IAM authentication through the **integrations** system and the
+[`atmos aws rds connect`](/cli/commands/aws/rds-connect) command. A fresh, short-lived IAM
+authentication token is minted from your Atmos identity and handed to `psql`/`mysql` — no static
+database password, no AWS CLI.
+
+**Key benefits:**
+- **No static password**: A ~15-minute IAM token is minted fresh for every connection
+- **No AWS CLI required**: The token is generated locally via SigV4 signing
+- **Token never touches disk or argv**: It is injected only into the child process environment
+- **Declarative connection metadata**: Name a database once in `atmos.yaml`, then connect by name
+
+## Quick Start
+
+### Basic `aws/rds` Integration
+
+The simplest RDS setup links an integration to an existing AWS identity:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+
+  integrations:
+    dev/rds/app-db:
+      kind: aws/rds
+      via:
+        identity: dev-admin
+      spec:
+        database:
+          host: mydb.abc123.us-east-2.rds.amazonaws.com
+          port: 5432
+          username: app
+          region: us-east-2
+          database: app
+```
+
+**Connect by name:**
+```bash
+atmos aws rds connect dev/rds/app-db
+```
+
+Atmos authenticates `dev-admin`, mints a fresh RDS IAM token, and opens `psql` with `PGSSLMODE=verify-full`
+— all without you typing a host, port, or password.
+
+:::note
+Unlike `aws/ecr` and `aws/eks`, the `aws/rds` integration provisions nothing at `atmos auth login`. An
+RDS IAM token is single-use and expires in ~15 minutes, so there is nothing durable to materialize
+ahead of time — the integration is purely declarative connection metadata consumed on demand by
+`atmos aws rds connect`.
+:::
+
+## Understanding Integrations
+
+### Why Integrations vs Identities?
+
+RDS connection metadata is fundamentally different from AWS identities:
+
+| Concept | IAM User/Role | `aws/rds` Integration |
+|---------|---------------|------------------------|
+| Stored identity object | Yes | No |
+| Policy attachment | Yes | No |
+| Server-side lifecycle | Yes | No |
+| Client-only connection metadata | No | Yes |
+
+An `aws/rds` integration names a database endpoint and links it to the identity used to authenticate
+against it. `atmos aws rds connect <name>` reads that metadata and mints a token on demand — it does
+not export anything to `atmos auth env`/`atmos auth shell`, because RDS connection coordinates are
+single-valued per integration and would collide if exported globally across multiple databases linked
+to the same identity.
+
+### Integration Configuration
+
+```yaml
+integrations:
+  my-rds-integration:            # Unique name for this integration
+    kind: aws/rds                # Integration type
+    via:
+      identity: my-identity      # Which identity provides AWS credentials
+    spec:
+      database:
+        host: mydb.abc123.us-east-2.rds.amazonaws.com   # required
+        port: 5432                                       # required
+        username: app                                     # required
+        region: us-east-2                                 # optional; falls back to the identity's region
+        database: app                                     # optional
+        engine: postgres                                  # optional; inferred from port when omitted
+```
+
+`host`, `port`, and `username` are required — the integration fails to load otherwise. `region`,
+`database`, and `engine` are optional and may also be supplied (or overridden) as `atmos aws rds
+connect` flags.
+
+## Common Patterns
+
+### Multi-Environment Setup
+
+Configure separate integrations for each environment:
+
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+
+    prod-deployer:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: DatabaseOperator
+        account: production
+
+  integrations:
+    dev/rds/app-db:
+      kind: aws/rds
+      via:
+        identity: dev-admin
+      spec:
+        database:
+          host: dev-db.abc123.us-east-2.rds.amazonaws.com
+          port: 5432
+          username: app
+          region: us-east-2
+
+    prod/rds/app-db:
+      kind: aws/rds
+      via:
+        identity: prod-deployer
+      spec:
+        database:
+          host: prod-db.xyz789.us-east-1.rds.amazonaws.com
+          port: 5432
+          username: app
+          region: us-east-1
+```
+
+**Usage:**
+```bash
+# Development database
+atmos aws rds connect dev/rds/app-db
+
+# Production database
+atmos aws rds connect prod/rds/app-db
+```
+
+### MySQL / MariaDB / Aurora MySQL
+
+The engine is inferred from the port when omitted, so a `port: 3306` integration connects with
+`mysql` automatically:
+
+```yaml
+integrations:
+  dev/rds/orders-db:
+    kind: aws/rds
+    via:
+      identity: dev-admin
+    spec:
+      database:
+        host: orders-db.abc123.us-east-2.rds.amazonaws.com
+        port: 3306
+        username: app
+        region: us-east-2
+        database: orders
+```
+
+```bash
+atmos aws rds connect dev/rds/orders-db
+```
+
+### Overriding Integration Values with Flags
+
+Any flag passed to `atmos aws rds connect` overrides the corresponding value from the named
+integration — useful for connecting to a read replica or a different database on the same instance
+without declaring a second integration:
+
+```bash
+atmos aws rds connect dev/rds/app-db --database analytics
+```
+
+## Standalone Connect
+
+You don't need an integration at all — pass every connection detail as flags:
+
+```bash
+atmos aws rds connect \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 5432 \
+  --username app --region us-east-2 --identity dev-admin
+```
+
+See the [`atmos aws rds connect`](/cli/commands/aws/rds-connect) command reference for the full flag
+list, including `--engine`, `--database`, `--ca-bundle`, and `--print-command`.
+
+## IAM Permissions
+
+RDS IAM database authentication requires setup independent of Atmos, on both the AWS and database
+sides:
+
+1. **Enable IAM database authentication** on the instance or cluster
+   (`EnableIAMDatabaseAuthentication`).
+2. **Grant the calling identity `rds-db:connect`** on the database user's resource ARN:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": "rds-db:connect",
+         "Resource": "arn:aws:rds-db:us-east-2:123456789012:dbuser:db-ABCDEFGHIJKLMNOPQRSTUVWXYZ/app"
+       }
+     ]
+   }
+   ```
+
+3. **Map the database account to IAM authentication:**
+   - PostgreSQL: `GRANT rds_iam TO app;`
+   - MySQL/MariaDB: create the user `IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS'`.
+
+## Troubleshooting
+
+### Certificate Verification Failure
+
+`atmos aws rds connect` connects over TLS with `verify-full` (PostgreSQL) or `VERIFY_IDENTITY`
+(MySQL). RDS server certificates chain to Amazon's own RDS CA rather than a public one, so Atmos
+embeds the
+[Amazon RDS global certificate bundle](https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem)
+and trusts it by default — standard RDS and Aurora endpoints verify with no extra configuration. If
+you still hit a certificate verification error (for example, connecting through a private CA), pass
+a bundle that covers it explicitly:
+
+```bash
+atmos aws rds connect dev/rds/app-db \
+  --ca-bundle /path/to/custom-bundle.pem
+```
+
+### Cannot Infer Engine
+
+If the port isn't `5432` or `3306` (for example, a non-default port or an RDS Proxy endpoint), pass
+`--engine postgres` or `--engine mysql` explicitly:
+
+```bash
+atmos aws rds connect dev/rds/app-db --engine postgres
+```
+
+### Access Denied at Connect Time
+
+A token that mints successfully but fails at connect time usually means the IAM permission or the
+in-database grant is missing or scoped to the wrong `dbuser`/region — see [IAM Permissions](#iam-permissions)
+above. Confirm the identity, region, and database username all match what's configured in AWS.
+
+## Next Steps
+
+- [`atmos aws rds connect`](/cli/commands/aws/rds-connect) — full command reference
+- [`atmos aws rds token`](/cli/commands/aws/rds-token) — generate a standalone token for other clients or drivers
+- [Auth Configuration](/cli/configuration/auth) — complete configuration reference

@@ -15,15 +15,30 @@
 // host platform, or empty string when none is found. On Windows there is
 // no canonical file-based bundle (the system uses SCHANNEL), so callers
 // should expect "" and let the subprocess fall back to its own logic.
+//
+// BuildBundle() combines the host's system CA bundle (via the same lookup as Find()) with a
+// caller-supplied extra PEM (e.g. a private root CA a subprocess would otherwise never trust,
+// such as pkg/cacerts/rds's embedded Amazon RDS CA bundle) and materializes the result at a
+// stable, content-hash-keyed path under the Atmos XDG cache directory.
 package cacerts
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
+
+// bundleFilePerm is the permission used for materialized combined CA bundle files. World/group
+// readable, matching the other CA bundle writers in this codebase (azure_trust.go, terraform/cache/tls.go).
+const bundleFilePerm = 0o644
 
 // EnvVars are the canonical environment variable names downstream tools
 // look at to override their built-in CA store. Setting both covers the
@@ -119,4 +134,73 @@ func Env() map[string]string {
 		EnvSSLCertFile:      path,
 		EnvRequestsCABundle: path,
 	}
+}
+
+// BuildBundle returns the path to a CA trust bundle combining the host's system CA store (via the
+// same lookup as Find(), when one exists) with the caller-supplied extra PEM appended. This is how
+// callers add trust for a CA the system store doesn't (and will never) carry — e.g. Amazon RDS's
+// private root CAs (pkg/cacerts/rds) — without losing trust for everything else the system store
+// already covers.
+//
+// The combined bundle is content-hash-keyed and written once under the Atmos XDG cache directory,
+// so repeated calls across invocations resolve to the same stable on-disk path (unlike a fresh
+// temp file per call, which would leave nothing for a later `--print-command`-printed path to
+// point at, and would need explicit cleanup).
+//
+// Returns "" (with no error) when there is nothing to write — no system bundle was found AND extra
+// is empty. Callers should treat "" the same way they treat Find() returning "": pass nothing to
+// the subprocess and let it fall back to its own trust store.
+func BuildBundle(extra []byte) (string, error) {
+	defer perf.Track(nil, "cacerts.BuildBundle")()
+
+	base := readBundle(Find())
+
+	combined := make([]byte, 0, len(base)+len(extra)+1)
+	combined = append(combined, base...)
+	if len(base) > 0 && len(extra) > 0 {
+		combined = append(combined, '\n')
+	}
+	combined = append(combined, extra...)
+
+	if len(combined) == 0 {
+		return "", nil
+	}
+
+	return writeBundle(combined)
+}
+
+// readBundle reads path, returning nil (not an error) when path is empty or unreadable — a system
+// bundle we can't use is treated the same as no system bundle at all.
+func readBundle(path string) []byte {
+	if path == "" {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// writeBundle materializes combined under a content-hash-keyed filename in the Atmos XDG cache
+// directory, reusing an already-written file with the same hash rather than rewriting it.
+func writeBundle(combined []byte) (string, error) {
+	sum := sha256.Sum256(combined)
+	fileName := fmt.Sprintf("bundle-%x.pem", sum[:8])
+
+	cacheDir, err := xdg.GetXDGCacheDir("cacerts", xdg.DefaultCacheDirPerm)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrCABundleBuild, err)
+	}
+	bundlePath := filepath.Join(cacheDir, fileName)
+
+	if info, err := os.Stat(bundlePath); err == nil && !info.IsDir() {
+		return bundlePath, nil
+	}
+
+	fs := filesystem.NewOSFileSystem()
+	if err := fs.WriteFileAtomic(bundlePath, combined, bundleFilePerm); err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrCABundleBuild, err)
+	}
+	return bundlePath, nil
 }

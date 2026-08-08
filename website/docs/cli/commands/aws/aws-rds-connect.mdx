@@ -1,0 +1,174 @@
+---
+title: atmos aws rds connect
+sidebar_label: rds connect
+sidebar_class_name: command
+sidebar_position: 8
+id: rds-connect
+description: Open an interactive psql/mysql session against RDS/Aurora using an Atmos identity and a freshly minted IAM authentication token.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Open an interactive `psql` or `mysql` session against an Amazon RDS or Aurora database using an Atmos identity and a freshly minted RDS IAM authentication token — no static database password, no AWS CLI.
+</Intro>
+
+## Usage
+
+```shell
+atmos aws rds connect [integration] [flags]
+```
+
+Provide the connection details as flags, or reference an [`aws/rds` integration](/cli/configuration/auth#integrations)
+declared in `atmos.yaml` by name. Flags always override the values declared by the integration.
+
+## Examples
+
+```shell
+# Connect using a declared aws/rds integration — no connection flags needed
+atmos aws rds connect my-db
+```
+
+```shell
+# Connect entirely with flags (PostgreSQL / Aurora PostgreSQL, port 5432)
+atmos aws rds connect \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 5432 \
+  --username app --region us-east-2 --identity dev-admin
+```
+
+```shell
+# MySQL / MariaDB / Aurora MySQL (port 3306), with an explicit database and a custom CA bundle
+atmos aws rds connect \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 3306 \
+  --username app --region us-east-2 --identity dev-admin \
+  --database app --ca-bundle /path/to/custom-bundle.pem
+```
+
+```shell
+# See the resolved client command without minting a token or connecting
+atmos aws rds connect my-db --print-command
+```
+
+## Arguments
+
+<dl>
+  <dt>`integration`</dt>
+  <dd>
+    Optional name of an `aws/rds` integration declared in `atmos.yaml`. Supplies `--host`, `--port`,
+    `--username`, `--region`, `--engine`, `--database`, and `--identity` as defaults; any flag passed
+    explicitly overrides the integration's declared value.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--host`</dt>
+  <dd>
+    The RDS/Aurora endpoint hostname. Required unless supplied by a named integration.
+  </dd>
+
+  <dt>`--port`</dt>
+  <dd>
+    The database port. Required unless supplied by a named integration. Also used to infer the engine
+    when `--engine` is omitted (`5432` → `postgres`, `3306` → `mysql`).
+  </dd>
+
+  <dt>`--username` <em>(alias `-u`)</em></dt>
+  <dd>
+    The database account name. Required unless supplied by a named integration.
+  </dd>
+
+  <dt>`--region`</dt>
+  <dd>
+    The AWS region of the database endpoint. Required unless supplied by a named integration.
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The Atmos identity to authenticate with. If omitted, Atmos resolves it in order: the
+    `ATMOS_IDENTITY` environment variable, then the named integration's declared `via.identity`, then
+    the default identity when exactly one is configured.
+  </dd>
+
+  <dt>`--engine`</dt>
+  <dd>
+    The database engine: `postgres` or `mysql`. Inferred from `--port` when omitted.
+  </dd>
+
+  <dt>`--database` <em>(alias `-d`)</em></dt>
+  <dd>
+    The database name to connect to. Optional.
+  </dd>
+
+  <dt>`--ca-bundle`</dt>
+  <dd>
+    Path to a CA bundle for TLS verification. Defaults to the Amazon RDS global certificate bundle
+    embedded in Atmos — see [Prerequisites](#prerequisites) below. Pass this flag to verify against a
+    different bundle instead (for example, a custom or private CA).
+  </dd>
+
+  <dt>`--print-command`</dt>
+  <dd>
+    Print the resolved client command (with the token redacted) instead of minting a token and
+    connecting.
+  </dd>
+</dl>
+
+**Environment variables:** `ATMOS_AWS_RDS_HOST`, `ATMOS_AWS_RDS_PORT`, `ATMOS_AWS_RDS_USERNAME`,
+`ATMOS_AWS_RDS_REGION`, `ATMOS_AWS_RDS_ENGINE`, `ATMOS_AWS_RDS_DATABASE`, `ATMOS_AWS_RDS_CA_BUNDLE`.
+
+## How It Works
+
+1. If an `integration` name is given, Atmos reads its declared `spec.database` as defaults for the
+   connection fields, and its `via.identity` as the identity fallback used only when `--identity` and
+   `ATMOS_IDENTITY` are both unset. Explicit flags always override the integration's declared values.
+2. Atmos authenticates the resolved identity to obtain AWS credentials, then mints a fresh RDS IAM
+   authentication token (the same mechanism as [`atmos aws rds token`](/cli/commands/aws/rds-token)) —
+   valid for approximately 15 minutes and generated locally with no AWS API call.
+3. The engine is resolved from `--engine`, or inferred from the port (`5432` → `postgres`,
+   `3306` → `mysql`).
+4. Atmos builds the `psql`/`mysql` argv. The token is **never placed on the command line or written to
+   disk** — it is injected only into the child process environment (`PGPASSWORD` for `psql`,
+   `MYSQL_PWD` for `mysql`).
+5. The connection is required to use TLS: `psql` connects with `PGSSLMODE=verify-full`; `mysql`
+   connects with `--ssl-mode=VERIFY_IDENTITY`. Both trust the Amazon RDS CA bundle embedded in Atmos
+   unless `--ca-bundle` is given.
+6. Atmos execs the client, replacing/inheriting the current terminal for an interactive session.
+   `--print-command` stops here and renders the resolved command instead.
+
+## Prerequisites
+
+- RDS IAM authentication must already be enabled for the target database — see the
+  [`atmos aws rds token` Prerequisites](/cli/commands/aws/rds-token#prerequisites) for the full list
+  (`EnableIAMDatabaseAuthentication`, the `rds-db:connect` IAM permission, and the in-database IAM
+  grant).
+- The `psql` (PostgreSQL) or `mysql` (MySQL/MariaDB) client binary must be installed and on `PATH`.
+- RDS server certificates chain to Amazon's own RDS CA, which is generally absent from OS trust
+  stores — a common cause of `verify-full`/`VERIFY_IDENTITY` failures with other tools. Atmos avoids
+  this by embedding the
+  [Amazon RDS global certificate bundle](https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem)
+  and trusting it by default, so standard RDS and Aurora endpoints verify out of the box with no
+  extra configuration. Pass `--ca-bundle` only if you need to verify against a different bundle:
+
+  ```shell
+  atmos aws rds connect my-db --ca-bundle /path/to/custom-bundle.pem
+  ```
+
+## Notes
+
+- A fresh token is minted on **every** invocation — there is nothing to cache or refresh, and nothing
+  durable is provisioned at `atmos auth login` for an `aws/rds` integration.
+- The token is passed to the client exclusively via the child process environment
+  (`PGPASSWORD`/`MYSQL_PWD`). It is never placed on the command line (so it never appears in shell
+  history or `ps` output) and never written to disk.
+- `--print-command` redacts the token entirely — it does not mint a token or connect, so it is safe to
+  use in scripts or with `--cast`/`ATMOS_CAST` recordings.
+
+## See Also
+
+- [`atmos aws rds token`](/cli/commands/aws/rds-token) — generate a standalone RDS IAM token for use
+  with any client or driver
+- [RDS Authentication Tutorial](/tutorials/rds-authentication) — declare an `aws/rds` integration and
+  connect by name
+- [Auth Configuration](/cli/configuration/auth) — configure providers, identities, and integrations
+- [IAM database authentication for RDS and Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html)

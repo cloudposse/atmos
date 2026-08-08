@@ -1263,6 +1263,15 @@ var (
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
 
+	// RDS IAM authentication errors.
+	ErrRDSTokenGeneration   = errors.New("failed to generate RDS IAM authentication token")
+	ErrRDSConnectFailed     = errors.New("failed to connect to RDS database")
+	ErrRDSEngineUnknown     = errors.New("unknown or unsupported database engine")
+	ErrRDSIntegrationConfig = errors.New("invalid aws/rds integration configuration")
+
+	// CA trust bundle errors (pkg/cacerts).
+	ErrCABundleBuild = errors.New("failed to build CA trust bundle")
+
 	// Atmos Pro authentication (atmos/pro provider) errors.
 	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
 	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")

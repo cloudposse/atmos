@@ -41,6 +41,17 @@ func addAzureTrustEnv(profile *Profile, stack, name string) error {
 	return nil
 }
 
+// TODO: consolidate with cacerts.BuildBundle. Both this function and
+// terraform/cache/tls.go's buildTrustBundle duplicate "read the system CA bundle, append an extra
+// PEM, write a combined bundle". They were NOT switched over when cacerts.BuildBundle was added
+// because the semantics genuinely differ in two ways that existing tests pin down: (1) this
+// function writes to a CALLER-SPECIFIED path (bundlePath, colocated with the emulator instance
+// data dir) rather than cacerts.BuildBundle's stable content-hash-keyed XDG cache path, and (2) on
+// a missing system bundle this returns ok=false and writes nothing, whereas cacerts.BuildBundle
+// happily writes an extra-only bundle (correct for RDS, where the embedded CA is sufficient on its
+// own, but wrong here — a self-signed emulator cert without the system roots too would drop trust
+// for everything else). Reconciling these (e.g. an optional-path parameter and an
+// on-missing-base behavior flag on cacerts.BuildBundle) is left as a follow-up.
 func buildAzureTrustBundle(certPath, bundlePath string) (string, bool, error) {
 	defer perf.Track(nil, "emulator.buildAzureTrustBundle")()
 
