@@ -2,6 +2,7 @@
 package extensions
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 
@@ -77,16 +78,40 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 		return ast.WalkContinue, nil
 	})
 
-	// Replace each auto-link with plain text.
+	// Replace each auto-link with plain text, in document order.
+	//
+	// ast.NewString produces an ast.KindString node, which is a valid goldmark node
+	// kind for "text with no source position" -- but glamour's ANSI renderer has no
+	// render case for it, so any replaced text silently disappears from rendered
+	// output (glamour's NewElement falls through to its default case and returns an
+	// empty Element{}). Build a proper source-backed ast.Text (ast.KindText) instead,
+	// which glamour does render, by locating the label's byte range in source.
+	//
+	// AutoLink only exposes its text as raw bytes (Label), not the underlying
+	// text.Segment, so the byte range is recovered here via a sequential search: since
+	// nodesToReplace is walked in document order, searching forward from the end of
+	// the previous match keeps each lookup anchored past prior occurrences instead of
+	// always finding the first one, which matters when the same package ref/version
+	// text appears more than once in a document.
+	searchFrom := 0
 	for _, autoLink := range nodesToReplace {
 		parent := autoLink.Parent()
 		if parent == nil {
 			continue
 		}
 
-		// Create a text node with the original content.
-		// AutoLink stores its text in a single child segment.
-		textNode := ast.NewString(autoLink.Label(source))
+		label := autoLink.Label(source)
+		var textNode ast.Node
+		if idx := bytes.Index(source[searchFrom:], label); idx >= 0 {
+			start := searchFrom + idx
+			stop := start + len(label)
+			textNode = ast.NewTextSegment(text.NewSegment(start, stop))
+			searchFrom = stop
+		} else {
+			// Should be unreachable: label is always a substring of source. Fall back
+			// to a raw string node rather than dropping the text entirely.
+			textNode = ast.NewString(label)
+		}
 		parent.ReplaceChild(parent, autoLink, textNode)
 	}
 }

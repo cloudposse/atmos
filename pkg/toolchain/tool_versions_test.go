@@ -311,6 +311,54 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrInvalidToolSpec)
 	})
+
+	t.Run("Promotes an already-tracked version under the same key", func(t *testing.T) {
+		// Regression test: "atmos toolchain set jq 1.7.1" must promote 1.7.1 to
+		// the default position when .tool-versions already contains
+		// "jq 1.9.0 1.7.1" -- both versions tracked under the same "jq" key.
+		// AddVersionToTool's reorder loop already handles this in place because
+		// findDuplicateKey only reports a conflict for a *different* key (alias
+		// vs. canonical form); it never fires for same-key updates.
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		err := AddToolToVersions(filePath, "jq", "1.9.0")
+		require.NoError(t, err)
+		err = AddToolToVersions(filePath, "jq", "1.7.1")
+		require.NoError(t, err)
+
+		err = AddToolToVersionsAsDefault(filePath, "jq", "1.7.1")
+		require.NoError(t, err)
+
+		toolVersions, err := LoadToolVersions(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"1.7.1", "1.9.0"}, toolVersions.Tools["jq"])
+	})
+
+	t.Run("Promotes an already-tracked version under a different (alias/canonical) key", func(t *testing.T) {
+		// Regression test: when the version is already tracked under a different
+		// key form than the one the caller passed (e.g. the file stores the
+		// canonical "opentofu/opentofu" entry but the caller asks to promote a
+		// version by the "opentofu" alias), findDuplicateKey finds the conflict.
+		// Setting asDefault=true must still promote the version within its
+		// existing key instead of silently doing nothing.
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		err := AddToolToVersions(filePath, "opentofu/opentofu", "1.10.3")
+		require.NoError(t, err)
+		err = AddToolToVersions(filePath, "opentofu/opentofu", "1.10.2")
+		require.NoError(t, err)
+
+		// Promote 1.10.2 to default using the alias form of the tool name.
+		err = AddToolToVersionsAsDefault(filePath, "opentofu", "1.10.2")
+		require.NoError(t, err)
+
+		toolVersions, err := LoadToolVersions(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"1.10.2", "1.10.3"}, toolVersions.Tools["opentofu/opentofu"])
+		assert.NotContains(t, toolVersions.Tools, "opentofu", "should not create a second, disconnected alias entry")
+	})
 }
 
 func TestLookupToolVersion(t *testing.T) {

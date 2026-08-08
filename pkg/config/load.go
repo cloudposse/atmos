@@ -751,6 +751,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("cast.recording.height", 36)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
+	// Toolchain lockfile is written by default for reproducible installs across
+	// platforms and CI (journaled in pkg/edition; previously opt-in via
+	// use_lock_file: true).
+	v.SetDefault("toolchain.use_lock_file", true)
+
 	// Atmos Pro defaults
 	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
 	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)

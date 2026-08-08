@@ -202,6 +202,64 @@ func TestCustomRenderer_Render_Strikethrough(t *testing.T) {
 	assert.Contains(t, stripped, "text")
 }
 
+// TestCustomRenderer_Render_PackageRefLinkify is regression coverage for a bug where
+// package-ref-shaped text (owner/repo@version, or bare tool@version) that goldmark's
+// GFM autolink pass mistook for an email address and the strict-linkify extension
+// un-linked, disappeared entirely from glamour's rendered ANSI output instead of
+// rendering as plain text. TestStrictLinkifyExtension in
+// pkg/ui/markdown/extensions/extensions_test.go only asserts on goldmark's
+// intermediate HTML output, which does render the node type the old code produced --
+// only glamour's ANSI renderer, used here via the real CustomRenderer, did not.
+func TestCustomRenderer_Render_PackageRefLinkify(t *testing.T) {
+	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		input       string
+		mustContain []string
+		wantCount   map[string]int
+	}{
+		{
+			name:        "owner/repo@version in a success message",
+			input:       "Set jqlang/jq@1.9.0 in .tool-versions",
+			mustContain: []string{"jqlang/jq@1.9.0"},
+		},
+		{
+			name:        "bare tool@version",
+			input:       "Set jq@1.9.0 in .tool-versions",
+			mustContain: []string{"jq@1.9.0"},
+		},
+		{
+			name:        "two package refs in one message",
+			input:       "Updated jq from jqlang/jq@1.7.1 to jqlang/jq@1.9.0",
+			mustContain: []string{"jqlang/jq@1.7.1", "jqlang/jq@1.9.0"},
+		},
+		{
+			// Regression coverage for an implementation that dedupes by label and
+			// always keeps only the first occurrence -- that would pass the "two
+			// different refs" case above but drop a genuinely repeated reference.
+			name:      "same package ref twice",
+			input:     "Updated jqlang/jq@1.9.0 then jqlang/jq@1.9.0",
+			wantCount: map[string]int{"jqlang/jq@1.9.0": 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := renderer.Render(tt.input)
+			assert.NoError(t, err)
+			stripped := stripANSIForTest(result)
+			for _, want := range tt.mustContain {
+				assert.Contains(t, stripped, want, "rendered output: %q", stripped)
+			}
+			for want, count := range tt.wantCount {
+				assert.Equal(t, count, strings.Count(stripped, want), "rendered output: %q", stripped)
+			}
+		})
+	}
+}
+
 func TestCustomRenderer_Render_Highlight(t *testing.T) {
 	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
 	require.NoError(t, err)
