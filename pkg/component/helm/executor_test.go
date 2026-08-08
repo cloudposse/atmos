@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -51,14 +53,16 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	renderChartManifest = func(_ context.Context, _ *chartSpec) (string, error) {
 		return helmExecutorManifest, nil
 	}
-	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (string, error) {
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
 		require.False(t, dryRun)
-		return helmExecutorManifest, nil
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var deletedRelease, deletedNamespace string
-	deleteHelmRelease = func(releaseName, namespace string) error {
-		deletedRelease = releaseName
-		deletedNamespace = namespace
+	var deleteDryRun bool
+	deleteHelmRelease = func(spec *chartSpec, dryRun bool) error {
+		deletedRelease = spec.ReleaseName
+		deletedNamespace = spec.Namespace
+		deleteDryRun = dryRun
 		return nil
 	}
 
@@ -104,10 +108,12 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	assert.Equal(t, 1, summary["object_count"])
 
 	info.SubCommand = "delete"
+	info.DryRun = true
 	summary, err = runOperation(ctx, &schema.AtmosConfiguration{}, info, OperationDelete, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "app", deletedRelease)
 	assert.Equal(t, "demo", deletedNamespace)
+	assert.True(t, deleteDryRun)
 	assert.Equal(t, "app", summary["release_name"])
 }
 
@@ -351,6 +357,14 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 			"version":    "1.2.3",
 			"name":       "demo",
 			"namespace":  "apps",
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmWaitSectionName: map[string]any{
+					cfg.HelmWaitStrategySectionName: "watcher",
+					cfg.HelmWaitJobsSectionName:     true,
+				},
+				cfg.HelmTimeoutSectionName: "15m",
+				cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 0},
+			},
 		},
 	}
 
@@ -362,6 +376,13 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
 	assert.True(t, spec.IncludeCRDs)
+	resolved, err := resolveReleaseLifecycle(spec.Release, releaseOperationUpgrade, false)
+	require.NoError(t, err)
+	assert.Equal(t, kube.StatusWatcherStrategy, resolved.Policy.WaitStrategy)
+	assert.True(t, resolved.Policy.WaitForJobs)
+	assert.Equal(t, 15*time.Minute, resolved.Policy.Timeout)
+	assert.Zero(t, resolved.Policy.MaxHistory)
+	assert.True(t, resolved.TimeoutExplicit)
 	repo, found := findRepository(spec.Repositories, "bitnami")
 	require.True(t, found)
 	assert.Equal(t, "https://charts.bitnami.com/bitnami", repo.URL)

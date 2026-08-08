@@ -515,6 +515,124 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
 }
 
+func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmTimeoutSectionName: "10m",
+				cfg.HelmWaitSectionName: map[string]any{
+					cfg.HelmWaitStrategySectionName: "watcher",
+				},
+				cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			},
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"source": "base"},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmInstallSectionName: map[string]any{
+				cfg.HelmTimeoutSectionName:   "20m",
+				cfg.HelmOnFailureSectionName: "uninstall",
+			},
+			cfg.HelmUpgradeSectionName: map[string]any{
+				cfg.HelmCleanupOnFailureSectionName: true,
+			},
+		},
+	}
+	result.ComponentHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"source": "component"},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmInstallSectionName: map[string]any{
+				cfg.HelmTimeoutSectionName: "60m",
+			},
+			cfg.HelmUpgradeSectionName: map[string]any{
+				cfg.HelmTimeoutSectionName: "30m",
+			},
+		},
+	}
+	result.ComponentOverridesHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"source": "override"},
+	}
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+
+	release := component[cfg.HelmReleaseSectionName].(map[string]any)
+	assert.Equal(t, "10m", release[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, "watcher", release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, 10, release[cfg.HelmHistorySectionName].(map[string]any)[cfg.HelmHistoryMaxSectionName])
+	install := release[cfg.HelmInstallSectionName].(map[string]any)
+	assert.Equal(t, "60m", install[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, "uninstall", install[cfg.HelmOnFailureSectionName])
+	upgrade := release[cfg.HelmUpgradeSectionName].(map[string]any)
+	assert.Equal(t, "30m", upgrade[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, true, upgrade[cfg.HelmCleanupOnFailureSectionName])
+	assert.Equal(t, map[string]any{"source": "override"}, component[cfg.ValuesSectionName])
+}
+
+func TestMergeComponentConfigurations_HelmReleaseIgnoresListMergeStrategy(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{ListMergeStrategy: "append"}}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "keep"},
+			},
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmCleanupOnFailureSectionName: true},
+		},
+	}
+	result.ComponentHelm = map[string]any{
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+		},
+	}
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+	upgrade := component[cfg.HelmReleaseSectionName].(map[string]any)[cfg.HelmUpgradeSectionName].(map[string]any)
+	assert.Equal(t, "rollback", upgrade[cfg.HelmOnFailureSectionName])
+	assert.Equal(t, true, upgrade[cfg.HelmCleanupOnFailureSectionName])
+}
+
+func TestMergeComponentConfigurations_EmptyHelmValuesDoNotEraseInheritedDefaults(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.HelmComponentType,
+		Component:     "demo-release",
+		AtmosConfig:   atmosCfg,
+		GlobalHelmLifecycle: map[string]any{
+			cfg.ValuesSectionName: map[string]any{"cluster": "shared"},
+		},
+	}
+	result := minimalComponentResult()
+	result.BaseComponentHelm = map[string]any{
+		cfg.ValuesSectionName: map[string]any{"image": map[string]any{"tag": "stable"}},
+	}
+	result.ComponentHelm = extractHelmComponentSection(map[string]any{
+		cfg.ValuesSectionName: nil,
+	})
+
+	component, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]any{
+		"cluster": "shared",
+		"image":   map[string]any{"tag": "stable"},
+	}, component[cfg.ValuesSectionName])
+}
+
 func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{}
 	opts := ComponentProcessorOptions{

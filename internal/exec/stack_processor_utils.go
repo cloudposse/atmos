@@ -1811,6 +1811,9 @@ func processYAMLConfigFileWithContextInternal(
 		// The error already contains context information from MergeWithContext
 		return nil, nil, err
 	}
+	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged, relativeFilePath); err != nil {
+		return nil, nil, err
+	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
@@ -1825,6 +1828,62 @@ func processYAMLConfigFileWithContextInternal(
 		HelmfileOverridesInline:   parentHelmfileOverridesInline,
 		HelmfileOverridesImports:  parentHelmfileOverridesImports,
 	}, mergeContext, nil
+}
+
+// applyHelmTypeOverrides applies the effective stack-level helm.overrides block
+// after imports have been deep-merged. Applying it here makes the override cover
+// native Helm components declared by the current manifest and by any import,
+// with the closest manifest's values taking precedence.
+func applyHelmTypeOverrides(atmosConfig *schema.AtmosConfiguration, stackConfig map[string]any, relativeFilePath string) error {
+	helmSection, ok := stackConfig[cfg.HelmSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	overridesValue, exists := helmSection[cfg.OverridesSectionName]
+	if !exists || overridesValue == nil {
+		return nil
+	}
+	helmOverrides, ok := overridesValue.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, relativeFilePath)
+	}
+	// A bare `helm.overrides.values:` key is an accidental YAML null, not an
+	// instruction to erase component-level values.
+	if helmOverrides[cfg.ValuesSectionName] == nil {
+		delete(helmOverrides, cfg.ValuesSectionName)
+	}
+	if len(helmOverrides) == 0 {
+		return nil
+	}
+
+	components, ok := stackConfig[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	helmComponents, ok := components[cfg.HelmComponentType].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	for name, value := range helmComponents {
+		component, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		componentOverrides := map[string]any{}
+		if overridesValue, exists := component[cfg.OverridesSectionName]; exists && overridesValue != nil {
+			componentOverrides, ok = overridesValue.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w for component %q in the stack manifest '%s'", errUtils.ErrInvalidHelmOverridesSection, name, relativeFilePath)
+			}
+		}
+		merged, err := m.Merge(atmosConfig, []map[string]any{componentOverrides, helmOverrides})
+		if err != nil {
+			return err
+		}
+		component[cfg.OverridesSectionName] = merged
+	}
+	return nil
 }
 
 // emptyStackManifestProcessingResult returns a result with initialized empty

@@ -20,6 +20,9 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
+    "helm": {
+      "$ref": "#/definitions/helm"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -105,6 +108,11 @@
         },
         {
           "required": [
+            "helm"
+          ]
+        },
+        {
+          "required": [
             "packer"
           ]
         },
@@ -142,6 +150,45 @@
     }
   ],
   "definitions": {
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "condition_predicate": {
       "type": "string",
       "description": "Built-in condition predicate for step and hook execution.",
@@ -363,7 +410,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
+      "description": "Components section. Supports built-in types (terraform, helmfile, helm, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -381,6 +428,9 @@
             },
             "kubernetes": {
               "$ref": "#/definitions/kubernetes_components"
+            },
+            "helm": {
+              "$ref": "#/definitions/helm_components"
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
@@ -990,6 +1040,267 @@
         }
       ]
     },
+    "helm": {
+      "title": "helm",
+      "description": "Native Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "values": {
+              "type": "object"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_wait_strategy": {
+      "title": "helm_wait_strategy",
+      "description": "Helm 4 release wait strategy",
+      "type": "string",
+      "enum": [
+        "watcher",
+        "hookOnly",
+        "legacy"
+      ]
+    },
+    "helm_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"},
+        "jobs": {"type": "boolean"}
+      }
+    },
+    "helm_delete_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"}
+      }
+    },
+    "helm_history_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max": {"type": "integer", "minimum": 0}
+      }
+    },
+    "helm_install_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "crds": {"type": "string", "enum": ["create", "skip"]},
+        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]}
+      }
+    },
+    "helm_upgrade_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "on_failure": {"type": "string", "enum": ["rollback", "keep"]},
+        "cleanup_on_failure": {"type": "boolean"}
+      }
+    },
+    "helm_delete_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_delete_wait_policy"}
+      }
+    },
+    "helm_release_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "history": {"$ref": "#/definitions/helm_history_policy"},
+        "install": {"$ref": "#/definitions/helm_install_policy"},
+        "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
+        "delete": {"$ref": "#/definitions/helm_delete_policy"}
+      }
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Native Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Native Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object"
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
     "kubernetes": {
       "title": "kubernetes",
       "description": "Kubernetes component type defaults",
@@ -1426,6 +1737,67 @@
           "required": [
             "uri"
           ]
+        }
+      ]
+    },
+    "retry": {
+      "title": "retry",
+      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fractional jitter applied to each delay (0–1)."
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
         }
       ]
     },
@@ -2252,6 +2624,47 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_overrides": {
+      "title": "helm_overrides",
+      "description": "Native Helm overrides section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
+            },
+            "values": {
+              "type": "object"
             }
           },
           "required": []

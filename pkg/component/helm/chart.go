@@ -37,10 +37,22 @@ type chartSpec struct {
 	IncludeCRDs bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
 	Repositories []chartRepository
+	// Release is the presence-aware policy tree before an action is selected.
+	Release releasePolicyInput
+	// LifecycleFlags contains only explicitly supplied invocation overrides.
+	LifecycleFlags map[string]any
+	// Lifecycle is populated with the effective selected-operation policy.
+	Lifecycle releaseLifecycleResolution
 }
 
 // newSettings builds Helm CLI environment settings honoring ambient HELM_* env.
 var newSettings = cli.New
+
+func newSettingsForNamespace(namespace string) *cli.EnvSettings {
+	settings := newSettings()
+	settings.SetNamespace(namespace)
+	return settings
+}
 
 // renderManifest renders the chart to a multi-document manifest string without
 // contacting a cluster (client-side dry run, equivalent to `helm template`).
@@ -64,7 +76,7 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 // newInstallAction constructs an Install action plus settings, wiring the chart
 // path options (repo URL, version) and an OCI-capable registry client.
 func newInstallAction(spec *chartSpec) (*action.Install, *cli.EnvSettings, error) {
-	settings := newSettings()
+	settings := newSettingsForNamespace(spec.Namespace)
 
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), spec.Namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo

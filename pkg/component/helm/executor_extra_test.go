@@ -69,8 +69,8 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 
@@ -141,8 +141,8 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 	setupRepositories = func([]chartRepository) error {
@@ -176,8 +176,10 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		return &hooks.Hooks{}, nil
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
-	applyHelmRelease = func(context.Context, *chartSpec, bool) (string, error) {
-		return helmExecutorManifest, nil
+	var appliedNamespace string
+	applyHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) (releaseActionResult, error) {
+		appliedNamespace = spec.Namespace
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var setup []chartRepository
 	setupRepositories = func(repositories []chartRepository) error {
@@ -189,15 +191,17 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		ComponentFromArg: "apps/app",
 		SubCommand:       "apply",
 		ComponentSection: map[string]any{
-			"chart": "bitnami/nginx",
-			"name":  "app",
+			"chart":     "bitnami/nginx",
+			"name":      "app",
+			"namespace": "component-ns",
 			"repositories": []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
 		},
 	}
-	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
+	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{"namespace": "incident-ns"}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
 	require.NoError(t, err)
+	assert.Equal(t, "incident-ns", appliedNamespace)
 	require.Len(t, setup, 1)
 	assert.Equal(t, "bitnami", setup[0].Name)
 }

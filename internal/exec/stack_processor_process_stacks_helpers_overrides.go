@@ -30,6 +30,9 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	if supportsGenerate(opts.ComponentType) {
 		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
 	}
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentOverridesHelm = make(map[string]any, componentOverridesCapacity)
+	}
 
 	i, ok := opts.ComponentMap[cfg.OverridesSectionName]
 	if !ok {
@@ -42,6 +45,9 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		return fmt.Errorf("%w: 'components.%s.%s.overrides' in the manifest '%s'", errUtils.ErrInvalidComponentOverrides, opts.ComponentType, opts.Component, opts.StackName)
 	}
 	result.ComponentOverrides = componentOverrides
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentOverridesHelm = extractHelmOverrideSection(componentOverrides)
+	}
 
 	// Extract vars overrides.
 	if i, ok := componentOverrides[cfg.VarsSectionName]; ok {

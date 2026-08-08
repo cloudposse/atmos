@@ -333,6 +333,20 @@ var helmComponentSectionKeys = []string{
 	"repository",
 	"namespace",
 	"name",
+	cfg.HelmReleaseSectionName,
+}
+
+var helmLifecycleSectionKeys = []string{
+	cfg.ValuesSectionName,
+	cfg.RepositoriesSectionName,
+	cfg.HelmReleaseSectionName,
+}
+
+// helmOverrideSectionKeys are native Helm fields accepted in a component or
+// type-level overrides block. Keep this intentionally narrow until other Helm
+// fields have documented override semantics.
+var helmOverrideSectionKeys = []string{
+	cfg.ValuesSectionName,
 }
 
 // extractHelmComponentSection copies the recognized Helm fields out of a
@@ -341,6 +355,42 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 	bag := make(map[string]any)
 	for _, key := range helmComponentSectionKeys {
 		if value, ok := componentMap[key]; ok {
+			// A bare `values:` key decodes to nil. Treat it as omitted so an
+			// accidental empty key cannot silently erase inherited Helm values.
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// extractHelmLifecycleSection copies only lifecycle fields from stack-level
+// helm defaults so unrelated type-level configuration is not injected into
+// every component manifest.
+func extractHelmLifecycleSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmLifecycleSectionKeys {
+		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// extractHelmOverrideSection copies only native Helm fields with documented
+// override semantics from a component or type-level overrides block.
+func extractHelmOverrideSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmOverrideSectionKeys {
+		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
 			bag[key] = value
 		}
 	}

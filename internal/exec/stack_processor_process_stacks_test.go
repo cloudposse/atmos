@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestProcessStackConfig_ErrorPaths(t *testing.T) {
@@ -914,6 +915,7 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 		{
 			name: "config with kubernetes section and component",
 			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
 				cfg.KubernetesSectionName: map[string]any{
 					cfg.CommandSectionName: "kubectl",
 					cfg.VarsSectionName: map[string]any{
@@ -962,13 +964,24 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, []any{"base"}, app[cfg.PathsSectionName])
 				assert.Equal(t, map[string]any{"deployment": "d.yaml"}, app[cfg.ManifestsSectionName])
 				assert.Equal(t, map[string]any{"engine": "kustomize"}, app[cfg.RenderSectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into kubernetes components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
 			},
 		},
 		{
 			name: "config with helm section and component",
 			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
 				cfg.HelmSectionName: map[string]any{
 					cfg.CommandSectionName: "helm",
+					cfg.ValuesSectionName: map[string]any{
+						"image":        map[string]any{"tag": "stable"},
+						"replicaCount": 1,
+					},
+					cfg.RepositoriesSectionName: []any{
+						map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
+					},
 					cfg.VarsSectionName: map[string]any{
 						"namespace": "apps",
 					},
@@ -996,6 +1009,14 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 					cfg.GenerateSectionName: map[string]any{
 						"chart": map[string]any{"path": "generated"},
 					},
+					cfg.HelmReleaseSectionName: map[string]any{
+						cfg.HelmTimeoutSectionName: "10m",
+						cfg.HelmWaitSectionName: map[string]any{
+							cfg.HelmWaitStrategySectionName: "watcher",
+						},
+						cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+						cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "keep"},
+					},
 				},
 				cfg.ComponentsSectionName: map[string]any{
 					cfg.HelmComponentType: map[string]any{
@@ -1005,11 +1026,13 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 								"replicaCount": 2,
 							},
 							cfg.ValuesFilesSectionName: []any{"values.yaml"},
-							cfg.RepositoriesSectionName: []any{
-								map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
-							},
 							cfg.RenderSectionName: map[string]any{
 								"output": map[string]any{"path": "rendered.yaml"},
+							},
+							cfg.HelmReleaseSectionName: map[string]any{
+								cfg.HelmTimeoutSectionName: "20m",
+								cfg.HelmWaitSectionName:    map[string]any{cfg.HelmWaitJobsSectionName: true},
+								cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
 							},
 						},
 					},
@@ -1023,10 +1046,22 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				app, ok := helm["app"].(map[string]any)
 				require.True(t, ok, "helm component 'app' must exist")
 				assert.Equal(t, "bitnami/nginx", app[cfg.ChartSectionName])
-				assert.Equal(t, map[string]any{"replicaCount": 2}, app[cfg.ValuesSectionName])
+				assert.Equal(t, map[string]any{
+					"image":        map[string]any{"tag": "stable"},
+					"replicaCount": 2,
+				}, app[cfg.ValuesSectionName])
 				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
 				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
 				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
+				release := app[cfg.HelmReleaseSectionName].(map[string]any)
+				assert.Equal(t, "20m", release[cfg.HelmTimeoutSectionName])
+				assert.Equal(t, "watcher", release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitStrategySectionName])
+				assert.Equal(t, true, release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitJobsSectionName])
+				assert.Equal(t, 10, release[cfg.HelmHistorySectionName].(map[string]any)[cfg.HelmHistoryMaxSectionName])
+				assert.Equal(t, "rollback", release[cfg.HelmUpgradeSectionName].(map[string]any)[cfg.HelmOnFailureSectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into helm components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
 			},
 		},
 	}

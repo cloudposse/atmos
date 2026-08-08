@@ -818,6 +818,8 @@ func ProcessStackConfig(
 	}
 
 	// Helm section.
+	helmLifecycleDefaults := extractHelmLifecycleSection(globalHelmSection)
+
 	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
 		helmCommand, ok = i.(string)
 		if !ok {
@@ -1139,6 +1141,7 @@ func ProcessStackConfig(
 					GlobalSettings:             globalAndKubernetesSettings,
 					GlobalEnv:                  globalAndKubernetesEnv,
 					GlobalAuth:                 globalAndKubernetesAuth,
+					GlobalSecrets:              globalSecretsSection,
 					GlobalDependencies:         globalAndKubernetesDependencies,
 					GlobalMetadata:             globalMetadataSection,
 					GlobalCommand:              kubernetesCommand,
@@ -1195,6 +1198,7 @@ func ProcessStackConfig(
 					GlobalSettings:             globalAndHelmSettings,
 					GlobalEnv:                  globalAndHelmEnv,
 					GlobalAuth:                 globalAndHelmAuth,
+					GlobalSecrets:              globalSecretsSection,
 					GlobalDependencies:         globalAndHelmDependencies,
 					GlobalMetadata:             globalMetadataSection,
 					GlobalCommand:              helmCommand,
@@ -1203,6 +1207,7 @@ func ProcessStackConfig(
 					GlobalAndTerraformGenerate: globalAndHelmGenerate,
 					GlobalSourceSection:        helmSource,
 					GlobalProvisionSection:     helmProvision,
+					GlobalHelmLifecycle:        helmLifecycleDefaults,
 					AtmosConfig:                atmosConfig,
 				}, nil
 			}
@@ -1232,6 +1237,7 @@ func ProcessStackConfig(
 		cfg.PackerComponentType:     true,
 		cfg.AnsibleComponentType:    true,
 		cfg.KubernetesComponentType: true,
+		cfg.HelmComponentType:       true,
 	}
 	for componentType, components := range globalComponentsSection {
 		if builtInTypes[componentType] {
