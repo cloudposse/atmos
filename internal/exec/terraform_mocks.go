@@ -50,7 +50,14 @@ func resolveTerraformMockOutput(
 
 	mocks, ok := componentSection[cfg.MocksSectionName].(map[string]any)
 	if !ok || mocks == nil {
-		return nil, true, fmt.Errorf("%w: component %q in stack %q", errUtils.ErrTerraformComponentMocksNotDeclared, component, stack)
+		// A `//` default in the caller's expression is honored the same way
+		// whether or not the component declares mocks, mirroring how a `//`
+		// default rescues a component with no real state at all. Without a
+		// default, an undeclared `mocks` map is a hard error.
+		if !hasYqDefault(output) {
+			return nil, true, fmt.Errorf("%w: component %q in stack %q", errUtils.ErrTerraformComponentMocksNotDeclared, component, stack)
+		}
+		mocks = map[string]any{}
 	}
 
 	value, err := tb.GetTerraformBackendVariable(atmosConfig, mocks, output)
@@ -58,7 +65,7 @@ func resolveTerraformMockOutput(
 		return nil, true, fmt.Errorf("failed to resolve mocked Terraform output %q for component %q in stack %q: %w", output, component, stack, err)
 	}
 	if value == nil && !hasYqDefault(output) && !mockOutputExists(mocks, output) {
-		return nil, true, fmt.Errorf("%w %q for component %q in stack %q", errUtils.ErrTerraformMockOutputNotDeclared, output, component, stack)
+		return nil, true, fmt.Errorf("%w: %q for component %q in stack %q", errUtils.ErrTerraformMockOutputNotDeclared, output, component, stack)
 	}
 
 	log.Debug(

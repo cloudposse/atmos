@@ -64,7 +64,7 @@ The [advanced quick start](/quick-start/advanced/) uses this pattern for its fir
 
 When a Terraform lookup is mocked, Atmos loads the referenced component's merged `mocks` map and evaluates the requested expression against it. It does **not** initialize Terraform, resolve the referenced component's credentials, read a backend, or populate the real-state lookup cache.
 
-That makes mock mode useful for local plans and `describe component` output that should be independent of the remote dependency. It also means `--use-mocks` never silently falls back to real state: a missing mock map or output is an actionable error, not a surprise backend read.
+That makes mock mode useful for local plans and `describe component` output that should be independent of the remote dependency. It also means `--use-mocks` never silently falls back to real state: a missing mock map or output is an actionable error, not a surprise backend read — unless the expression itself supplies a YQ `//` default, which is honored the same way it is for real state, whether or not the referenced component declares `mocks` at all.
 
 Mock values themselves are literal. Atmos does not evaluate templates or YAML functions inside `mocks`, so a mock cannot accidentally call the real dependency it was meant to replace.
 

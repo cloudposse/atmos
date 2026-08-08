@@ -153,4 +153,3 @@ GLOBAL FLAGS
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
-

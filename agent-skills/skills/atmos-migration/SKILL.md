@@ -10,6 +10,7 @@ references:
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
   - references/from-component-updater.md
+  - references/from-terragrunt.md
 ---
 
 # Migrating to Atmos
@@ -25,7 +26,8 @@ For full prose tutorials aimed at end users, link to:
 
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
-- [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (not covered by this skill)
+- [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
+  [from-terragrunt.md](references/from-terragrunt.md) for the agent-actionable recipes
 
 ## Terraform or OpenTofu
 
@@ -76,6 +78,7 @@ different reference:
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
@@ -189,3 +192,5 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
+  workflow for classic Terragrunt and Terragrunt Stacks

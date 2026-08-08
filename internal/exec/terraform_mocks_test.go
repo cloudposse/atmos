@@ -75,3 +75,26 @@ func TestTerraformComponentMocksFailClosed(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is not declared")
 }
+
+// TestTerraformComponentMocksYqDefaultDoesNotRequireMocks verifies that a YQ `//`
+// default in the caller's expression is honored even when the referenced
+// component declares no `mocks` section at all, mirroring how a `//` default
+// already rescues a component with no real state. Without a default, an
+// undeclared `mocks` map must still hard-error (see TestTerraformComponentMocksFailClosed).
+func TestTerraformComponentMocksYqDefaultDoesNotRequireMocks(t *testing.T) {
+	sandbox, err := testhelpers.SetupSandbox(t, "../../tests/fixtures/scenarios/terraform-component-mocks")
+	require.NoError(t, err)
+	t.Cleanup(sandbox.Cleanup)
+	t.Chdir(sandbox.OriginalWorkdir)
+	for key, value := range sandbox.GetEnvironmentVariables() {
+		t.Setenv(key, value)
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{Stack: "dev"}, true)
+	require.NoError(t, err)
+
+	// "app" declares no `mocks` section at all.
+	value, err := processTagTerraformState(&atmosConfig, `!terraform.state app .missing // "yq-fallback"`, "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
+	require.NoError(t, err)
+	assert.Equal(t, "yq-fallback", value)
+}
