@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	listpkg "github.com/cloudposse/atmos/pkg/list"
@@ -45,6 +46,57 @@ func TestVendorPullCmd_ExecutorError(t *testing.T) {
 
 	err := vendorPullCmd.RunE(vendorPullCmd, []string{"unexpected-arg"})
 	assert.Error(t, err, "vendor pull command should return an error with unexpected arguments")
+}
+
+// newVendorPullCmdWithRealFlags builds a throwaway *cobra.Command carrying vendorPullCmd's REAL,
+// production flag registrations (via vendorPullParser, the same parser vendorPullCmd itself uses in
+// init()), plus the global flags internal/exec.ProcessCommandLineArgs reads directly off cmd.Flags()
+// (base-path, config, config-path, profile) -- see newVendorPullTestCmd's doc comment for why those
+// can't come from RootCmd in this test binary. Unlike newVendorPullTestCmd, this exercises the real
+// --component flag type as registered in cmd/vendor/vendor.go's init(), which is exactly what
+// TestVendorPullCmd_RepeatedComponentFlagErrors needs to prove.
+func newVendorPullCmdWithRealFlags(t *testing.T) *cobra.Command {
+	t.Helper()
+	c := &cobra.Command{Use: "pull", RunE: e.ExecuteVendorPullCmd}
+	vendorPullParser.RegisterFlags(c)
+	c.Flags().String("base-path", "", "")
+	c.Flags().StringSlice("config", nil, "")
+	c.Flags().StringSlice("config-path", nil, "")
+	c.Flags().StringSlice("profile", nil, "")
+	return c
+}
+
+// TestVendorPullCmd_RepeatedComponentFlagErrors is the direct regression test for the reported bug:
+// "atmos vendor pull -c vpc -c eks" silently kept only the LAST --component value (pflag's default
+// last-occurrence-wins behavior for a plain string flag), dropping vpc with no error or warning --
+// surprising given "vendor update --component" is a repeatable slice that accumulates instead.
+// --component must now reject more than one value the same way "vendor update --pull" delegating
+// into pull already does (see parseVendorComponentFlag/ErrSingleComponentRequired), rather than
+// silently discarding the user's earlier selection.
+func TestVendorPullCmd_RepeatedComponentFlagErrors(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	base := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	vpcSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	vpcDir := writeLocalComponentManifestFixture(t, base, "vpc", vpcSource)
+
+	eksSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(eksSource, "main.tf"), []byte("# eks\n"), 0o644))
+	writeLocalComponentManifestFixture(t, base, "eks", eksSource)
+
+	cmd := newVendorPullCmdWithRealFlags(t)
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("component", "eks"))
+
+	err := cmd.RunE(cmd, nil)
+
+	require.Error(t, err, "repeating --component must error, not silently keep only the last value")
+	assert.ErrorIs(t, err, e.ErrSingleComponentRequired)
+	assert.NoFileExists(t, filepath.Join(vpcDir, "main.tf"), "vpc must not have been silently dropped and left unpulled")
 }
 
 // TestVendorCommandProvider tests the VendorCommandProvider interface methods.
@@ -127,6 +179,17 @@ func resetCommandFlags(t *testing.T, cmd *cobra.Command) {
 
 	reset := func(flags *pflag.FlagSet) {
 		flags.VisitAll(func(f *pflag.Flag) {
+			// A pflag SliceValue (e.g. StringSlice, used by vendor update's --component) tracks
+			// its own private "has this flag ever been Set" bit, independent of pflag.Flag.Changed
+			// below -- once ANY test (or production code, e.g. update.go's own sliceValue.Replace
+			// call mid-RunE) sets it, every later Value.Set() on the SAME flag object APPENDS
+			// instead of replacing, for the lifetime of this test binary's shared, package-level
+			// command. Value.Replace() bypasses that private bit entirely (it always overwrites),
+			// so it's the only way to deterministically clear a slice flag back to empty between
+			// tests, regardless of what an earlier test (in any file, any run order) left behind.
+			if sliceValue, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sliceValue.Replace(nil)
+			}
 			_ = f.Value.Set(f.DefValue)
 			f.Changed = false
 		})

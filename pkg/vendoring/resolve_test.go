@@ -554,3 +554,34 @@ func TestFilterComponentsByDeclaredTags_NoVendorFileExcludesEverything(t *testin
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+// TestListDeclaredSources_PropagatesCollectManifestFilesError proves a broken vendor.yaml is
+// surfaced as an error (not silently swallowed or misreported as "no vendor file"), mirroring
+// TestResolveComponentSource_PropagatesBrokenVendorYamlError's technique for the equivalent
+// CollectManifestFiles call in ResolveComponentSource.
+func TestListDeclaredSources_PropagatesCollectManifestFilesError(t *testing.T) {
+	dir := t.TempDir()
+	file := writeFile(t, dir, "vendor.yaml", "spec: [")
+
+	sources, ok, err := ListDeclaredSources(file)
+
+	require.Error(t, err)
+	assert.True(t, ok, "the vendor file is present on disk -- it just failed to parse")
+	assert.Nil(t, sources)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
+}
+
+// TestFilterComponentsByDeclaredTags_PropagatesListDeclaredSourcesError proves a broken
+// vendor.yaml propagates through FilterComponentsByDeclaredTags's ListDeclaredSources call rather
+// than being masked. Tags must be non-empty so the function doesn't short-circuit at its earlier
+// empty-tags no-op check before ever reading the vendor file.
+func TestFilterComponentsByDeclaredTags_PropagatesListDeclaredSourcesError(t *testing.T) {
+	dir := t.TempDir()
+	file := writeFile(t, dir, "vendor.yaml", "spec: [")
+
+	got, err := FilterComponentsByDeclaredTags(file, []string{"vpc"}, []string{"networking"})
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
+}

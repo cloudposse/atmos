@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
@@ -242,6 +243,71 @@ spec:
 
 	assert.NoFileExists(t, firstFile, "the tag-matched component's file must be removed")
 	assert.FileExists(t, secondFile, "an untagged component's file must be left alone")
+}
+
+// TestVendorCleanCmd_ComponentAndStackRejected proves --component and --stack are rejected as
+// mutually exclusive base selectors, mirroring vendor diff's
+// TestVendorDiffCommand_ComponentAndTagsRejected (vendor_test.go) but exercising the
+// --component/--stack pairing clean actually enforces via vendorSelectorGroupCount. Reuses
+// writeCleanStackLabelsFixture's real "dev" stack (rather than an empty stacks dir, like
+// TestVendorCleanCmd_UnmatchedStackErrors) because --stack != "" makes RunE call
+// cfg.InitCliConfig(processStacks=true) before the exclusivity check ever runs, and an empty
+// stacks dir fails that call outright (ErrFailedToFindImport) instead of reaching it.
+func TestVendorCleanCmd_ComponentAndStackRejected(t *testing.T) {
+	writeCleanStackLabelsFixture(t, "vars:\n  stage: dev\ncomponents:\n  terraform:\n    first: {}\n")
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	err := vendorCleanCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorCleanCmd_MalformedLabelsErrors proves a --labels value with no "=" or ":" separator
+// surfaces pkg/tags.ParseLabelsFlag's error instead of being silently ignored -- this happens
+// before cfg.InitCliConfig, so no atmos.yaml/vendor.yaml fixture is needed.
+func TestVendorCleanCmd_MalformedLabelsErrors(t *testing.T) {
+	chdirTest(t, t.TempDir())
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("labels", "notkeyvalue"))
+
+	err := vendorCleanCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+}
+
+// TestVendorCleanCmd_UnmatchedTagsErrors proves --tags matching no declared vendor.yaml source is
+// a hard error from the selector-resolution path itself (resolveVendorSelectorComponents), not a
+// silent fall-through to cleaning everything -- unlike TestVendorCleanCmd_UnmatchedStackErrors
+// (an empty stacks dir), this uses a real vendor.yaml declaring a source whose tags simply don't
+// match, so it fails past cfg.InitCliConfig and into resolveVendorTagsSelector/the "no components
+// matched" check.
+func TestVendorCleanCmd_UnmatchedTagsErrors(t *testing.T) {
+	root := t.TempDir()
+	chdirTest(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: oci://ghcr.io/cloudposse/mock-first:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["vendor-first"]
+`), 0o644))
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("tags", "does-not-exist"))
+
+	err := vendorCleanCmd.RunE(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
 // TestVendorCleanCmd_UnmatchedStackErrors proves --stack matching no components is a hard error,

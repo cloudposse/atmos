@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
@@ -313,11 +314,52 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 		return nil
 	}
 
+	warnAboutVendorYamlShadowing(componentsByType)
+
 	return pullStackComponentsByType(atmosConfig, componentsByType, install.InstallOptions{
 		DryRun:          flg.DryRun,
 		RefreshLock:     flg.RefreshLock,
 		LockEnforcement: flg.LockEnforcement,
 	})
+}
+
+// warnAboutVendorYamlShadowing warns about every componentsByType entry that ALSO has a vendor.yaml
+// entry declared for it -- --stack/--labels always install from a resolved component's own
+// component.yaml regardless of vendor.yaml (see handleStackVendor's doc comment), so if the two ever
+// declare different sources, "atmos vendor pull -c <name>" and "atmos vendor pull --stack ..." can
+// silently install different content into the identical target directory. This never blocks the
+// pull -- --stack/--labels bypassing vendor.yaml is documented, intentional precedence, not
+// something to reject -- it only surfaces the risk so a divergence isn't entirely silent.
+//
+// Reading vendor.yaml here is best-effort: a missing or malformed vendor.yaml must never turn into a
+// hard failure for --stack/--labels, which are designed to work with no vendor.yaml at all (or an
+// unrelated/broken one) when no --tags filter is given to force reading it.
+func warnAboutVendorYamlShadowing(componentsByType map[string][]string) {
+	sources, ok, err := vendoring.ListDeclaredSources("")
+	if err != nil || !ok {
+		return
+	}
+
+	declared := make(map[string]bool, len(sources))
+	for i := range sources {
+		if sources[i].Component != "" {
+			declared[sources[i].Component] = true
+		}
+	}
+
+	var shadowed []string
+	for _, names := range componentsByType {
+		for _, name := range names {
+			if declared[name] {
+				shadowed = append(shadowed, name)
+			}
+		}
+	}
+	sort.Strings(shadowed)
+
+	for _, name := range shadowed {
+		ui.Warningf("component %q also has a vendor.yaml entry; this --stack/--labels pull installs from its own component.yaml and ignores it -- run 'atmos vendor pull -c %s' to see what vendor.yaml would install instead", name, name)
+	}
 }
 
 // pullStackComponentsByType vendors componentsByType (already resolved and, when applicable,

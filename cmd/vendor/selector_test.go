@@ -89,6 +89,42 @@ func TestResolveVendorTagsSelector(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
+
+	t.Run("no vendor.yaml present returns nil, no error", func(t *testing.T) {
+		// An empty vendorFile (no --file override) makes VendorFilePresent search cwd/atmos.yaml's
+		// vendor.base_path for a vendor.yaml; a non-empty override, by contrast, is always trusted
+		// verbatim by VendorFilePresent (even if it doesn't exist), so this must chdir into a fresh,
+		// vendor.yaml-less directory and pass "" rather than a made-up missing path.
+		chdirTest(t, t.TempDir())
+		got, err := resolveVendorTagsSelector("", []string{"networking"})
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("two sources declaring the same component name dedupe to one entry", func(t *testing.T) {
+		dupFile := filepath.Join(t.TempDir(), "vendor.yaml")
+		require.NoError(t, os.WriteFile(dupFile, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc
+      version: 1.0.0
+      tags: [networking]
+      targets:
+        - components/terraform/vpc
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc-2
+      version: 2.0.0
+      tags: [networking]
+      targets:
+        - components/terraform/vpc2
+`), 0o644))
+
+		got, err := resolveVendorTagsSelector(dupFile, []string{"networking"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"vpc"}, got, "two sources declaring the same component name must dedupe to one entry")
+	})
 }
 
 // TestResolveVendorSelectorComponents_UnmatchedSelectorErrors proves a --tags selector matching

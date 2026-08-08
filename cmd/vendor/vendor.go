@@ -56,7 +56,7 @@ func init() {
 	// Set up vendor pull flags. Registered via Flags() (not PersistentFlags()): vendorPullCmd has
 	// no subcommands of its own, so persistent inheritance was never needed here.
 	vendorPullParser = flags.NewStandardParser(
-		flags.WithStringFlag("component", "c", "", "Only vendor the specified component"),
+		flags.WithStringSliceFlag("component", "c", []string{}, "Only vendor the specified component"),
 		flags.WithStringFlag("stack", "s", "", "Only vendor components belonging to the specified stack"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),

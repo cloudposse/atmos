@@ -1174,6 +1174,34 @@ func TestValidateTagsAndComponents(t *testing.T) {
 			sources: []schema.AtmosVendorSource{{Component: "dup"}, {Component: "dup"}},
 			wantErr: ErrDuplicateComponents,
 		},
+		{
+			// Regression test: "compute" is eks's tag, not vpc's. An out-of-scope component's tag
+			// must never vouch for the requested --component -- that let `vendor pull -c vpc --tags
+			// compute` silently pass validation, get filtered down to zero packages, and exit 0 with
+			// nothing installed. See docs/fixes/... for the full writeup.
+			name:      "requested component's own tags mismatch, even though a different component matches",
+			sources:   sources,
+			component: "vpc",
+			tags:      []string{"compute"},
+			wantErr:   errUtils.ErrInvalidArgumentError,
+		},
+		{
+			name:      "requested component and tags both match",
+			sources:   sources,
+			component: "vpc",
+			tags:      []string{"network"},
+			wantErr:   nil,
+		},
+		{
+			// The component-existence check must win over a tags-mismatch message: --tags happening
+			// to match nothing anywhere must not mask "this component isn't declared at all" behind a
+			// generic tags error.
+			name:      "requested component is not defined, even though --tags matches nothing either",
+			sources:   sources,
+			component: "missing",
+			tags:      []string{"nonexistent"},
+			wantErr:   ErrComponentNotDefined,
+		},
 	}
 
 	for _, tt := range tests {
