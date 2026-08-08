@@ -1,0 +1,46 @@
+---
+slug: vhs-tape-interpretation
+title: "Bring Your VHS Tapes Straight Into Atmos Casts"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+If you already script your terminal demos with [VHS](https://github.com/charmbracelet/vhs), moving them to Atmos casts meant a choice: keep a second recording toolchain around just for those `.tape` files, or hand-rewrite every `Type`/`Wait`/`Sleep` line into Atmos's own cast YAML. Neither is appealing when you just want one recording working again.
+
+<!--truncate-->
+
+## The Problem
+
+A `.tape` script and an Atmos `type: cast` step describe the same kind of thing — typed commands, waits, keypresses — but in two different dialects, driven by two different tools. Rewriting a tape by hand is tedious and easy to get subtly wrong, and keeping `vhs` installed alongside Atmos just to run old tapes means maintaining two toolchains for one job.
+
+## The Change
+
+A `type: cast` step can now interpret VHS-dialect tape scripts directly, in memory — no `vhs` binary, no separate toolchain, and nothing written to disk. Point `tape_file:` at an existing `.tape` file, or write one inline with `tape:`:
+
+```yaml
+steps:
+  - name: hero-demo
+    type: cast
+    mode: session
+    tape_file: demo/hero.tape
+    output:
+      mp4: hero.mp4
+```
+
+For a one-off tape with no workflow at all, `atmos cast record` interprets and records it directly:
+
+```shell
+atmos cast record demo/hero.tape --output=hero.mp4
+```
+
+The step's existing `mode` still decides how the tape runs: `mode: session` replays raw keypresses faithfully (the same trade-off session mode already has — no per-command exit code, since it's one continuous PTY session), while `mode: steps` turns each typed command into a real, executed step with a real exit code, and errors up front if the tape uses anything `mode: steps` can't express (a raw keypress, `Hide`/`Show`, or `Copy`/`Paste`/`Env`).
+
+## Why It Matters
+
+- **No second toolchain.** Existing `.tape` files run through Atmos's own recorder — nothing external to install.
+- **Exit codes when you want them.** Choose `mode: steps` for a tape that only types commands, and get real pass/fail signal per command instead of just a recording.
+- **A gentle migration path.** Point at a tape as-is today, then hand-migrate to native `steps:` later if you need finer control — both are documented side by side.
+
+## Get Involved
+
+See [tape interpretation](/workflows/steps/type/cast#tape-interpretation) for the full directive support matrix, and [`atmos cast record`](/cli/commands/cast/record) for the CLI reference.

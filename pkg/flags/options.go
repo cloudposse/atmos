@@ -20,8 +20,9 @@ type Option func(*parserConfig)
 // parserConfig holds the configuration for a FlagParser.
 // This is an internal type used by the Options pattern.
 type parserConfig struct {
-	registry    *FlagRegistry
-	viperPrefix string // Prefix for Viper keys (optional)
+	registry          *FlagRegistry
+	viperPrefix       string            // Prefix for Viper keys (optional)
+	viperKeyOverrides map[string]string // Flag name -> explicit Viper key, bypassing viperPrefix
 
 	// Interactive prompt configuration.
 	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags
@@ -341,6 +342,34 @@ func WithViperPrefix(prefix string) Option {
 
 	return func(cfg *parserConfig) {
 		cfg.viperPrefix = prefix
+	}
+}
+
+// WithViperKey pins a single flag's Viper storage key, overriding both the
+// parser's WithViperPrefix and the default "prefix.flagName" derivation.
+//
+// Use this when a flag's CLI name must stay bound to a bare root key that
+// would otherwise collide with an unrelated dotted namespace: Viper treats
+// any registered flag as shadowing every nested key under its own key (see
+// isPathShadowedInFlatMap in spf13/viper), so a bare-key flag like the
+// global --cast flag (key "cast") silently zeroes out any unrelated nested
+// key such as "cast.record.mode" whenever the bare flag itself is left
+// unset. Moving the bare flag's storage to a nested leaf of its own (e.g.
+// "cast.target") removes the collision without renaming the CLI flag or any
+// unrelated schema-backed key.
+//
+// Example:
+//
+//	WithStringFlag("cast", "", "", "..."),
+//	WithViperKey("cast", "cast.target"),
+func WithViperKey(flagName, key string) Option {
+	defer perf.Track(nil, "flags.WithViperKey")()
+
+	return func(cfg *parserConfig) {
+		if cfg.viperKeyOverrides == nil {
+			cfg.viperKeyOverrides = make(map[string]string)
+		}
+		cfg.viperKeyOverrides[flagName] = key
 	}
 }
 

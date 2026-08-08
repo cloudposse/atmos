@@ -2721,7 +2721,15 @@
         },
         "mode": {
           "type": "string",
-          "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+          "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
+        },
+        "tape": {
+          "type": "string",
+          "description": "Inline VHS-dialect tape script interpreted into steps/session actions at execution time. Mutually exclusive with tape_file and with an explicit steps list."
+        },
+        "tape_file": {
+          "type": "string",
+          "description": "Path to an external VHS .tape file, interpreted the same way as tape. Mutually exclusive with tape and with an explicit steps list."
         },
         "rate": {
           "type": "string",

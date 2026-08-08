@@ -14998,6 +14998,28 @@
           ],
           "description": "Cast step and session action fields."
         },
+        "tape": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with tape_file and with steps."
+        },
+        "tape_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path to an external VHS .tape file, interpreted the same way as tape."
+        },
         "shell": {
           "anyOf": [
             {

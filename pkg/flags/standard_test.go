@@ -191,6 +191,81 @@ func TestStandardFlagParser_WithViperPrefix(t *testing.T) {
 	assert.Equal(t, "dev", value)
 }
 
+// TestStandardFlagParser_BareKeyShadowsNestedPrefix pins a real Viper quirk
+// that WithViperKey exists to work around: a flag bound to a bare Viper key
+// (e.g. the global --cast flag, key "cast") shadows every nested key under
+// that same root (e.g. "cast.record.mode"), per Viper's pflag-shadowing
+// check (isPathShadowedInFlatMap). Whenever the bare-key flag is registered
+// but left unchanged, any unrelated command's dotted-prefixed flag under
+// that root silently loses its configured default -- Get/GetString on the
+// nested key returns the zero value instead of falling through to Viper's
+// SetDefault, even though the bare-key flag was never explicitly set. This
+// is inherent Viper behavior (not a bug in this package), asserted here so
+// a future Viper upgrade that changes it doesn't silently invalidate the
+// reasoning behind WithViperKey; see
+// TestStandardFlagParser_WithViperKeyAvoidsShadowing for the actual fix.
+func TestStandardFlagParser_BareKeyShadowsNestedPrefix(t *testing.T) {
+	v := viper.New()
+
+	// A bare-key flag, mirroring the global --cast flag's own registration
+	// (no Viper prefix -- its key is the literal flag name).
+	rootParser := NewStandardFlagParser(WithStringFlag("cast", "", "", "root flag"))
+	rootCmd := &cobra.Command{Use: "root"}
+	rootParser.RegisterFlags(rootCmd)
+	require.NoError(t, rootParser.BindToViper(v))
+	require.NoError(t, rootParser.BindFlagsToViper(rootCmd, v))
+
+	// An unrelated command's flag nested under the same root, mirroring
+	// `atmos cast record --mode` (Viper key "cast.record.mode", default
+	// "session"). Neither flag is explicitly set on the command line.
+	nestedParser := NewStandardFlagParser(
+		WithViperPrefix("cast.record"),
+		WithStringFlag("mode", "", "session", "nested flag"),
+	)
+	nestedCmd := &cobra.Command{Use: "record"}
+	nestedParser.RegisterFlags(nestedCmd)
+	require.NoError(t, nestedParser.BindToViper(v))
+	require.NoError(t, nestedParser.BindFlagsToViper(nestedCmd, v))
+
+	// Without WithViperKey, the nested flag's configured default is lost.
+	assert.Equal(t, "", v.GetString("cast.record.mode"),
+		"documents that an unguarded bare-key flag shadows an unrelated nested default")
+}
+
+// TestStandardFlagParser_WithViperKeyAvoidsShadowing verifies the fix for
+// TestStandardFlagParser_BareKeyShadowsNestedPrefix: pinning the bare-key
+// flag's Viper storage to a nested leaf of its own (via WithViperKey) stops
+// it from shadowing an unrelated nested flag under the same root segment.
+func TestStandardFlagParser_WithViperKeyAvoidsShadowing(t *testing.T) {
+	v := viper.New()
+
+	rootParser := NewStandardFlagParser(
+		WithStringFlag("cast", "", "", "root flag"),
+		WithViperKey("cast", "cast.target"),
+	)
+	rootCmd := &cobra.Command{Use: "root"}
+	rootParser.RegisterFlags(rootCmd)
+	require.NoError(t, rootParser.BindToViper(v))
+	require.NoError(t, rootParser.BindFlagsToViper(rootCmd, v))
+
+	nestedParser := NewStandardFlagParser(
+		WithViperPrefix("cast.record"),
+		WithStringFlag("mode", "", "session", "nested flag"),
+	)
+	nestedCmd := &cobra.Command{Use: "record"}
+	nestedParser.RegisterFlags(nestedCmd)
+	require.NoError(t, nestedParser.BindToViper(v))
+	require.NoError(t, nestedParser.BindFlagsToViper(nestedCmd, v))
+
+	assert.Equal(t, "session", v.GetString("cast.record.mode"),
+		"WithViperKey must stop the bare-key flag from shadowing the nested flag's default")
+
+	// The root flag's own value must still resolve correctly at its new key.
+	require.NoError(t, rootCmd.Flags().Set("cast", "demo.gif"))
+	assert.Equal(t, "demo.gif", v.GetString("cast.target"),
+		"the overridden flag must still resolve its own explicitly-set value")
+}
+
 func TestStandardFlagParser_RequiredFlags(t *testing.T) {
 	parser := NewStandardFlagParser(
 		WithRequiredStringFlag("component", "c", "Component name (required)"),
