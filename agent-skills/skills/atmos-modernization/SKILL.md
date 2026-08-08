@@ -28,6 +28,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
 | Hand-rolled scheduled drift GitHub Actions | Atmos Pro drift detection |
 | `cloudposse/github-action-atmos-terraform-drift-*` | `settings.pro.drift_detection` plus `atmos terraform plan --upload-status` |
+| `atlantis.yaml` / `integrations.atlantis` as the only CI system | Atmos Native CI (`ci:` config + GitHub Actions) — see [atmos-migration references/from-atlantis.md](../atmos-migration/references/from-atlantis.md) |
 | Secret values through raw store calls | Declared `secrets.vars` plus `!secret` |
 | Legacy hook event spelling | Modern dotted lifecycle events such as `after.terraform.plan` |
 | Static GitHub tokens in URLs | Atmos Auth `github/sts` through Atmos Pro |
