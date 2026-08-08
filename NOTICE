@@ -2050,7 +2050,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/posthog/posthog-go
     License: MIT
-    URL: https://github.com/posthog/posthog-go/blob/v1.12.6/LICENSE.md
+    URL: https://github.com/posthog/posthog-go/blob/v1.17.4/LICENSE.md
 
   - github.com/rhysd/actionlint
     License: MIT
