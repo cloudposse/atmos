@@ -15,6 +15,19 @@ vars:
 
 components:
   terraform:
+    base-azurerm-features:
+      metadata:
+        type: abstract
+      providers:
+        azurerm:
+          features:
+            resource_group:
+              prevent_deletion_if_contains_resources: true
+        azurerm.other:
+          features:
+            resource_group:
+              prevent_deletion_if_contains_resources: true
+
     eip-explicit-alias:
       metadata:
         component: mock
@@ -33,3 +46,14 @@ components:
           region: us-east-2
         aws.use1:
           region: us-east-1
+
+    azurerm-empty-features:
+      metadata:
+        component: mock
+        inherits:
+          - base-azurerm-features
+      providers:
+        azurerm:
+          features: {}
+        azurerm.other:
+          features: {}

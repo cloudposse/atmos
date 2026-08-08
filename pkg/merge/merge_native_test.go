@@ -82,6 +82,29 @@ func TestDeepMergeNative_BothMapsMergedRecursively(t *testing.T) {
 	assert.Equal(t, 30, nested["c"])
 }
 
+func TestDeepMergeNative_EmptySrcMapOverridesDstMap(t *testing.T) {
+	dst := map[string]any{
+		"provider": map[string]any{
+			"features": map[string]any{
+				"resource_group": map[string]any{
+					"prevent_deletion_if_contains_resources": true,
+				},
+			},
+		},
+	}
+	src := map[string]any{
+		"provider": map[string]any{
+			"features": map[string]any{},
+		},
+	}
+
+	require.NoError(t, deepMergeNative(dst, src, false, false))
+
+	provider, ok := dst["provider"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{}, provider["features"])
+}
+
 func TestDeepMergeNative_MapSrcOverridesNonMapDst(t *testing.T) {
 	dst := map[string]any{"k": "string"}
 	src := map[string]any{"k": map[string]any{"x": 1}}
