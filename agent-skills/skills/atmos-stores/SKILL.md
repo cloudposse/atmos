@@ -4,6 +4,7 @@ description: "Store backends: AWS SSM, AWS Secrets Manager, Azure Key Vault, Goo
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 ---
 
 # Atmos External Stores
