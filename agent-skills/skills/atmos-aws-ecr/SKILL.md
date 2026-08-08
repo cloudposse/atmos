@@ -4,6 +4,7 @@ description: "AWS ECR commands in Atmos: atmos aws ecr login, ECR auth integrati
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: aws
 ---
 
 # Atmos AWS ECR
