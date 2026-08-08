@@ -35,7 +35,7 @@ func newBundledTestInstaller(t *testing.T) *Installer {
 
 // Compile-time sentinel: fails the build if any AvailableSkill field is renamed,
 // so the catalog tests below cannot silently reference stale fields.
-var _ = AvailableSkill{Name: "", DisplayName: "", Description: "", Version: "", Source: ""}
+var _ = AvailableSkill{Name: "", DisplayName: "", Description: "", Version: "", Source: "", Category: ""}
 
 func TestCatalog(t *testing.T) {
 	catalog, err := Catalog()
