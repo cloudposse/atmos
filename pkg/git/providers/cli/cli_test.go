@@ -69,89 +69,91 @@ func TestCloneFreshMinimalArgs(t *testing.T) {
 	assert.Equal(t, []string{"clone", "--", "https://github.com/acme/deploy.git", workdir}, runner.calls[0].args)
 }
 
-func TestCloneReconcilesExistingWorkdir(t *testing.T) {
-	runner := newFakeRunner()
-	// The common case: the workdir's remote already matches the configured
-	// URI (unchanged since the original clone), so reconcile must not issue
-	// a redundant "remote set-url".
-	runner.on("remote get-url origin", atmosgit.RunResult{Stdout: "https://github.com/acme/deploy.git\n"}, nil)
-	provider := New(WithRunner(runner))
-	workdir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
+// TestCloneReconcileRemoteSync covers syncRemoteURL's three non-error
+// outcomes during reconcile of an already-cloned workdir:
+//   - the remote already matches the configured URI (unchanged since the
+//     original clone), so reconcile must not issue a redundant "remote
+//     set-url";
+//   - the remote no longer matches (e.g. a corrected typo or a migrated
+//     repository), so reconcile must repoint it via "remote set-url" before
+//     fetching -- otherwise the correction in config would be silently
+//     ignored by an already-cloned workdir forever, since fetch/pull address
+//     the remote by name, never by the configured URI;
+//   - no URI is configured at all (a bare reconcile with only a
+//     Workdir/Branch), so reconcile must not issue a "remote get-url" --
+//     there is nothing to compare it to.
+func TestCloneReconcileRemoteSync(t *testing.T) {
+	tests := []struct {
+		name              string
+		uri               string
+		remoteURLResp     string // stubbed "remote get-url origin" stdout; empty means unstubbed
+		wantCalls         []string
+		checkNoRemoteSync bool
+	}{
+		{
+			name:          "remote already matches configured URI: no set-url",
+			uri:           "https://github.com/acme/deploy.git",
+			remoteURLResp: "https://github.com/acme/deploy.git\n",
+			wantCalls: []string{
+				"status --porcelain --untracked-files=all",
+				"remote get-url origin",
+				"fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1",
+				"checkout main",
+				"merge --ff-only origin/main",
+			},
+		},
+		{
+			name:          "remote URI changed: repoints via remote set-url",
+			uri:           "https://github.com/acme/deploy.git",
+			remoteURLResp: "https://github.com/acme/old-deploy.git\n",
+			wantCalls: []string{
+				"status --porcelain --untracked-files=all",
+				"remote get-url origin",
+				"remote set-url origin https://github.com/acme/deploy.git",
+				"fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1",
+				"checkout main",
+				"merge --ff-only origin/main",
+			},
+		},
+		{
+			name: "no URI configured: skips remote sync entirely",
+			wantCalls: []string{
+				"status --porcelain --untracked-files=all",
+				"fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1",
+				"checkout main",
+				"merge --ff-only origin/main",
+			},
+			checkNoRemoteSync: true,
+		},
+	}
 
-	err := provider.Clone(context.Background(), &atmosgit.CloneOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		Depth:       1,
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := newFakeRunner()
+			if tt.remoteURLResp != "" {
+				runner.on("remote get-url origin", atmosgit.RunResult{Stdout: tt.remoteURLResp}, nil)
+			}
+			provider := New(WithRunner(runner))
+			workdir := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
 
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 5)
-	assert.Equal(t, "status --porcelain --untracked-files=all", calls[0])
-	assert.Equal(t, "remote get-url origin", calls[1])
-	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[2])
-	assert.Equal(t, "checkout main", calls[3])
-	assert.Equal(t, "merge --ff-only origin/main", calls[4])
-}
+			err := provider.Clone(context.Background(), &atmosgit.CloneOptions{
+				RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+				URI:         tt.uri,
+				Depth:       1,
+			})
+			require.NoError(t, err)
 
-// TestCloneReconcileUpdatesRemoteURLOnChange covers the config-drift case: the
-// workdir's existing "origin" remote no longer matches the configured URI
-// (e.g. a corrected typo or a migrated repository), so reconcile must repoint
-// it via "remote set-url" before fetching -- otherwise the correction in
-// config would be silently ignored by an already-cloned workdir forever,
-// since fetch/pull address the remote by name, never by the configured URI.
-func TestCloneReconcileUpdatesRemoteURLOnChange(t *testing.T) {
-	runner := newFakeRunner()
-	runner.on("remote get-url origin", atmosgit.RunResult{Stdout: "https://github.com/acme/old-deploy.git\n"}, nil)
-	provider := New(WithRunner(runner))
-	workdir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
+			calls := runner.joinedCalls()
+			assert.Equal(t, tt.wantCalls, calls)
 
-	err := provider.Clone(context.Background(), &atmosgit.CloneOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		Depth:       1,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 6)
-	assert.Equal(t, "status --porcelain --untracked-files=all", calls[0])
-	assert.Equal(t, "remote get-url origin", calls[1])
-	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
-	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[3])
-	assert.Equal(t, "checkout main", calls[4])
-	assert.Equal(t, "merge --ff-only origin/main", calls[5])
-}
-
-// TestCloneReconcileSkipsRemoteSyncWhenURIEmpty covers syncRemoteURL's
-// early-return branch: when the caller passes no URI (e.g. a bare reconcile
-// with only a Workdir/Branch, no config drift to check against), reconcile
-// must not issue a "remote get-url" at all -- there is nothing to compare it
-// to.
-func TestCloneReconcileSkipsRemoteSyncWhenURIEmpty(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(workdir, ".git"), 0o755))
-
-	err := provider.Clone(context.Background(), &atmosgit.CloneOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
-		// URI intentionally empty.
-		Depth: 1,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 4)
-	assert.Equal(t, "status --porcelain --untracked-files=all", calls[0])
-	assert.Equal(t, "fetch origin +refs/heads/main:refs/remotes/origin/main --depth 1", calls[1])
-	assert.Equal(t, "checkout main", calls[2])
-	assert.Equal(t, "merge --ff-only origin/main", calls[3])
-	for _, c := range calls {
-		assert.NotContains(t, c, "remote get-url", "no URI to compare against, so no remote lookup should happen")
-		assert.NotContains(t, c, "remote set-url")
+			if tt.checkNoRemoteSync {
+				for _, c := range calls {
+					assert.NotContains(t, c, "remote get-url", "no URI to compare against, so no remote lookup should happen")
+					assert.NotContains(t, c, "remote set-url")
+				}
+			}
+		})
 	}
 }
 
