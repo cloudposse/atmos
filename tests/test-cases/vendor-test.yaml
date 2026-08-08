@@ -104,3 +104,74 @@ tests:
         # README.md should be excluded because it doesn't match **/*.tf include
         - "./components/terraform/combined/README.md"
       exit_code: 0
+
+  # Regression test: --stack must actually resolve and vendor the stack's components. Guards
+  # against InitCliConfig being called with processStacks=false on the --stack/--labels path,
+  # which silently leaves atmosConfig.StackConfigFilesAbsolutePaths empty and makes every stack
+  # look like "not found" regardless of whether it exists.
+  - name: atmos_vendor_pull_stack
+    short: false
+    enabled: true
+    description: "Ensure 'atmos vendor pull --stack' resolves and vendors the stack's components."
+    workdir: "fixtures/scenarios/vendor-stack-labels"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--stack=dev"
+    expect:
+      file_exists:
+        - "./components/terraform/comp-a/main.tf"
+        - "./components/terraform/comp-a/README.md"
+        - "./components/terraform/comp-b/main.tf"
+        - "./components/terraform/comp-b/README.md"
+      exit_code: 0
+
+  # Regression test: --labels must resolve via the same stack-processing path as --stack (see
+  # atmos_vendor_pull_stack above) and must narrow to only the matching component (AND-match on
+  # metadata.labels), not vendor every stack component.
+  - name: atmos_vendor_pull_labels
+    short: false
+    enabled: true
+    description: "Ensure 'atmos vendor pull --labels' resolves and vendors only the matching component."
+    workdir: "fixtures/scenarios/vendor-stack-labels"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--labels=tier=foundational"
+    expect:
+      file_exists:
+        - "./components/terraform/comp-a/main.tf"
+        - "./components/terraform/comp-a/README.md"
+      file_not_exists:
+        - "./components/terraform/comp-b/main.tf"
+        - "./components/terraform/comp-b/README.md"
+      exit_code: 0
+
+  # Regression test: --stack and --labels must compose (labels narrow further within the stack),
+  # not act as alternative/conflicting selectors. "env=test" alone matches both comp-a and comp-b
+  # (see stacks/dev.yaml), so combining it with --stack=dev and asserting only comp-a's tier=
+  # foundational sibling narrowing separately (atmos_vendor_pull_labels above) proves composition:
+  # here --labels=env=test matches both of --stack=dev's components, so both must vendor.
+  - name: atmos_vendor_pull_stack_and_labels
+    short: false
+    enabled: true
+    description: "Ensure 'atmos vendor pull --stack --labels' composes: --labels narrows within --stack's resolved set."
+    workdir: "fixtures/scenarios/vendor-stack-labels"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--stack=dev"
+      - "--labels=env=test"
+    expect:
+      file_exists:
+        - "./components/terraform/comp-a/main.tf"
+        - "./components/terraform/comp-a/README.md"
+        - "./components/terraform/comp-b/main.tf"
+        - "./components/terraform/comp-b/README.md"
+      exit_code: 0

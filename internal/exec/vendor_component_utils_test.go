@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
@@ -356,4 +357,572 @@ func TestExecuteComponentVendorInternal_AlreadyMaterialized_SkipsReinstall(t *te
 	err := ExecuteComponentVendorInternal(atmosConfig, spec, "vpc", componentPath, install.InstallOptions{})
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(componentPath, "extra.tf"), "an already-materialized component must be skipped, not re-copied from source")
+}
+
+// TestResolveVendorComponentName proves the stack-declared component name is used as-is unless the
+// component's own data declares a metadata.component override (e.g. multiple stack instances of
+// the same underlying component vendor from the same directory).
+func TestResolveVendorComponentName(t *testing.T) {
+	tests := []struct {
+		name     string
+		compName string
+		data     any
+		want     string
+	}{
+		{"no override uses the stack-declared name", "vpc-flow-logs", map[string]any{}, "vpc-flow-logs"},
+		{"non-map data uses the stack-declared name", "vpc-flow-logs", "not-a-map", "vpc-flow-logs"},
+		{"no metadata section uses the stack-declared name", "vpc-flow-logs", map[string]any{"vars": map[string]any{}}, "vpc-flow-logs"},
+		{
+			"metadata.component override is used", "vpc-flow-logs",
+			map[string]any{"metadata": map[string]any{"component": "vpc"}},
+			"vpc",
+		},
+		{
+			"empty metadata.component override falls back to the stack-declared name", "vpc-flow-logs",
+			map[string]any{"metadata": map[string]any{"component": ""}},
+			"vpc-flow-logs",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveVendorComponentName(tt.compName, tt.data))
+		})
+	}
+}
+
+// TestComponentHasVendorManifest proves the existence check --stack relies on to silently skip
+// stack components with no component.yaml of their own, distinguishing that "no" case from a real
+// error (an unsupported component type).
+func TestComponentHasVendorManifest(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	terraformBasePath := filepath.Join(basePath, "components", "terraform")
+
+	t.Run("component with a component.yaml", func(t *testing.T) {
+		writeLocalComponentVendorConfig(t, terraformBasePath, "vpc", t.TempDir())
+
+		has, err := componentHasVendorManifest(atmosConfig, "vpc", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.True(t, has)
+	})
+
+	t.Run("component directory exists but has no component.yaml", func(t *testing.T) {
+		require.NoError(t, os.MkdirAll(filepath.Join(terraformBasePath, "eks"), 0o755))
+
+		has, err := componentHasVendorManifest(atmosConfig, "eks", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.False(t, has)
+	})
+
+	t.Run("component directory does not exist", func(t *testing.T) {
+		has, err := componentHasVendorManifest(atmosConfig, "does-not-exist", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.False(t, has)
+	})
+
+	t.Run("unsupported component type is a real error, not a silent skip", func(t *testing.T) {
+		_, err := componentHasVendorManifest(atmosConfig, "vpc", "bogus-type")
+
+		require.Error(t, err)
+	})
+}
+
+// stackComponentEntry builds one component's map[string]any entry as ExecuteDescribeStacks would
+// return it, optionally overriding metadata.component and/or marking it abstract.
+func stackComponentEntry(metadataComponent string, abstract bool) map[string]any {
+	metadata := map[string]any{}
+	if metadataComponent != "" {
+		metadata["component"] = metadataComponent
+	}
+	if abstract {
+		metadata["type"] = "abstract"
+	}
+	return map[string]any{"metadata": metadata}
+}
+
+// TestResolveStackVendorComponents proves the full resolution pipeline --stack relies on: abstract
+// components are skipped, components without a component.yaml are silently skipped, a
+// metadata.component override is honored and deduped against the component it resolves to, and
+// components are grouped by type for ExecuteComponentVendorPullBatch.
+func TestResolveStackVendorComponents(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
+		},
+	}
+	terraformBasePath := filepath.Join(basePath, "components", "terraform")
+	helmfileBasePath := filepath.Join(basePath, "components", "helmfile")
+
+	// "vpc" and "app" are real, vendorable components.
+	writeLocalComponentVendorConfig(t, terraformBasePath, "vpc", t.TempDir())
+	writeLocalComponentVendorConfig(t, helmfileBasePath, "app", t.TempDir())
+	// "eks" has a directory but no component.yaml - not every stack component vendors this way.
+	require.NoError(t, os.MkdirAll(filepath.Join(terraformBasePath, "eks"), 0o755))
+
+	stacksMap := map[string]any{
+		"dev-us-west-2": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc":                stackComponentEntry("", false),
+					"vpc-flow-logs":      stackComponentEntry("vpc", false), // dedups against "vpc".
+					"eks":                stackComponentEntry("", false),    // no component.yaml -> skipped.
+					"abstract-component": stackComponentEntry("", true),     // abstract -> skipped.
+				},
+				cfg.HelmfileComponentType: map[string]any{
+					"app": stackComponentEntry("", false),
+				},
+			},
+		},
+	}
+
+	got, err := resolveStackVendorComponents(atmosConfig, stacksMap, []string{cfg.TerraformComponentType, cfg.HelmfileComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, got[cfg.TerraformComponentType])
+	assert.Equal(t, []string{"app"}, got[cfg.HelmfileComponentType])
+	assert.Len(t, got, 2, "eks (no manifest) and abstract-component (abstract) must not appear in any group")
+}
+
+// buildHandleStackVendorFixture creates a temp atmos project with two stacks: "dev", declaring a
+// vendorable "vpc" component (its own component.yaml, local source, metadata.labels.tier: "1") and
+// a non-vendorable "eks" component (no component.yaml, no labels); and "prod", declaring its own
+// "vpc-prod" component (metadata.labels.tier: "2"). Changes the process working directory to the
+// fixture root and returns the initialized AtmosConfiguration, mirroring describe_stacks_test.go's
+// buildDescribeStacksDegradationFixture.
+func buildHandleStackVendorFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+	vpcSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "terraform"), "vpc", vpcSource)
+
+	eksDir := filepath.Join(tmpDir, "components", "terraform", "eks")
+	require.NoError(t, os.MkdirAll(eksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(eksDir, "main.tf"), []byte(""), 0o644))
+
+	vpcProdDir := filepath.Join(tmpDir, "components", "terraform", "vpc-prod")
+	require.NoError(t, os.MkdirAll(vpcProdDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vpcProdDir, "main.tf"), []byte(""), 0o644))
+	vpcProdSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcProdSource, "main.tf"), []byte("# vpc-prod\n"), 0o644))
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "terraform"), "vpc-prod", vpcProdSource)
+
+	devStack := "components:\n  terraform:\n    vpc:\n      metadata:\n        labels:\n          tier: \"1\"\n      vars: {}\n    eks:\n      vars: {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(devStack), 0o644))
+
+	prodStack := "components:\n  terraform:\n    vpc-prod:\n      metadata:\n        labels:\n          tier: \"2\"\n      vars: {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "prod.yaml"), []byte(prodStack), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestHandleStackVendor_PullsOnlyTheGivenStacksComponents proves the end-to-end "atmos vendor pull
+// --stack dev" flow: it resolves "dev"'s components via ExecuteDescribeStacks, pulls "vpc" (which
+// declares its own component.yaml), silently skips "eks" (no component.yaml), and never touches
+// "prod"'s "vpc-prod" even though it has a component.yaml of its own -- --stack scopes strictly to
+// the named stack.
+func TestHandleStackVendor_PullsOnlyTheGivenStacksComponents(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev"})
+
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"))
+	content, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# vpc\n", string(content), "vpc's component.yaml source must have been pulled")
+
+	prodContent, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc-prod", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Empty(t, string(prodContent), "prod's vpc-prod must not be touched by a --stack dev pull")
+}
+
+// TestHandleStackVendor_ComponentAlsoInVendorYaml_WarnsAboutDivergentSource is the direct
+// regression test for the reported bug: when a --stack-resolved component has BOTH its own
+// component.yaml (which --stack/--labels always installs from) AND a vendor.yaml entry (which
+// --component/bare --tags would install from instead), the two can silently disagree on content
+// with zero indication to the user -- "atmos vendor pull -c vpc" and "atmos vendor pull --stack dev"
+// installed different content into the identical target directory, both exiting 0. --stack must now
+// warn (not error -- this is documented, intentional precedence, not something to reject) whenever
+// a resolved component also has a vendor.yaml entry, so the divergence risk is surfaced.
+func TestHandleStackVendor_ComponentAlsoInVendorYaml_WarnsAboutDivergentSource(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+	require.NoError(t, os.WriteFile("vendor.yaml", []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+
+	stderr, cleanup := setupVendorModelTestUI(t)
+	defer cleanup()
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev"})
+
+	require.NoError(t, err, "the divergence must only warn, never block a --stack pull that would otherwise succeed")
+	assert.FileExists(t, filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"),
+		"vpc must still install via its own component.yaml, unaffected by the warning")
+	assert.Contains(t, stderr.String(), "vpc", "the warning must name the affected component")
+	assert.Contains(t, stderr.String(), "vendor.yaml", "the warning must explain the divergence risk against vendor.yaml")
+}
+
+// TestHandleStackVendor_UnknownStack proves an unresolvable stack name fails loudly with
+// errUtils.ErrInvalidArgumentError rather than silently succeeding as a no-op -- the same sentinel
+// and wording "atmos vendor update --stack" already uses for its own zero-match case (see
+// cmd/vendor/update.go), since pull and update share an identical stack/labels-only selector
+// vocabulary.
+func TestHandleStackVendor_UnknownStack(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "does-not-exist"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestHandleStackVendor_LabelsMatchingNothingErrors proves the labels-only zero-match branch (no
+// --stack, --labels matching no component in any stack) errors with the same sentinel/wording as
+// the named-stack case above, rather than silently succeeding as a no-op.
+func TestHandleStackVendor_LabelsMatchingNothingErrors(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Labels: map[string]string{"tier": "does-not-exist"}})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// buildHandleStackVendorTypeFilterFixture creates a temp atmos project with a single "dev" stack
+// declaring two vendorable components of different types: a terraform "vpc" and a helmfile "app",
+// each with its own component.yaml/local source. Used to prove handleStackVendor's --type filtering
+// (flg.TypeChanged) narrows the --stack path to a single component type, mirroring
+// buildHandleStackVendorFixture's setup style but with atmos.yaml also configuring a helmfile base
+// path.
+func buildHandleStackVendorTypeFilterFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+	vpcSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "terraform"), "vpc", vpcSource)
+
+	appDir := filepath.Join(tmpDir, "components", "helmfile", "app")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(appDir, "helmfile.yaml"), []byte(""), 0o644))
+	appSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(appSource, "helmfile.yaml"), []byte("# app\n"), 0o644))
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "helmfile"), "app", appSource)
+
+	devStack := "components:\n  terraform:\n    vpc:\n      vars: {}\n  helmfile:\n    app:\n      vars: {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(devStack), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n  helmfile:\n    base_path: components/helmfile\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestHandleStackVendor_TypeChanged_Stack_OnlyMatchingTypePulled proves flg.TypeChanged threads
+// through handleStackVendor's --stack path the same way TestExecuteVendorPullCommand_Everything_
+// NoVendorFile_TypeFilter proves it for the --everything/sweep path: an explicit
+// VendorFlags{ComponentType: helmfile, TypeChanged: true} must narrow componentTypes to only
+// "helmfile", so the stack's terraform "vpc" is never even considered/pulled, while the helmfile
+// "app" is.
+func TestHandleStackVendor_TypeChanged_Stack_OnlyMatchingTypePulled(t *testing.T) {
+	atmosConfig := buildHandleStackVendorTypeFilterFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev", ComponentType: cfg.HelmfileComponentType, TypeChanged: true})
+
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "helmfile", "app", "helmfile.yaml"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# app\n", string(content), "helmfile app must be pulled when --type helmfile is explicit")
+
+	vpcContent, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Empty(t, string(vpcContent), "terraform vpc must not be pulled when --stack is combined with an explicit --type helmfile")
+}
+
+// initMinimalAtmosProjectFixture writes a minimal atmos.yaml (terraform components under
+// "components/terraform", stacks under "stacks") at tmpDir, chdirs the test into it, and returns
+// the initialized AtmosConfiguration (processStacks=true). Shared tail for fixture builders that
+// only differ in what they put under stacks/ and components/ before calling this -- e.g.
+// buildHandleStackVendorNoManifestFixture below and describe_stacks_test.go's
+// buildDescribeStacksDegradationFixture.
+func initMinimalAtmosProjectFixture(t *testing.T, tmpDir string) schema.AtmosConfiguration {
+	t.Helper()
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// buildHandleStackVendorNoManifestFixture creates a temp atmos project with a single "dev" stack
+// declaring one component ("eks") that has a directory but no component.yaml of its own. Used to
+// prove handleStackVendor's no-manifest no-op: the stack resolves fine, but nothing in it has a
+// manifest to vendor.
+func buildHandleStackVendorNoManifestFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	eksDir := filepath.Join(tmpDir, "components", "terraform", "eks")
+	require.NoError(t, os.MkdirAll(eksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(eksDir, "main.tf"), []byte(""), 0o644))
+
+	devStack := "components:\n  terraform:\n    eks:\n      vars: {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(devStack), 0o644))
+
+	return initMinimalAtmosProjectFixture(t, tmpDir)
+}
+
+// TestHandleStackVendor_NoManifests_NoOp proves handleStackVendor's "the stack resolved components,
+// but none has its own component.yaml" branch: the stack lookup itself succeeds (stacksMap is
+// non-empty), but resolveAndFilterStackComponents comes back empty, and handleStackVendor must
+// return nil without touching any files, rather than erroring.
+func TestHandleStackVendor_NoManifests_NoOp(t *testing.T) {
+	atmosConfig := buildHandleStackVendorNoManifestFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev"})
+
+	require.NoError(t, err)
+
+	entries, readErr := os.ReadDir(filepath.Join(atmosConfig.BasePath, "components", "terraform", "eks"))
+	require.NoError(t, readErr)
+	assert.Len(t, entries, 1, "eks's directory must contain only its own pre-existing main.tf, nothing pulled")
+}
+
+// TestHandleStackVendor_MalformedVendorYaml_PropagatesError proves filterStackComponentsByTags
+// surfaces a genuine vendor.yaml parse error (rather than treating it as "no vendor.yaml" or
+// swallowing it into the "no match" sentinel) when --stack/--tags are combined and the repo's
+// vendor.yaml can't be parsed. Mirrors TestExecuteComponentVendorPullBatch_
+// PropagatesMaterializationCheckError's malformed-YAML technique.
+func TestHandleStackVendor_MalformedVendorYaml_PropagatesError(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	require.NoError(t, os.WriteFile("vendor.yaml", []byte("not: [valid yaml"), 0o644))
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev", Tags: []string{"networking"}})
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidArgumentError, "a malformed vendor.yaml must surface a genuine parse error, not the 'no match' sentinel")
+}
+
+// TestResolveAndFilterStackComponents_EmptyComponentsWithTags_ReturnsEmptyNoError proves the early
+// return's left-hand OR condition (len(componentsByType) == 0) independently: when --stack/--labels
+// resolves to zero components in the first place, a non-empty --tags must not be treated as a "tags
+// filtered everything out" error -- there was nothing for it to filter. This is distinct from
+// TestExecuteVendorPullCommand_StackAndTagsExcludesUntaggedComponents, which covers the case where
+// resolution finds a non-empty set that tags then narrows to empty (an explicit error there).
+func TestResolveAndFilterStackComponents_EmptyComponentsWithTags_ReturnsEmptyNoError(t *testing.T) {
+	got, err := resolveAndFilterStackComponents(&schema.AtmosConfiguration{}, map[string]any{}, []string{cfg.TerraformComponentType}, []string{"networking"})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+// TestWalkStackVendorComponents_SkipsMalformedEntries proves walkStackVendorComponents and
+// stackComponentsSection tolerate malformed stacksMap shapes without panicking or erroring: a stack
+// entry that isn't a map, a stack with no "components" key, and a component-type section that isn't
+// a map are all silently skipped, while a normal, well-formed entry alongside them is still resolved.
+func TestWalkStackVendorComponents_SkipsMalformedEntries(t *testing.T) {
+	stacksMap := map[string]any{
+		"weird": "not-a-map",
+		"no-components-key": map[string]any{
+			"vars": map[string]any{},
+		},
+		"empty-components": map[string]any{
+			"components": map[string]any{},
+		},
+		"bad-type-section": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: "not-a-map",
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": stackComponentEntry("", false),
+				},
+			},
+		},
+	}
+
+	got := walkStackVendorComponents(stacksMap, []string{cfg.TerraformComponentType})
+
+	require.Len(t, got, 1, "only the well-formed 'dev' stack's vpc must be resolved")
+	assert.Equal(t, stackVendorComponent{ComponentType: cfg.TerraformComponentType, Name: "vpc"}, got[0])
+}
+
+// buildHandleStackVendorMixedResultFixture creates a temp atmos project with a single "dev" stack
+// declaring two vendorable components of different types: a terraform "vpc" with a real, pullable
+// local source, and a helmfile "app" whose component.yaml is well-formed but whose declared source
+// points at a local path that doesn't exist -- so pulling it fails only inside
+// ExecuteComponentVendorPullBatch, mirroring writeSweepComponentManifestFixture's use in
+// TestExecuteVendorPullCommand_Everything_NoVendorFile_OneTypeGroupFails_OtherStillPulled
+// (vendor_pull_sweep_test.go), but exercised via handleStackVendor/pullStackComponentsByType instead
+// of handleVendorPullSweep.
+func buildHandleStackVendorMixedResultFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+	vpcSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "terraform"), "vpc", vpcSource)
+
+	appDir := filepath.Join(tmpDir, "components", "helmfile", "app")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+	missingSource := filepath.Join(t.TempDir(), "does-not-exist")
+	writeLocalComponentVendorConfig(t, filepath.Join(tmpDir, "components", "helmfile"), "app", missingSource)
+
+	devStack := "components:\n  terraform:\n    vpc:\n      vars: {}\n  helmfile:\n    app:\n      vars: {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(devStack), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n  helmfile:\n    base_path: components/helmfile\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestHandleStackVendor_OneTypeGroupFails_OtherStillPulled proves pullStackComponentsByType's
+// per-type errors.Join behavior with two real component types (not one): the helmfile "app"'s
+// unresolvable source must not prevent the terraform "vpc" from being pulled, and the helmfile
+// failure must still surface as an error rather than being silently swallowed.
+func TestHandleStackVendor_OneTypeGroupFails_OtherStillPulled(t *testing.T) {
+	atmosConfig := buildHandleStackVendorMixedResultFixture(t)
+
+	err := handleStackVendor(&atmosConfig, &VendorFlags{Stack: "dev"})
+
+	require.Error(t, err, "the helmfile component's unresolvable source must surface as an error")
+
+	content, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# vpc\n", string(content), "the valid terraform component must still be pulled despite the helmfile component failing")
+}
+
+// TestResolveVendorComponentSelector_NoFilterReturnsEveryStacksComponents proves stack == "" scopes
+// across every stack, and unlike resolveStackVendorComponents (pull's --stack path), a component
+// with no component.yaml (eks) IS included -- update/diff/clean/verify key off vendor.yaml by name,
+// not manifest presence.
+func TestResolveVendorComponentSelector_NoFilterReturnsEveryStacksComponents(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	got, err := ResolveVendorComponentSelector(&atmosConfig, "", nil, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"eks", "vpc", "vpc-prod"}, got)
+}
+
+// TestResolveVendorComponentSelector_ScopedByStack proves a non-empty stack narrows to just that
+// stack's components.
+func TestResolveVendorComponentSelector_ScopedByStack(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	got, err := ResolveVendorComponentSelector(&atmosConfig, "dev", nil, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"eks", "vpc"}, got)
+}
+
+// TestResolveVendorComponentSelector_FilteredByLabels proves labels narrow across all stacks (AND
+// match against metadata.labels), independent of --stack.
+func TestResolveVendorComponentSelector_FilteredByLabels(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	got, err := ResolveVendorComponentSelector(&atmosConfig, "", map[string]string{"tier": "1"}, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, got, "only dev's vpc carries tier=1; eks has no labels and vpc-prod carries tier=2")
+}
+
+// TestResolveVendorComponentSelector_StackAndLabelsCompose proves --stack and --labels compose as a
+// further narrowing (both resolve the same stack-declared component set) rather than as alternative
+// modes: prod's vpc-prod carries tier=2, so scoping to "dev" (tier=1 only) with a tier=2 filter
+// matches nothing.
+func TestResolveVendorComponentSelector_StackAndLabelsCompose(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	got, err := ResolveVendorComponentSelector(&atmosConfig, "dev", map[string]string{"tier": "2"}, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+// TestResolveVendorComponentSelector_UnknownStackReturnsEmptyNoError proves an unresolvable stack
+// name returns an empty (not error) result -- unlike handleStackVendor's own "vendor pull --stack"
+// entry point (which hard-errors via errUtils.ErrInvalidArgumentError), callers of this shared
+// resolver (vendor update/diff/clean/verify) are responsible for deciding what an empty selector
+// match means for them, since some of those commands support NO selector as "operate on everything"
+// and must be able to tell that apart from "a selector was given and matched nothing".
+func TestResolveVendorComponentSelector_UnknownStackReturnsEmptyNoError(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	got, err := ResolveVendorComponentSelector(&atmosConfig, "does-not-exist", nil, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }

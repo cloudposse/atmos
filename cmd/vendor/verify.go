@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	pkgtags "github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
@@ -49,7 +50,7 @@ var vendorVerifyCmd = &cobra.Command{
 report drift: missing files, or files whose contents no longer match what was last vendored.
 Exits non-zero when any drift is found. This never checks for a newer upstream version — see
 'atmos vendor update --check' for that.`,
-	Example: "atmos vendor verify\natmos vendor verify --component vpc\natmos vendor verify --format json",
+	Example: "atmos vendor verify\natmos vendor verify --component vpc\natmos vendor verify --format json\natmos vendor verify --tags networking\natmos vendor verify --stack dev-us-west-2 --labels tier=1",
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.verifyRunE")()
@@ -63,7 +64,35 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		if err != nil {
 			return err
 		}
-		atmosConfig, err := cfg.InitCliConfig(info, false)
+
+		component := v.GetString("component")
+		filterTags := splitTags(v.GetString("tags"))
+		stack := v.GetString("stack")
+		labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		if err != nil {
+			return err
+		}
+		// --stack/--labels resolve components via ExecuteDescribeStacksScoped, which requires
+		// atmosConfig.StackConfigFilesAbsolutePaths to be populated -- only they need
+		// processStacks=true; --component/--tags operate on vendor.yaml/component.yaml manifests
+		// directly and don't.
+		atmosConfig, err := cfg.InitCliConfig(info, stack != "" || len(labels) > 0)
+		if err != nil {
+			return err
+		}
+		if vendorSelectorGroupCount(component, stack, labels) > 1 {
+			return errVendorSelectorsExclusive()
+		}
+		components, err := resolveVendorSelectorComponents(&VendorSelectorOptions{
+			AtmosConfig:   &atmosConfig,
+			Component:     component,
+			Tags:          filterTags,
+			Stack:         stack,
+			Labels:        labels,
+			VendorFile:    v.GetString("file"),
+			ComponentType: v.GetString("type"),
+			TypeChanged:   cmd.Flags().Changed("type"),
+		})
 		if err != nil {
 			return err
 		}
@@ -78,7 +107,7 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 			return err
 		}
 
-		rows := buildVerifyRows(lock, drifts, atmosConfig.BasePath, v.GetString("component"))
+		rows := buildVerifyRows(lock, drifts, atmosConfig.BasePath, components)
 
 		if err := renderVerifyResult(rows, v.GetString("format")); err != nil {
 			return err
@@ -92,16 +121,22 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 }
 
 // buildVerifyRows resolves each drift's lock key back to its artifact's human-readable Name,
-// optionally filtering to a single component, and returns rows sorted for deterministic output
-// (Verify's own drifts are produced from map iteration, so their order isn't stable run to run).
-func buildVerifyRows(lock *lockfile.LockFile, drifts []lockfile.Drift, basePath, component string) []verifyRow {
+// optionally filtering to a set of components (empty/nil means every component), and returns rows
+// sorted for deterministic output (Verify's own drifts are produced from map iteration, so their
+// order isn't stable run to run).
+func buildVerifyRows(lock *lockfile.LockFile, drifts []lockfile.Drift, basePath string, components []string) []verifyRow {
+	wanted := make(map[string]bool, len(components))
+	for _, component := range components {
+		wanted[component] = true
+	}
+
 	rows := make([]verifyRow, 0, len(drifts))
 	for _, drift := range drifts {
 		name := drift.Artifact
 		if artifact, ok := lock.Artifacts[drift.Artifact]; ok && artifact.Name != "" {
 			name = artifact.Name
 		}
-		if component != "" && name != component {
+		if len(wanted) > 0 && !wanted[name] {
 			continue
 		}
 		rows = append(rows, verifyRow{Component: name, Path: displayPath(basePath, drift.Path), Reason: drift.Reason})
@@ -172,6 +207,11 @@ func createVerifyTable(rows []verifyRow) string {
 func init() {
 	vendorVerifyParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Verify only this component"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
+		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
+		flags.WithStringFlag("tags", "", "", "Verify only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
+		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),
 	)
 	vendorVerifyParser.RegisterFlags(vendorVerifyCmd)

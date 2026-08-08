@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // writeSweepComponentManifestFixture writes a component.yaml for componentName under
@@ -40,9 +42,11 @@ func newVendorPullSweepTestCmd() *cobra.Command {
 	cmd := newTestCommandWithGlobalFlags("pull")
 	flags := cmd.Flags()
 	flags.StringP("component", "c", "", "")
+	flags.StringP("stack", "s", "", "")
 	flags.StringP("type", "t", "terraform", "")
 	flags.Bool("dry-run", false, "")
 	flags.String("tags", "", "")
+	flags.String("labels", "", "")
 	flags.Bool("everything", false, "")
 	flags.Bool("refresh-lock", false, "")
 	return cmd
@@ -233,4 +237,164 @@ func TestExecuteVendorPullCommand_Everything_NoVendorFile_RefreshLock_ForcesReDo
 	content, err = os.ReadFile(targetFile)
 	require.NoError(t, err)
 	assert.Equal(t, "# v2\n", string(content), "--refresh-lock must force a re-download even when already materialized")
+}
+
+// TestExecuteVendorPullCommand_StackAndTagsExcludesUntaggedComponents is the end-to-end regression
+// test for --stack/--tags composition. Vendor pull with both --stack and --tags set must narrow the
+// stack-resolved component set by vendor.yaml-declared tags. It must not silently ignore --tags,
+// and it must not reject the combination outright. The fixture's dev stack resolves to a vpc
+// component that only has a component.yaml, with no vendor.yaml entry and therefore no declared
+// tags at all, so a non-empty tags filter excludes it -- proving the filter actually applies rather
+// than being a no-op, with the zero-match result surfaced as an explicit error.
+func TestExecuteVendorPullCommand_StackAndTagsExcludesUntaggedComponents(t *testing.T) {
+	buildHandleStackVendorFixture(t)
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestExecuteVendorPullCommand_LabelsOnly_PullsMatchingComponent proves --labels alone (with no
+// --stack) reaches the same stack-resolution path --stack does: ExecuteVendorPullCommand's
+// needsStackProcessing presence check (stackFlagVal != "" || labelsFlagVal != "") must fire on
+// --labels alone so atmosConfig is initialized with processStacks=true, and handleVendorConfig's
+// "flg.Stack != "" || len(flg.Labels) > 0" branch must route to handleStackVendor on --labels alone
+// too. Every other test in this file that reaches handleStackVendor sets --stack; this is the only
+// one that exercises --labels by itself.
+func TestExecuteVendorPullCommand_LabelsOnly_PullsMatchingComponent(t *testing.T) {
+	atmosConfig := buildHandleStackVendorFixture(t)
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("labels", "tier=1"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.NoError(t, err)
+	content, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# vpc\n", string(content), "dev's vpc (tier=1) must have been pulled via --labels alone")
+
+	prodContent, readErr := os.ReadFile(filepath.Join(atmosConfig.BasePath, "components", "terraform", "vpc-prod", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Empty(t, string(prodContent), "prod's vpc-prod (tier=2) must not match --labels tier=1")
+}
+
+// TestExecuteVendorPullCommand_ComponentAndTags_NoVendorFile_ReturnsInvalidArgument proves
+// handleVendorConfig's "--component resolved via its own component.yaml, which has no tags to match"
+// branch: with no vendor.yaml at all, --component combined with --tags can never match (a
+// component.yaml has no tags concept), so the call must fail with errUtils.ErrInvalidArgumentError
+// instead of silently pulling the component or silently ignoring --tags.
+func TestExecuteVendorPullCommand_ComponentAndTags_NoVendorFile_ReturnsInvalidArgument(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Chdir(repoRoot)
+
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "main.tf"), []byte("# vpc\n"), 0o644))
+	dir := writeSweepComponentManifestFixture(t, repoRoot, "terraform", "vpc", src)
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	assert.NoFileExists(t, filepath.Join(dir, "main.tf"), "an unmatched --component/--tags combination must not pull anything")
+}
+
+// TestExecuteVendorPullCommand_ComponentOnly_NoVendorFile_PullsComponent proves --component alone
+// (no --tags), with no vendor.yaml at all, falls through handleVendorConfig's remaining branches to
+// handleComponentVendor and actually pulls the component via its own component.yaml -- the positive
+// companion to the --tags-rejection case above, confirming that fallthrough is actually reached.
+func TestExecuteVendorPullCommand_ComponentOnly_NoVendorFile_PullsComponent(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Chdir(repoRoot)
+
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "main.tf"), []byte("# vpc\n"), 0o644))
+	dir := writeSweepComponentManifestFixture(t, repoRoot, "terraform", "vpc", src)
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(dir, "main.tf"))
+}
+
+// TestExecuteVendorPullCommand_ComponentAndTagsMismatch_WithVendorFile_ReturnsInvalidArgument is the
+// direct regression test for the reported bug: "atmos vendor pull -c vpc --tags compute", where vpc
+// IS declared in vendor.yaml but its own declared tags don't include "compute" -- while some OTHER
+// declared component (eks) does -- previously passed validateTagsAndComponents's global,
+// unscoped tag-existence check (which only checked that "compute" exists SOMEWHERE in vendor.yaml,
+// not that vpc itself has it), then silently filtered down to zero packages in
+// processAtmosVendorSource and returned nil. It must now fail with errUtils.ErrInvalidArgumentError,
+// matching "vendor update --component --tags" mismatch behavior, and must not pull anything.
+func TestExecuteVendorPullCommand_ComponentAndTagsMismatch_WithVendorFile_ReturnsInvalidArgument(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Chdir(repoRoot)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "vendor.yaml"), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      tags: [compute]
+      targets: ["components/terraform/eks"]
+`), 0o644))
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("tags", "compute"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	assert.NoFileExists(t, filepath.Join(repoRoot, "components", "terraform", "vpc", "main.tf"),
+		"vpc's own tags don't include 'compute' -- eks matching must not vouch for it")
+}
+
+// TestExecuteVendorPullCommand_StackAndTagsMatchesDeclaredComponent proves the positive case of
+// --stack/--tags composition: when a stack-resolved component DOES have a matching vendor.yaml
+// entry, --tags keeps it (and drops any sibling that doesn't match), and it still installs via its
+// own component.yaml -- --tags only narrows which stack-resolved names survive the filter, it never
+// changes how a surviving one is installed (that's still entirely component.yaml-driven).
+func TestExecuteVendorPullCommand_StackAndTagsMatchesDeclaredComponent(t *testing.T) {
+	buildHandleStackVendorFixture(t)
+	require.NoError(t, os.WriteFile("vendor.yaml", []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+
+	cmd := newVendorPullSweepTestCmd()
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("tags", "networking"))
+
+	err := ExecuteVendorPullCommand(cmd, nil)
+
+	require.NoError(t, err)
+	content, readErr := os.ReadFile(filepath.Join("components", "terraform", "vpc", "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# vpc\n", string(content), "vpc must install via its own component.yaml, unaffected by the vendor.yaml entry used only for tag matching")
 }

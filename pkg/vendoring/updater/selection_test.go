@@ -46,3 +46,67 @@ spec:
 	require.Len(t, report.Results, 1)
 	assert.Equal(t, "good", report.Results[0].Component)
 }
+
+// TestUpdateSelectedComponents_TagsMismatchErrors proves an explicit --component list combined
+// with --tags that matches nothing produces an error rather than a silently empty report --
+// vendoring.MatchesComponentTags lets --component and --tags compose, but this is the "you asked
+// for something and got literally nothing" case that deserves the same treatment as an unmatched
+// --stack/--labels selector elsewhere in this feature.
+func TestUpdateSelectedComponents_TagsMismatchErrors(t *testing.T) {
+	base := t.TempDir()
+	vendorFile := filepath.Join(base, "vendor.yaml")
+	require.NoError(t, os.WriteFile(vendorFile, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: good
+      source: github.com/cloudposse/terraform-null-label
+      version: 1.0.0
+      tags: [networking]
+      targets: [components/terraform/good]
+`), 0o644))
+
+	params := &SelectionParams{
+		VendorFile: vendorFile,
+		Tags:       []string{"compute"},
+		RunWithProgress: func(doWork func(onProgress func(string, int, int)) (*vendoring.UpdateReport, error)) (*vendoring.UpdateReport, error) {
+			return doWork(nil)
+		},
+	}
+
+	report, err := UpdateSelectedComponents(params, []string{"good"})
+
+	require.Error(t, err)
+	assert.Nil(t, report)
+}
+
+// TestUpdateSelectedComponents_TagsMatchSucceeds proves a matching --tags filter still updates the
+// named component normally (the composed-but-matching case, as opposed to the mismatch case above).
+func TestUpdateSelectedComponents_TagsMatchSucceeds(t *testing.T) {
+	base := t.TempDir()
+	vendorFile := filepath.Join(base, "vendor.yaml")
+	require.NoError(t, os.WriteFile(vendorFile, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: good
+      source: github.com/cloudposse/terraform-null-label
+      version: 1.0.0
+      tags: [networking]
+      targets: [components/terraform/good]
+`), 0o644))
+
+	params := &SelectionParams{
+		VendorFile: vendorFile,
+		Tags:       []string{"networking"},
+		RunWithProgress: func(doWork func(onProgress func(string, int, int)) (*vendoring.UpdateReport, error)) (*vendoring.UpdateReport, error) {
+			return &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "good"}}}, nil
+		},
+	}
+
+	report, err := UpdateSelectedComponents(params, []string{"good"})
+
+	require.NoError(t, err)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, "good", report.Results[0].Component)
+}

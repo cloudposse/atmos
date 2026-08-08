@@ -20,6 +20,8 @@ new version.
 
 ```shell
 atmos vendor diff --component <name> [--type <type>] [--from <ref>] [--to <ref>] [--diff-file <path>]
+atmos vendor diff --tags <tag1>,<tag2> [options]
+atmos vendor diff --stack <stack> [--labels <key>=<value>] [options]
 ```
 
 `--from` defaults to the component's current pinned version and `--to` defaults to the
@@ -32,6 +34,18 @@ back to the component's own `component.yaml`/`component.yml` manifest (found und
 <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s existing precedence:
 `vendor.yaml` wins whenever it declares the component.
 
+At least one selector is required: `--component` for a single target, or `--stack`/`--labels`
+for every component resolved from a stack (composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`).
+`--tags` is a separate, independent filter that composes with either base selector — or
+stands on its own, filtering every component whose `vendor.yaml` source declares any of the
+given tags — narrowing the diffed set to only components whose declared tags also match; a
+component with no `vendor.yaml` entry (the common case for `--stack`) has no tags to match
+and is excluded by a non-empty `--tags` filter. `--component` and `--stack`/`--labels` remain
+mutually exclusive with each other. When a selector resolves to more than one component,
+every match is diffed in turn under its own `## <component>` heading; a per-component
+failure doesn't stop the rest.
+
 ## Examples
 
 ```shell
@@ -43,23 +57,39 @@ atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
 
 # Restrict the diff to a single file.
 atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+
+# Diff every component whose vendor.yaml source declares a given tag.
+atmos vendor diff --tags networking
+
+# Diff every component in a stack, or matching stack metadata.labels.
+atmos vendor diff --stack dev-us-west-2
+atmos vendor diff --labels tier=1
+
+# Diff a stack's components, narrowed further by declared vendor.yaml tags.
+atmos vendor diff --stack dev-us-west-2 --tags networking
 ```
 
 ## Flags
 
 <dl>
-  <dt>`--component` / `-c` (string, required)</dt>
-  <dd>The component to diff.</dd>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>The component to diff. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match).</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Diff every component belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
   <dt>`--from` (string)</dt>
-  <dd>Starting ref (tag, branch, or commit). Defaults to the current pinned version.</dd>
+  <dd>Starting ref (tag, branch, or commit). Defaults to each component's current pinned version.</dd>
   <dt>`--to` (string)</dt>
   <dd>Ending ref. Defaults to the latest tag.</dd>
   <dt>`--diff-file` (string)</dt>
   <dd>Restrict the diff to a single file path within the component.</dd>
   <dt>`--type` / `-t` (string, default `terraform`)</dt>
-  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`.</dd>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`), used when falling back to a per-component `component.yaml`, and to scope a `--stack`/`--labels` selection.</dd>
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
-  <dd>The vendor manifest to read the component's source from (imports are followed).</dd>
+  <dd>The vendor manifest to read sources from (imports are followed).</dd>
 </dl>
 
 :::note

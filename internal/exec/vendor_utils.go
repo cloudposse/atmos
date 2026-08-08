@@ -14,12 +14,14 @@ import (
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
@@ -282,17 +284,6 @@ func validateTagsAndComponents(
 	component string,
 	tags []string,
 ) error {
-	if len(tags) > 0 {
-		componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
-			return s.Tags
-		})
-
-		if len(lo.Intersect(tags, componentTags)) == 0 {
-			return fmt.Errorf("%w '%s' tagged with the tags %v",
-				ErrNoComponentsWithTags, vendorConfigFileName, tags)
-		}
-	}
-
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, _ int) (string, bool) {
 		return s.Component, s.Component != ""
 	})
@@ -302,9 +293,46 @@ func validateTagsAndComponents(
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
 	}
 
+	// Component existence is checked before any tags reasoning below, so an undeclared --component
+	// is always reported as such -- never masked behind a tags-mismatch message just because --tags
+	// also happens to match nothing.
 	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
 			ErrComponentNotDefined, component, vendorConfigFileName)
+	}
+
+	if len(tags) == 0 {
+		return nil
+	}
+
+	// Tag matching is scoped to the components actually in play: just the named --component if one
+	// was given, never a different, out-of-scope component. Checking tags globally across every
+	// declared source let a mismatched --component/--tags pair (e.g. "-c vpc --tags compute" where
+	// only "eks" has the "compute" tag) pass this check on the strength of a component the user
+	// never asked for, then silently filter down to zero packages later with no error.
+	if component != "" {
+		var declaredTags []string
+		for i := range sources {
+			if sources[i].Component == component {
+				declaredTags = sources[i].Tags
+				break
+			}
+		}
+		if len(lo.Intersect(tags, declaredTags)) == 0 {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithExplanation("No components matched the given selector.").
+				WithHint(fmt.Sprintf("component '%s' does not declare any of the requested tags %v.", component, tags)).
+				Err()
+		}
+		return nil
+	}
+
+	componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
+		return s.Tags
+	})
+	if len(lo.Intersect(tags, componentTags)) == 0 {
+		return fmt.Errorf("%w '%s' tagged with the tags %v",
+			ErrNoComponentsWithTags, vendorConfigFileName, tags)
 	}
 
 	return nil
@@ -635,11 +663,12 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 	return nil
 }
 
+// shouldSkipSource reports whether s should be skipped for the given --component/--tags filter --
+// the inverse of vendoring.MatchesComponentTags, the shared component-exact/tags-any matcher also
+// used by `vendor update` (pkg/vendoring/update.go's sourceMatchesFilter), so the two commands don't
+// hand-maintain independent copies of the same filter logic.
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
-	// Skip if component or tags do not match
-	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
-	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
+	return !vendoring.MatchesComponentTags(s, component, tags)
 }
 
 // normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.

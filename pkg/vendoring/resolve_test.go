@@ -502,3 +502,86 @@ func TestDiscoverAllComponentManifests_PropagatesDiscoverError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
 }
+
+// TestFilterComponentsByDeclaredTags_ANDsAgainstStackResolvedNames proves --tags composes with an
+// already-resolved candidate list (e.g. from --component or --stack/--labels) as an independent
+// AND-filter: "vpc" (declared in vendor.yaml, tagged networking) matches a "networking" filter,
+// "eks" (declared, tagged compute) does not, and "rds" (no vendor.yaml entry at all -- pure
+// component.yaml vendoring) is excluded too, since it has no tags to match against.
+func TestFilterComponentsByDeclaredTags_ANDsAgainstStackResolvedNames(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "vendor.yaml", `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      tags: [compute]
+      targets: ["components/terraform/eks"]
+`)
+
+	got, err := FilterComponentsByDeclaredTags("", []string{"vpc", "eks", "rds"}, []string{"networking"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, got)
+}
+
+// TestFilterComponentsByDeclaredTags_EmptyTagsIsNoop proves an empty tags filter passes every
+// candidate through unchanged, without even reading vendor.yaml.
+func TestFilterComponentsByDeclaredTags_EmptyTagsIsNoop(t *testing.T) {
+	got, err := FilterComponentsByDeclaredTags("", []string{"vpc", "eks"}, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc", "eks"}, got)
+}
+
+// TestFilterComponentsByDeclaredTags_NoVendorFileExcludesEverything proves that when no
+// vendor.yaml exists at all (a pure component.yaml repo), a non-empty --tags filter excludes every
+// candidate, rather than erroring or passing them through -- consistent with the rule that no
+// declared tags can never match a non-empty tags filter.
+func TestFilterComponentsByDeclaredTags_NoVendorFileExcludesEverything(t *testing.T) {
+	chdir(t, t.TempDir())
+
+	got, err := FilterComponentsByDeclaredTags("", []string{"vpc", "eks"}, []string{"networking"})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+// TestListDeclaredSources_PropagatesCollectManifestFilesError proves a broken vendor.yaml is
+// surfaced as an error (not silently swallowed or misreported as "no vendor file"), mirroring
+// TestResolveComponentSource_PropagatesBrokenVendorYamlError's technique for the equivalent
+// CollectManifestFiles call in ResolveComponentSource.
+func TestListDeclaredSources_PropagatesCollectManifestFilesError(t *testing.T) {
+	dir := t.TempDir()
+	file := writeFile(t, dir, "vendor.yaml", "spec: [")
+
+	sources, ok, err := ListDeclaredSources(file)
+
+	require.Error(t, err)
+	assert.True(t, ok, "the vendor file is present on disk -- it just failed to parse")
+	assert.Nil(t, sources)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
+}
+
+// TestFilterComponentsByDeclaredTags_PropagatesListDeclaredSourcesError proves a broken
+// vendor.yaml propagates through FilterComponentsByDeclaredTags's ListDeclaredSources call rather
+// than being masked. Tags must be non-empty so the function doesn't short-circuit at its earlier
+// empty-tags no-op check before ever reading the vendor file.
+func TestFilterComponentsByDeclaredTags_PropagatesListDeclaredSourcesError(t *testing.T) {
+	dir := t.TempDir()
+	file := writeFile(t, dir, "vendor.yaml", "spec: [")
+
+	got, err := FilterComponentsByDeclaredTags(file, []string{"vpc"}, []string{"networking"})
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
+}

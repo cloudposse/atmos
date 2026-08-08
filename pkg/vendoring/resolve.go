@@ -137,6 +137,71 @@ func ResolveComponentSource(params *ResolveSourceParams) (*ResolvedSource, error
 	}, nil
 }
 
+// ListDeclaredSources returns every source declared across vendorFile (--file override, else
+// ./vendor.yaml, following imports) -- for callers that filter across a whole manifest by a
+// declared field (e.g. tags), rather than resolving one named component the way
+// ResolveComponentSource does. The returned bool mirrors VendorFilePresent: false means no vendor
+// manifest exists at all (not an error -- --tags-based selection over a component.yaml-only repo,
+// like `atmos vendor pull --tags`, simply has nothing to match against).
+func ListDeclaredSources(vendorFile string) ([]schema.AtmosVendorSource, bool, error) {
+	defer perf.Track(nil, "vendoring.ListDeclaredSources")()
+
+	resolved, ok := VendorFilePresent(vendorFile)
+	if !ok {
+		return nil, false, nil
+	}
+
+	files, err := CollectManifestFiles(resolved)
+	if err != nil {
+		return nil, true, err
+	}
+
+	var sources []schema.AtmosVendorSource
+	for _, file := range files {
+		fileSources, err := readVendorSources(file)
+		if err != nil {
+			return nil, true, err
+		}
+		sources = append(sources, fileSources...)
+	}
+	return sources, true, nil
+}
+
+// FilterComponentsByDeclaredTags narrows components (already resolved via --component or
+// --stack/--labels) to just those whose vendor.yaml-declared source also matches --tags (ANY of the
+// given tags, via MatchesComponentTags). --component/--stack/--labels and --tags are independent
+// filters over the same candidate set, not mutually exclusive selector "modes" -- this is what lets
+// them compose. A component with no vendor.yaml entry at all (pure component.yaml vendoring, the
+// common case for --stack) has no declared tags and is naturally excluded by any non-empty --tags
+// filter, the same way any filter excludes an entity missing the filtered attribute -- not a special
+// case requiring its own branch. An empty tags slice is a no-op (returns components unchanged).
+func FilterComponentsByDeclaredTags(vendorFile string, components []string, tags []string) ([]string, error) {
+	defer perf.Track(nil, "vendoring.FilterComponentsByDeclaredTags")()
+
+	if len(tags) == 0 {
+		return components, nil
+	}
+
+	sources, ok, err := ListDeclaredSources(vendorFile)
+	if err != nil {
+		return nil, err
+	}
+	declaredTags := make(map[string][]string, len(sources))
+	if ok {
+		for i := range sources {
+			declaredTags[sources[i].Component] = sources[i].Tags
+		}
+	}
+
+	filtered := make([]string, 0, len(components))
+	for _, name := range components {
+		if MatchesComponentTags(&schema.AtmosVendorSource{Component: name, Tags: declaredTags[name]}, "", tags) {
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered, nil
+}
+
 // VendorFilePresent reports whether a vendor manifest is available: override if non-empty,
 // otherwise the location configured via atmos.yaml (vendor.base_path, falling back to
 // <BasePath>/vendor.yaml), matching `atmos vendor pull`'s existing resolution

@@ -769,12 +769,26 @@ func verifyArtifactFile(config *schema.AtmosConfiguration, artifactID, target st
 func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bool) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.Clean")()
 
+	var components []string
+	if component != "" {
+		components = []string{component}
+	}
+	return CleanSelected(config, components, force, dryRun)
+}
+
+// CleanSelected removes files owned by selected lock artifacts. An empty/nil components selects
+// every artifact (same as Clean's blank-component behavior); otherwise only artifacts whose Name is
+// in components are selected. Modified files are preserved unless force is true. The lock is
+// updated only when every selected artifact was removed cleanly.
+func CleanSelected(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
+	defer perf.Track(config, "lockfile.CleanSelected")()
+
 	lock, err := Load(config)
 	if err != nil {
 		return nil, err
 	}
 	report := &CleanReport{}
-	selected, remainingOwners, err := selectCleanArtifacts(config, lock, component)
+	selected, remainingOwners, err := selectCleanArtifacts(config, lock, components)
 	if err != nil {
 		return nil, err
 	}
@@ -795,11 +809,20 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 	return report, nil
 }
 
-func selectCleanArtifacts(config *schema.AtmosConfiguration, lock *LockFile, component string) (map[string]Artifact, map[string]struct{}, error) {
+// selectCleanArtifacts partitions lock's artifacts into the selected set (matching components,
+// or every artifact when components is empty) and remainingOwners (the file paths still owned by
+// artifacts NOT selected, so removeCleanArtifacts never deletes a file another surviving artifact
+// still owns).
+func selectCleanArtifacts(config *schema.AtmosConfiguration, lock *LockFile, components []string) (map[string]Artifact, map[string]struct{}, error) {
+	wanted := make(map[string]bool, len(components))
+	for _, component := range components {
+		wanted[component] = true
+	}
+
 	selected := map[string]Artifact{}
 	remainingOwners := map[string]struct{}{}
 	for id, artifact := range lock.Artifacts {
-		if component == "" || artifact.Name == component {
+		if len(wanted) == 0 || wanted[artifact.Name] {
 			selected[id] = artifact
 			continue
 		}

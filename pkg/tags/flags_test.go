@@ -154,4 +154,26 @@ func TestParseLabelsFlag(t *testing.T) {
 			t.Fatal("expected error for empty key")
 		}
 	})
+
+	t.Run("duplicate keys: last value wins", func(t *testing.T) {
+		got, err := ParseLabelsFlag("tier=foundational,tier=edge")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"tier": "edge"}
+		if len(got) != len(want) || got["tier"] != want["tier"] {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("whitespace-only segment is skipped like an empty one", func(t *testing.T) {
+		got, err := ParseLabelsFlag("  ,tier=edge")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"tier": "edge"}
+		if len(got) != len(want) || got["tier"] != want["tier"] {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+	})
 }

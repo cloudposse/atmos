@@ -220,6 +220,178 @@ func TestParseVendorFlags_TypeChanged(t *testing.T) {
 	})
 }
 
+// newVendorPullFlagSetWithStack mirrors cmd/vendor/vendor.go's vendorPullCmd flag set including
+// the "stack" flag, for TestParseVendorFlags_Stack.
+func newVendorPullFlagSetWithStack(withStack bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withStack {
+		flags.StringP("stack", "s", "", "")
+	}
+	return flags
+}
+
+// TestParseVendorFlags_Stack proves parseVendorFlags reads --stack when the calling command
+// registers it (cmd/vendor/vendor.go's vendorPullCmd), and defaults to "" without erroring when
+// the flag isn't registered at all ('vendor update --pull' delegates to parseVendorFlags with a
+// FlagSet that doesn't define "stack").
+func TestParseVendorFlags_Stack(t *testing.T) {
+	t.Run("stack flag set is read", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		require.NoError(t, flags.Set("stack", "dev-us-west-2"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "dev-us-west-2", vendorFlags.Stack)
+	})
+
+	t.Run("stack flag left at its default is empty", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Stack)
+	})
+
+	t.Run("stack flag not registered at all does not error", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(false)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Stack)
+	})
+}
+
+// TestValidateVendorFlags_Stack proves validateVendorFlags rejects --stack combined with
+// --component or --everything, while allowing --stack on its own and together with --tags -- --tags
+// is an independent filter that composes with --stack (narrowed downstream by handleStackVendor via
+// filterStackComponentsByTags), not a fourth mutually exclusive selector "mode".
+func TestValidateVendorFlags_Stack(t *testing.T) {
+	t.Run("stack alone is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2"}))
+	})
+
+	t.Run("component and stack together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Component: "vpc", Stack: "dev-us-west-2"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateComponentStackFlag)
+	})
+
+	t.Run("stack and tags together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Tags: []string{"networking"}}))
+	})
+
+	t.Run("everything and stack together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Everything: true, Stack: "dev-us-west-2"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateEverythingFlag)
+	})
+}
+
+// TestValidateVendorFlags_Labels proves validateVendorFlags rejects --labels combined with
+// --component or --everything (mirroring --stack's own exclusivity rules), while allowing --labels
+// on its own, together with --stack (both resolve the same stack-declared component set --
+// --labels narrows it further, not a separate mode), and together with --tags (an independent
+// filter that composes with --stack/--labels, same as it does with --stack alone).
+func TestValidateVendorFlags_Labels(t *testing.T) {
+	t.Run("labels alone is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Labels: map[string]string{"tier": "1"}}))
+	})
+
+	t.Run("stack and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Stack: "dev-us-west-2", Labels: map[string]string{"tier": "1"}}))
+	})
+
+	t.Run("component and labels together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Component: "vpc", Labels: map[string]string{"tier": "1"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateComponentLabelsFlag)
+	})
+
+	t.Run("tags and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateVendorFlags(&VendorFlags{Tags: []string{"networking"}, Labels: map[string]string{"tier": "1"}}))
+	})
+
+	t.Run("everything and labels together is rejected", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{Everything: true, Labels: map[string]string{"tier": "1"}})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrValidateEverythingFlag)
+	})
+}
+
+// TestValidateVendorFlags_ComponentAndTagsCompose proves --component and --tags are no longer
+// rejected together: both operate on vendor.yaml Sources[] (ExecuteAtmosVendorInternal already ANDs
+// them via shouldSkipSource) or, when no vendor.yaml exists, handleVendorConfig treats a component
+// with no declared tags as excluded by a non-empty --tags filter (see its own doc comment) rather
+// than rejecting the flag combination up front.
+func TestValidateVendorFlags_ComponentAndTagsCompose(t *testing.T) {
+	require.NoError(t, validateVendorFlags(&VendorFlags{Component: "vpc", Tags: []string{"networking"}}))
+}
+
+// TestParseOptionalLabelsFlag proves parseOptionalLabelsFlag reads --labels when the calling
+// command registers it, defaults to nil without erroring when the flag isn't registered at all
+// ('vendor update --pull' delegates to parseVendorFlags with a FlagSet that doesn't define
+// "labels"), and propagates a malformed value's parse error.
+func TestParseOptionalLabelsFlag(t *testing.T) {
+	t.Run("labels flag set is read", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+		flags.String("labels", "", "")
+		require.NoError(t, flags.Set("labels", "tier=1,cost-center:platform"))
+
+		labels, err := parseOptionalLabelsFlag(flags)
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"tier": "1", "cost-center": "platform"}, labels)
+	})
+
+	t.Run("labels flag not registered at all does not error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+
+		labels, err := parseOptionalLabelsFlag(flags)
+
+		require.NoError(t, err)
+		assert.Nil(t, labels)
+	})
+
+	t.Run("malformed labels value propagates a parse error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+		flags.String("labels", "", "")
+		require.NoError(t, flags.Set("labels", "not-a-pair"))
+
+		_, err := parseOptionalLabelsFlag(flags)
+
+		require.Error(t, err)
+	})
+}
+
+// TestSetDefaultEverythingFlag_Stack proves --stack alone (like --component and --tags) suppresses
+// the "no flags given" default that otherwise sets Everything to true.
+func TestSetDefaultEverythingFlag_Stack(t *testing.T) {
+	t.Run("stack set suppresses the everything default", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		vendorFlags := &VendorFlags{Stack: "dev-us-west-2"}
+
+		setDefaultEverythingFlag(flags, vendorFlags)
+
+		assert.False(t, vendorFlags.Everything)
+	})
+
+	t.Run("no flags given still defaults everything to true", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithStack(true)
+		vendorFlags := &VendorFlags{}
+
+		setDefaultEverythingFlag(flags, vendorFlags)
+
+		assert.True(t, vendorFlags.Everything)
+	})
+}
+
 // TestParseVendorFlags_ComponentSliceFlag proves parseVendorFlags tolerates the flag shape
 // `vendor update --pull` delegates with: vendorUpdateCmd registers --component as a repeatable
 // string slice (cmd/vendor/update.go), while vendorPullCmd registers a plain string. A
@@ -271,4 +443,34 @@ func TestParseVendorFlags_ComponentSliceFlag(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "vpc", vendorFlags.Component)
 	})
+}
+
+// TestParseVendorTagsFlag proves --tags trims whitespace around each tag and drops empty
+// segments, matching cmd/vendor's splitTags (e.g. "networking, database" yields "networking" and
+// "database" with no leading space, and "a,,b" doesn't yield an empty entry).
+func TestParseVendorTagsFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		csv  string
+		want []string
+	}{
+		{"empty string", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single tag", "networking", []string{"networking"}},
+		{"comma separated with a space", "networking, database", []string{"networking", "database"}},
+		{"leading and trailing commas", ",networking,database,", []string{"networking", "database"}},
+		{"whitespace around tags", " networking , database ", []string{"networking", "database"}},
+		{"empty segments between commas", "networking,,database", []string{"networking", "database"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := newVendorPullFlagSet(false)
+			require.NoError(t, flags.Set("tags", tt.csv))
+
+			vendorFlags, err := parseVendorFlags(flags, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, vendorFlags.Tags)
+		})
+	}
 }
