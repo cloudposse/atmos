@@ -4,6 +4,7 @@ description: "Terraform state migration workflow with tfmigrate in Atmos: writin
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - references/tfmigrate-migration-patterns.md
 ---
