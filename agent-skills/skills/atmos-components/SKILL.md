@@ -4,6 +4,7 @@ description: "Component architecture: Terraform root modules, remote source prov
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Component Architecture
