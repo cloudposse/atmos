@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,7 +156,7 @@ func (d *ContainerDriverConfig) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.MappingNode:
 		type containerDriverConfig ContainerDriverConfig
 		var decoded containerDriverConfig
-		if err := value.Decode(&decoded); err != nil {
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
 			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
 		}
 		*d = ContainerDriverConfig(decoded)
@@ -742,14 +743,33 @@ func decodeContainerWith(node *yaml.Node, action string, t containerActionTarget
 	}
 }
 
-// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it in dst.
+// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it
+// in dst, rejecting any field not defined on T (e.g. a typo'd `platforms:` on
+// a `with:` block that only supports `context`/`tags`/etc.) rather than
+// silently dropping it. See decodeYAMLKnownFields for why plain node.Decode
+// can't do this.
 func decodeYAMLInto[T any](node *yaml.Node, dst **T) error {
 	var cfg T
-	if err := node.Decode(&cfg); err != nil {
-		return err
+	if err := decodeYAMLKnownFields(node, &cfg); err != nil {
+		return fmt.Errorf("%w: %w", ErrWorkflowControlStepInvalid, err)
 	}
 	*dst = &cfg
 	return nil
+}
+
+// decodeYAMLKnownFields decodes node into dst, rejecting fields not defined on
+// dst's type (including nested structs). Only the stream-level yaml.Decoder
+// supports a strict/KnownFields mode -- plain node.Decode has no such option
+// -- so this re-marshals node and decodes it through a yaml.Decoder with
+// KnownFields(true) instead.
+func decodeYAMLKnownFields(node *yaml.Node, dst any) error {
+	nodeBytes, err := yaml.Marshal(node)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(nodeBytes))
+	dec.KnownFields(true)
+	return dec.Decode(dst)
 }
 
 // normalizeContainerAction returns the canonical container verb, defaulting an

@@ -1290,6 +1290,89 @@ func TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *tes
 	assert.Nil(t, commandStep.With, "with: must not also leak into the generic With map for a container step")
 }
 
+// containerStepWithUnknownFieldYAML is the same shape as
+// containerStepWithBlockYAML but with a plausible-sounding, nonexistent
+// field (`platforms:` -- not a field on ContainerBuildStep) mixed into the
+// `with:` block, the way a user coming from Docker Compose might type it.
+const containerStepWithUnknownFieldYAML = `
+- name: build
+  type: container
+  action: build
+  provider: docker
+  with:
+    context: app
+    dockerfile: Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+`
+
+// TestContainerStepWithBlock_RejectsUnknownField confirms a typo'd/nonexistent
+// `with:` field (e.g. `platforms:`, which sounds plausible but isn't a
+// ContainerBuildStep field) is rejected rather than silently dropped, for
+// both the workflow-file path (yaml.Unmarshal) and the custom-command path
+// (mapstructure + TasksDecodeHook) -- the same two paths
+// TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically
+// exercises for the happy path. Before this fix, decodeYAMLInto used plain
+// yaml.Node.Decode, which has no KnownFields/strict mode, so `platforms:`
+// was silently discarded with no error and no trace in the decoded struct.
+func TestContainerStepWithBlock_RejectsUnknownField(t *testing.T) {
+	t.Run("workflow file path", func(t *testing.T) {
+		var fromYAML Tasks
+		err := yaml.Unmarshal([]byte(containerStepWithUnknownFieldYAML), &fromYAML)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "platforms")
+	})
+
+	t.Run("custom command path", func(t *testing.T) {
+		var generic []any
+		require.NoError(t, yaml.Unmarshal([]byte(containerStepWithUnknownFieldYAML), &generic))
+
+		var fromMapstructure Tasks
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &fromMapstructure,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				ConditionDecodeHook(),
+				WorkflowStepDecodeHook(),
+				TasksDecodeHook(),
+			),
+		})
+		require.NoError(t, err)
+		err = decoder.Decode(generic)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "platforms")
+	})
+}
+
+// containerStepDriverUnknownFieldYAML nests the typo inside the `driver:`
+// mapping (a field with its own custom UnmarshalYAML, ContainerDriverConfig),
+// not the top-level `with:` mapping -- a distinct code path from the
+// top-level case above since ContainerDriverConfig.UnmarshalYAML runs its
+// own nested decode.
+const containerStepDriverUnknownFieldYAML = `
+- name: build
+  type: container
+  action: build
+  with:
+    context: app
+    driver:
+      name: atmos-native-ci
+      bogus_field: x
+`
+
+// TestContainerStepWithBlock_RejectsUnknownNestedDriverField confirms the
+// same unknown-field rejection reaches a typo inside a nested `driver:`
+// mapping, not just the top-level `with:` mapping.
+func TestContainerStepWithBlock_RejectsUnknownNestedDriverField(t *testing.T) {
+	var fromYAML Tasks
+	err := yaml.Unmarshal([]byte(containerStepDriverUnknownFieldYAML), &fromYAML)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus_field")
+}
+
 // containerStepOverrideYAML has two ordinary `type: shell` (default) steps:
 // one with a mapping-form step-level `container:` override, and one that
 // opts out of an ambient container sandbox with the bare boolean form

@@ -83,10 +83,11 @@ type: container
 action: push
 with:
   image: alpine:latest
-  tag: v1
+  tags: [v1]
 `), &step))
 		require.NotNil(t, step.Push)
 		assert.Equal(t, "alpine:latest", step.Push.Image)
+		assert.Equal(t, []string{"v1"}, step.Push.Tags)
 		assert.Nil(t, step.Run)
 		assert.Nil(t, step.Build)
 	})
