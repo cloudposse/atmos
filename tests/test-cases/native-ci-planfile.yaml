@@ -4,6 +4,9 @@ tests:
   - name: "atmos terraform planfile list"
     enabled: true
     snapshot: false
+    # --store pins the local backend explicitly. The fixture already defaults to
+    # local, so this keeps the list command independent of the store config and
+    # never reaches a cloud backend that needs credentials this test lacks.
     description: "Verify 'atmos terraform planfile list' command exists and returns exit code 0."
     workdir: "fixtures/scenarios/native-ci"
     command: "atmos"
@@ -11,6 +14,8 @@ tests:
       - "terraform"
       - "planfile"
       - "list"
+      - "--store"
+      - "local"
     expect:
       exit_code: 0
 
@@ -152,7 +157,11 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - "CI hook"
+        # GITHUB_ACTIONS=true auto-selects the GitHub provider, which attempts a
+        # check run; the fixture's fake token makes creation skip with a warning,
+        # proving the provider was detected. The planfile uploads to the local
+        # store (the fixture default), so the CI hook itself does not error.
+        - "CI check run creation skipped"
       file_contains:
         "github-output.txt":
           - "has_changes=true"

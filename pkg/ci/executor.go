@@ -2,7 +2,6 @@ package ci
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
@@ -178,51 +177,25 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 }
 
 // createPlanfileStore creates a planfile store from ExecuteOptions.
+// Store selection honors `components.terraform.planfiles` (default, priority, and
+// a single named store) before falling back to environment detection and local
+// storage. See planfile.ResolveStoreCandidates for the full order.
 func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	defer perf.Track(opts.AtmosConfig, "ci.createPlanfileStore")()
 
-	artOpts := artifact.StoreOptions{
-		AtmosConfig: opts.AtmosConfig,
-	}
-
-	// Use the default store from configuration if available.
-	if opts.AtmosConfig != nil {
-		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
-		if planfilesConfig.Default != "" {
-			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
-				artOpts.Type = storeSpec.Type
-				artOpts.Options = storeSpec.Options
-				attachIdentity(&artOpts, opts.Info)
-				backend, err := artifact.NewStore(artOpts)
-				if err != nil {
-					return nil, err
-				}
-				return adapter.NewStore(backend), nil
-			}
-		}
-	}
-
-	// Fall back to environment-based detection.
-	if envOpts := detectStoreFromEnv(); envOpts != nil {
-		envOpts.AtmosConfig = opts.AtmosConfig
-		attachIdentity(envOpts, opts.Info)
-		backend, err := artifact.NewStore(*envOpts)
-		if err != nil {
-			return nil, err
-		}
-		return adapter.NewStore(backend), nil
-	}
-
-	// Default to local storage.
-	artOpts.Type = "local/dir"
-	artOpts.Options = map[string]any{
-		"path": ".atmos/planfiles",
-	}
-	backend, err := artifact.NewStore(artOpts)
+	candidates, err := planfile.ResolveStoreCandidates(opts.AtmosConfig, "")
 	if err != nil {
 		return nil, err
 	}
-	return adapter.NewStore(backend), nil
+
+	store, _, err := adapter.NewStoreFromCandidates(candidates, func(artOpts *artifact.StoreOptions) {
+		attachIdentity(artOpts, opts.Info)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return store, nil
 }
 
 // defaultResolverFactory builds the resolver that bridges Atmos auth into
@@ -258,35 +231,6 @@ func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacks
 		return
 	}
 	artOpts.Resolver = defaultResolverFactory(authManager, info)
-}
-
-// detectStoreFromEnv detects the artifact store from environment variables.
-func detectStoreFromEnv() *artifact.StoreOptions {
-	defer perf.Track(nil, "ci.detectStoreFromEnv")()
-
-	// Check for S3 configuration.
-	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
-		return &artifact.StoreOptions{
-			Type: "aws/s3",
-			Options: map[string]any{
-				"bucket": bucket,
-				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
-				"region": os.Getenv("AWS_REGION"),
-			},
-		}
-	}
-
-	// Check for GitHub Actions.
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		return &artifact.StoreOptions{
-			Type: "github/artifacts",
-			Options: map[string]any{
-				"prefix": "planfile",
-			},
-		}
-	}
-
-	return nil
 }
 
 // extractEventPrefix extracts the prefix from a hook event.

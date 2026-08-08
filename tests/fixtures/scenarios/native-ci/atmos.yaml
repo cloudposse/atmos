@@ -10,7 +10,17 @@ components:
 
     # Planfile storage backends (registry pattern)
     planfiles:
-      # Stores are tried in priority order; if unavailable, fall through to next
+      # Select the local store by default. `default` takes precedence over
+      # `priority`, so the `--ci` upload hook writes to the filesystem store,
+      # which works in every environment. The cloud stores below need
+      # credentials that fork-PR CI and local runs do not have, and
+      # github/artifacts additionally requires the Actions runtime upload token
+      # (ACTIONS_RUNTIME_TOKEN), which GitHub withholds from `run:` steps.
+      default: "local"
+
+      # Priority order used when `default` is unset. Stores are tried in order;
+      # a store that cannot initialize in the current environment is skipped for
+      # the next one. Kept here to exercise the configuration shape.
       priority:
         - "github"
         - "s3"
