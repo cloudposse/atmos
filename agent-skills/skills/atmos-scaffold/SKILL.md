@@ -4,6 +4,7 @@ description: "Scaffold templates: authoring scaffold.yaml, form fields (types, v
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: scaffolding
 references:
   - references/scaffold-yaml-schema.md
   - references/merge-strategy.md
