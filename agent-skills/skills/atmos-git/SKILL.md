@@ -4,6 +4,7 @@ description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/com
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Git
