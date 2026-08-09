@@ -139,14 +139,65 @@ func TestExplainRepositoryWideYAMLFunctionFailure_PassesThroughNil(t *testing.T)
 }
 
 // TestExplainRepositoryWideYAMLFunctionFailure_PreservesWrappedSentinels proves the enrichment is
-// transparent to callers that branch on specific sentinels (e.g. the circular-dependency check
-// that `!terraform.state` cycles rely on).
+// transparent to callers that branch on specific sentinels propagated from the inner describe.
+//
+// The cause must be one the hints actually fire on (a degradable backend read), otherwise the
+// helper returns early and the test proves nothing about enrichment — it would pass just as well
+// if hints were never attached at all.
 func TestExplainRepositoryWideYAMLFunctionFailure_PreservesWrappedSentinels(t *testing.T) {
 	p := &describeStacksProcessor{filterByStack: ""}
-	cause := fmt.Errorf("%w: %w", errUtils.ErrDescribeComponent, errUtils.ErrCircularDependency)
+	cause := fmt.Errorf("%w: %w", errUtils.ErrReadTerraformState, errUtils.ErrDescribeComponent)
 
 	err := p.explainRepositoryWideYAMLFunctionFailure(cause, "global", "dev-pen")
 
+	require.NotEmpty(t, cockroachErrors.GetAllHints(err), "the cause must be one that is actually enriched")
+	require.True(t, errors.Is(err, errUtils.ErrReadTerraformState))
 	require.True(t, errors.Is(err, errUtils.ErrDescribeComponent))
-	require.True(t, errors.Is(err, errUtils.ErrCircularDependency))
+}
+
+// TestExplainRepositoryWideYAMLFunctionFailure_NoHintsOnNonDegradableFailure is the guard for the
+// false-advice bug: every hint is a way to stop Atmos failing on an unreadable backend, and the
+// lead one promises that dropping `--error-mode=strict` lets the command continue. For a failure
+// warn mode also treats as fatal that promise is simply untrue — the command fails identically in
+// every error mode — so no hints may be attached.
+//
+// A circular `!terraform.state` chain is the case that motivated this: it already carries its own
+// cycle-specific remediation, and appending five irrelevant flag suggestions buried it.
+func TestExplainRepositoryWideYAMLFunctionFailure_NoHintsOnNonDegradableFailure(t *testing.T) {
+	tests := []struct {
+		name  string
+		cause error
+	}{
+		{
+			name:  "circular dependency chain",
+			cause: fmt.Errorf("%w: %w", errUtils.ErrDescribeComponent, errUtils.ErrCircularDependency),
+		},
+		{
+			name: "corrupt state file",
+			cause: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w",
+				errUtils.ErrReadTerraformState, errUtils.ErrProcessTerraformStateFile),
+		},
+		{
+			name: "typo'd backend_type",
+			cause: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w",
+				errUtils.ErrReadTerraformState, errUtils.ErrUnsupportedBackendType),
+		},
+		{
+			name: "static backend missing the requested output",
+			cause: fmt.Errorf("%w: %w `data_bucket_name`",
+				errUtils.ErrReadTerraformState, errUtils.ErrStaticRemoteStateOutputMissing),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &describeStacksProcessor{filterByStack: ""}
+
+			err := p.explainRepositoryWideYAMLFunctionFailure(tt.cause, "global", "dev-pen")
+
+			assert.Equal(t, tt.cause, err, "a failure no error mode can resolve must come back untouched")
+			assert.Empty(t, cockroachErrors.GetAllHints(err),
+				"suggesting --error-mode=warn for a failure warn mode also aborts on is false advice")
+		})
+	}
 }

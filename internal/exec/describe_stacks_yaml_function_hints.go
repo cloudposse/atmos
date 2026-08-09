@@ -42,18 +42,26 @@ func (p *describeStacksProcessor) resolvesTerraformStateFunctions() bool {
 // https://github.com/cloudposse/atmos/issues/2566 and
 // docs/fixes/2026-07-28-inventory-commands-read-remote-tfstate.md.
 //
-// Two cases get the error back untouched, because the `describe stacks` remedies below would be
-// wrong advice for them:
+// Three cases get the error back untouched, because the `describe stacks` remedies below would
+// be wrong advice for them:
 //   - The caller scoped the run with `--stack`: they asked for that stack specifically, so the
 //     underlying error is the whole answer.
 //   - Both terraform state/output functions are already in `skip`: the caller explicitly opted
 //     out of credentialed reads, so telling them to skip those functions is redundant.
+//   - The failure is not one warn mode would have degraded. Every hint below is a way to stop
+//     Atmos failing on an unreadable backend, and the lead hint literally says dropping
+//     `--error-mode=strict` will let the command continue. For anything warn mode also treats
+//     as fatal — a circular `!terraform.state` chain, a corrupt state file, a typo'd
+//     `backend_type` — that is false: the command fails identically in every mode. Gating on
+//     isRecoverableInWarnMode keeps the guidance to exactly the failures it can resolve.
 //
 // Enrichment is transparent to `errors.Is`: callers branch on sentinels propagated from the inner
-// describe (e.g. ErrCircularDependency from a `!terraform.state` cycle), and those must keep
-// matching through the added hints.
+// describe, and those must keep matching through the added hints.
 func (p *describeStacksProcessor) explainRepositoryWideYAMLFunctionFailure(err error, componentName, stackName string) error {
 	if err == nil || p.filterByStack != "" || !p.resolvesTerraformStateFunctions() || p.onWarning != nil {
+		return err
+	}
+	if !isRecoverableInWarnMode(err) {
 		return err
 	}
 

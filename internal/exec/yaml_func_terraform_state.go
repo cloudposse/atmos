@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -52,9 +53,10 @@ func isRecoverableTerraformError(err error) bool {
 //   - isRecoverableTerraformError — which gates the YQ `//` default operator — is unchanged,
 //     so `!terraform.state … // "fallback"` still refuses to paper over a credential failure
 //     with its literal default.
-//   - Only the *read* failing. ErrEvaluateTerraformBackendVariable (the YQ expression failed
-//     against state Atmos successfully retrieved) stays fatal in every mode: that is a
-//     manifest defect the user needs to see, not an environmental one to degrade past.
+//   - Environmental failures only. ErrReadTerraformState is the wrapper GetTerraformState puts
+//     around *every* backend failure, including several that are defects in the repository's
+//     own manifests rather than conditions of the environment. Those are filtered out by
+//     isTerraformStateManifestDefect below and stay fatal in every error mode.
 //
 // Scope: this covers `!terraform.state`, which reads the backend directly and wraps every
 // failure in ErrReadTerraformState. `!terraform.output` shells out to `terraform output` and
@@ -63,8 +65,41 @@ func isRecoverableTerraformError(err error) bool {
 // narrowing that error enough to degrade only access failures is tracked as follow-up in
 // docs/fixes/2026-07-28-inventory-commands-read-remote-tfstate.md.
 func isRecoverableInWarnMode(err error) bool {
+	if isTerraformStateManifestDefect(err) {
+		return false
+	}
+
 	return isRecoverableTerraformError(err) ||
 		errors.Is(err, errUtils.ErrReadTerraformState)
+}
+
+// terraformStateManifestDefects are the failures that reach the classifier wrapped in
+// ErrReadTerraformState but describe a mistake in the stack manifests rather than a condition
+// of the environment. Degrading these to `(computed)` would turn a typo into plausible-looking
+// output that exits 0 — the user would have no signal at all — so warn and silent mode must
+// keep failing on them just as strict mode does.
+//
+// The distinction only became expressible once GetTerraformState started wrapping its cause
+// with %w instead of %v (see terraform_state_utils.go); before that every backend failure
+// arrived as one flat, unmatchable string.
+var terraformStateManifestDefects = []error{
+	// `backend_type` names a backend Atmos does not implement — a typo in the manifest.
+	errUtils.ErrUnsupportedBackendType,
+	// The state file was retrieved but is not parseable as Terraform state (corrupt or
+	// truncated). Substituting `(computed)` here would hide state corruption.
+	errUtils.ErrProcessTerraformStateFile,
+	// A `static` remote-state backend does not declare the requested output key.
+	errUtils.ErrStaticRemoteStateOutputMissing,
+	// The YQ expression failed against state Atmos successfully retrieved.
+	errUtils.ErrEvaluateTerraformBackendVariable,
+}
+
+// isTerraformStateManifestDefect reports whether err describes a manifest defect that must stay
+// fatal even in warn/silent mode.
+func isTerraformStateManifestDefect(err error) bool {
+	return slices.ContainsFunc(terraformStateManifestDefects, func(sentinel error) bool {
+		return errors.Is(err, sentinel)
+	})
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.

@@ -126,3 +126,62 @@ func TestProcessNodesWithContext_FatalErrorsStillAbortInWarnMode(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrEvaluateTerraformBackendVariable))
 	assert.Empty(t, warnings, "no degradation should be reported for a fatal error")
 }
+
+// TestProcessNodesWithContext_ManifestDefectsAbortInWarnMode drives the manifest-defect
+// classification through the same path a real `!terraform.state` takes, using the shapes
+// GetTerraformState actually produces.
+//
+// These all arrive wrapped in ErrReadTerraformState, indistinguishable from the cross-account
+// AccessDenied above unless the cause survives the wrap. Degrading them would report success
+// while emitting `(computed)` for what is really a typo in the stack manifest or a corrupt
+// state file — the user would get a plausible-looking value and a zero exit code with no
+// signal that anything was wrong.
+func TestProcessNodesWithContext_ManifestDefectsAbortInWarnMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		readErr  error
+		sentinel error
+	}{
+		{
+			name: "typo'd backend_type",
+			readErr: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w: `s4`",
+				errUtils.ErrReadTerraformState, errUtils.ErrUnsupportedBackendType),
+			sentinel: errUtils.ErrUnsupportedBackendType,
+		},
+		{
+			name: "corrupt state file",
+			readErr: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w",
+				errUtils.ErrReadTerraformState, errUtils.ErrProcessTerraformStateFile),
+			sentinel: errUtils.ErrProcessTerraformStateFile,
+		},
+		{
+			name: "static backend missing the requested output",
+			readErr: fmt.Errorf("%w: %w `data_bucket_name`",
+				errUtils.ErrReadTerraformState, errUtils.ErrStaticRemoteStateOutputMissing),
+			sentinel: errUtils.ErrStaticRemoteStateOutputMissing,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installFailingStateGetter(t, tt.readErr)
+
+			var warnings []DegradationWarning
+			data := map[string]any{
+				"vars": map[string]any{"data_bucket_name": "!terraform.state global dev-pen data_bucket_name"},
+			}
+
+			_, err := processNodesWithContext(
+				&schema.AtmosConfiguration{}, data, "dev-pen", nil, nil,
+				&schema.ConfigAndStacksInfo{Component: "customer"},
+				func(w DegradationWarning) { warnings = append(warnings, w) },
+			)
+
+			require.Error(t, err, "a manifest defect must abort even though it is wrapped in ErrReadTerraformState")
+			assert.True(t, errors.Is(err, tt.sentinel), "the specific cause must remain matchable")
+			assert.True(t, errors.Is(err, errUtils.ErrReadTerraformState),
+				"the outer wrapper must still be present — that is what makes the narrowing necessary")
+			assert.Empty(t, warnings, "a fatal error must not also be reported as a degradation")
+		})
+	}
+}

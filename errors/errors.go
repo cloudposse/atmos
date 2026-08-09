@@ -217,6 +217,14 @@ var (
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
 	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
 
+	// ErrStaticRemoteStateOutputMissing marks a `!terraform.state` read against a `static`
+	// remote-state backend whose declared outputs do not contain the requested key. The
+	// outputs of a static backend are written directly in the stack manifest, so a missing
+	// key is always a manifest typo — never an environmental condition — and must stay fatal
+	// in every error mode. It is deliberately distinct from ErrTerraformOutputNotFound,
+	// which means "not provisioned yet" and IS recoverable.
+	ErrStaticRemoteStateOutputMissing = errors.New("static remote state output not declared")
+
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
 	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")

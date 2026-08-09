@@ -128,6 +128,29 @@ func TestIsRecoverableInWarnMode(t *testing.T) {
 			err:      errUtils.ErrEvaluateTerraformBackendVariable,
 			expected: false,
 		},
+		// Manifest defects arrive wrapped in ErrReadTerraformState exactly like a
+		// cross-account AccessDenied does, but they describe a mistake in the stack
+		// manifests rather than a condition of the environment. Degrading them to
+		// `(computed)` would turn a typo into plausible-looking output that exits 0, so
+		// they must stay fatal in warn/silent mode as well as strict.
+		{
+			name: "typo'd backend_type, as GetTerraformState wraps it, stays fatal",
+			err: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w: `s4`",
+				errUtils.ErrReadTerraformState, errUtils.ErrUnsupportedBackendType),
+			expected: false,
+		},
+		{
+			name: "corrupt state file, as GetTerraformState wraps it, stays fatal",
+			err: fmt.Errorf("%w for component `global` in stack `dev-pen`: %w",
+				errUtils.ErrReadTerraformState, errUtils.ErrProcessTerraformStateFile),
+			expected: false,
+		},
+		{
+			name: "static backend missing the requested output stays fatal",
+			err: fmt.Errorf("%w: %w `data_bucket_name`",
+				errUtils.ErrReadTerraformState, errUtils.ErrStaticRemoteStateOutputMissing),
+			expected: false,
+		},
 		{
 			name:     "bare ErrGetObjectFromS3 is not recoverable: the path always wraps it in ErrReadTerraformState",
 			err:      errUtils.ErrGetObjectFromS3,

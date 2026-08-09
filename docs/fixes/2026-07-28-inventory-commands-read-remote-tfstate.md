@@ -68,10 +68,16 @@ identity cannot read. There, an unreadable backend is the topology working as de
 ## Fix
 
 Widen `isRecoverableInWarnMode` to include `ErrReadTerraformState`, the wrapper
-`GetTerraformState` puts around every backend read failure:
+`GetTerraformState` puts around every backend read failure — but subtract the failures that
+wrapper also carries which are defects in the repository's own manifests rather than
+conditions of the environment:
 
 ```go
 func isRecoverableInWarnMode(err error) bool {
+	if isTerraformStateManifestDefect(err) {
+		return false
+	}
+
 	return isRecoverableTerraformError(err) ||
 		errors.Is(err, errUtils.ErrReadTerraformState)
 }
@@ -81,6 +87,30 @@ func isRecoverableInWarnMode(err error) bool {
 values and `(computed)` for the rest, with an end-of-command summary of what was degraded
 and the real cause available at `--logs-level=Debug`.
 
+### Why the subtraction is necessary
+
+`ErrReadTerraformState` is not a synonym for "environmental failure". `GetTerraformState`
+wraps it around *everything* `GetTerraformBackend` and the static-backend path can return,
+which includes four failures that are unambiguously mistakes in the stack manifests:
+
+| Failure | Sentinel | Why it must stay fatal |
+| --- | --- | --- |
+| `backend_type` names a backend Atmos does not implement | `ErrUnsupportedBackendType` | A typo; no error mode makes it work. |
+| Retrieved state is not parseable Terraform state | `ErrProcessTerraformStateFile` | Degrading hides state corruption. |
+| A `static` backend does not declare the requested output | `ErrStaticRemoteStateOutputMissing` | The outputs are written in the manifest; a missing key is a typo. |
+| The YQ expression failed against state Atmos *did* retrieve | `ErrEvaluateTerraformBackendVariable` | The read succeeded; the expression is wrong. |
+
+Degrading any of these substitutes `(computed)` for what is really a typo, reports success,
+and exits 0 — the user gets a plausible-looking value with no signal at all that something
+is wrong. That is strictly worse than the abort this fix set out to remove, because the
+abort at least said what happened.
+
+Telling them apart required one supporting change: `GetTerraformState` formatted its cause
+with `%v`, which flattened every backend failure into a single unmatchable string. It now
+uses `%w`, so `errors.Is` can reach the real sentinel. The static-backend "output does not
+exist" case had no sentinel of its own at all and now carries
+`ErrStaticRemoteStateOutputMissing`.
+
 The change is deliberately narrow in three ways:
 
 - **Warn/silent mode only.** `--error-mode=strict` still surfaces every one of these, which
@@ -89,13 +119,15 @@ The change is deliberately narrow in three ways:
   YQ `//` default operator, so `!terraform.state … // "fallback"` still refuses to paper
   over a credential failure with its literal default. The two classifiers were already split
   for exactly this kind of divergence.
-- **Only the read failing.** `ErrEvaluateTerraformBackendVariable` — the YQ expression failed
-  against state Atmos *did* retrieve — stays fatal in every mode, because that is a manifest
-  defect the user needs to see rather than an environmental one to degrade past.
+- **Environmental failures only.** See the table above.
 
 `describe stacks` additionally keeps the actionable hints added earlier in this PR, now
-leading with `--error-mode`; after this fix they can only appear under
-`--error-mode=strict`.
+leading with `--error-mode`. They are gated on `isRecoverableInWarnMode` rather than merely
+on strict mode, because every hint is a way to stop Atmos failing on an unreadable backend
+and the lead one promises that dropping `--error-mode=strict` lets the command continue. For
+a failure warn mode also aborts on — a circular `!terraform.state` chain, a corrupt state
+file, a typo'd `backend_type` — that promise is false, and the five suggestions bury the
+error's own remediation. The hints now appear on exactly the failures they can resolve.
 
 ## What this replaces
 
