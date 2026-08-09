@@ -223,7 +223,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 	targetBasePath := resolveVendorTargetBasePath(params.atmosConfig, params.vendorConfigFileName)
 
-	logInitialMessage(params.vendorConfigFileName, params.tags)
+	logInitialMessage(params.vendorConfigFileName, params.tags, targetBasePath)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
 	}
@@ -615,12 +615,24 @@ func processVendorImports(
 	return append(mergedSources, sources...), allImports, nil
 }
 
-func logInitialMessage(vendorConfigFileName string, tags []string) {
+func logInitialMessage(vendorConfigFileName string, tags []string, targetBasePath string) {
 	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
 	ui.Info(logMessage)
+
+	// Say once per run where relative targets land, but only when that is not the manifest's own
+	// directory — i.e. only when `vendor.base_path` puts the manifest somewhere other than the
+	// Atmos base path. Projects upgrading into this behavior have their vendored artifacts move,
+	// and the previous tree is left in place rather than cleaned up, so without a line here the
+	// only evidence is a large unexplained diff.
+	if manifestDir := filepath.Dir(vendorConfigFileName); targetBasePath != "" && targetBasePath != manifestDir {
+		ui.Info(fmt.Sprintf(
+			"Relative targets resolve against the Atmos base path '%s', not the manifest directory '%s'",
+			targetBasePath, manifestDir,
+		))
+	}
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
