@@ -87,6 +87,7 @@ var nonManifestSections = map[string]struct{}{
 	"paths":              {}, // Kubernetes component sub-field (manifest paths).
 	"manifests":          {}, // Kubernetes component sub-field (inline manifests).
 	"render":             {}, // Kubernetes component sub-field (render output config).
+	"validate":           {}, // Kubernetes component sub-field (structural validation opt-out).
 	"chart":              {}, // Native Helm component sub-field (chart reference).
 	"values":             {}, // Native Helm component sub-field (inline chart values).
 	"values_files":       {}, // Native Helm component sub-field (chart values file paths).
