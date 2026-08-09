@@ -202,7 +202,15 @@ jobs:
 
   pr-semver-labels:
     name: PR Semver Labels
-    if: github.event_name == 'pull_request'
+    # Required checks must also report on the merge queue's synthetic commit
+    # (github.event_name == 'merge_group'), otherwise the merge queue waits
+    # out its full check-response timeout for a check that will never exist,
+    # then dequeues the PR -- even when every other check already passed.
+    # The label check itself only makes sense against a real pull_request
+    # event (github.event.pull_request doesn't exist for merge_group), and
+    # by the time a PR reaches the queue its label was already verified on
+    # pull_request, so merge_group just needs this job to report a pass.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -223,7 +231,10 @@ jobs:
 
       # Check for required semver labels
       # Every PR must have exactly one: major, minor, patch, or no-release
+      # pull_request only: merge_group has no github.event.pull_request for
+      # this action to check labels against.
       - uses: mheap/github-action-required-labels@0ac283b4e65c1fb28ce6079dea5546ceca98ccbe # v5.5.2
+        if: github.event_name == 'pull_request'
         with:
           mode: exactly
           count: 1
