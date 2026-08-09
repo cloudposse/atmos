@@ -87,6 +87,26 @@ func (c *StoreCandidate) Description() string {
 	return c.Options.Type
 }
 
+// IsConfigured reports whether this candidate came from the user's configuration (or an
+// explicit `--store`) rather than from environment detection or the built-in fallback.
+//
+// The distinction drives log severity: a store the user named and Atmos then could not use is
+// news, because the planfile silently goes somewhere else. An environment-detected candidate
+// being skipped — GITHUB_ACTIONS set but no token, so the local store is used — is routine and
+// would be noise on every local run.
+func (c *StoreCandidate) IsConfigured() bool {
+	defer perf.Track(nil, "planfile.StoreCandidate.IsConfigured")()
+
+	switch c.Source {
+	case StoreSourceExplicit, StoreSourceDefault, StoreSourcePriority, StoreSourceOnlyStore:
+		return true
+	case StoreSourceEnvironment, StoreSourceFallback:
+		return false
+	default:
+		return false
+	}
+}
+
 // ResolveStoreCandidates returns the ordered list of planfile stores to try.
 //
 // Resolution order:

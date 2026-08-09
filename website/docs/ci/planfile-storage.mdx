@@ -90,8 +90,22 @@ Two consequences worth knowing:
   of `planfiles.stores` nor a store type is a configuration error listing the stores you did define,
   so `priority: [s3]` without a matching `stores.s3` is caught instead of ignored.
 
-The selected store handles both upload and download, so `plan` and `deploy` agree on where the
-planfile lives. A failure *while* uploading or downloading does not switch stores.
+Within a single command the selected store handles both upload and download, so a failure *while*
+uploading or downloading never switches stores.
+
+Across steps, `plan` and `deploy` resolve independently. Selection depends on the environment at
+the moment the store is constructed, so if that environment differs between the two steps — a
+GitHub token available to `plan` but not to `deploy`, for instance — they can select different
+stores and `deploy` will not find the planfile. When a store you configured cannot be initialized
+and Atmos moves to the next candidate, it says so:
+
+```console
+WARN Configured planfile store is unavailable; trying the next candidate store="gh (github/artifacts)" source=priority error="GitHub token not found"
+WARN Using planfile store store="localstore (local/dir)" source=priority
+```
+
+To make both steps fail rather than diverge, name a single store with `default` (or `--store`)
+instead of listing alternatives in `priority`.
 
 ## Storage Backends
 

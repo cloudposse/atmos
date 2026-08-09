@@ -26,9 +26,15 @@ var newBackend = artifact.NewStore
 // Candidates are tried in order, which is what makes `planfiles.priority`
 // meaningful: a backend that cannot be initialized in the current environment
 // (GitHub Artifacts without a token, S3 without credentials) is skipped in favor
-// of the next one. Runtime failures do not switch stores — once a store is
-// selected, it handles both upload and download so that `plan` and `deploy` agree
-// on where the planfile lives.
+// of the next one. Runtime failures do not switch stores: within a single run the
+// store selected here handles both upload and download, so a failure mid-transfer
+// cannot move the planfile.
+//
+// That guarantee is per process, not across CI steps. `plan` and `deploy` resolve
+// independently, and selection depends on the environment at construction, so an
+// environment that differs between the two steps (a token present at plan and absent
+// at deploy) can land them on different stores. Skipping a store the user configured
+// is therefore logged at warning level — see logSkippedCandidate.
 //
 // When every candidate fails, the errors are joined so the message explains each
 // attempt rather than only the last.
@@ -40,6 +46,8 @@ func NewStoreFromCandidates(candidates []planfile.StoreCandidate, decorate Store
 	}
 
 	var failures []error
+	skippedConfigured := false
+
 	for _, candidate := range candidates {
 		opts := candidate.Options
 		if decorate != nil {
@@ -48,17 +56,64 @@ func NewStoreFromCandidates(candidates []planfile.StoreCandidate, decorate Store
 
 		backend, err := newBackend(opts)
 		if err != nil {
-			log.Debug("Planfile store unavailable, trying the next candidate",
-				"store", candidate.Description(), "source", string(candidate.Source), "error", err)
+			if candidate.IsConfigured() {
+				skippedConfigured = true
+			}
+			logSkippedCandidate(&candidate, err)
 			failures = append(failures, fmt.Errorf("%s (from %s): %w", candidate.Description(), candidate.Source, err))
 			continue
 		}
 
-		log.Debug("Selected planfile store", "store", candidate.Description(), "source", string(candidate.Source))
+		logSelectedCandidate(&candidate, skippedConfigured)
 
 		candidate.Options = opts
 		return NewStore(backend), candidate, nil
 	}
 
 	return nil, planfile.StoreCandidate{}, fmt.Errorf("%w: %w", errUtils.ErrPlanfileStoreUnavailable, errors.Join(failures...))
+}
+
+// logSkippedCandidate reports a candidate that could not be initialized.
+//
+// A store the user configured is warned about: the run continues with a different backend, so
+// the planfile silently lands somewhere other than where it was asked to go — the same class of
+// failure as the environment-detection override this package exists to prevent, and just as hard
+// to spot from a successful-looking `plan`. Environment-detected and built-in fallback
+// candidates stay at debug: nobody asked for them, and skipping them is the normal path on any
+// machine without CI credentials.
+func logSkippedCandidate(candidate *planfile.StoreCandidate, err error) {
+	defer perf.Track(nil, "adapter.logSkippedCandidate")()
+
+	fields := []any{
+		"store", candidate.Description(),
+		"source", string(candidate.Source),
+		"error", err,
+	}
+
+	if candidate.IsConfigured() {
+		log.Warn("Configured planfile store is unavailable; trying the next candidate", fields...)
+		return
+	}
+
+	log.Debug("Planfile store unavailable, trying the next candidate", fields...)
+}
+
+// logSelectedCandidate reports the store that will be used. It is raised to warning level only
+// when a store the user configured was skipped to get here, so the two messages together say
+// what was asked for and what is actually being used. With nothing skipped — the ordinary case —
+// this stays at debug and the command prints nothing.
+func logSelectedCandidate(candidate *planfile.StoreCandidate, skippedConfigured bool) {
+	defer perf.Track(nil, "adapter.logSelectedCandidate")()
+
+	fields := []any{
+		"store", candidate.Description(),
+		"source", string(candidate.Source),
+	}
+
+	if skippedConfigured {
+		log.Warn("Using planfile store", fields...)
+		return
+	}
+
+	log.Debug("Selected planfile store", fields...)
 }
