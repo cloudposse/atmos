@@ -1112,6 +1112,10 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "Enables structural validation of this component's manifests (default true). Set to false to opt out of both the implicit apply/deploy auto-gate and the explicit 'atmos kubernetes validate' command for this component; does not affect '--server' dry-run validation against a live cluster."
             }
           },
           "required": []
