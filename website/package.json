@@ -46,7 +46,7 @@
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
-    "docusaurus-plugin-llms": "^0.4.0",
+    "docusaurus-plugin-llms": "^0.5.1",
     "docusaurus-plugin-sentry": "^2.0.0",
     "framer-motion": "^12.41.0",
     "gray-matter": "^4.0.3",
@@ -55,7 +55,7 @@
     "marked": "^15.0.4",
     "node-fetch": "^3.3.2",
     "posthog-docusaurus": "^2.0.2",
-    "posthog-js": "^1.393.4",
+    "posthog-js": "^1.407.2",
     "prism-react-renderer": "^2.4.1",
     "raw-loader": "^4.0.2",
     "react": "^18.3.1",
@@ -81,7 +81,7 @@
     "acorn": "^8.17.0",
     "ajv": "^8.20.0",
     "eslint-scope": "^8.0.0",
-    "prettier": "^3.8.4"
+    "prettier": "^3.9.6"
   },
   "browserslist": {
     "production": [
