@@ -1881,6 +1881,7 @@ type BaseComponentConfig struct {
 	BaseComponentProvider                  string
 	BaseComponentPaths                     any
 	BaseComponentManifests                 any
+	BaseComponentValidate                  any
 	BaseComponentPlugins                   any
 	BaseComponentRender                    AtmosSectionMapType
 	BaseComponentHelm                      AtmosSectionMapType
