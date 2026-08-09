@@ -1277,23 +1277,23 @@
           "properties": {
             "stack": {
               "type": "string",
-              "description": "Atmos stack where the `component` is provisioned (e.g. `tenant1-ue2-prod`). Takes precedence over `namespace`, `tenant`, `environment` and `stage`, which are ignored when `stack` is set. Supports Go templates."
+              "description": "Atmos stack where the `component` is provisioned (e.g. `tenant1-ue2-prod`). Supports Go templates."
             },
             "namespace": {
               "type": "string",
-              "description": "The `namespace` where the `component` is provisioned. Ignored when `stack` is set."
+              "description": "The `namespace` where the `component` is provisioned."
             },
             "tenant": {
               "type": "string",
-              "description": "The `tenant` where the `component` is provisioned. Ignored when `stack` is set."
+              "description": "The `tenant` where the `component` is provisioned."
             },
             "environment": {
               "type": "string",
-              "description": "The `environment` where the `component` is provisioned. Ignored when `stack` is set."
+              "description": "The `environment` where the `component` is provisioned."
             },
             "stage": {
               "type": "string",
-              "description": "The `stage` where the `component` is provisioned. Ignored when `stack` is set."
+              "description": "The `stage` where the `component` is provisioned."
             },
             "component": {
               "type": "string",
