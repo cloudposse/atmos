@@ -22,6 +22,22 @@ repositories, and commit results back to your source of truth. Kubernetes compon
 native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
+:::note Replaces the old `cloudposse/github-action-*` Actions
+You do not need the separate [`cloudposse/github-action-atmos-terraform-*` Actions](/deprecated/github-actions)
+anymore. The `atmos` CLI now does this work:
+
+- It writes job summaries.
+- It posts status checks.
+- It sets output variables.
+- It manages planfiles.
+
+Do not use the old Actions in new workflows. Existing workflows that use them still work. `actions/checkout`
+plus an `atmos` command is the minimum for a basic workflow (job summaries, output variables) — it is not
+universally sufficient. Status checks, check runs, PR comments, and OIDC need matching permissions, and SBOM
+uploads and `github/artifacts` planfile storage also need the `github-runtime` action. See
+[Permissions](#permissions) below.
+:::
+
 <Experimental />
 
 ## Quick Start
@@ -67,7 +83,7 @@ ci:
 
 ## GitHub Actions Workflows
 
-Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
+Running Atmos in GitHub Actions reduces to two steps for the basics: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries and output variables with no extra setup. Status checks, check runs, and PR comments need matching [permissions](#permissions); SBOM uploads and planfile storage in `github/artifacts` also need the `github-runtime` action.
 
 Terraform commands use the full native CI feature set. Kubernetes commands currently emit
 human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit statuses,
