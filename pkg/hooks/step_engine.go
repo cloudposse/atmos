@@ -363,6 +363,12 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	for k, v := range ctx.Hook.Env {
 		vars.SetEnv(k, v)
 	}
+	// Anchor for a bare-relative explicit working_directory (see
+	// isDotPrefixedWorkingDirectory in pkg/runner/step/handler_base.go). Uses
+	// the same ComponentPath resolution setDefaultStepWorkingDirectory already
+	// applies to an unset working_directory, so it stays compatible with
+	// provisioned workdirs and metadata.component aliasing for free.
+	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
 	return vars
 }
 
