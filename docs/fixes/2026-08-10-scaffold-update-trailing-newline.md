@@ -32,9 +32,6 @@ cancels out `diff3`'s guaranteed loss of exactly one trailing newline and preser
   just `theirs` — appending it only to `theirs` would make an otherwise-identical `ours`/`theirs` pair (a
   common no-op shape) differ by one trailing newline as far as `diff3` is concerned, turning a no-op into a
   spurious detected change/conflict.
-- An earlier iteration of this fix added a separate `matchTrailingNewline` post-processing step; it was
-  removed in favor of the simpler pre-merge newline append once it was clear the append alone makes the
-  counts cancel correctly (see commit `f77a925e5`).
 - No change to conflict detection, threshold behavior, or `ConflictStrategy` handling — out of scope, and
   unaffected since the appended newline is identical across all three inputs.
 - `pkg/generator/merge/text_merger_test.go`: consolidated the trailing-newline regression coverage into a
