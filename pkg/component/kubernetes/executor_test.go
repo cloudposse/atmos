@@ -661,6 +661,56 @@ func TestRunOperationApplyGateSkippedWhenValidateDisabled(t *testing.T) {
 	assert.Equal(t, 1, result.ObjectsTotal)
 }
 
+// TestRunOperationPropagatesValidateSectionError verifies apply and validate
+// both fail closed and never contact the cluster when the component's
+// "validate" section is present but not a bool (e.g. a quoted "false"). The
+// object uses an invalid name ("Bad_Name") so the assertion actually proves
+// precedence: with a structurally valid object, both "validate-section
+// resolved first" and "structural check first, but this object happens to
+// pass" would return the same error, so that wouldn't catch a regression
+// that reorders the two checks. An invalid name means only "validate-section
+// resolved first" can still produce ErrKubernetesValidateSectionInvalid.
+func TestRunOperationPropagatesValidateSectionError(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation Operation
+		fatalMsg  string
+	}{
+		{
+			name:      "apply",
+			operation: OperationApply,
+			fatalMsg:  "apply must fail closed on an invalid 'validate' section before contacting the cluster",
+		},
+		{
+			name:      "validate",
+			operation: OperationValidate,
+			fatalMsg:  "validate must fail closed on an invalid 'validate' section before any structural or cluster check",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := newKubernetesSDKClient
+			t.Cleanup(func() { newKubernetesSDKClient = original })
+			newKubernetesSDKClient = func() (*sdkClient, error) {
+				t.Fatal(tt.fatalMsg)
+				return nil, nil
+			}
+
+			objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "Bad_Name", "")}
+			_, err := runOperation(
+				&component.ExecutionContext{},
+				&schema.AtmosConfiguration{},
+				&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": "false"}},
+				tt.operation,
+				objects,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
+		})
+	}
+}
+
 func TestRunOperationValidateSkippedWhenValidateDisabled(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })
