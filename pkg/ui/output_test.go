@@ -488,7 +488,7 @@ func TestInfof(t *testing.T) {
 	}
 }
 
-func TestStatusTo(t *testing.T) {
+func TestOutput(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	_, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
@@ -496,13 +496,14 @@ func TestStatusTo(t *testing.T) {
 	globalIO.Masker().RegisterSecret(secret)
 
 	var output bytes.Buffer
-	SuccessTo(&output, "Deployment complete: "+secret)
-	SuccessTof(&output, "Deployed %d components: %s", 42, secret)
-	WarningTo(&output, "Stack is deprecated: "+secret)
-	WarningTof(&output, "Deprecated in version %s: %s", "2.0", secret)
-	InfoTo(&output, "Processing components: "+secret)
-	InfoTof(&output, "Processing %d components: %s", 42, secret)
-	WarningTo(nil, "Fallback warning")
+	uiOutput := New(&output)
+	uiOutput.Success("Deployment complete: " + secret)
+	uiOutput.Successf("Deployed %d components: %s", 42, secret)
+	uiOutput.Warning("Stack is deprecated: " + secret)
+	uiOutput.Warningf("Deprecated in version %s: %s", "2.0", secret)
+	uiOutput.Info("Processing components: " + secret)
+	uiOutput.Infof("Processing %d components: %s", 42, secret)
+	New(nil).Warning("Fallback warning")
 
 	assertions := []string{"Deployment complete", "Deployed 42 components", "Stack is deprecated", "Deprecated in version 2.0", "Processing components", "Processing 42 components"}
 	for _, assertion := range assertions {

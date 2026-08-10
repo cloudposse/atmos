@@ -77,6 +77,7 @@ func AutoProvisionSource(
 	writers provisioner.OutputWriters,
 ) (retErr error) {
 	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
+	out := ui.New(writers.Stderr)
 
 	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
 	if err != nil {
@@ -121,7 +122,7 @@ func AutoProvisionSource(
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
-				ui.WarningTof(writers.Stderr, "Failed to update workdir last accessed time: %s", err)
+				out.Warningf("Failed to update workdir last accessed time: %s", err)
 			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
@@ -133,7 +134,7 @@ func AutoProvisionSource(
 		if !workdir.OutputSuppressed(ctx) {
 			ui.Info(reason)
 		} else if writers.Stderr != nil {
-			ui.InfoTo(writers.Stderr, reason)
+			out.Info(reason)
 		}
 	}
 
@@ -146,7 +147,7 @@ func AutoProvisionSource(
 	if isWorkdir {
 		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
-			ui.WarningTof(writers.Stderr, "Failed to write workdir metadata: %s", err)
+			out.Warningf("Failed to write workdir metadata: %s", err)
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
@@ -212,6 +213,7 @@ type vendorTarget struct {
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
 	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
+	out := ui.New(target.writers.Stderr)
 
 	operation := func() error {
 		// Track whether this attempt creates the target directory so a failed
@@ -234,7 +236,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, target.path); err != nil {
 			if createdTarget {
 				if rmErr := os.RemoveAll(target.path); rmErr != nil {
-					ui.WarningTof(target.writers.Stderr, "Failed to clean up target directory after failed provisioning: %s", rmErr)
+					out.Warningf("Failed to clean up target directory after failed provisioning: %s", rmErr)
 				}
 			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
@@ -254,7 +256,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 			return err
 		}
 		if target.writers.Stderr != nil {
-			ui.SuccessTo(target.writers.Stderr, completedMsg)
+			out.Success(completedMsg)
 		}
 		return nil
 	}

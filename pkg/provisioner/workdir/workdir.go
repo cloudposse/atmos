@@ -163,11 +163,12 @@ func (s *Service) Provision(
 	}
 
 	suppressOutput := OutputSuppressed(ctx)
+	out := ui.New(writers.Stderr)
 	if !suppressOutput {
 		ui.ClearLine()
 		ui.Infof("Provisioning workdir for component '%s'", workdirComponent)
 	} else if writers.Stderr != nil {
-		ui.InfoTof(writers.Stderr, "Provisioning workdir for component '%s'", workdirComponent)
+		out.Infof("Provisioning workdir for component '%s'", workdirComponent)
 	}
 
 	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
@@ -209,14 +210,14 @@ func (s *Service) Provision(
 			ui.ClearLine()
 			ui.Successf("Workdir provisioned: %s", workdirPath)
 		} else if writers.Stderr != nil {
-			ui.SuccessTof(writers.Stderr, "Workdir provisioned: %s", workdirPath)
+			out.Successf("Workdir provisioned: %s", workdirPath)
 		}
 	} else {
 		if !suppressOutput {
 			ui.ClearLine()
 			ui.Successf("Workdir ready (no changes): %s", workdirPath)
 		} else if writers.Stderr != nil {
-			ui.SuccessTof(writers.Stderr, "Workdir ready (no changes): %s", workdirPath)
+			out.Successf("Workdir ready (no changes): %s", workdirPath)
 		}
 	}
 	return nil
@@ -260,6 +261,7 @@ func (s *Service) syncLocalToWorkdir(
 	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
 	suppressOutput := OutputSuppressed(ctx)
+	out := ui.New(writers.Stderr)
 
 	// Use sourceComponent (base component) for finding the source directory.
 	componentPath, err := s.validateComponentPath(atmosConfig, componentConfig, sourceComponent)
@@ -285,7 +287,7 @@ func (s *Service) syncLocalToWorkdir(
 			ui.ClearLine()
 			ui.Info(message)
 		} else if writers.Stderr != nil {
-			ui.InfoTo(writers.Stderr, message)
+			out.Info(message)
 		}
 	}
 
@@ -332,11 +334,12 @@ func (s *Service) validateComponentPath(
 func (s *Service) computeContentHash(ctx context.Context, workdirPath string, writers provisioner.OutputWriters) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
+		out := ui.New(writers.Stderr)
 		switch {
 		case !OutputSuppressed(ctx):
 			ui.Warningf("Failed to compute content hash: %s", err)
 		case writers.Stderr != nil:
-			ui.WarningTof(writers.Stderr, "Failed to compute content hash: %s", err)
+			out.Warningf("Failed to compute content hash: %s", err)
 		default:
 			ui.Warningf("Failed to compute content hash: %s", err)
 		}

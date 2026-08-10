@@ -320,38 +320,48 @@ func MarkdownMessageNoWrapf(format string, a ...interface{}) {
 	MarkdownMessageNoWrap(content)
 }
 
-// Success writes a success message with green checkmark to stderr (UI channel).
-func Success(text string) {
-	SuccessTo(nil, text)
+// Output writes formatted UI messages to a specific destination.
+type Output struct {
+	writer stdio.Writer
 }
 
-// SuccessTo writes a success message to writer, or the UI channel when writer is nil.
-func SuccessTo(writer stdio.Writer, text string) {
-	defer perf.Track(nil, "ui.SuccessTo")()
+// New creates UI output that writes to writer, or the UI channel when writer is nil.
+func New(writer stdio.Writer) *Output {
+	return &Output{writer: writer}
+}
+
+// Success writes a success message with green checkmark to stderr (UI channel).
+func Success(text string) {
+	New(nil).Success(text)
+}
+
+// Success writes a success message with green checkmark to the configured destination.
+func (o *Output) Success(text string) {
+	defer perf.Track(nil, "ui.Output.Success")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.SuccessTo called before InitFormatter")
+		log.Debug("ui.Output.Success called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Success(text)+newline, "SuccessTo")
+	writeStatus(f, o.writer, f.Success(text)+newline, "Output.Success")
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
 func Successf(format string, a ...interface{}) {
-	SuccessTof(nil, format, a...)
+	New(nil).Successf(format, a...)
 }
 
-// SuccessTof writes a formatted success message to writer, or the UI channel when writer is nil.
-func SuccessTof(writer stdio.Writer, format string, a ...interface{}) {
-	defer perf.Track(nil, "ui.SuccessTof")()
+// Successf writes a formatted success message with green checkmark to the configured destination.
+func (o *Output) Successf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Successf")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.SuccessTof called before InitFormatter")
+		log.Debug("ui.Output.Successf called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Successf(format, a...)+newline, "SuccessTof")
+	writeStatus(f, o.writer, f.Successf(format, a...)+newline, "Output.Successf")
 }
 
 // Error writes an error message with red X to stderr (UI channel).
@@ -386,70 +396,70 @@ func Errorf(format string, a ...interface{}) {
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
 func Warning(text string) {
-	WarningTo(nil, text)
+	New(nil).Warning(text)
 }
 
-// WarningTo writes a warning message to writer, or the UI channel when writer is nil.
-func WarningTo(writer stdio.Writer, text string) {
-	defer perf.Track(nil, "ui.WarningTo")()
+// Warning writes a warning message with yellow warning sign to the configured destination.
+func (o *Output) Warning(text string) {
+	defer perf.Track(nil, "ui.Output.Warning")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.WarningTo called before InitFormatter")
+		log.Debug("ui.Output.Warning called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Warning(text)+newline, "WarningTo")
+	writeStatus(f, o.writer, f.Warning(text)+newline, "Output.Warning")
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
 func Warningf(format string, a ...interface{}) {
-	WarningTof(nil, format, a...)
+	New(nil).Warningf(format, a...)
 }
 
-// WarningTof writes a formatted warning message to writer, or the UI channel when writer is nil.
-func WarningTof(writer stdio.Writer, format string, a ...interface{}) {
-	defer perf.Track(nil, "ui.WarningTof")()
+// Warningf writes a formatted warning message with yellow warning sign to the configured destination.
+func (o *Output) Warningf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Warningf")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.WarningTof called before InitFormatter")
+		log.Debug("ui.Output.Warningf called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Warningf(format, a...)+newline, "WarningTof")
+	writeStatus(f, o.writer, f.Warningf(format, a...)+newline, "Output.Warningf")
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
 func Info(text string) {
-	InfoTo(nil, text)
+	New(nil).Info(text)
 }
 
-// InfoTo writes an info message to writer, or the UI channel when writer is nil.
-func InfoTo(writer stdio.Writer, text string) {
-	defer perf.Track(nil, "ui.InfoTo")()
+// Info writes an info message with cyan info icon to the configured destination.
+func (o *Output) Info(text string) {
+	defer perf.Track(nil, "ui.Output.Info")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.InfoTo called before InitFormatter")
+		log.Debug("ui.Output.Info called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Info(text)+newline, "InfoTo")
+	writeStatus(f, o.writer, f.Info(text)+newline, "Output.Info")
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
 func Infof(format string, a ...interface{}) {
-	InfoTof(nil, format, a...)
+	New(nil).Infof(format, a...)
 }
 
-// InfoTof writes a formatted info message to writer, or the UI channel when writer is nil.
-func InfoTof(writer stdio.Writer, format string, a ...interface{}) {
-	defer perf.Track(nil, "ui.InfoTof")()
+// Infof writes a formatted info message with cyan info icon to the configured destination.
+func (o *Output) Infof(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Infof")()
 
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.InfoTof called before InitFormatter")
+		log.Debug("ui.Output.Infof called before InitFormatter")
 		return
 	}
-	writeStatus(f, writer, f.Infof(format, a...)+newline, "InfoTof")
+	writeStatus(f, o.writer, f.Infof(format, a...)+newline, "Output.Infof")
 }
 
 func writeStatus(f *formatter, writer stdio.Writer, formatted, operation string) {
