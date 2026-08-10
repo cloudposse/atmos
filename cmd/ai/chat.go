@@ -35,6 +35,12 @@ func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
 }
 
 // getModelFromConfig returns the model for the current provider from configuration.
+// This is an independent lookup of the raw provider config and can return "" for a
+// provider that has no explicit `model` set — even when the actually-constructed
+// client resolves a non-empty default (e.g. claude-code CLI clients default their
+// model to "claude-code"). Prefer client.GetModel() on the already-constructed
+// client wherever one is available (e.g. when creating a session); this function
+// remains as a fallback for call sites without a constructed client to hand.
 func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
 	provider := getProviderFromConfig(atmosConfig)
 	if providerConfig, err := ai.GetProviderConfig(atmosConfig, provider); err == nil {
@@ -77,8 +83,11 @@ var chatCmd = &cobra.Command{
 
 		log.Debug("Starting AI chat session")
 
-		// Create AI client using factory.
-		client, err := ai.NewClient(&atmosConfig)
+		// Create AI client using factory. When --mcp was given, filter MCP.Servers
+		// for CLI providers, whose clients otherwise read atmosConfig.MCP.Servers
+		// directly and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
@@ -110,7 +119,7 @@ var chatCmd = &cobra.Command{
 				if err != nil {
 					// Session doesn't exist, create new one.
 					log.Debugf("Session '%s' not found, creating new session", sessionName)
-					sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: getModelFromConfig(&atmosConfig), Provider: getProviderFromConfig(&atmosConfig)})
+					sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: client.GetModel(), Provider: getProviderFromConfig(&atmosConfig)})
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
@@ -121,7 +130,7 @@ var chatCmd = &cobra.Command{
 			} else {
 				// Create anonymous session with timestamp.
 				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
-				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: getModelFromConfig(&atmosConfig), Provider: getProviderFromConfig(&atmosConfig)})
+				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: client.GetModel(), Provider: getProviderFromConfig(&atmosConfig)})
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
