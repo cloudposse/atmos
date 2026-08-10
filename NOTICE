@@ -315,7 +315,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.19.1/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.19.2/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
@@ -1096,11 +1096,11 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.37.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.55.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.56.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1120,7 +1120,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.38.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.39.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
