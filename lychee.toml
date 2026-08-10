@@ -189,7 +189,7 @@ exclude = [
   # This PDF intermittently times out from CI runners across multiple docs
   # referencing it; verified to return 200 outside CI via curl.
   "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
-  # reproducible-builds.org intermittently refuses connections from CI
-  # runners ("Connection refused"); verified to return 200 outside CI via curl.
-  "reproducible-builds\\.org/docs/source-date-epoch/?$",
+  # Reproducible Builds project docs intermittently refuse connections from CI
+  # runners; the page returns 200 outside CI, verified via curl.
+  "reproducible-builds\\.org",
 ]

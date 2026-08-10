@@ -4,6 +4,7 @@ description: "Atmos CI: Native CI with GitHub Actions containers, native outputs
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 references:
   - references/native-ci.md
 ---
