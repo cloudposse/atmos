@@ -180,7 +180,7 @@ func ResolveWorkflowFilePath(atmosConfig *schema.AtmosConfiguration, file string
 	if u.IsPathAbsolute(file) {
 		workflowPath = file
 	} else {
-		workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, file)
+		workflowPath = filepath.Join(getWorkflowsDirToUse(atmosConfig), file)
 	}
 
 	// If the workflow file is specified without an extension, use the default extension.
@@ -198,7 +198,7 @@ func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
 
 	if !u.FileExists(workflowPath) {
 		return nil, errUtils.Build(errUtils.ErrWorkflowFileNotFound).
-			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
+			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(displayPath(workflowPath))).
 			WithExitCode(1).
 			Err()
 	}
@@ -215,7 +215,7 @@ func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
 
 	if workflowManifest.Workflows == nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
-			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(workflowPath)).
+			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(displayPath(workflowPath))).
 			WithHint("Add a top-level 'workflows:' key to the manifest file").
 			WithExitCode(1).
 			Err()

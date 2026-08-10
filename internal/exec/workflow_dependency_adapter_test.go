@@ -83,6 +83,11 @@ func TestExecuteWorkflow_DependenciesWorkflowsCrossFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	atmosConfig.BasePath = tmpDir
 	atmosConfig.Workflows.BasePath = ""
+	// InitCliConfig already precomputed WorkflowsDirAbsolutePath against the original
+	// stacksPath-derived config; getWorkflowsDirToUse prefers that precomputed field over the
+	// live BasePath/Workflows.BasePath above, so it must be updated too or cross-file
+	// resolution below still looks in the stale stacksPath directory instead of tmpDir.
+	atmosConfig.WorkflowsDirAbsolutePath = tmpDir
 
 	buildLog := filepath.Join(tmpDir, "build.txt")
 	deployLog := filepath.Join(tmpDir, "deploy.txt")

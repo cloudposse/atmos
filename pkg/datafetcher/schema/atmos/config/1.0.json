@@ -16363,6 +16363,26 @@
         }
       ]
     },
+    "vendorDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workflowsDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "version": {
       "anyOf": [
         {

@@ -58,6 +58,11 @@ Atmos resolves the active profile using this precedence (highest first):
 3. `profiles.default` in the base `atmos.yaml`
 4. No profile
 
+Profiles apply on top of whatever base configuration was selected — including a base loaded
+via [`--config` or `--config-path`](/cli/configuration) — so
+`atmos --config ./main.yaml --profile ci ...` merges the `ci` profile over `main.yaml`, the
+same way it would over an auto-discovered `atmos.yaml`.
+
 ### Pinning a Profile Per Project
 
 You can pin a profile for a whole project by setting `ATMOS_PROFILE` in a committed dotenv file and including it in the base `atmos.yaml` [`env`](/cli/configuration/env) section:
