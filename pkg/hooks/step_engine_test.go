@@ -429,6 +429,43 @@ func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
 	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
 }
 
+// TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute verifies the value-classification rule
+// for a non-empty working_directory: a BARE value ("foo", "foo/bar") has no anchor of its own, so
+// it's resolved relative to the component directory (same anchor as the empty-value default) --
+// previously it fell through unchanged to exec.Cmd.Dir's CWD-relative default, silently behaving
+// identically to a dot-prefixed value. A dot-prefixed value ("./foo") and an absolute value are
+// left untouched, since exec.Cmd.Dir already resolves those correctly (CWD-relative and
+// passthrough respectively).
+func TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "app")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+	}
+
+	bareStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "modules/sub"}
+	setDefaultStepWorkingDirectory(ctx, bareStep)
+	assert.Equal(t, filepath.Join(componentDir, "modules", "sub"), bareStep.WorkingDirectory,
+		"a bare (non-dot-prefixed) working_directory must anchor to the component directory")
+
+	dotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "./modules/sub"}
+	setDefaultStepWorkingDirectory(ctx, dotStep)
+	assert.Equal(t, "./modules/sub", dotStep.WorkingDirectory,
+		"a dot-prefixed working_directory is left as-is -- exec.Cmd.Dir already resolves it "+
+			"relative to CWD, matching the runtime-source convention")
+
+	dotDotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: ".."}
+	setDefaultStepWorkingDirectory(ctx, dotDotStep)
+	assert.Equal(t, "..", dotDotStep.WorkingDirectory, "bare \"..\" is dot-prefixed, left as-is")
+
+	absDir := t.TempDir()
+	absStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}
+	setDefaultStepWorkingDirectory(ctx, absStep)
+	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
+}
+
 func TestStepsSummary(t *testing.T) {
 	tests := []struct {
 		name   string
