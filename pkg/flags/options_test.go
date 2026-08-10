@@ -243,6 +243,24 @@ func TestWithValidValues(t *testing.T) {
 	assert.Equal(t, []string{"json", "yaml", "table"}, strFlag.ValidValues)
 }
 
+func TestWithValidValues_StringSliceFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-slice flag (e.g. --client, repeatable).
+	WithStringSliceFlag("client", "c", nil, "AI client(s) to target")(cfg)
+
+	// Then set valid values, same option as the scalar StringFlag case.
+	opt := WithValidValues("client", "claude-code", "vscode", "gemini")
+	opt(cfg)
+
+	flag := cfg.registry.Get("client")
+	assert.NotNil(t, flag)
+
+	sliceFlag, ok := flag.(*StringSliceFlag)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"claude-code", "vscode", "gemini"}, sliceFlag.ValidValues)
+}
+
 func TestWithValidValues_NonExistentFlag(t *testing.T) {
 	cfg := &parserConfig{registry: NewFlagRegistry()}
 
