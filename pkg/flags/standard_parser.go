@@ -97,6 +97,16 @@ func (p *StandardParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) er
 	return p.parser.BindFlagsToViper(cmd, v)
 }
 
+// ValidateFlagValues validates cmd's already-parsed flag values against this parser's
+// registered ValidValues constraints (see WithValidValues). Call it after
+// BindFlagsToViper for commands that don't call Parse(). See
+// StandardFlagParser.ValidateFlagValues for details.
+func (p *StandardParser) ValidateFlagValues(cmd *cobra.Command) error {
+	defer perf.Track(nil, "flags.StandardParser.ValidateFlagValues")()
+
+	return p.parser.ValidateFlagValues(cmd)
+}
+
 // Parse processes command-line arguments and returns strongly-typed StandardOptions.
 //
 // Handles precedence (CLI > ENV > config > defaults) via Viper.

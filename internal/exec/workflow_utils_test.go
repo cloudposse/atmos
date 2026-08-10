@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +22,6 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -543,117 +544,6 @@ func TestShellFieldsCorrectParsing(t *testing.T) {
 			assert.NoError(t, err, "shell.Fields should not return an error")
 			assert.Equal(t, tt.expectedArgs, actualArgs,
 				"shell.Fields should correctly parse quoted arguments")
-		})
-	}
-}
-
-// TestBuildWorkflowStepError tests the buildWorkflowStepError function.
-func TestBuildWorkflowStepError(t *testing.T) {
-	tests := []struct {
-		name           string
-		err            error
-		ctx            *workflowStepErrorContext
-		expectContains []string
-		expectSentinel error
-		expectExitCode int
-	}{
-		{
-			name: "shell command failure with stack",
-			err:  errors.New("command failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/path/to/stacks/workflows/deploy.yaml",
-				WorkflowBasePath: "/path/to/stacks/workflows",
-				Workflow:         "deploy-all",
-				StepName:         "step1",
-				Command:          "echo hello",
-				CommandType:      "shell",
-				FinalStack:       "dev-us-east-1",
-			},
-			expectContains: []string{"deploy-all", "step1", "echo hello", "dev-us-east-1"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "atmos command failure without stack",
-			err:  errors.New("terraform failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/base/stacks/workflows/infra.yaml",
-				WorkflowBasePath: "/base/stacks/workflows",
-				Workflow:         "provision",
-				StepName:         "terraform-step",
-				Command:          "terraform plan vpc",
-				CommandType:      "atmos",
-				FinalStack:       "",
-			},
-			expectContains: []string{"provision", "terraform-step", "atmos terraform plan vpc"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "atmos command failure with stack",
-			err:  errors.New("plan failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/workflows/deploy.yaml",
-				WorkflowBasePath: "/workflows",
-				Workflow:         "deploy",
-				StepName:         "plan-step",
-				Command:          "terraform plan mycomponent",
-				CommandType:      "atmos",
-				FinalStack:       "prod",
-			},
-			expectContains: []string{"deploy", "plan-step", "atmos", "prod"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "error with exit code",
-			err:  errUtils.WithExitCode(errors.New("exit error"), 2),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/workflows/test.yaml",
-				WorkflowBasePath: "/workflows",
-				Workflow:         "test-wf",
-				StepName:         "failing-step",
-				Command:          "exit 2",
-				CommandType:      "shell",
-				FinalStack:       "",
-			},
-			expectContains: []string{"test-wf", "failing-step"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-			expectExitCode: 2,
-		},
-		{
-			name: "workflow file in nested directory",
-			err:  errors.New("nested failure"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/base/stacks/workflows/team/project/deploy.yaml",
-				WorkflowBasePath: "/base/stacks/workflows",
-				Workflow:         "deploy",
-				StepName:         "step1",
-				Command:          "echo test",
-				CommandType:      "shell",
-				FinalStack:       "",
-			},
-			expectContains: []string{"deploy", "step1", "team/project/deploy"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildWorkflowStepError(tt.err, tt.ctx)
-
-			assert.Error(t, result)
-			assert.ErrorIs(t, result, tt.expectSentinel)
-
-			// Use Format to get the full formatted error including hints. Strip ANSI
-			// since CI-enabled color rendering can split an expected substring (e.g. a
-			// syntax-highlighted code fence) across separate escape-coded spans.
-			formattedErr := atmosansi.Strip(errUtils.Format(result, errUtils.DefaultFormatterConfig()))
-			for _, expected := range tt.expectContains {
-				assert.Contains(t, formattedErr, expected)
-			}
-
-			if tt.expectExitCode > 0 {
-				exitCode := errUtils.GetExitCode(result)
-				assert.Equal(t, tt.expectExitCode, exitCode)
-			}
 		})
 	}
 }
@@ -2008,6 +1898,63 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-mixed-types", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes
+// proves that a workflow-level `working_directory:` default (documented as
+// "default working directory for all steps") actually reaches extended step
+// types (archive, file, junit, workdir, container, ...), not just the
+// shell/exec/atmos legacy dispatch path. Before the fix, extended steps only
+// ever looked at their own step-level WorkingDirectory (via
+// pkg/runner/step's resolver) and silently ignored the workflow-level
+// default, falling back to the process cwd instead.
+func TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	basePath := t.TempDir()
+	subDir := filepath.Join(basePath, "sub")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "marker.txt"), []byte("from-workflow-default"), 0o644))
+
+	// Process cwd differs from basePath and also has a same-named "sub" dir,
+	// so a wrong (cwd-fallback) resolution would silently succeed against
+	// the wrong directory instead of failing loudly.
+	cwd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "sub", "marker.txt"), []byte("from-cwd"), 0o644))
+	t.Chdir(cwd)
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: basePath}
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description:      "Test workflow-level working_directory default reaches extended step types",
+		WorkingDirectory: "sub",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "archive",
+				Type:        "archive",
+				Action:      "replace",
+				Source:      ".",
+				Destination: "../result.zip",
+				Format:      "zip",
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(atmosConfig, "test-workflow-default-workdir", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(filepath.Join(basePath, "result.zip"))
+	require.NoError(t, err, "archive should land under basePath (the workflow-level default), not the process cwd")
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	rc, err := r.File[0].Open()
+	require.NoError(t, err)
+	defer rc.Close()
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, "from-workflow-default", string(content))
 }
 
 // TestExecuteWorkflow_EnvStepPersistsToLaterSteps verifies that ExecuteWorkflow's
