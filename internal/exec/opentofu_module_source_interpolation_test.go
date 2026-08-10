@@ -112,9 +112,9 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 		componentInfo, ok := componentSection["component_info"].(map[string]any)
 		require.True(t, ok, "component_info should be present")
 
-		// Check if validation was skipped due to OpenTofu detection.
-		if skipped, exists := componentInfo["validation_skipped_opentofu"]; exists {
-			assert.True(t, skipped.(bool), "validation_skipped_opentofu should be true when OpenTofu-specific syntax is detected")
+		// Check if validation was skipped for the known module-source-interpolation diagnostic.
+		if skipped, exists := componentInfo["validation_skipped_module_source_interpolation"]; exists {
+			assert.True(t, skipped.(bool), "validation_skipped_module_source_interpolation should be true when module source interpolation is detected")
 		}
 
 		// Terraform config may be nil (validation skipped) or contain partial info.

@@ -48,8 +48,11 @@ This feature requires variables to be available during `tofu init`, which is why
 
 ### Terraform vs OpenTofu
 
-**Important:** This feature is **OpenTofu-specific** and is **NOT supported** in HashiCorp Terraform. Terraform's HCL
-parser explicitly rejects variable interpolation in module source blocks.
+**Important:** This feature was **OpenTofu-specific** and was **NOT supported** in HashiCorp Terraform at the time this
+PRD was written. Terraform's HCL parser explicitly rejected variable interpolation in module source blocks.
+
+> **Superseded:** Terraform 1.15 (April 2026) added the equivalent capability via `const = true` variables. See
+> [Update (2026-08-10)](#update-2026-08-10-generalized-to-terraform-115-2913) below.
 
 ## Root Cause Analysis
 
@@ -568,3 +571,35 @@ Users simply need to upgrade to the version with auto-detection support. No conf
 - [Issue #1753](https://github.com/cloudposse/atmos/issues/1753)
 - [PR #1163 - Init Varfile Support](https://github.com/cloudposse/atmos/pull/1163)
 - Test Fixture: `tests/fixtures/scenarios/opentofu-module-source-interpolation/`
+
+## Update (2026-08-10): Generalized to Terraform 1.15+ (#2913)
+
+- **Issue #2913** reported the identical "Variables not allowed" failure on plain HashiCorp Terraform 1.15.2 (no
+  OpenTofu involved): `variable "org" { const = true ... }` + `module { source = "./mods/${var.org}" }`.
+- **Terraform 1.15** (released April 29, 2026) added the same capability OpenTofu 1.8+ already had: variables (and
+  locals composed entirely of them) can now be used in a module's `source`/`version` attributes, as long as the
+  variable is declared `const = true`, resolved at `terraform init` time. See
+  [HashiCorp's announcement](https://www.hashicorp.com/en/blog/new-in-terraform-115-dynamic-sources-variable-deprecation-and-more).
+- **Corrected understanding:** the "Variables not allowed" diagnostic is not an OpenTofu-specific feature gate — it's
+  an inherent limitation of `terraform-config-inspect`, which decodes `module.source` via
+  `gohcl.DecodeExpression(attr.Expr, nil, &source)` (a `nil` `hcl.EvalContext`). Any variable reference in that
+  position produces this diagnostic identically, regardless of which tool/version is actually configured, and
+  regardless of whether that tool/version would accept the expression.
+- **Fix:** decoupled the skip from `IsOpenTofu()` tool detection entirely. It now applies unconditionally whenever the
+  diagnostic text matches, for both `terraform` and `tofu` configured commands.
+  - Renamed `isKnownOpenTofuFeature` → `isKnownModuleSourceInterpolationDiagnostic` (`internal/exec/terraform_detection.go`).
+  - Renamed the `component_info` flag `validation_skipped_opentofu` → `validation_skipped_module_source_interpolation`
+    (`internal/exec/utils.go`).
+  - Removed the now-unnecessary `effectiveConfig`/command-override clone in `utils.go` that existed only to feed
+    `IsOpenTofu()`.
+- **Scope decision:** `IsOpenTofu()` and its detection cache (`internal/exec/terraform_detection.go`) were
+  intentionally retained even though, after this fix, they have no remaining production call site in this path —
+  they're generically useful, well-tested infrastructure; removing them was out of scope for this bug fix.
+- **SBOM impact:** checked and confirmed not applicable. `pkg/sbom/terraform.go` gathers module evidence via
+  `terraform modules -json` against an already-initialized directory, never via `terraform-config-inspect`, so it
+  never hits this diagnostic. Verified empirically against Terraform 1.15.6 that `modules -json` (and the underlying
+  `.terraform/modules/modules.json` manifest) already reports the **resolved** module source (e.g. `./mods/acme`),
+  not the unresolved template — Atmos's SBOM pipeline was already recording the effective source correctly. Added
+  `TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource` in `pkg/sbom/terraform_test.go` to guard this.
+- **New fixture/tests:** `tests/fixtures/scenarios/terraform-module-source-interpolation/`,
+  `internal/exec/terraform_module_source_interpolation_test.go`.

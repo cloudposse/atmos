@@ -105,22 +105,32 @@ func cacheDetectionResult(command string, isTofu bool) {
 	detectionCache[command] = isTofu
 }
 
-// isKnownOpenTofuFeature checks if the error message matches known OpenTofu-specific features
-// that terraform-config-inspect doesn't support.
-func isKnownOpenTofuFeature(err error) bool {
+// isKnownModuleSourceInterpolationDiagnostic checks if the error message matches a known,
+// non-fatal diagnostic that terraform-config-inspect emits when a module's `source` (or
+// similar) attribute references a variable.
+//
+// Terraform-config-inspect decodes these attributes via gohcl.DecodeExpression with a nil
+// hcl.EvalContext, so ANY variable reference in that position produces the HCL diagnostic
+// "Variables not allowed" -- regardless of whether the configured tool/version actually
+// supports evaluating it. This is valid, modern syntax under both OpenTofu 1.8+ (module
+// source interpolation) and Terraform 1.15+ (via `const = true` variables); it is not a
+// tool-specific feature gate, so this check intentionally does not depend on which command
+// (terraform/tofu) is configured.
+func isKnownModuleSourceInterpolationDiagnostic(err error) bool {
 	if err == nil {
 		return false
 	}
 
 	errMsg := err.Error()
 
-	// List of error patterns that indicate OpenTofu-specific syntax.
-	openTofuPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+).
-		// Add more patterns here as OpenTofu adds features that diverge from Terraform.
+	// List of error patterns produced by terraform-config-inspect's inability to evaluate
+	// variable references in module source/version attributes.
+	moduleSourceInterpolationPatterns := []string{
+		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
+		// Add more patterns here as needed.
 	}
 
-	for _, pattern := range openTofuPatterns {
+	for _, pattern := range moduleSourceInterpolationPatterns {
 		if strings.Contains(errMsg, pattern) {
 			return true
 		}

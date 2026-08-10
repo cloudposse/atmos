@@ -258,8 +258,9 @@ func TestCacheDetectionResult(t *testing.T) {
 	})
 }
 
-// TestIsKnownOpenTofuFeature tests the pattern matching for OpenTofu features.
-func TestIsKnownOpenTofuFeature(t *testing.T) {
+// TestIsKnownModuleSourceInterpolationDiagnostic tests the pattern matching for the
+// module-source-interpolation diagnostic, which applies regardless of tool (terraform/tofu).
+func TestIsKnownModuleSourceInterpolationDiagnostic(t *testing.T) {
 	tests := []struct {
 		name     string
 		err      error
@@ -309,24 +310,24 @@ func TestIsKnownOpenTofuFeature(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isKnownOpenTofuFeature(tt.err)
+			result := isKnownModuleSourceInterpolationDiagnostic(tt.err)
 			assert.Equal(t, tt.expected, result, "Pattern matching result should match expected for: %s", tt.name)
 		})
 	}
 }
 
-// TestIsKnownOpenTofuFeature_Patterns tests that all known patterns are detected.
-func TestIsKnownOpenTofuFeature_Patterns(t *testing.T) {
-	// List of known OpenTofu-specific error patterns that should be skipped.
+// TestIsKnownModuleSourceInterpolationDiagnostic_Patterns tests that all known patterns are detected.
+func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
+	// List of known error patterns that should be skipped, regardless of tool.
 	knownPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+).
+		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
 	}
 
 	for _, pattern := range knownPatterns {
 		t.Run("detects pattern: "+pattern, func(t *testing.T) {
 			err := errors.New("Error in configuration: " + pattern + " - please check your syntax")
-			result := isKnownOpenTofuFeature(err)
-			assert.True(t, result, "Should detect known OpenTofu pattern: %s", pattern)
+			result := isKnownModuleSourceInterpolationDiagnostic(err)
+			assert.True(t, result, "Should detect known pattern: %s", pattern)
 		})
 	}
 }
@@ -372,24 +373,24 @@ func TestIsOpenTofu_ConcurrentAccess(t *testing.T) {
 	assert.True(t, cached, "Cache should indicate OpenTofu")
 }
 
-// TestIsKnownOpenTofuFeature_EdgeCases tests edge cases for pattern matching.
-func TestIsKnownOpenTofuFeature_EdgeCases(t *testing.T) {
+// TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases tests edge cases for pattern matching.
+func TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases(t *testing.T) {
 	t.Run("empty error message", func(t *testing.T) {
 		err := errors.New("")
-		result := isKnownOpenTofuFeature(err)
+		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.False(t, result, "Empty error message should not match")
 	})
 
 	t.Run("very long error message with pattern", func(t *testing.T) {
 		longPrefix := strings.Repeat("error context ", 100)
 		err := errors.New(longPrefix + "Variables not allowed in this context")
-		result := isKnownOpenTofuFeature(err)
+		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.True(t, result, "Should detect pattern in long error message")
 	})
 
 	t.Run("error message with only whitespace", func(t *testing.T) {
 		err := errors.New("   \n\t   ")
-		result := isKnownOpenTofuFeature(err)
+		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.False(t, result, "Whitespace-only error should not match")
 	})
 
@@ -397,7 +398,7 @@ func TestIsKnownOpenTofuFeature_EdgeCases(t *testing.T) {
 		// If we add more patterns in the future, this test ensures
 		// that we detect if ANY pattern matches.
 		err := errors.New("Variables not allowed and some other error")
-		result := isKnownOpenTofuFeature(err)
+		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.True(t, result, "Should match if any pattern is found")
 	})
 }
@@ -518,12 +519,12 @@ func BenchmarkIsOpenTofu_Cached(b *testing.B) {
 	}
 }
 
-// BenchmarkIsKnownOpenTofuFeature benchmarks pattern matching.
-func BenchmarkIsKnownOpenTofuFeature(b *testing.B) {
+// BenchmarkIsKnownModuleSourceInterpolationDiagnostic benchmarks pattern matching.
+func BenchmarkIsKnownModuleSourceInterpolationDiagnostic(b *testing.B) {
 	err := errors.New("Variables not allowed: Variables may not be used here")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		isKnownOpenTofuFeature(err)
+		isKnownModuleSourceInterpolationDiagnostic(err)
 	}
 }

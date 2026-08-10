@@ -180,6 +180,43 @@ func TestAppendModulesForDirectoryHandlesRunTerraformModulesErrors(t *testing.T)
 	}
 }
 
+// TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource guards against SBOM evidence
+// ever recording an unresolved module-source template (e.g. "./mods/${var.org}") instead of the
+// concrete path Terraform actually fetched. Confirmed empirically against Terraform 1.15.6: for a
+// module whose `source` attribute interpolates a `const = true` variable, `terraform modules -json`
+// already reports the resolved literal value ("./mods/acme"), not the template -- so this asserts
+// appendModulesForDirectory passes that resolved value straight through rather than needing to
+// resolve it itself (see issue #2913 investigation).
+func TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	moduleDir := filepath.Join(directory, "mods", "acme")
+	require.NoError(t, os.MkdirAll(moduleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "main.tf"), []byte(`output "org" {
+  value = "acme"
+}
+`), 0o644))
+
+	previous := runTerraformModules
+	runTerraformModules = func(context.Context, string, string) ([]byte, error) {
+		// Mirrors the real `terraform modules -json` output for a module declared as
+		// `source = "./mods/${var.org}"` with `var.org` `const = true` and default "acme".
+		return []byte(`{"format_version":"1.0","modules":[{"key":"greeting","source":"./mods/acme","version":""}]}`), nil
+	}
+	t.Cleanup(func() { runTerraformModules = previous })
+
+	config := &schema.AtmosConfiguration{}
+	graph := &Graph{}
+	complete, detail := appendModulesForDirectory(t.Context(), graph, config, "terraform:test-component", directory)
+
+	require.True(t, complete, "detail: %s", detail)
+	require.Len(t, graph.Components, 1)
+	component := graph.Components[0]
+	require.Equal(t, "./mods/acme", component.Source)
+	require.Equal(t, "./mods/acme", component.Properties["atmos:declared-source"])
+	require.NotContains(t, component.Source, "${", "SBOM must record the effective module source, not the unresolved interpolation template")
+}
+
 // --- resolveModuleArtifact -----------------------------------------------------
 
 func TestResolveModuleArtifactResolvesDigestReferenceWithoutNetwork(t *testing.T) {

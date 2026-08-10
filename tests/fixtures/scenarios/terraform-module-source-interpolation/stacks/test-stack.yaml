@@ -1,0 +1,10 @@
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    test-component:
+      vars:
+        # Reproduces issue #2913: Terraform 1.15+ `const` variable interpolation
+        # in a module's `source` attribute.
+        org: "acme"
