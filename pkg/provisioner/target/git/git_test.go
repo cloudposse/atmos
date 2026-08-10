@@ -45,7 +45,8 @@ func TestParseConfig(t *testing.T) {
 		},
 		"pull_request": map[string]any{"enabled": true},
 	}
-	cfg := parseConfig(block)
+	cfg, err := parseConfig(block)
+	require.NoError(t, err)
 	assert.Equal(t, "deployments", cfg.Repository)
 	assert.Equal(t, "clusters/dev/argocd", cfg.Path)
 	assert.Equal(t, "platform-admin", cfg.Identity)
@@ -57,11 +58,22 @@ func TestParseConfig(t *testing.T) {
 }
 
 func TestParseConfigEmpty(t *testing.T) {
-	cfg := parseConfig(map[string]any{})
+	cfg, err := parseConfig(map[string]any{})
+	require.NoError(t, err)
 	assert.Empty(t, cfg.Repository)
 	assert.Empty(t, cfg.Identity)
 	assert.False(t, cfg.PullRequest)
 	assert.Nil(t, cfg.Split, "split is unset until the target block explicitly configures it")
+}
+
+func TestParseConfigRejectsNonBoolSplit(t *testing.T) {
+	_, err := parseConfig(map[string]any{
+		"repository": "deployments",
+		"path":       "clusters/dev/argocd",
+		"split":      "yes",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
 }
 
 func TestResolveSplit(t *testing.T) {
@@ -107,6 +119,38 @@ func TestDeliverRepositoryNotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+// TestDeliverRejectsNonBoolSplit verifies Deliver fails closed on a
+// config parse error (a typo'd, non-bool "split" value) instead of silently
+// falling through to repository resolution with a zero-value config.
+func TestDeliverRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	// Must fail before repository resolution -- a repository-not-found error
+	// would mean the parse error was silently swallowed.
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+// TestFetchRejectsNonBoolSplit mirrors TestDeliverRejectsNonBoolSplit for the
+// read-only Fetch path: a typo'd, non-bool "split" value must fail closed
+// before repository resolution is even attempted.
+func TestFetchRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	_, err := g.Fetch(context.Background(), &target.FetchInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
 }
 
 func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
@@ -298,6 +342,78 @@ func TestWriteArtifactSingleFileModeReplacesExistingDirectory(t *testing.T) {
 	info, err := os.Stat(stale)
 	require.NoError(t, err)
 	assert.False(t, info.IsDir(), "the stale directory must be replaced by a single file")
+}
+
+// TestWriteArtifactDirectoryModeReplacesExistingFile mirrors
+// TestWriteArtifactSingleFileModeReplacesExistingDirectory in the other
+// direction: a stale single file left over from a prior split=false delivery
+// to the same path is silently replaced when split flips to true.
+func TestWriteArtifactDirectoryModeReplacesExistingFile(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("clusters", "dev", "demo")
+
+	stale := filepath.Join(workdir, "clusters", "dev", "demo")
+	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
+	require.NoError(t, os.WriteFile(stale, []byte("stale single file\n"), 0o600))
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_v1_Namespace.yaml": []byte("kind: Namespace\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, true))
+
+	info, err := os.Stat(stale)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "the stale file must be replaced by a directory")
+}
+
+// TestWarnOnSplitModeFlip exercises warnOnSplitModeFlip's branches directly.
+// Note: ui.Warningf writes to the process's real stderr formatter (no test
+// seam in this codebase, see pkg/degradation for the same convention), so
+// these assert the function doesn't panic across every existing-path shape
+// rather than capturing the warning text.
+func TestWarnOnSplitModeFlip(t *testing.T) {
+	t.Run("no existing path", func(t *testing.T) {
+		workdir := t.TempDir()
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(filepath.Join(workdir, "missing"), "missing", true)
+		})
+	})
+
+	t.Run("directory replaced by file (mode flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		dir := filepath.Join(workdir, "clusters", "dev")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(dir, "clusters/dev", false)
+		})
+	})
+
+	t.Run("file replaced by directory (mode flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		file := filepath.Join(workdir, "kustomization.yaml")
+		require.NoError(t, os.WriteFile(file, []byte("kind: Kustomization\n"), 0o600))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(file, "kustomization.yaml", true)
+		})
+	})
+
+	t.Run("directory replaced by directory (no flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		dir := filepath.Join(workdir, "clusters", "dev")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(dir, "clusters/dev", true)
+		})
+	})
+
+	t.Run("file replaced by file (no flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		file := filepath.Join(workdir, "kustomization.yaml")
+		require.NoError(t, os.WriteFile(file, []byte("kind: Kustomization\n"), 0o600))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(file, "kustomization.yaml", false)
+		})
+	})
 }
 
 func TestWriteArtifactWriteFailure(t *testing.T) {
