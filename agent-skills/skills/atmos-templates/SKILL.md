@@ -4,6 +4,7 @@ description: "Go templates: Sprig/Gomplate functions, atmos.Component, atmos.Gom
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 references:
   - references/go-templates.md
 ---
@@ -225,21 +226,21 @@ are not supported in stack manifests (only in `atmos.yaml`).
 1. **Prefer YAML functions over Go templates** -- Type-safe, cannot break YAML
 2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
 3. **Use `atmos.GomplateDatasource` instead of `datasource`** -- Built-in caching prevents
-   redundant API calls
+    redundant API calls
 4. **Minimize `atmos.Component` usage** -- Each call may initialize Terraform
-5. **All template functions cache results** per execution for repeated calls
+5. **All template functions cache results** per execution for repeated calls.
 
 ## Common Pitfalls
 
 1. **Go templates break YAML** -- Unquoted `{{ }}` can cause YAML parse errors. Always quote
-   template expressions.
+    template expressions.
 2. **Type confusion** -- Go templates always return strings. Use `!template` with `toJson` for
-   complex types.
+    complex types.
 3. **Indentation issues** -- Multi-line template output can break YAML indentation.
 4. **Sprig/Gomplate conflicts** -- The `env` function exists in both libraries with different
-   syntax. Use `getenv` for Gomplate's version when both are enabled.
+    syntax. Use `getenv` for Gomplate's version when both are enabled.
 5. **Performance degradation** -- Overuse of `atmos.Component` or `!terraform.output` across
-   many stacks can dramatically slow `atmos describe stacks` and `atmos describe affected`.
+    many stacks can dramatically slow `atmos describe stacks` and `atmos describe affected`.
 
 ## Additional Resources
 

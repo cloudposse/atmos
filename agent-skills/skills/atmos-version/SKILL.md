@@ -4,6 +4,7 @@ description: "Atmos Version Tracker: version tracks, lock files, managed externa
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 ---
 
 # Atmos Version Tracker

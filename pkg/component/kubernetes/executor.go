@@ -248,14 +248,37 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 	case OperationApply:
 		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
 		// before contacting the cluster or delivering to a provision target.
-		if err := validateObjectsStructural(objects); err != nil {
+		// Component-level `validate: false` opts out explicitly.
+		validateEnabled, err := resolveComponentValidateEnabled(info.ComponentSection)
+		if err != nil {
 			return nil, err
+		}
+		if validateEnabled {
+			if err := validateObjectsStructural(objects); err != nil {
+				return nil, err
+			}
 		}
 		return deliverApply(atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
 		return runDelete(objects)
 	case OperationValidate:
-		return runValidate(objects, resolveValidateOptions(ctx.Flags))
+		options := resolveValidateOptions(ctx.Flags)
+		validateEnabled, err := resolveComponentValidateEnabled(info.ComponentSection)
+		if err != nil {
+			return nil, err
+		}
+		if !validateEnabled {
+			// `validate: false` opts out of Atmos's own offline structural opinion
+			// only. An explicit --server request still validates against the live
+			// cluster's own API, which is authoritative regardless of this flag.
+			if !options.Server {
+				ui.Warningf("structural validation skipped: 'validate: false' is set for this component")
+				return objectsToResults("skipped", objects), nil
+			}
+			ui.Warningf("offline structural validation skipped: 'validate: false' is set for this component")
+			return runServerValidate(objects)
+		}
+		return runValidate(objects, options)
 	default:
 		return nil, fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
 	}
