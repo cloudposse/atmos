@@ -370,6 +370,10 @@ func TestRenderMarkdown_Empty(t *testing.T) {
 	assert.Contains(t, out, "no findings")
 }
 
+// TestRenderMarkdown_WithFindings covers the default (no RepoBaseURL, not running in
+// GitHub Actions) rendering: severity badges are plain inline code, never shields.io
+// images — an image inside a table cell/heading makes glamour pull its raw URL out
+// into a numbered footnote, which is exactly the noise this mode exists to avoid.
 func TestRenderMarkdown_WithFindings(t *testing.T) {
 	f := &Findings{
 		Tool: "checkov",
@@ -380,9 +384,33 @@ func TestRenderMarkdown_WithFindings(t *testing.T) {
 	}
 	out := RenderMarkdown(f, RenderMarkdownOptions{})
 	assert.Contains(t, out, "checkov")
-	assert.Contains(t, out, "1 HIGH, 1 LOW")
+	assert.Contains(t, out, "`HIGH`")
+	assert.Contains(t, out, "`LOW`")
+	assert.NotContains(t, out, "shields.io")
 	assert.Contains(t, out, "CKV_AWS_19")
-	assert.Contains(t, out, "main.tf:5")
+	assert.Contains(t, out, "`main.tf:5`")
+	assert.NotContains(t, out, "[main.tf:5]")
+}
+
+// TestRenderMarkdown_WithFindings_GitHubActions covers rendering when RepoBaseURL is
+// set (running in GitHub Actions): severity badges become real shields.io images,
+// since GitHub renders the same markdown natively (PR comments, Pro run page) and
+// shows them inline with no footnote noise.
+func TestRenderMarkdown_WithFindings_GitHubActions(t *testing.T) {
+	f := &Findings{
+		Tool: "checkov",
+		Findings: []Finding{
+			{RuleID: "CKV_AWS_19", Severity: SeverityHigh, Message: "Encrypt at rest", File: "main.tf", Line: 5},
+			{RuleID: "CKV_AWS_18", Severity: SeverityLow, Message: "Access logging"},
+		},
+	}
+	out := RenderMarkdown(f, RenderMarkdownOptions{RepoBaseURL: "https://github.com/org/repo/blob/abc123"})
+	assert.Contains(t, out, "https://shields.io/badge/HIGH-1-critical?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/LOW-1-yellow?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/-HIGH-critical?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/-LOW-yellow?style=for-the-badge")
+	assert.Contains(t, out, "CKV_AWS_19")
+	assert.Contains(t, out, "[main.tf:5](https://github.com/org/repo/blob/abc123/main.tf#L5)")
 }
 
 func TestRenderMarkdown_RespectsMaxFindings(t *testing.T) {

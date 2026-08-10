@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the emulator-aws example (the AWS emulator demo, backed by the Floci driver).
+# See examples/emulator-aws/ for the example code.
+#
+# Note: most emulator-aws commands (list/describe) eagerly authenticate against the Floci
+# emulator on localhost:4566, which is only available in the CI workflow job. These tests
+# cover what can be validated offline: that the example's stack manifests are well-formed.
+tests:
+  - name: emulator-aws validate stacks
+    enabled: true
+    snapshot: false
+    description: "Verify the emulator-aws example's stack manifests are valid (offline; no emulator required)."
+    workdir: "../examples/emulator-aws"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+      stderr:
+        - "validated successfully"

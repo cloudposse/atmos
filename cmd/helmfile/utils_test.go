@@ -66,6 +66,48 @@ func TestIsHelpRequest(t *testing.T) {
 	}
 }
 
+func TestStripCIFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantEnabled bool
+		wantArgs    []string
+	}{
+		{
+			name:        "no ci flag",
+			args:        []string{"echo-server", "--skip-deps"},
+			wantEnabled: false,
+			wantArgs:    []string{"echo-server", "--skip-deps"},
+		},
+		{
+			name:        "ci flag",
+			args:        []string{"echo-server", "--ci", "--skip-deps"},
+			wantEnabled: true,
+			wantArgs:    []string{"echo-server", "--skip-deps"},
+		},
+		{
+			name:        "ci false",
+			args:        []string{"echo-server", "--ci=false", "--skip-deps"},
+			wantEnabled: false,
+			wantArgs:    []string{"echo-server", "--skip-deps"},
+		},
+		{
+			name:        "ci true",
+			args:        []string{"echo-server", "--ci=true"},
+			wantEnabled: true,
+			wantArgs:    []string{"echo-server"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotEnabled, gotArgs := stripCIFlag(tt.args)
+			assert.Equal(t, tt.wantEnabled, gotEnabled)
+			assert.Equal(t, tt.wantArgs, gotArgs)
+		})
+	}
+}
+
 func TestHandleHelpRequest(t *testing.T) {
 	tests := []struct {
 		name           string

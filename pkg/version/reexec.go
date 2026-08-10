@@ -122,6 +122,52 @@ func getEnvWrapper(key string) string {
 	return os.Getenv(key)
 }
 
+// ParseUseVersionFromArgs returns the value supplied to --use-version, if any.
+func ParseUseVersionFromArgs(args []string) string {
+	defer perf.Track(nil, "version.ParseUseVersionFromArgs")()
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+		if arg == "--use-version" {
+			if i+1 < len(args) && args[i+1] != "--" {
+				return args[i+1]
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// ExplicitVersionOverride returns the explicit version override requested by
+// env vars or --use-version, using the same precedence as version re-exec.
+func ExplicitVersionOverride(args []string) string {
+	defer perf.Track(nil, "version.ExplicitVersionOverride")()
+
+	return explicitVersionOverride(getEnvWrapper, args)
+}
+
+func explicitVersionOverride(getEnv func(string) string, args []string) string {
+	if requested := getEnv(VersionUseEnvVar); requested != "" {
+		return requested
+	}
+	if requested := ParseUseVersionFromArgs(args); requested != "" {
+		return requested
+	}
+	if requested := getEnv(UseVersionEnvVar); requested != "" {
+		return requested
+	}
+	if requested := getEnv(VersionEnvVar); requested != "" {
+		return requested
+	}
+	return ""
+}
+
 // defaultInstaller wraps toolchain.RunInstall.
 type defaultInstaller struct{}
 
@@ -229,7 +275,7 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 //
 //nolint:revive // os.Exit is intentional for hard failures.
 func fatalFormattedErr(formatted string) {
-	ui.Writeln(formatted)
+	ui.Writeln(strings.TrimRight(formatted, "\n"))
 	os.Exit(1)
 }
 
@@ -307,7 +353,7 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("Version '%s' is not a valid format", version).
-			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
+			WithHint("Version must be a PR number, `pr:NNNN`, `sha:XXXXXXX`, `ref:<name>` (e.g., `ref:main`), or semver (e.g., `1.2.3`)").
 			WithCause(err).
 			WithExitCode(1).
 			Err()

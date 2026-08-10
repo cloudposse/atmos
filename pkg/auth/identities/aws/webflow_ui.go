@@ -17,13 +17,18 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // webflowSpinnerPollInterval is the polling interval used by the spinner
 // model to check for token-exchange results between bubbletea ticks.
 const webflowSpinnerPollInterval = 100 * time.Millisecond
+
+// maxWebflowDialogURLWidth keeps browser-auth dialogs compact while allowing
+// short device-code URLs to remain with their verification instructions.
+const maxWebflowDialogURLWidth = 80
 
 // webflowIsTTY checks if stderr is a terminal.
 func webflowIsTTY() bool {
@@ -39,17 +44,29 @@ func webflowIsInteractive() bool {
 	return webflowIsTTYFunc()
 }
 
-// displayWebflowDialog shows a styled dialog with the authentication URL (TTY mode).
+// displayWebflowDialog shows the browser-authentication status and manual fallback URL in TTY mode.
 func displayWebflowDialog(authURL string) {
+	dialog, containsURL := renderWebflowDialog(authURL)
+	ui.Writef("%s\n", dialog)
+	if containsURL {
+		return
+	}
+
+	instructionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorDarkGray))
+	urlStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorBorder)).
+		Italic(true)
+
+	ui.Writef("%s\n%s\n", instructionStyle.Render("If the browser doesn't open, visit:"), urlStyle.Render(authURL))
+}
+
+func renderWebflowDialog(authURL string) (string, bool) {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(theme.ColorCyan)).
 		PaddingLeft(1).
 		PaddingRight(1)
-
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
-		Italic(true)
 
 	instructionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorDarkGray))
@@ -65,20 +82,27 @@ func displayWebflowDialog(authURL string) {
 	content.WriteString(titleStyle.Render("🔐 AWS Browser Authentication"))
 	content.WriteString("\n\n")
 	content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
-	content.WriteString("\n")
-	content.WriteString(instructionStyle.Render("If the browser doesn't open, visit:"))
-	content.WriteString("\n\n")
-	content.WriteString(urlStyle.Render(authURL))
 
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+	containsURL := authURL != "" && lipgloss.Width(authURL) <= maxWebflowDialogURLWidth
+	if containsURL {
+		urlStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.ColorBorder)).
+			Italic(true)
+		content.WriteString("\n\n")
+		content.WriteString(urlStyle.Render(authURL))
+		content.WriteString("\n\n")
+		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above."))
+	}
+
+	return boxStyle.Render(content.String()), containsURL
 }
 
 // displayWebflowDialogPlainText shows the authentication URL in plain text (non-TTY).
 func displayWebflowDialogPlainText(authURL string) {
-	utils.PrintfMessageToTUI("🔐 **AWS Browser Authentication (Non-Interactive)**\n")
-	utils.PrintfMessageToTUI("Visit this URL on a device with a browser:\n")
-	utils.PrintfMessageToTUI("%s\n", authURL)
-	utils.PrintfMessageToTUI("After signing in, paste the authorization code below.\n")
+	ui.Writef("🔐 **AWS Browser Authentication (Non-Interactive)**\n")
+	ui.Writef("Visit this URL on a device with a browser:\n")
+	ui.Writef("%s\n", authURL)
+	ui.Writef("After signing in, paste the authorization code below.\n")
 }
 
 // Spinner model for interactive waiting (follows SSO pattern from sso.go).
@@ -108,6 +132,7 @@ func newWebflowSpinnerModel(tokenCh <-chan webflowSpinnerTokenResult, cancel con
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 	return webflowSpinnerModel{
 		spinner: s,
 		message: "Waiting for browser authentication",

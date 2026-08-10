@@ -1,0 +1,73 @@
+---
+title: Version Files
+sidebar_position: 50
+sidebar_label: files
+sidebar_class_name: command
+description: Configure file managers that render locked versions into project files.
+---
+
+import File from '@site/src/components/File'
+
+`version.files` declares which files carry managed versions. [`atmos version track apply`](/cli/commands/version/track/apply) rewrites those files from the lock file, and [`verify`](/cli/commands/version/track/verify) fails when they drift.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  files:
+    - manager: github-actions
+      paths:
+        - .github/workflows/*.yaml
+        - .github/workflows/*.yml
+
+    - manager: marker
+      paths:
+        - Dockerfile
+        - scripts/**/*.sh
+
+    - manager: template
+      paths:
+        - "**/*.tmpl"
+```
+</File>
+
+When `version.files` is empty, managers with default paths run over those defaults.
+
+## Managers
+
+<dl>
+  <dt>`github-actions`</dt>
+  <dd>Rewrites `uses:` refs in workflow files by matching `owner/repo` packages.</dd>
+
+  <dt>`marker`</dt>
+  <dd>Rewrites version tokens on lines annotated with `atmos:version` comments.</dd>
+
+  <dt>`template`</dt>
+  <dd>Renders `*.tmpl` source files to sibling files using the `.version` context.</dd>
+</dl>
+
+## Marker Example
+
+```dockerfile
+# atmos:version opentofu
+ENV TOFU_VERSION=1.10.6
+```
+
+```yaml
+tofu_version: 1.10.6 # atmos:version opentofu
+```
+
+Use `match=` when the default token detection is ambiguous:
+
+```shell
+DOWNLOAD_URL="https://example.com/tool/v1.2.3/tool.tgz" # atmos:version tool match=/tool/(v[^/]+)/tool.tgz
+```
+
+## Examples
+
+```shell
+atmos version track apply prod
+atmos version track apply prod --check
+atmos version track apply prod --manager=github-actions
+```

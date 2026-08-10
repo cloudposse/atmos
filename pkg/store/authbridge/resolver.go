@@ -61,6 +61,7 @@ func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName strin
 		ConfigFile:      aws.ConfigFile,
 		Profile:         aws.Profile,
 		Region:          aws.Region,
+		EndpointURL:     aws.EndpointURL,
 	}, nil
 }
 

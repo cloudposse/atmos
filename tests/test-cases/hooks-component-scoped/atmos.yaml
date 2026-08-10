@@ -15,7 +15,7 @@ stacks:
 # Stores configuration removed to avoid AWS initialization in test
 # stores:
 #   prod/ssm:
-#     type: aws-ssm-parameter-store
+#     kind: aws/ssm
 #     options:
 #       region: us-east-1
 

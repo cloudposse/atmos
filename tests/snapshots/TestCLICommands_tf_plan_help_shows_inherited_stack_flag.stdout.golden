@@ -1,11 +1,9 @@
 
 👽 test darwin/arm64
 
-Generate an execution plan, which shows what actions Terraform will take to
-reach the desired state of the configuration.
+Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.
 
-This command shows what Terraform will do when you run 'apply'. It helps you
-verify changes before making them to your infrastructure.
+This command shows what Terraform will do when you run 'apply'. It helps you verify changes before making them to your infrastructure.
 
 For complete Terraform/OpenTofu documentation, see:
 https://developer.hashicorp.com/terraform/cli/commands/plan
@@ -13,18 +11,18 @@ https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 
-                                    
-    $ atmos terraform plan [flags]  
-                                    
+
+    $ atmos terraform plan [flags]
+
 
 EXAMPLES
 
-                                                              
-    – Execute a terraform plan                                
-                                                              
-                                                              
-     $ atmos terraform plan <component-name> -s <stack-name>  
-                                                              
+
+    – Execute a terraform plan
+
+
+     $ atmos terraform plan <component-name> -s <stack-name>
+
 
 FLAGS
 
@@ -71,6 +69,10 @@ GLOBAL FLAGS
 
       --base-path string                     Base path for Atmos project
 
+      --cast string                          Record command output as an asciinema cast (--cast for generated path, --
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
+
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
 
@@ -83,6 +85,8 @@ GLOBAL FLAGS
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
       --dry-run                              Perform dry run without making actual changes
+
+      --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
 
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 
@@ -98,8 +102,13 @@ GLOBAL FLAGS
   -i, --identity string                      Specify the identity to authenticate to before running Terraform
                                              commands. Use without value to interactively select.
 
-      --include-dependents                   For each affected component, detect the dependent components and process
-                                             them in the dependency order
+      --include-dependencies string          Also process everything the selected components depend on (their
+                                             prerequisites), in dependency order (reversed for destroy). Optionally
+                                             bound the expansion: --include-dependencies=N
+
+      --include-dependents string            Also process everything that depends on the selected components, in
+                                             dependency order (reversed for destroy). Optionally bound the expansion: --
+                                             include-dependents=N
 
       --init-pass-vars                       Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                              feature)
@@ -107,6 +116,9 @@ GLOBAL FLAGS
       --interactive                          Enable interactive prompts for missing required flags, optional value
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
+
+      --labels string                        Filter by labels (comma-separated key=value or key:value pairs, matches
+                                             all): --labels=cost-center=platform,compliance=sox
 
       --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
                                              standard file descriptor, including '/dev/stdout', '/dev/stderr' and
@@ -175,6 +187,11 @@ GLOBAL FLAGS
 
   -s, --stack string                         Stack name
 
+      --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
+
+      --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
+                                             instead of remote state. Supported only by plan and describe commands
+
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
@@ -202,4 +219,3 @@ COMPATIBILITY FLAGS
       -target               Target specific resources for planning/applying
       -var                  Set a value for one of the input variables
       -var-file             Load variable values from the given file
-

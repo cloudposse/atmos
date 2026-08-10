@@ -47,6 +47,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 				ConfigFile:      expectedConfigFile,
 				Profile:         "prod",
 				Region:          "us-east-1",
+				EndpointURL:     "http://localhost:4566",
 			},
 		},
 	}
@@ -67,6 +68,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	assert.Equal(t, expectedConfigFile, authConfig.ConfigFile)
 	assert.Equal(t, "prod", authConfig.Profile)
 	assert.Equal(t, "us-east-1", authConfig.Region)
+	assert.Equal(t, "http://localhost:4566", authConfig.EndpointURL)
 }
 
 func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {

@@ -26,7 +26,7 @@ func TestRegisterProvisioner(t *testing.T) {
 
 	event := HookEvent("before.terraform.init")
 
-	mockFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+	mockFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 		return nil
 	}
 
@@ -70,7 +70,7 @@ func TestRegisterProvisioner_EmptyHookEventReturnsError(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: "",
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -90,7 +90,7 @@ func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -98,7 +98,7 @@ func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -137,7 +137,7 @@ func TestGetProvisionersForEvent_ReturnsCopy(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -188,7 +188,7 @@ func TestExecuteProvisioners_SingleProvisionerSuccess(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisionerCalled = true
 			assert.NotNil(t, atmosConfig)
 			assert.NotNil(t, componentConfig)
@@ -220,7 +220,7 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return nil
 		},
@@ -230,7 +230,7 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -263,7 +263,7 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return expectedErr
 		},
@@ -272,7 +272,7 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -306,7 +306,7 @@ func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			capturedAuthContext = authContext
 			return nil
 		},
@@ -344,7 +344,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event1,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return nil
 		},
@@ -354,7 +354,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "cleanup",
 		HookEvent: event2,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -398,7 +398,7 @@ func TestConcurrentRegistration(t *testing.T) {
 			provisioner := Provisioner{
 				Type:      "backend",
 				HookEvent: event,
-				Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+				Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 					return nil
 				},
 			}
@@ -422,7 +422,7 @@ func TestExecuteProvisioners_ContextCancellation(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
 			// Check if context is cancelled.
 			select {
 			case <-ctx.Done():

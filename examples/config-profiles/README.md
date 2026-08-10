@@ -1,3 +1,11 @@
+---
+title: Config Profiles
+tags: [Stacks]
+cast:
+  file: /casts/examples/config-profiles/list-and-show.cast
+  title: atmos config profiles
+---
+
 # Config Profiles Example
 
 This example demonstrates Atmos config profiles - a powerful feature for managing environment-specific configurations without duplicating settings across your infrastructure.

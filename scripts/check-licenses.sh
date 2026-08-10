@@ -4,15 +4,23 @@
 
 set -e
 
+GO_LICENSES_VERSION="${GO_LICENSES_VERSION:-v1.6.0}"
+GO_LICENSES_BIN="$(command -v go-licenses || true)"
+
 echo "==================================="
 echo "Atmos License Audit"
 echo "==================================="
 echo ""
 
 # Check if go-licenses is installed
-if ! command -v go-licenses &> /dev/null; then
-    echo "Installing go-licenses..."
-    go install github.com/google/go-licenses@latest
+if [ -z "${GO_LICENSES_BIN}" ]; then
+    echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
+    go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
+    GOBIN="$(go env GOBIN)"
+    if [ -z "${GOBIN}" ]; then
+        GOBIN="$(go env GOPATH)/bin"
+    fi
+    GO_LICENSES_BIN="${GOBIN}/go-licenses"
 fi
 
 # go-licenses uses categories:
@@ -30,7 +38,7 @@ echo ""
 # Run license check - only disallow "forbidden" category
 # We allow "restricted" (LGPL, MPL) as they're acceptable for dynamic linking
 EXIT_CODE=0
-go-licenses check . --disallowed_types=forbidden 2>&1 | tee /tmp/license-check.log
+"${GO_LICENSES_BIN}" check . --disallowed_types=forbidden 2>&1 | tee /tmp/license-check.log
 LICENSE_CHECK_EXIT=$?
 
 if [ $LICENSE_CHECK_EXIT -eq 0 ]; then
@@ -61,7 +69,7 @@ echo "==================================="
 echo ""
 
 # Generate summary report
-go-licenses report . 2>&1 | grep -v "^W" | grep -v "^E" | awk -F',' '{print $3}' | sort | uniq -c | sort -rn | while read count license; do
+"${GO_LICENSES_BIN}" report . 2>&1 | grep -v "^W" | grep -v "^E" | awk -F',' '{print $3}' | sort | uniq -c | sort -rn | while read count license; do
     if [ -n "$license" ]; then
         printf "%3d  %s\n" "$count" "$license"
     fi

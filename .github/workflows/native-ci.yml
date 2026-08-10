@@ -1,0 +1,185 @@
+name: Native CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # Only run when something this E2E actually exercises changes, so unrelated
+    # PRs aren't spammed with scanner SARIF/code-scanning annotations.
+    paths:
+      # The E2E fixture + its validation test-case.
+      - "tests/fixtures/scenarios/native-ci-e2e/**"
+      - "tests/test-cases/native-ci-e2e.yaml"
+      # The workflow itself.
+      - ".github/workflows/native-ci.yml"
+      # The feature this E2E exercises, so scanner/CI source changes still run it.
+      - "pkg/ci/**"
+      - "pkg/hooks/**"
+      - "actions/cache/**"
+      # CI log grouping boundaries exercised by the workflow and Terraform jobs.
+      - "cmd/root.go"
+      - "internal/exec/terraform_execute_helpers_exec.go"
+      - "internal/exec/workflow_utils.go"
+      - "pkg/runner/step/**"
+      - "pkg/workflow/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  statuses: write
+
+env:
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
+  ATMOS_NATIVE_CI_WORKDIR: tests/fixtures/scenarios/native-ci-e2e
+  ATMOS_VERSION_CHECK_ENABLED: "false"
+  NATIVE_CI_TRIVY_VERSION: "0.70.0"
+  NATIVE_CI_KICS_VERSION: "2.1.20"
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
+
+jobs:
+  workflow-groups:
+    name: "[native ci] workflow groups (${{ matrix.group_mode }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group_mode:
+          - auto
+          - invocation
+          - off
+    env:
+      ATMOS_CI_GROUPS_MODE: ${{ matrix.group_mode }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Run workflow log group fixture
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        run: |
+          echo "ATMOS_CI_GROUPS_MODE=${ATMOS_CI_GROUPS_MODE}"
+          case "${ATMOS_CI_GROUPS_MODE}" in
+            auto)
+              echo "Expected: GitHub log groups named 'first workflow group' and 'second workflow group'."
+              echo "Expected: each workflow shell step prints ATMOS_CI_LOG_GROUP_ACTIVE=1."
+              ;;
+            invocation)
+              echo "Expected: one GitHub log group around the full 'atmos workflow' invocation."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=1 because the invocation group is active."
+              ;;
+            off)
+              echo "Expected: no Atmos-created GitHub log groups."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=<unset>."
+              ;;
+          esac
+          atmos workflow ci-log-groups -f ci-log-groups
+
+  terraform-plan:
+    name: "[native ci] terraform plan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATMOS_CI_GROUPS_MODE: auto
+
+    services:
+      floci:
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        ports:
+          - 4566:4566
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Restore Atmos native CI cache
+        uses: ./actions/cache
+        env:
+          ATMOS_CHDIR: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+
+      - name: Validate native CI fixture
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        run: atmos validate stacks
+
+      - name: Mirror Terraform providers
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          # TFLint release-attestation verification invokes `gh`, which reads
+          # GH_TOKEN (not GITHUB_TOKEN) while installing tool dependencies.
+          GH_TOKEN: ${{ github.token }}
+        run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json
+
+      - name: Terraform plan
+        id: terraform-plan
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          ATMOS_CI_GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: atmos terraform plan bucket -s test
+
+  terraform-apply:
+    name: "[native ci] terraform apply"
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATMOS_CI_GROUPS_MODE: auto
+
+    services:
+      floci:
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        ports:
+          - 4566:4566
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Restore Atmos native CI cache
+        uses: ./actions/cache
+        env:
+          ATMOS_CHDIR: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+
+      - name: Validate native CI fixture
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        run: atmos validate stacks
+
+      - name: Mirror Terraform providers
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          # TFLint release-attestation verification invokes `gh`, which reads
+          # GH_TOKEN (not GITHUB_TOKEN) while installing tool dependencies.
+          GH_TOKEN: ${{ github.token }}
+        run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json
+
+      - name: Terraform apply
+        id: terraform-apply
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          ATMOS_CI_GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: atmos terraform apply bucket -s test -auto-approve

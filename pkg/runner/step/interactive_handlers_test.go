@@ -372,10 +372,11 @@ func TestInteractiveHandlersByCategory(t *testing.T) {
 
 // TestInteractiveHandlersExecuteFailFast verifies that interactive handlers fail
 // fast (return an error) instead of blocking on a prompt when they cannot run.
-// The prompt uses an invalid Go template, so Execute errors before reaching the
-// interactive form in both cases: in a non-TTY environment CheckTTY rejects it
-// first, and in a TTY environment ResolvePrompt rejects the bad template. Either
-// way no form is rendered, so this test never hangs.
+// The prompt uses an invalid Go template and no default is set, so Execute
+// errors before reaching the interactive form in both cases: in a non-TTY
+// environment resolveInteractive rejects it first (no default), and in a TTY
+// environment ResolvePrompt rejects the bad template. Either way no form is
+// rendered, so this test never hangs.
 func TestInteractiveHandlersExecuteFailFast(t *testing.T) {
 	ctx := context.Background()
 

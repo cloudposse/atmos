@@ -27,14 +27,13 @@
 
 -->
 
-Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
+**Run your infrastructure anywhere.**
 
-## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/components) that you implement using [Terraform "root modules"](https://atmos.tools/components/terraform). Then tie everything together using [Stack](https://atmos.tools/stacks) configurations defined in YAML.
+Atmos is the open-source **runtime for infrastructure** — it builds, authenticates, and ships Terraform, OpenTofu, Kubernetes, Helm, and containers the same way on your laptop, in CI, and with AI agents. Auth, secrets, vendoring, caching, the toolchain, workflows, and CI are built in. Point every environment at the same reusable root modules and treat the rest as configuration. Stop stringing together 25 tools.
 
-Atmos can change how you think about the Terraform code you write to build your infrastructure. Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into intuitive CLI commands.
-Its strength in managing DRY configurations at scale for Terraform and is supported by robust design patterns, comprehensive documentation, and a passionate community, making it a versatile tool for both startups and enterprises.
-Atmos is extensible to accommodate any tooling, including enterprise-scale Terraform, and includes custom policy controls, vendoring, and GitOps capabilities out of the box. Everything is open source and free.
+> **Run it on your laptop. Run it the same in CI. Run it with agents.**
 
+Everything is open source and free.
 
 > [!TIP]
 > ### You can try out `atmos` directly in your browser using GitHub Codespaces
@@ -54,79 +53,67 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 ## Introduction
 
 
-[Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
-streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
-it efficiently orchestrates both local and CI/CD pipeline tasks, optimizing infrastructure management for engineers and cloud
-architects alike. You can then run the CLI anywhere, such as locally or in CI/CD.
+[Atmos](https://atmos.tools) turns sprawling cloud infrastructure into one declarative system you can run consistently — locally, in CI/CD, and through AI agents. Model your platform once as [stacks](https://atmos.tools/stacks) and [components](https://atmos.tools/components), authenticate once, and run the same commands everywhere. The same code deploys to every region, environment, and stage with [DRY configuration](https://atmos.tools/design-patterns/) — no copy-paste, no bespoke wrapper scripts, no glue.
 
-The Atmos project consists of a command-line tool, a `Go` library, and even a terraform provider.  It provides numerous
-[conventions](https://atmos.tools/design-patterns/) to help you provision, manage, and orchestrate workflows across various toolchains.
-You can even access the configurations natively from within terraform using our [`terraform-provider-utils`](https://github.com/cloudposse/terraform-provider-utils/).
+[Cloud Posse](https://cloudposse.com/) builds and operates production infrastructure on AWS, Azure, and GCP with Atmos every day — and so do startups and enterprises managing thousands of components.
 
-[Cloud Posse](https://cloudposse.com/) uses this tool extensively for automating cloud infrastructure with
-[Terraform](https://www.hashicorp.com/products/terraform) and [Kubernetes](https://kubernetes.io/), but it can be used to automate any complex workflow.
+## Everything you'd otherwise bolt on
 
-> [!TIP]
-> ### Did you know?
->
-> By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
-> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
-> operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
+Auth, secrets, vendoring, caching, the toolchain, workflows, CI, and AI are part of the runtime — not a pile of plugins you wire together.
 
-## Core Features
+- [**Unified Auth:**](https://atmos.tools/cli/configuration/auth) One identity layer across AWS, Azure, and GCP — SSO, OIDC, and federation. EKS and ECR login happen automatically, and the same identity feeds Terraform, stores, and emulators.
+- [**Secrets Management:**](https://atmos.tools/cli/configuration/secrets) Declare secrets per environment, source them from 10+ backends (1Password, SSM, Vault, SOPS, and more), and mask them across every channel.
+- [**Vendoring:**](https://atmos.tools/cli/configuration/vendor) Pull every dependency just-in-time with version pinning and retries — no separate vendor step.
+- [**Caching & Mirroring:**](https://atmos.tools/cli/configuration/ci/cache) A native build cache plus a transparent Terraform provider and module registry mirror — warm in CI, instant on your laptop.
+- [**Toolchain:**](https://atmos.tools/cli/configuration/toolchain) Auto-install the exact Terraform, OpenTofu, and Helmfile versions your stacks need — verified by checksum.
+- [**Workflows & Automation:**](https://atmos.tools/workflows) Orchestrate, automate, and chain anything with 25+ step types and custom commands across every component.
+- [**GitOps & CI/CD:**](https://atmos.tools/ci) The same commands locally and in CI. Detect affected components, emit matrices, and catch drift.
+- [**AI + MCP:**](https://atmos.tools/ai) Chat about your infrastructure, run 20+ skills, expose Atmos as an MCP server, or add `--ai` to any command.
 
-Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a set of
-powerful tools to tackle deployment challenges. Designed to be cloud agnostic, it enables you to operate consistently across
-various cloud platforms. These features boost efficiency, clarity, and control across various environments, making it an
-indispensable asset for managing complex infrastructures with confidence.
+## Run anything, the same way
 
-- [**Terminal UI**](https://atmos.tools/cli) Polished interface for easier interaction with Terraform, workflows, and commands.
-- [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform/usage) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
-- [**Stacks:**](https://atmos.tools/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
-- [**Components:**](https://atmos.tools/components) A generic abstraction for deployable units, such as Terraform "root" modules.
-- [**Vendoring:**](https://atmos.tools/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
-- [**Custom Commands:**](https://atmos.tools/cli/configuration/commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
-- [**Workflow Orchestration:**](https://atmos.tools/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
+- **Terraform & OpenTofu like a platform team.** Plan and apply across every component in dependency order with bounded concurrency. Backends and providers are generated for you, and drift is caught automatically.
+- **Kubernetes & Helm as first-class workloads.** Model [Helmfile](https://atmos.tools/components/helmfile) and Kubernetes releases beside the rest of your stack, with the same CLI you already use for Terraform.
+- **Containers and cloud emulators.** [Containers](https://atmos.tools/components/container) and dev containers are workloads too — and you can spin up [cloud emulators](https://atmos.tools/components/emulator) locally so your whole stack runs on your laptop, with no account required to iterate.
+- **Bring your own.** [Packer](https://atmos.tools/components/packer), [Ansible](https://atmos.tools/components/ansible), or your own [component types](https://atmos.tools/components) plug into the same registry the built-ins use.
 
-See [all features of Atmos](https://atmos.tools/features).
+## Your laptop is the CI. CI is your laptop.
+
+Same command, same auth, same secrets, same toolchain — whether you run it locally or in a pipeline. Atmos is git-aware: it detects what changed and plans or applies only the affected components, so CI does exactly the work that changed — nothing more.
+
+## Built for your agents
+
+Everything is declarative and self-documenting, so AI agents can reason about your infrastructure instead of stringing together 25 tools and praying. Atmos ships a catalog of portable [agent skills](https://atmos.tools/ai/agent-skills) — working across Claude Code, Cursor, Gemini, and Copilot — and an [MCP server](https://atmos.tools/ai/mcp-server) so any agent can install what it needs and drive Atmos directly, as native tools, with no custom integration.
+
+## Extend it without forking it
+
+- [**Custom Commands:**](https://atmos.tools/cli/configuration/commands) Wrap any script as a first-class `atmos` command with flags, args, and identity.
+- [**YAML Functions:**](https://atmos.tools/functions/yaml) Resolve state, outputs, secrets, and Git metadata right inside your config.
+- [**Hooks:**](https://atmos.tools/stacks/hooks) Run infracost, checkov, trivy, or any command on lifecycle events.
+- [**Stores:**](https://atmos.tools/cli/configuration/stores) Plug in SSM, Secrets Manager, Key Vault, Vault, Redis, and more for cross-component data.
+- [**Validation:**](https://atmos.tools/validation/validating) Enforce your own guardrails with OPA/Rego policies and JSON Schema.
+- [**Templates & Data Sources:**](https://atmos.tools/templates) Pull live data into your config with Go templates and Gomplate datasources.
 
 ## Use Cases
 
-Atmos has consistently demonstrated its effectiveness in addressing these key use-cases, showcasing its adaptability and
-strength in the cloud infrastructure and DevOps domains:
+Atmos has consistently proven its strength across the cloud infrastructure and DevOps domains:
 
 - **Managing Large Multi-Account Cloud Environments:** Suitable for organizations using multiple cloud accounts to separate different
   projects or stages of development.
 - **Cross-Platform Cloud Architectures:** Ideal for businesses that need to manage configuration of services across AWS, GCP, Azure, etc., to
   build a cohesive system.
 - **Multi-Tenant Systems for SaaS:** Perfect for SaaS companies looking to host multiple customers within a unified infrastructure.
-  Simply define a baseline tenant configuration once, and then seamlessly onboard new tenants by reusing this baseline through pure
-  configuration, bypassing the need for further code development.
-- **Efficient Multi-Region Deployments:** Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline
-  configurations with [stacks](https://atmos.tools/stacks) and extend them across regions with DRY principles through
-  [imports](https://atmos.tools/stacks/imports) and [inheritance](https://atmos.tools/howto/inheritance).
-- **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
-  with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
-  organization via [service catalogs](https://atmos.tools/howto/catalogs), [component libraries](https://atmos.tools/components),
-  [vendoring](https://atmos.tools/vendor), and [OPA policies](https://atmos.tools/validation/opa),
-  simplifying the process of achieving and maintaining rigorous compliance.
-- **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
-  predefined templates and policies.
-- **Streamlining Deployment with Service Catalogs, Landing Zones, and Blueprints:** Provides ready-to-use templates and guidelines for
-  setting up cloud environments quickly and consistently.
+  Define a baseline tenant configuration once, then onboard new tenants by reusing this baseline through pure configuration — no further code required.
+- **Efficient Multi-Region Deployments:** Define baseline configurations with [stacks](https://atmos.tools/stacks) and extend them across regions
+  with DRY principles through [imports](https://atmos.tools/stacks/imports) and [inheritance](https://atmos.tools/howto/inheritance).
+- **Compliant Infrastructure for Regulated Industries:** Create vetted configurations that comply with SOC2, HIPAA, HITRUST, PCI, and other
+  standards, then share and reuse them across the organization via [service catalogs](https://atmos.tools/howto/catalogs),
+  [component libraries](https://atmos.tools/components), [vendoring](https://atmos.tools/vendor), and [OPA policies](https://atmos.tools/validation/opa).
+- **Empowering Teams with Self-Service Infrastructure:** Let teams manage their infrastructure independently, using predefined templates and policies.
 
 > [!TIP]
 > Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel,
 > or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
-
-
-Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns
-and best practices, such as:
-- Enforces a project structure convention, so everybody knows where to find things.
-- Provides clear separation of configuration from code, so the same code is easily deployed to different regions, environments and stages
-- It can be extended to include new features, commands, and workflows
-- The commands have a clean, consistent and easy to understand syntax
-- The CLI code is modular and self-documenting
 
 ## Telemetry
 
@@ -137,7 +124,7 @@ You can **opt-out** of telemetry collection in either of the following ways:
 - Set `settings.telemetry.enabled: false` in your `atmos.yaml`
 - Or set the environment variable: `ATMOS_TELEMETRY_ENABLED=false`
 
-> **Note for Atmos Pro users:** If you’re using [Atmos Pro](https://atmos-pro.com), your [workspace ID](https://atmos-pro.com/docs/authentication/workspace-id) will be included in telemetry events. This allows our team to provide more effective support and assist with troubleshooting as part of your subscription.
+> **Note for Atmos Pro users:** If you're using [Atmos Pro](https://atmos-pro.com), your [workspace ID](https://atmos-pro.com/docs/authentication/workspace-id) will be included in telemetry events. This allows our team to provide more effective support and assist with troubleshooting as part of your subscription.
 
 To learn more about what is collected and how it works, see the [Telemetry Documentation](https://atmos.tools/cli/telemetry).
 

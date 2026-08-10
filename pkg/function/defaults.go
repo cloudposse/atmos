@@ -32,6 +32,7 @@ func RegisterDefaults() {
 		mustRegister(registry, NewLiteralFunction())
 
 		// PostMerge functions.
+		mustRegister(registry, NewSecretFunction())
 		mustRegister(registry, NewStoreFunction())
 		mustRegister(registry, NewStoreGetFunction())
 		mustRegister(registry, NewTerraformOutputFunction())

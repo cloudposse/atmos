@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+# Track 2: a non-store SOPS secret backend defined globally for the whole stack (not under a
+# component, and not in atmos.yaml). The global `secrets:` block merges into every component
+# in this stack. The `file` path is a Go template — `{{ .atmos_stack }}` / `{{ .atmos_component }}`
+# are in scope (e.g. `secrets/{{ .atmos_stack }}.{{ .atmos_component }}.enc.yaml` for per-component
+# files). Atmos encrypts/decrypts in-process (getsops/sops SDK) — no `sops` binary required, only
+# the age private key. The key is declared here via `age_key_file` (supports `~` and `$ENV`), so
+# this example works without exporting SOPS_AGE_KEY_FILE; the env var still works as a fallback.
+secrets:
+  providers:
+    dev-sops:
+      kind: sops/age
+      spec:
+        file: secrets/dev.enc.yaml
+        age_key_file: secrets/keys.txt
+
+import:
+  - catalog/api

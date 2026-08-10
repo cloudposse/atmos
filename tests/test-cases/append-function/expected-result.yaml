@@ -7,7 +7,7 @@ components:
       vars:
         cidr: "10.0.0.0/16"
         region: "us-east-1"
-    
+
     eks:
       vars:
         cluster_name: "production"  # Overridden
@@ -27,7 +27,7 @@ components:
           - rds
           - elasticache
           - s3-bucket
-    
+
     rds:
       vars:
         engine: "postgres"

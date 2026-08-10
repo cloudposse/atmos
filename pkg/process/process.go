@@ -36,14 +36,17 @@ type Streams struct {
 
 // Result contains the outcome of a subprocess invocation.
 type Result struct {
-	Command    string
-	Args       []string
-	ExitCode   int
-	Err        error
-	Started    bool
-	Canceled   bool
-	StartedAt  time.Time
-	FinishedAt time.Time
+	Command      string
+	Args         []string
+	ExitCode     int
+	Err          error
+	Started      bool
+	Canceled     bool
+	Signaled     bool
+	Signal       string
+	SignalNumber int
+	StartedAt    time.Time
+	FinishedAt   time.Time
 }
 
 // Success reports whether the subprocess completed with exit code 0.
@@ -102,6 +105,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 
 	result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	result.ExitCode = exitCode(err)
+	result.Signaled, result.SignalNumber, result.Signal = exitSignal(err)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		result.Canceled = true
 		result.Err = errors.Join(result.Err, ctxErr)
@@ -119,9 +123,17 @@ func writerOrDiscard(w io.Writer) io.Writer {
 func exitCode(err error) int {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode()
+		return exitStatusCode(exitErr)
 	}
 	return -1
+}
+
+func exitSignal(err error) (bool, int, string) {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitSignalStatus(exitErr)
+	}
+	return false, 0, ""
 }
 
 // OSStreams returns streams connected to the current process standard streams.

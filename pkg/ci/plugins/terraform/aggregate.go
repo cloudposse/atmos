@@ -14,19 +14,17 @@ import (
 )
 
 const (
-	aggregateComponentName               = "aggregate"
-	aggregateCommandApply                = "apply"
-	aggregateCommandDestroy              = "destroy"
-	aggregateCommandPlan                 = "plan"
-	aggregateMarkdownMaxBytes            = 960 * 1024
-	aggregateMarkdownNoticeReserveBytes  = 512
-	aggregateStackAll                    = "all"
-	aggregateDetailOutputMaxBytes        = 12 * 1024
-	aggregateDetailLineBacktrackMaxBytes = 4 * 1024
-	aggregateStatusChanged               = "changed"
-	aggregateStatusFailed                = "failed"
-	aggregateStatusNoChanges             = "no changes"
-	aggregateStatusSkipped               = "skipped"
+	aggregateComponentName              = "aggregate"
+	aggregateCommandApply               = "apply"
+	aggregateCommandDestroy             = "destroy"
+	aggregateCommandPlan                = "plan"
+	aggregateMarkdownMaxBytes           = 960 * 1024
+	aggregateMarkdownNoticeReserveBytes = 512
+	aggregateStackAll                   = "all"
+	aggregateStatusChanged              = "changed"
+	aggregateStatusFailed               = "failed"
+	aggregateStatusNoChanges            = "no changes"
+	aggregateStatusSkipped              = "skipped"
 )
 
 // terraformPlanAggregate is the complete rendered model for one graph-backed Terraform run.

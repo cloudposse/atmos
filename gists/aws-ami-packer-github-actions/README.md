@@ -1,3 +1,8 @@
+---
+title: "AWS AMIs with Packer & GitHub Actions"
+tags: [AWS, CI/CD]
+---
+
 # Build, Scan, Approve & Share AWS AMIs with Atmos + Packer + GitHub Actions
 
 Configure and use Atmos with Packer to build, scan, approve, and share a hardened Amazon Linux 2023 AMI — automated end-to-end with a GitHub Actions pipeline and a tree of custom commands.

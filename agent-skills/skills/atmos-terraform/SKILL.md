@@ -1,35 +1,136 @@
 ---
 name: atmos-terraform
-description: "Terraform orchestration: plan/apply/deploy, workspace management, backend config, varfile generation, authentication"
+description: "Terraform and OpenTofu orchestration: plan/apply/deploy, workspace management, backend config, varfile generation, authentication, binary selection (terraform/tofu), mixed-binary setups"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
-# Atmos Terraform Orchestration
+# Atmos Terraform and OpenTofu Orchestration
 
-Atmos wraps the Terraform CLI to provide stack-aware orchestration of infrastructure operations. Instead of
-manually managing workspaces, backends, variable files, and authentication for each Terraform component, Atmos
+Atmos wraps the Terraform or OpenTofu CLI to provide stack-aware orchestration of infrastructure operations.
+Instead of manually managing workspaces, backends, variable files, and authentication for each component, Atmos
 resolves the full configuration from stack manifests and handles all of these concerns automatically.
+
+Everything in this skill applies identically to **Terraform** and **OpenTofu**. The `atmos terraform` command
+namespace is the same regardless of which binary is configured -- `atmos terraform plan` runs `tofu plan` when
+the binary is set to `tofu`. Use the user's terminology in responses (if they say "OpenTofu," say "OpenTofu").
+
+## Terraform or OpenTofu: Binary Selection
+
+Atmos defaults to the `terraform` binary. Switch to OpenTofu by setting `components.terraform.command: tofu`
+in `atmos.yaml`. The setting cascades through CLI > env > config > defaults precedence and can be overridden
+at multiple levels for mixed setups.
+
+### Global (whole project on OpenTofu)
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    command: tofu                # All atmos terraform commands invoke `tofu` instead of `terraform`
+    base_path: components/terraform
+```
+
+Or via environment variable:
+
+```bash
+export ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu
+atmos terraform plan vpc -s dev   # Runs: tofu plan
+```
+
+### Per-stack override
+
+Use `terraform.overrides.command` in a stack manifest to switch the binary for everything in that stack:
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  overrides:
+    command: tofu
+```
+
+### Per-component override
+
+Set `command` on an individual component to run a single component on a different binary than the rest of
+the stack (useful for legacy components that haven't been validated on OpenTofu, or new components testing
+OpenTofu-specific features):
+
+```yaml
+components:
+  terraform:
+    legacy-vpc:
+      command: terraform           # This component stays on Terraform
+      vars: ...
+    new-eks:
+      command: tofu                # This component runs on OpenTofu
+      vars: ...
+```
+
+### Per-invocation override
+
+Pass `--terraform-command` on the CLI to override for a single command:
+
+```bash
+atmos terraform plan vpc -s dev --terraform-command=tofu
+```
+
+### Installing and Pinning the Binary via Toolchain
+
+The Atmos toolchain installs and pins both Terraform and OpenTofu so the same binary version runs
+on every developer machine and in CI. Binary **selection** (`command: terraform` vs `command: tofu`)
+and binary **version pinning** (`dependencies.tools.terraform` vs `dependencies.tools.opentofu`) are
+independent settings -- `command` says *which* binary Atmos invokes, `dependencies.tools.<name>` says
+*which version* the toolchain installs. Always pin both together; setting `command: tofu` without a
+matching `opentofu` dependency leaves you at the mercy of whatever `tofu` is on PATH.
+
+Pinning can be applied at four scopes, in increasing precedence:
+
+1. **Project-wide** -- `.tool-versions` (asdf-compatible) at the repo root for defaults everyone shares.
+2. **Stack-wide** -- `dependencies.tools` in a stack default to pin a whole stack scope.
+3. **Component-type** -- `terraform.dependencies.tools` to default every Terraform/OpenTofu component.
+4. **Per-component** -- `dependencies.tools` on an individual component for migrations or one-offs.
+
+Atmos installs declared tools when running the component. Use `atmos toolchain install` only to
+pre-warm a cache, bootstrap a shell, or troubleshoot a specific binary. For full YAML examples,
+resolution order, ad-hoc installs, and the inspection workflow, see
+[references/toolchain-pinning.md](references/toolchain-pinning.md) and the
+[atmos-toolchain](../atmos-toolchain/SKILL.md) skill.
+
+### OpenTofu-specific considerations
+
+- **State encryption** (OpenTofu 1.7+) -- a Terraform-incompatible feature; if enabled, state can no longer
+  be read by `terraform`. Switching back is not zero-effort.
+- **`removed` blocks** -- supported by both binaries in recent versions; no Atmos-side difference.
+- **Provider/module registry** -- OpenTofu uses `registry.opentofu.org` by default; pinned modules sourced
+  from `registry.terraform.io` still work in OpenTofu but consult the relevant registry availability when
+  the user reports a missing module.
+- **`terraform.required_version`** -- OpenTofu respects this constraint; pin appropriately.
+- **`terraform { backend ... }` block** -- identical syntax in both binaries; no Atmos-side change needed.
+
+For users running mixed Terraform/OpenTofu deployments, the per-component or per-stack override pattern is
+the right tool. Do not propose a project-wide switch unless the user has validated all components against
+OpenTofu.
 
 ## How Atmos Orchestrates Terraform
 
 When you run any `atmos terraform` command, Atmos performs the following sequence:
 
 1. **Resolves stack configuration** -- Reads and deep-merges all stack manifests to produce the fully resolved
-   configuration for the target component in the target stack.
+    configuration for the target component in the target stack.
 2. **Generates backend configuration** -- Writes a `backend.tf.json` file in the component directory with the
-   correct backend settings (S3 bucket, key, region, etc.) derived from the stack config.
+    correct backend settings (S3 bucket, key, region, etc.) derived from the stack config.
 3. **Generates variable file** -- Writes a `terraform.tfvars.json` file containing all `vars` defined for the
-   component in the stack.
+    component in the stack.
 4. **Provisions backend infrastructure** -- If `provision.backend.enabled: true`, creates the backend storage
-   (e.g., S3 bucket) before Terraform init.
+    (e.g., S3 bucket) before Terraform init.
 5. **Runs `terraform init`** -- Initializes the working directory with the generated backend config. Cleans
-   `.terraform/environment` first and optionally adds `-reconfigure`.
+    `.terraform/environment` first and optionally adds `-reconfigure`.
 6. **Selects or creates workspace** -- Calculates the Terraform workspace name from context variables and
-   selects it (or creates it if it does not exist).
+    selects it (or creates it if it does not exist).
 7. **Executes the requested command** -- Runs `terraform plan`, `apply`, `destroy`, etc. with the generated
-   varfile and any additional flags.
+    varfile and any additional flags.
 
 This means a single command like `atmos terraform plan vpc -s plat-ue2-dev` replaces what would normally
 require multiple manual steps: configuring the backend, writing tfvars, running init, selecting the workspace,
@@ -111,35 +212,14 @@ atmos terraform deploy vpc -s dev --planfile /tmp/vpc-plan.tfplan
 
 ### destroy
 
-Destroys all resources managed by a component in a stack.
-
-```shell
-atmos terraform destroy <component> -s <stack>
-
-# With auto-approve (use with extreme caution)
-atmos terraform destroy vpc -s dev -auto-approve
-
-# Targeted destroy
-atmos terraform destroy vpc -s dev -target=aws_instance.web
-```
+Destroys all resources managed by a component in a stack. Accepts `-auto-approve` and `-target=...`
+just like upstream Terraform: `atmos terraform destroy vpc -s dev`.
 
 ### init
 
-Initializes the Terraform working directory. Atmos runs this automatically before plan, apply, and deploy,
-so manual invocation is rarely needed.
-
-```shell
-atmos terraform init <component> -s <stack>
-
-# Reconfigure the backend
-atmos terraform init vpc -s dev -reconfigure
-
-# Upgrade provider plugins
-atmos terraform init vpc -s dev -upgrade
-
-# Migrate state between backends
-atmos terraform init vpc -s dev -migrate-state
-```
+Atmos runs `terraform init` automatically before plan, apply, and deploy, so manual invocation is
+rarely needed. When required, all upstream init flags pass through (`-reconfigure`, `-upgrade`,
+`-migrate-state`): `atmos terraform init vpc -s dev -reconfigure`.
 
 ## Multi-Component Operations
 
@@ -174,120 +254,26 @@ atmos terraform deploy --all --dry-run
 
 ## Workspace Management
 
-Atmos calculates Terraform workspace names from stack context variables and automatically manages workspace
-selection. When you run any terraform command, Atmos:
+Atmos computes the Terraform workspace name from stack context (namespace, tenant, environment,
+stage, component), runs `terraform init -reconfigure`, and selects (or creates) the workspace
+on every invocation. Explicit management is also available: `atmos terraform workspace vpc -s plat-ue2-dev`.
 
-1. Computes the workspace name from context (namespace, tenant, environment, stage, component)
-2. Runs `terraform init -reconfigure`
-3. Selects the workspace with `terraform workspace select` (or creates it with `terraform workspace new`
-   if it does not exist)
-
-You can also manage workspaces explicitly:
-
-```shell
-atmos terraform workspace vpc -s plat-ue2-dev
-```
-
-### Workspace Key Prefix
-
-The recommended approach for stable workspace keys uses `metadata.name`:
-
-```yaml
-components:
-  terraform:
-    vpc/defaults:
-      metadata:
-        type: abstract
-        name: vpc              # Stable identity
-        component: vpc/v2      # Implementation can change
-```
-
-For advanced dynamic naming, `workspace_key_prefix` supports Go templates:
-
-```yaml
-components:
-  terraform:
-    vpc:
-      backend:
-        workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
-```
-
-Configure workspace behavior in `atmos.yaml`:
-
-```yaml
-components:
-  terraform:
-    init_run_reconfigure: true
-    workspaces_enabled: true
-```
+For stable workspace keys across component implementations, use `metadata.name` on an abstract
+base component (`name: vpc`, `component: vpc/v2`); for dynamic naming, `workspace_key_prefix`
+under `backend:` accepts Go templates. Toggle the runtime behavior via
+`components.terraform.init_run_reconfigure` and `workspaces_enabled` in `atmos.yaml`. Full
+examples are in [references/backend-configuration.md](references/backend-configuration.md).
 
 ## Backend Configuration and Auto-Generation
 
-Atmos reads `backend_type` and `backend` settings from the stack configuration and auto-generates
-a `backend.tf.json` file in the component directory before running `terraform init`.
+With `components.terraform.auto_generate_backend_file: true` in `atmos.yaml`, Atmos reads
+`backend_type` and `backend` from the resolved stack config, deep-merges through the stack
+hierarchy (org → tenant → environment → stage → component), and writes `backend.tf.json` into
+the component directory before `terraform init`. Add `backend.tf.json` to `.gitignore`.
 
-### Enabling Auto-Generation
-
-```yaml
-# atmos.yaml
-components:
-  terraform:
-    auto_generate_backend_file: true
-```
-
-### Stack-Level Backend Config
-
-Backend settings cascade through the stack hierarchy:
-
-```yaml
-# Organization defaults (stacks/orgs/acme/_defaults.yaml)
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: acme-ue1-root-tfstate
-      region: us-east-1
-      encrypt: true
-      use_lockfile: true
-
-# Component override (stacks/orgs/acme/plat/prod/us-east-1.yaml)
-components:
-  terraform:
-    special-component:
-      backend_type: s3
-      backend:
-        s3:
-          bucket: acme-ue1-prod-special-tfstate
-          key: "special/terraform.tfstate"
-```
-
-### Generated File
-
-The generated `backend.tf.json` looks like:
-
-```json
-{
-  "terraform": {
-    "backend": {
-      "s3": {
-        "bucket": "acme-ue1-root-tfstate",
-        "region": "us-east-1",
-        "encrypt": true,
-        "use_lockfile": true,
-        "key": "ue1/prod/vpc/terraform.tfstate"
-      }
-    }
-  }
-}
-```
-
-Add `backend.tf.json` to `.gitignore` since it is generated automatically.
-
-### Manual Generation
-
-```shell
-atmos terraform generate backend vpc -s plat-ue2-dev
-```
+Regenerate manually with `atmos terraform generate backend vpc -s plat-ue2-dev`. For full
+examples covering S3, GCS, Azure, and remote backends, plus workspace key prefix patterns, see
+[references/backend-configuration.md](references/backend-configuration.md).
 
 ## Variable File Generation
 
@@ -313,56 +299,48 @@ atmos terraform generate planfile vpc -s dev --format=yaml --file=planfile.yaml
 
 ## Authentication Configuration
 
-Atmos integrates authentication so components can automatically use the correct credentials.
-
-### Global Auth in atmos.yaml
-
-```yaml
-auth:
-  providers:
-    acme-sso:
-      kind: aws-sso
-      start_url: https://acme.awsapps.com/start
-      region: us-east-1
-
-  identities:
-    prod-admin:
-      kind: aws
-      via:
-        provider: acme-sso
-      principal:
-        name: AdministratorAccess
-        account:
-          id: "333333333333"
-      default: true
-```
-
-### Component-Level Identity
-
-```yaml
-components:
-  terraform:
-    vpc:
-      auth:
-        identity: prod-admin
-```
-
-### Runtime Override
+Terraform commands can use Atmos auth identities from `atmos.yaml` or component-level `auth.identity`.
+Keep detailed provider/profile setup in `atmos-auth`; this skill should only recommend the Terraform
+runtime controls:
 
 ```shell
-# Use a specific identity
 atmos terraform plan vpc -s prod --identity prod-admin
-
-# Skip authentication
 atmos terraform plan vpc -s dev --identity ""
 ```
 
 ## Backend Provisioning
 
-Set `provision.backend.enabled: true` in stack config to auto-provision backend infrastructure
-(S3 buckets, etc.), solving the Terraform bootstrap problem. Manual provisioning is available via
-`atmos terraform backend create/list/describe/update/delete`. See
+Backend configuration and backend provisioning are different:
+
+- `backend_type` and `backend` tell Terraform where state lives and generate `backend.tf.json`.
+- `provision.backend.enabled: true` tells Atmos to create the backend storage before first use.
+
+Set `provision.backend.enabled: true` in stack config to auto-provision backend infrastructure,
+solving the Terraform bootstrap problem. Manual provisioning is available via
+`atmos terraform backend create/list/describe/update/delete`. Backend provisioning currently applies
+to Terraform components. See
 [references/backend-configuration.md](references/backend-configuration.md) for details.
+
+## Source Provisioning and Workdirs
+
+Use `source` for just-in-time component provisioning and pair it with `provision.workdir` for isolated
+per-instance execution. Workdirs prevent shared `.terraform`, lockfile, backend, and varfile collisions
+when the same component source is used by multiple stacks or runs.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git
+        version: 1.450.0
+      provision:
+        workdir:
+          enabled: true
+```
+
+With workdirs enabled, Atmos stages the provisioned source into the instance workdir and runs Terraform
+there. Without workdirs, source provisioning targets the component path.
 
 ## Interactive Shell
 
@@ -433,30 +411,10 @@ If a path matches multiple components, Atmos prompts for selection in interactiv
 
 ## Debugging
 
-### Describe Component
-
-Use `atmos describe component` to see the fully resolved configuration:
-
-```shell
-atmos describe component vpc -s plat-ue2-dev
-```
-
-This shows all merged vars, backend config, workspace name, metadata, and settings.
-
-### Dry Run
-
-Preview what Atmos will do without executing:
-
-```shell
-atmos terraform plan vpc -s dev --dry-run
-```
-
-### Terraform Debug Logging
-
-```shell
-export TF_LOG=DEBUG
-atmos terraform plan vpc -s dev
-```
+- `atmos describe component vpc -s plat-ue2-dev` -- show the fully resolved configuration
+  (merged vars, backend, workspace name, metadata, settings).
+- `atmos terraform plan vpc -s dev --dry-run` -- preview what Atmos will do without executing.
+- `TF_LOG=DEBUG atmos terraform plan vpc -s dev` -- enable upstream Terraform debug logging.
 
 ## Configuration in atmos.yaml
 
@@ -468,28 +426,32 @@ corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
 ## Best Practices
 
 1. **Use the two-stage plan/apply workflow for production.** Run `plan` first, review the output, then
-   `apply --from-plan` to ensure exactly the reviewed changes are applied.
+    `apply --from-plan` to ensure exactly the reviewed changes are applied.
 
 2. **Use `deploy` for automated pipelines.** It combines plan and apply with auto-approve, ideal for CI/CD.
 
 3. **Always preview multi-component operations with `--dry-run`** before executing `--all` or `--affected`.
 
 4. **Let Atmos manage backend configuration.** Set `auto_generate_backend_file: true` and define backend
-   settings in stack manifests rather than hardcoding in Terraform modules.
+    settings in stack manifests rather than hardcoding in Terraform modules.
 
 5. **Use `atmos describe component`** to debug configuration resolution issues. It shows the fully merged
-   result of all stack manifest inheritance.
+    result of all stack manifest inheritance.
 
 6. **Add generated files to .gitignore.** The `backend.tf.json` and `terraform.tfvars.json` files are
-   generated at runtime and should not be committed.
+    generated at runtime and should not be committed.
 
 7. **Use `atmos terraform shell`** for interactive debugging. It sets up the full context so you can
-   run native terraform commands directly.
+    run native terraform commands directly.
 
 8. **Enable backend provisioning** (`provision.backend.enabled: true`) to solve the Terraform bootstrap
-   problem and ensure backends exist before first use.
+    problem and ensure backends exist before first use.
+
+9. **Use source provisioning with workdirs** when components are pulled via `source`, especially in CI
+    or any multi-stack workflow that can run concurrently.
 
 ## Additional Resources
 
 - For the complete list of all `atmos terraform` subcommands, see [references/commands-reference.md](references/commands-reference.md)
 - For backend configuration patterns (S3, GCS, Azure, remote), see [references/backend-configuration.md](references/backend-configuration.md)
+- For toolchain-based Terraform/OpenTofu version pinning at each scope, see [references/toolchain-pinning.md](references/toolchain-pinning.md)

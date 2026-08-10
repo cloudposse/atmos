@@ -393,6 +393,8 @@ func minimalComponentResult() *ComponentProcessorResult {
 		BaseComponentAuth:                      map[string]any{},
 		ComponentProviders:                     map[string]any{},
 		ComponentHooks:                         map[string]any{},
+		ComponentTest:                          map[string]any{},
+		ComponentMocks:                         map[string]any{},
 		ComponentBackendType:                   "",
 		ComponentBackendSection:                map[string]any{},
 		ComponentRemoteStateBackendType:        "",
@@ -401,11 +403,439 @@ func minimalComponentResult() *ComponentProcessorResult {
 		ComponentOverridesHooks:                map[string]any{},
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
+		BaseComponentMocks:                     map[string]any{},
 		BaseComponentBackendType:               "",
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendType:    "",
 		BaseComponentRemoteStateBackendSection: map[string]any{},
 	}
+}
+
+// TestMergeComponentConfigurations_Plugins covers the Helm CLI plugins list merge:
+// it is omitted when unset, flows through from base-only and component-only, and the
+// concrete component's list replaces the inherited one under the default strategy.
+func TestMergeComponentConfigurations_Plugins(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("absent-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "plugins must be absent when neither base nor component set it")
+	})
+
+	t.Run("component-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok, "plugins must be present and a list")
+		require.Len(t, got, 2)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("base-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok)
+		require.Len(t, got, 1)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+	})
+
+	t.Run("component-replaces-base-by-default", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.8.0"}
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.PluginsSectionName].([]any)
+		require.Len(t, got, 2, "default replace strategy keeps the concrete component's list")
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.TerraformComponentType, Component: "vpc", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "terraform components must not emit a plugins section")
+	})
+}
+
+func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-base",
+			"base_only":      "base",
+		},
+	}
+	res.ComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-component",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
+	require.True(t, ok)
+	testVars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-from-component", testVars["fixture_vpc_id"])
+	assert.Equal(t, "base", testVars["base_only"])
+
+	testVars["fixture_vpc_id"] = "merged-mutated"
+	assert.Equal(t, "vpc-from-component", res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating merged test vars must not mutate the component source map")
+
+	res.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["base_only"] = "source-mutated"
+	res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
+	assert.Equal(t, "base", testVars["base_only"], "mutating source maps after merge must not mutate merged test vars")
+	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
+}
+
+func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.TestSectionName)
+}
+
+func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentMocks = map[string]any{
+		"inherited": "from-base",
+		"network": map[string]any{
+			"cidr":   "10.0.0.0/16",
+			"region": "us-east-2",
+		},
+	}
+	res.ComponentMocks = map[string]any{
+		"vpc_id": "vpc-local",
+		"network": map[string]any{
+			"cidr": "10.1.0.0/16",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	mocks, ok := comp[cfg.MocksSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "from-base", mocks["inherited"])
+	assert.Equal(t, "vpc-local", mocks["vpc_id"])
+	network, ok := mocks["network"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "10.1.0.0/16", network["cidr"])
+	assert.Equal(t, "us-east-2", network["region"])
+
+	network["cidr"] = "mutated"
+	assert.Equal(t, "10.1.0.0/16", res.ComponentMocks["network"].(map[string]any)["cidr"])
+}
+
+// TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global
+// Kubernetes provider/paths/manifests/render defaults are the lowest-precedence layer:
+// they flow through when the component sets nothing, and the component overrides them.
+func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-defaults-flow-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:             cfg.KubernetesComponentType,
+			Component:                 "api",
+			AtmosConfig:               atmosCfg,
+			GlobalKubernetesProvider:  "kustomize",
+			GlobalKubernetesPaths:     []any{"base"},
+			GlobalKubernetesManifests: []any{"global.yaml"},
+			GlobalKubernetesRender:    map[string]any{"output": map[string]any{"split": true}},
+		}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		assert.Equal(t, "kustomize", comp[cfg.ProviderSectionName])
+		assert.Equal(t, []any{"base"}, comp[cfg.PathsSectionName])
+		assert.Equal(t, []any{"global.yaml"}, comp[cfg.ManifestsSectionName])
+		render, ok := comp[cfg.RenderSectionName].(map[string]any)
+		require.True(t, ok, "render section must be present")
+		out := render["output"].(map[string]any)
+		assert.Equal(t, true, out["split"])
+	})
+
+	t.Run("component-overrides-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.ComponentProvider = "kubectl"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName], "component provider must override the global default")
+	})
+}
+
+// TestMergeComponentConfigurations_Kubernetes verifies the full three-level precedence
+// (stack-global Kubernetes defaults → base component → component instance) for the
+// kubernetes-native sections (provider/paths/manifests/render), and that hooks, generate,
+// source, and provision flow through for the kubernetes component type.
+func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("three-level-precedence-provider-component-wins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentProvider = "kubectl"
+		res.ComponentProvider = "kustomize-component"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName],
+			"component provider must win over base and global")
+	})
+
+	t.Run("provider-base-wins-over-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentProvider = "kubectl"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName],
+			"base provider must win over the global default when the component sets nothing")
+	})
+
+	t.Run("paths-and-manifests-merge-across-three-levels", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:             cfg.KubernetesComponentType,
+			Component:                 "api",
+			AtmosConfig:               atmosCfg,
+			GlobalKubernetesPaths:     map[string]any{"global": "g.yaml"},
+			GlobalKubernetesManifests: map[string]any{"global": "gm.yaml"},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentPaths = map[string]any{"base": "b.yaml"}
+		res.ComponentPaths = map[string]any{"component": "c.yaml"}
+		res.BaseComponentManifests = map[string]any{"base": "bm.yaml"}
+		res.ComponentManifests = map[string]any{"component": "cm.yaml"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		paths, ok := comp[cfg.PathsSectionName].(map[string]any)
+		require.True(t, ok, "paths section must be a merged map")
+		assert.Equal(t, "g.yaml", paths["global"])
+		assert.Equal(t, "b.yaml", paths["base"])
+		assert.Equal(t, "c.yaml", paths["component"])
+
+		manifests, ok := comp[cfg.ManifestsSectionName].(map[string]any)
+		require.True(t, ok, "manifests section must be a merged map")
+		assert.Equal(t, "gm.yaml", manifests["global"])
+		assert.Equal(t, "bm.yaml", manifests["base"])
+		assert.Equal(t, "cm.yaml", manifests["component"])
+	})
+
+	t.Run("render-merges-with-component-winning-on-conflict", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:          cfg.KubernetesComponentType,
+			Component:              "api",
+			AtmosConfig:            atmosCfg,
+			GlobalKubernetesRender: map[string]any{"engine": "global", "from_global": true},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRender = map[string]any{"engine": "base", "from_base": true}
+		res.ComponentRender = map[string]any{"engine": "component", "from_component": true}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		render, ok := comp[cfg.RenderSectionName].(map[string]any)
+		require.True(t, ok, "render section must be a merged map")
+		assert.Equal(t, "component", render["engine"], "component render must win on conflicting keys")
+		assert.Equal(t, true, render["from_global"])
+		assert.Equal(t, true, render["from_base"])
+		assert.Equal(t, true, render["from_component"])
+	})
+
+	t.Run("hooks-generate-source-provision-flow-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:              cfg.KubernetesComponentType,
+			Component:                  "api",
+			AtmosConfig:                atmosCfg,
+			GlobalAndTerraformHooks:    map[string]any{"before": map[string]any{"a": "global-hook"}},
+			GlobalAndTerraformGenerate: map[string]any{"file.yaml": map[string]any{"from": "global"}},
+			GlobalSourceSection:        map[string]any{"uri": "global-uri"},
+			GlobalProvisionSection:     map[string]any{"workdir": "global-wd"},
+		}
+		res := minimalComponentResult()
+		res.ComponentHooks = map[string]any{"after": map[string]any{"b": "component-hook"}}
+		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
+		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
+		res.ComponentProvision = map[string]any{"timeout": "5m"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
+		require.True(t, ok, "hooks section must be present for kubernetes")
+		assert.Contains(t, hooks, "before")
+		assert.Contains(t, hooks, "after")
+
+		generate, ok := comp[cfg.GenerateSectionName].(map[string]any)
+		require.True(t, ok, "generate section must be present for kubernetes")
+		assert.Contains(t, generate, "file.yaml")
+		assert.Contains(t, generate, "comp.yaml")
+
+		source, ok := comp[cfg.SourceSectionName].(map[string]any)
+		require.True(t, ok, "source section must be present for kubernetes")
+		assert.Equal(t, "global-uri", source["uri"])
+		assert.Equal(t, "1.2.3", source["version"])
+
+		provision, ok := comp[cfg.ProvisionSectionName].(map[string]any)
+		require.True(t, ok, "provision section must be present for kubernetes")
+		assert.Equal(t, "global-wd", provision["workdir"])
+		assert.Equal(t, "5m", provision["timeout"])
+	})
+
+	t.Run("validate-component-instance-false-overrides-base-true", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		res.ComponentValidate = false
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, false, comp[cfg.ValidateSectionName],
+			"an explicit component-instance validate:false must override a base-component validate:true")
+	})
+
+	t.Run("validate-base-true-flows-through-when-component-unset", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, true, comp[cfg.ValidateSectionName],
+			"base-component validate:true must flow through when the component instance sets nothing")
+	})
+
+	t.Run("validate-unset-everywhere-is-absent-from-comp", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		_, ok := comp[cfg.ValidateSectionName]
+		assert.False(t, ok, "validate must be absent (not defaulted to any value) when unset at every layer")
+	})
+
+	t.Run("validate-global-true-flows-through-when-base-and-component-unset", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesValidate: true,
+		}
+		res := minimalComponentResult()
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, true, comp[cfg.ValidateSectionName],
+			"global validate:true must flow through when base and component set nothing")
+	})
+
+	t.Run("validate-global-false-flows-through-when-base-and-component-unset", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesValidate: false,
+		}
+		res := minimalComponentResult()
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, false, comp[cfg.ValidateSectionName],
+			"global validate:false must flow through when base and component set nothing")
+	})
+
+	t.Run("validate-base-overrides-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesValidate: false,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, true, comp[cfg.ValidateSectionName],
+			"base-component validate:true must override a global validate:false when the component sets nothing")
+	})
+
+	t.Run("validate-component-overrides-global-and-base", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesValidate: true,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentValidate = true
+		res.ComponentValidate = false
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, false, comp[cfg.ValidateSectionName],
+			"component validate:false must win over both global and base validate:true")
+	})
 }
 
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
@@ -705,6 +1135,132 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 
 		assert.Equal(t, []any{"configs/base.json", "configs/component.json"}, deps["files"],
 			"dependencies.files must follow the effective component list_merge_strategy")
+	})
+}
+
+// TestMergeComponentConfigurations_Metadata verifies the 3-tier metadata merge
+// precedence (lowest to highest): global (stack-wide) metadata -> the
+// metadata.inherits base-component chain -> the component's own local metadata.
+// This is the fix for global metadata.labels/tags/custom/enabled/locked/
+// terraform_workspace_pattern silently doing nothing when set at the
+// stack-manifest root.
+func TestMergeComponentConfigurations_Metadata(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-only-applies-with-no-local-or-inherited-metadata", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"labels":  map[string]any{"org": "acme"},
+				"enabled": false,
+			},
+		}
+		res := minimalComponentResult()
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"])
+		assert.Equal(t, false, metadata["enabled"])
+	})
+
+	t.Run("component-local-wins-over-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"labels": map[string]any{"org": "acme"},
+			},
+		}
+		res := minimalComponentResult()
+		res.ComponentMetadata = map[string]any{
+			"labels": map[string]any{"org": "platform-team"},
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"], "component-local metadata must win over global")
+	})
+
+	t.Run("inherits-base-wins-over-global-when-component-is-silent", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"locked": false,
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"locked": true,
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, true, metadata["locked"], "metadata.inherits base chain must win over global when the component sets nothing locally")
+	})
+
+	t.Run("component-local-wins-over-inherits-base-and-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalMetadata: map[string]any{
+				"terraform_workspace_pattern": "global-pattern",
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"terraform_workspace_pattern": "base-pattern",
+		}
+		res.ComponentMetadata = map[string]any{
+			"terraform_workspace_pattern": "component-pattern",
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, "component-pattern", metadata["terraform_workspace_pattern"])
+	})
+
+	t.Run("metadata-inheritance-disabled-skips-base-tier-but-keeps-global", func(t *testing.T) {
+		disabled := false
+		disabledCfg := &schema.AtmosConfiguration{
+			Stacks: schema.Stacks{Inherit: schema.StacksInherit{Metadata: &disabled}},
+		}
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   disabledCfg,
+			GlobalMetadata: map[string]any{
+				"labels": map[string]any{"org": "acme"},
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentMetadata = map[string]any{
+			"labels": map[string]any{"org": "should-not-apply"},
+		}
+
+		comp, err := mergeComponentConfigurations(disabledCfg, &opts, res)
+		require.NoError(t, err)
+		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+		require.True(t, ok, "metadata section must be present and a map")
+
+		assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"], "global metadata must still apply when metadata.inherits is disabled")
 	})
 }
 

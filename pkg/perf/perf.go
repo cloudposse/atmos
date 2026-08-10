@@ -92,12 +92,6 @@ func EnableTracking(enabled bool) {
 	}
 }
 
-// IsTrackingEnabled returns true if performance tracking is currently enabled.
-// This is used to check if the heatmap should be displayed after command execution.
-func IsTrackingEnabled() bool {
-	return trackingEnabled.Load()
-}
-
 // UseSimpleTracking enables or disables simple tracking mode.
 // Simple mode uses a single global call stack (faster, no goroutine ID lookups).
 // Use false for multi-goroutine scenarios to ensure accurate per-goroutine tracking.

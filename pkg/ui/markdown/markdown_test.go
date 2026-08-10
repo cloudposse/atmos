@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // stripANSI removes ANSI escape sequences from a string.
@@ -136,12 +136,9 @@ func TestRenderWorkflow(t *testing.T) {
 	r, err := NewRenderer(schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
-	r.isTTYSupportForStdout = func() bool {
+	r.shouldRender = func(terminal.Stream) bool {
 		return true
 	}
-	defer func() {
-		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-	}()
 
 	tests := []struct {
 		name     string
@@ -176,16 +173,9 @@ func TestRenderError(t *testing.T) {
 	r, err := NewRenderer(schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
-	r.isTTYSupportForStderr = func() bool {
+	r.shouldRender = func(terminal.Stream) bool {
 		return true
 	}
-	r.isTTYSupportForStdout = func() bool {
-		return true
-	}
-	defer func() {
-		r.isTTYSupportForStderr = term.IsTTYSupportForStderr
-		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-	}()
 
 	tests := []struct {
 		name       string
@@ -256,12 +246,9 @@ func TestRenderSuccess(t *testing.T) {
 	r, err := NewRenderer(schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
-	r.isTTYSupportForStdout = func() bool {
+	r.shouldRender = func(terminal.Stream) bool {
 		return true
 	}
-	defer func() {
-		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-	}()
 
 	tests := []struct {
 		name     string

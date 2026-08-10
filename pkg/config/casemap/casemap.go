@@ -88,6 +88,43 @@ func ExtractFromYAML(rawYAML []byte, paths []string) (*CaseMaps, error) {
 	return caseMaps, nil
 }
 
+// CollectEnvKeysRecursive walks the raw YAML and returns a CaseMap of
+// lowercase->original for every key found under any `env:` mapping at any depth:
+// the top-level `env:`, plus custom-command and step-level `env:` blocks. Viper
+// lowercases map keys, but environment variable names are case-sensitive, so this
+// lets nested env sections (e.g. commands[].steps[].env) be restored the same way
+// the top-level `env:` already is. Command-level `env:` written as a list of
+// {key, value} pairs is unaffected by Viper and is intentionally not collected here.
+func CollectEnvKeysRecursive(rawYAML []byte) (CaseMap, error) {
+	var root interface{}
+	if err := yaml.Unmarshal(rawYAML, &root); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+	caseMap := make(CaseMap)
+	collectEnvKeys(root, false, caseMap)
+	return caseMap, nil
+}
+
+// collectEnvKeys recurses through arbitrary YAML structure. When underEnv is true,
+// the current node is the value of an `env:` mapping, so its keys are env var names.
+func collectEnvKeys(node interface{}, underEnv bool, out CaseMap) {
+	switch n := node.(type) {
+	case map[string]interface{}:
+		if underEnv {
+			for key := range n {
+				out[strings.ToLower(key)] = key
+			}
+		}
+		for key, value := range n {
+			collectEnvKeys(value, strings.EqualFold(key, "env"), out)
+		}
+	case []interface{}:
+		for _, item := range n {
+			collectEnvKeys(item, false, out)
+		}
+	}
+}
+
 // navigateToPath traverses a nested map using dot notation.
 func navigateToPath(m map[string]interface{}, path string) map[string]interface{} {
 	parts := strings.Split(path, ".")

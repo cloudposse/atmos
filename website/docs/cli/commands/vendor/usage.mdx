@@ -4,7 +4,7 @@ sidebar_label: vendor
 sidebar_class_name: command
 description: "Vendor Atmos Components and Stacks"
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -12,6 +12,10 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use these subcommands to vendor Atmos components and stacks.
+[`atmos vendor get|set`](/cli/commands/vendor/vendor-get) look up a vendored source **by
+component name**; [`atmos vendor config`](/cli/commands/vendor/config) is the
+canonical `get|set|delete|format|list` interface that addresses `vendor.yaml` by
+arbitrary dot-notation path — `vendor get|set` are convenience aliases of it.
 </Intro>
 
 <ActionCard title="Configure Vendoring">
@@ -23,7 +27,7 @@ Use these subcommands to vendor Atmos components and stacks.
 
 ## Usage
 
-<Screengrab title="atmos vendor --help" slug="atmos-vendor--help" />
+<CastPlayer title="atmos vendor --help" src="/casts/screengrabs/atmos-vendor--help.cast" static chrome />
 
 ## Subcommands
 <DocCardList />

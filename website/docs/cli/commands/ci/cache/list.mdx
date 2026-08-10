@@ -1,0 +1,86 @@
+---
+title: atmos ci cache list
+sidebar_label: list
+sidebar_class_name: command
+sidebar_position: 3
+id: list
+description: List CI cache entries.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+List CI cache entries, optionally filtered by key prefix. Newest entries are listed first. Supports table, JSON, YAML, CSV, and TSV output.
+</Intro>
+
+<Experimental/>
+
+:::info Runs locally
+`list` administers the cache over the provider's public API (the GitHub Actions caches REST API), so it works from your workstation as well as inside CI — you do not need to be running in a CI runner. It only needs a GitHub token (`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`, or `gh auth login`) and a GitHub repository (resolved from `GITHUB_REPOSITORY` or your local `git` remote). This is in contrast to [`save`](/cli/commands/ci/cache/save) and [`restore`](/cli/commands/ci/cache/restore), which transfer cache content and run only inside a runner.
+:::
+
+<ActionCard title="Configure the CI Cache">
+    Configure the cache in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos ci cache list --help" src="/casts/screengrabs/atmos-ci-cache-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos ci cache list [flags]
+```
+
+## Examples
+
+```shell
+# List all cache entries
+atmos ci cache list
+
+# Filter by key prefix
+atmos ci cache list --key="atmos-cache-linux-"
+
+# JSON output for scripting
+atmos ci cache list --format=json
+```
+
+## Output
+
+In an interactive terminal, the `table` format shows a human-readable **Size** (e.g. `1.5 GB`) and **Age** (e.g. `2 hours ago`) for each entry. The machine-readable formats (`json`, `yaml`, `csv`, `tsv`) — and the `table` format when piped — keep the raw byte count and an absolute timestamp so the output stays easy to parse in scripts.
+
+## Flags
+
+<dl>
+  <dt>`--key` / `-k`</dt>
+  <dd>Filter entries by key prefix.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table` (default), `json`, `yaml`, `csv`, or `tsv`.</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for `csv`/`tsv` output.</dd>
+
+  <dt>`--max-columns`</dt>
+  <dd>Maximum number of columns to display in table format (`0` = no limit).</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_FORMAT`</dt>
+  <dd>Overrides `--format`.</dd>
+</dl>
+
+## Related
+
+- [`atmos ci cache delete`](/cli/commands/ci/cache/delete) - Delete a cache entry
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache

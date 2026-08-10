@@ -1,0 +1,83 @@
+---
+title: atmos terraform cache mirror
+sidebar_label: cache mirror
+sidebar_class_name: command
+id: mirror
+description: Pre-seed the registry cache with providers for multiple platforms.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Eagerly mirror the providers required by one or more components into the cache for multiple platforms, using `terraform/tofu providers mirror`. This is the eager counterpart to the lazy proxy: where the proxy caches only the platform Terraform requests at run time, `cache mirror` pre-fetches every configured platform — for mixed CI/developer fleets and air-gapped reproducible builds.
+</Intro>
+
+<CastPlayer title="atmos terraform cache mirror --help" src="/casts/screengrabs/atmos-terraform-cache-mirror--help.cast" static chrome />
+
+The mirror writes the canonical `filesystem_mirror` layout the proxy already serves, so the same cache directory works three ways: lazily (proxy), eagerly (mirror), and offline (`filesystem_mirror`).
+
+Platforms are resolved with the following precedence:
+
+1. The `--platform` flag (repeatable).
+2. [`components.terraform.platforms`](/cli/configuration/components/terraform#platforms) in your stack configuration.
+3. The current host platform (`<os>_<arch>`).
+
+## Usage
+
+```shell
+atmos terraform cache mirror [component] -s <stack> [flags]
+```
+
+Target components the same way as `atmos terraform plan`: a single component with `--stack`, or a fleet with `--all`, `--components`, or `--query` (optionally scoped with `--stack`). With `--all` and no `--stack`, every component in every stack is mirrored — the foundation for an air-gapped bundle.
+
+:::note Alias
+`atmos terraform cache warm` is an alias for `cache mirror`.
+:::
+
+## Arguments
+
+<dl>
+  <dt>`[component]`</dt>
+  <dd>The Atmos component whose required providers are mirrored. Omit it when using `--all`, `--components`, `--query`, or a bare `--stack`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>The Atmos stack. Required for a single component; an optional scope for `--all`, `--components`, and `--query`. A bare `--stack` (no component) mirrors every component in that stack.</dd>
+  <dt>`--platform`</dt>
+  <dd>Target platform as `os_arch` (e.g. `linux_amd64`, `darwin_arm64`). Repeatable. Overrides the configured platforms.</dd>
+  <dt>`--all`</dt>
+  <dd>Mirror every component in every stack. Scope to one stack with `--stack`.</dd>
+  <dt>`--components`</dt>
+  <dd>Mirror only the listed components.</dd>
+  <dt>`-q, --query`</dt>
+  <dd>Mirror the components selected by a YQ expression.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Mirror one component for the platforms declared in components.terraform.platforms
+atmos terraform cache mirror vpc -s plat-ue2-prod
+
+# Override the configured platforms for a one-off
+atmos terraform cache mirror vpc -s plat-ue2-prod --platform=linux_amd64 --platform=darwin_arm64
+
+# Mirror an entire fleet for an air-gapped bundle
+atmos terraform cache mirror --all
+
+# Scope a bulk mirror to a single stack, or to specific components
+atmos terraform cache mirror --all -s plat-ue2-prod
+atmos terraform cache mirror --components=vpc,eks -s plat-ue2-prod
+
+# Inspect what landed in the cache
+atmos terraform cache list
+```
+
+## Related Commands
+
+- [`atmos terraform cache list`](/cli/commands/terraform/cache/list)
+- [`atmos terraform cache stats`](/cli/commands/terraform/cache/stats)
+- [`atmos terraform cache prune`](/cli/commands/terraform/cache/prune)

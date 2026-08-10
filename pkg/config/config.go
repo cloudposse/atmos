@@ -508,6 +508,22 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
 
+	// Convert Kubernetes dir to an absolute path.
+	kubernetesBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Kubernetes.BasePath)
+	kubernetesDirAbsPath, err := filepath.Abs(kubernetesBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.KubernetesDirAbsolutePath = kubernetesDirAbsPath
+
+	// Convert Helm dir to an absolute path.
+	helmBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Helm.BasePath)
+	helmDirAbsPath, err := filepath.Abs(helmBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
+
 	return nil
 }
 

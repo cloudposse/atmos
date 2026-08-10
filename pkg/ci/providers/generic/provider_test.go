@@ -169,3 +169,28 @@ func TestGetFirstEnv(t *testing.T) {
 		assert.Empty(t, result)
 	})
 }
+
+func TestProviderContextCheckoutMetadata(t *testing.T) {
+	// GitLab-style env supplies checkout metadata through the generic provider.
+	t.Setenv("CI_SERVER_URL", "https://gitlab.acme.com")
+	t.Setenv("CI_REPOSITORY_URL", "https://gitlab.acme.com/acme/deploy.git")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://gitlab.acme.com", ctx.ServerURL)
+	assert.Equal(t, "https://gitlab.acme.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCheckoutMetadataAbsent(t *testing.T) {
+	t.Setenv("CI_SERVER_URL", "")
+	t.Setenv("CI_REPOSITORY_URL", "")
+	t.Setenv("ATMOS_CI_REPOSITORY_URL", "")
+	t.Setenv("ATMOS_CI_SERVER_URL", "")
+	t.Setenv("GIT_URL", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Empty(t, ctx.CloneURL, "providers that cannot determine the clone URL leave it empty")
+}

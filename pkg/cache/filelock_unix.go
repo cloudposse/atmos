@@ -3,96 +3,94 @@
 package cache
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/gofrs/flock"
 )
 
-const (
-	// MaxLockRetries is the number of times to retry acquiring a lock.
-	maxLockRetries = 50
-	// LockRetryDelay is the delay between lock retry attempts.
-	lockRetryDelay = 10 * time.Millisecond
-)
+const cacheLockTimeout = 2 * time.Second
 
-// flockFileLock implements FileLock using flock on Unix systems.
-type flockFileLock struct {
-	lockPath string
-}
+// tryReadLockTimeout bounds the "best-effort, non-blocking" read-lock attempts
+// in WithRLock and TryWithRLock. It must stay well under cacheLockTimeout so
+// these still fail fast under genuine contention, but 1ms (the original
+// value) was tight enough that ordinary scheduling/IO jitter on a loaded CI
+// runner -- not actual lock contention -- could make an uncontended
+// acquisition miss its deadline, which TryWithRLock's callers (e.g. workdir
+// metadata reads) treat identically to "lock held by another process."
+// 50ms comfortably exceeds filelock's internal retryDelay (10ms), so a
+// briefly-held exclusive lock also has a real chance to clear within budget.
+const tryReadLockTimeout = 50 * time.Millisecond
 
-// NewFileLock creates a new FileLock for the given path.
-// The lock file is created at path + ".lock" to prevent lock loss during atomic renames.
+type flockFileLock struct{ lockPath string }
+
+// NewFileLock preserves the cache package API while using a stable sibling
+// lock file that survives atomic cache-file replacement.
 func NewFileLock(path string) FileLock {
 	defer perf.Track(nil, "cache.NewFileLock")()
 
-	return &flockFileLock{
-		lockPath: path + ".lock",
-	}
+	return NewFileLockAtPath(path + ".lock")
 }
 
-// WithLock executes fn while holding an exclusive lock.
-func (f *flockFileLock) WithLock(fn func() error) error {
+// NewFileLockAtPath creates a FileLock that uses lockPath directly. Use this
+// when compatibility requires a lock name other than targetPath + ".lock".
+func NewFileLockAtPath(lockPath string) FileLock {
+	defer perf.Track(nil, "cache.NewFileLockAtPath")()
+
+	return &flockFileLock{lockPath: lockPath}
+}
+
+func (l *flockFileLock) WithLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithLock")()
 
-	lock := flock.New(f.lockPath)
-
-	// Try to acquire lock with reasonable retries for concurrent access.
-	var locked bool
-	var err error
-
-	for i := 0; i < maxLockRetries; i++ {
-		locked, err = lock.TryLock()
-		if err != nil {
-			return errors.Join(errUtils.ErrCacheLocked, err)
-		}
-		if locked {
-			break
-		}
-		// Wait a short time before retrying.
-		time.Sleep(lockRetryDelay)
-	}
-
-	if !locked {
-		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
-	}
-
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Trace("Failed to unlock cache file", "error", err, "path", f.lockPath)
-		}
-	}()
-
-	return fn()
+	ctx, cancel := context.WithTimeout(context.Background(), cacheLockTimeout)
+	defer cancel()
+	return cacheLockError(filelock.New(l.lockPath).WithExclusive(ctx, fn))
 }
 
-// WithRLock executes fn while holding a shared read lock.
-func (f *flockFileLock) WithRLock(fn func() error) error {
+func (l *flockFileLock) WithLockContext(ctx context.Context, fn func() error) error {
+	defer perf.Track(nil, "cache.flockFileLock.WithLockContext")()
+
+	return cacheLockError(filelock.New(l.lockPath).WithExclusive(ctx, fn))
+}
+
+func (l *flockFileLock) WithRLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithRLock")()
 
-	lock := flock.New(f.lockPath)
+	// Cache reads are deliberately best-effort. Preserve the old non-blocking
+	// behavior by reading without a lock when one isn't quickly available.
+	ctx, cancel := context.WithTimeout(context.Background(), tryReadLockTimeout)
+	defer cancel()
+	err := filelock.New(l.lockPath).WithShared(ctx, fn)
+	if errors.Is(err, filelock.ErrAcquire) && ctx.Err() != nil {
+		return fn()
+	}
+	return cacheLockError(err)
+}
 
-	// Use TryRLock to avoid blocking indefinitely which can cause deadlocks.
-	locked, err := lock.TryRLock()
-	if err != nil {
+func cacheLockError(err error) error {
+	if errors.Is(err, filelock.ErrAcquire) {
 		return errors.Join(errUtils.ErrCacheLocked, err)
 	}
-	if !locked {
-		// If we can't get the lock immediately, return without error.
-		// This prevents deadlocks during concurrent access.
-		// The caller should handle the case where fn wasn't executed.
-		return fn() // Execute without lock - cache is non-critical.
-	}
+	return err
+}
 
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Trace("Failed to unlock cache file during read", "error", err, "path", f.lockPath)
+// TryWithRLock executes fn only when a shared read lock can be acquired
+// quickly (see tryReadLockTimeout).
+func (f *flockFileLock) TryWithRLock(fn func() error) (bool, error) {
+	defer perf.Track(nil, "cache.flockFileLock.TryWithRLock")()
+
+	ctx, cancel := context.WithTimeout(context.Background(), tryReadLockTimeout)
+	defer cancel()
+	err := filelock.New(f.lockPath).WithShared(ctx, fn)
+	if errors.Is(err, filelock.ErrAcquire) {
+		if ctx.Err() != nil {
+			return false, nil
 		}
-	}()
-
-	return fn()
+		return false, cacheLockError(err)
+	}
+	return true, err
 }

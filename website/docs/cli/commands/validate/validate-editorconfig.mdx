@@ -6,7 +6,7 @@ id: editorconfig
 description: Use this command to validate the workdir of the Atmos project against the rules defined in the .editorconfig file.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
@@ -23,7 +23,7 @@ Use this command to validate files against the rules defined in .editorconfig fi
 
 ## Usage
 
-<Screengrab title="atmos validate editorconfig --help" slug="atmos-validate-editorconfig--help" />
+<CastPlayer title="atmos validate editorconfig --help" src="/casts/screengrabs/atmos-validate-editorconfig--help.cast" static chrome />
 
 Execute the `validate editorconfig` command like this:
 
@@ -44,7 +44,18 @@ atmos validate editorconfig
 atmos validate editorconfig --logs-level Trace
 atmos validate editorconfig --no-color
 atmos validate editorconfig --dry-run
+atmos validate editorconfig --format sarif > editorconfig.sarif
+
+# Source excerpts for local or CI logs
+atmos validate editorconfig --format rich
+atmos validate editorconfig --ci
+atmos validate editorconfig --affected --base origin/main
 ```
+
+`--affected` checks only files changed since the Git merge-base. Changing an
+EditorConfig rule file validates the complete project because the rule can apply
+to every file. GitHub Actions automatically uses the pull request base SHA;
+use `--base` locally to choose a comparison point.
 
 ## Flags
 
@@ -77,7 +88,10 @@ atmos validate editorconfig --dry-run
   <dd>Regex to exclude files from checking.</dd>
 
   <dt>`--format` <em>(optional)</em></dt>
-  <dd>Specify the output format: default, gcc (default `default`).</dd>
+  <dd>Specify the output format: `default`, `gcc`, `codeclimate`, `github-actions`, `sarif`, or `rich` (default `default`). `sarif` and `rich` are rendered by Atmos; the other formats are provided by EditorConfig Checker. The flag overrides `ATMOS_VALIDATE_FORMAT`, which overrides `validate.editorconfig.format`, then `validate.format`, in `atmos.yaml`.</dd>
+
+  <dt>`--ci` <em>(optional)</em></dt>
+  <dd>Enable CI annotations. SARIF is uploaded only when `ci.enabled` and `ci.results.enabled` are enabled in `atmos.yaml`.</dd>
 
   <dt>`--help` <em>(optional)</em></dt>
   <dd>help for editorconfig.</dd>

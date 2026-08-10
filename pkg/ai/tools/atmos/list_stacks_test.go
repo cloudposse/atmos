@@ -2,6 +2,7 @@ package atmos
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -216,6 +219,117 @@ stacks:
 	stacks, ok := result.Data["stacks"].([]string)
 	require.True(t, ok)
 	assert.Empty(t, stacks)
+}
+
+// TestListStacksTool_Execute_NoStacksYetRealPath exercises the real currentStackConfig
+// refresh path (Initialized: true, via an actual InitCliConfig call) against a project
+// with zero stack manifests. Unlike TestListStacksTool_Execute_EmptyStacks, which
+// constructs an AtmosConfiguration by hand with Initialized left false, this drives
+// the exact production path a long-running chat/MCP session takes: currentStackConfig
+// must treat "no stack manifests found" as an empty project, not an error.
+func TestListStacksTool_Execute_NoStacksYetRealPath(t *testing.T) {
+	atmosConfig, _ := setupLiveStackProject(t, map[string]string{})
+	tool := NewListStacksTool(atmosConfig)
+
+	result, err := tool.Execute(context.Background(), map[string]interface{}{})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Success)
+
+	stacks, ok := result.Data["stacks"].([]string)
+	require.True(t, ok)
+	assert.Empty(t, stacks)
+}
+
+func TestListStacksTool_Execute_LoadsStacksAddedAfterToolCreation(t *testing.T) {
+	atmosConfig, stacksDir := setupLiveStackProject(t, nil)
+	tool := NewListStacksTool(atmosConfig)
+
+	writeStackFile(t, stacksDir, "dev.yaml", `vars:
+  stage: dev
+components:
+  terraform:
+    vpc: {}
+`)
+
+	result, err := tool.Execute(context.Background(), map[string]interface{}{})
+
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	stacks, ok := result.Data["stacks"].([]string)
+	require.True(t, ok)
+	assert.Contains(t, stacks, "dev")
+	components, ok := result.Data["components"].(map[string][]string)
+	require.True(t, ok)
+	assert.Contains(t, components["dev"], "vpc")
+}
+
+func TestListStacksTool_Execute_ReflectsStackFileModificationAfterStartup(t *testing.T) {
+	atmosConfig, stacksDir := setupLiveStackProject(t, map[string]string{
+		"dev.yaml": `vars:
+  stage: dev
+components:
+  terraform:
+    vpc: {}
+`,
+	})
+	tool := NewListStacksTool(atmosConfig)
+
+	result, err := tool.Execute(context.Background(), map[string]interface{}{})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	components, ok := result.Data["components"].(map[string][]string)
+	require.True(t, ok)
+	assert.Contains(t, components["dev"], "vpc")
+	assert.NotContains(t, components["dev"], "rds")
+
+	writeStackFile(t, stacksDir, "dev.yaml", `vars:
+  stage: dev
+components:
+  terraform:
+    vpc: {}
+    rds: {}
+`)
+
+	result, err = tool.Execute(context.Background(), map[string]interface{}{})
+
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	components, ok = result.Data["components"].(map[string][]string)
+	require.True(t, ok)
+	assert.Contains(t, components["dev"], "vpc")
+	assert.Contains(t, components["dev"], "rds")
+}
+
+func TestListStacksTool_Execute_RecoversAfterMissingImportIsAdded(t *testing.T) {
+	atmosConfig, stacksDir := setupLiveStackProject(t, map[string]string{
+		"dev.yaml": `import:
+  - catalog/vpc
+
+vars:
+  stage: dev
+`,
+	})
+	tool := NewListStacksTool(atmosConfig)
+
+	result, err := tool.Execute(context.Background(), map[string]interface{}{})
+	require.Error(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.Success)
+
+	writeStackFile(t, stacksDir, filepath.Join("catalog", "vpc.yaml"), `components:
+  terraform:
+    vpc: {}
+`)
+
+	result, err = tool.Execute(context.Background(), map[string]interface{}{})
+
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	stacks, ok := result.Data["stacks"].([]string)
+	require.True(t, ok)
+	assert.Contains(t, stacks, "dev")
 }
 
 func TestListStacksTool_Execute_MultipleStacks(t *testing.T) {
@@ -536,4 +650,47 @@ stacks:
 	}
 
 	return atmosConfig, cleanup
+}
+
+func setupLiveStackProject(t *testing.T, stackFiles map[string]string) (*schema.AtmosConfiguration, string) {
+	t.Helper()
+	exec.ClearFindStacksMapCache()
+	t.Cleanup(exec.ClearFindStacksMapCache)
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := fmt.Sprintf(`
+base_path: "%s"
+components:
+  terraform:
+    base_path: "%s"
+stacks:
+  base_path: "%s"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`, filepath.ToSlash(tmpDir), filepath.ToSlash(componentsDir), filepath.ToSlash(stacksDir))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o600))
+
+	for relPath, content := range stackFiles {
+		writeStackFile(t, stacksDir, relPath, content)
+	}
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	require.True(t, atmosConfig.Initialized)
+
+	return &atmosConfig, stacksDir
+}
+
+func writeStackFile(t *testing.T, stacksDir, relPath, content string) {
+	t.Helper()
+	path := filepath.Join(stacksDir, relPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }

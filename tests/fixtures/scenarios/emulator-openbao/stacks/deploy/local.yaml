@@ -1,0 +1,31 @@
+vars:
+  stage: local
+
+components:
+  # The emulator is a stack-scoped component; `atmos emulator up openbao -s local`
+  # starts (or reuses) the OpenBao dev server. The driver runs it with a fixed root
+  # token reachable on all interfaces (see pkg/emulator/driver/vault.go).
+  emulator:
+    openbao:
+      driver: openbao
+      # Pin the dev-server port so the atmos.yaml `secrets/vault` store can reach it at
+      # a stable address (stores can't use the `!emulator` function to discover the
+      # auto-assigned host port).
+      container:
+        ports:
+          - host: 8200
+            container: 8200
+
+  terraform:
+    # Consumer — declares a secret backed by the OpenBao store and resolves it via
+    # `!secret`, proving the full Vault-secrets path resolves against the emulator.
+    consumer:
+      secrets:
+        vars:
+          APP_SECRET:
+            description: Application secret stored in the OpenBao (Vault KV v2) emulator.
+            store: secrets/vault
+            required: true
+      vars:
+        name: consumer
+        app_secret: !secret APP_SECRET

@@ -1,3 +1,11 @@
+---
+title: Secrets Masking
+tags: [DX]
+cast:
+  file: /casts/examples/secrets-masking/masked-plan.cast
+  title: atmos secrets masking
+---
+
 # Secrets Masking Example
 
 This example demonstrates Atmos's automatic secrets masking feature.

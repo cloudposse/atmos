@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/99designs/keyring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -119,7 +118,7 @@ func TestFileKeyring_MissingPassword(t *testing.T) {
 	}
 	err = store.Store("test", testCreds, "test-realm")
 	require.Error(t, err, "Expected error when storing without password in non-TTY environment")
-	assert.Contains(t, err.Error(), "keyring password required")
+	assert.Contains(t, err.Error(), "password required")
 }
 
 func TestFileKeyring_StoreRetrieve_AWS(t *testing.T) {
@@ -547,28 +546,9 @@ func TestFileKeyring_ErrorHandling(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestCreatePasswordPrompt_EnvironmentVariable(t *testing.T) {
-	passwordEnv := "TEST_KEYRING_PASSWORD"
-	expectedPassword := "env-password-12345"
-	t.Setenv(passwordEnv, expectedPassword)
-
-	promptFunc := createPasswordPrompt(passwordEnv)
-
-	password, err := promptFunc("Enter password")
-	require.NoError(t, err)
-	assert.Equal(t, expectedPassword, password)
-}
-
-func TestCreatePasswordPrompt_NoEnvironmentNoTTY(t *testing.T) {
-	passwordEnv := "NONEXISTENT_PASSWORD_ENV"
-
-	promptFunc := createPasswordPrompt(passwordEnv)
-
-	// Without env var and without TTY, should error.
-	_, err := promptFunc("Enter password")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "keyring password required")
-}
+// Note: the password-prompt behavior (env var, no-env-no-TTY error, min length) now lives in
+// pkg/keyring and is covered by that package's tests (TestFileKeyring_MissingPasswordOnAccess,
+// TestFileKeyring_PasswordTooShort, TestFileKeyring_CustomPasswordEnv).
 
 func TestFileKeyring_StoreUnsupportedType(t *testing.T) {
 	tempDir := t.TempDir()
@@ -612,11 +592,8 @@ func TestFileKeyring_CorruptedData(t *testing.T) {
 	creds := &types.AWSCredentials{AccessKeyID: "TEST"}
 	require.NoError(t, store.Store("test-alias", creds, "test-realm"))
 
-	// Now manually corrupt the data by storing invalid JSON.
-	_ = store.ring.Set(keyring.Item{
-		Key:  "corrupted",
-		Data: []byte("this is not valid JSON"),
-	})
+	// Now manually corrupt the data by storing invalid JSON at the realm-scoped key Retrieve reads.
+	_ = store.kr.Set(buildKeyringKey("corrupted", "test-realm"), "this is not valid JSON")
 
 	// Attempting to retrieve should error.
 	_, err = store.Retrieve("corrupted", "test-realm")
@@ -688,13 +665,10 @@ func TestFileKeyring_RetrieveUnknownType(t *testing.T) {
 
 	// Store data with an unknown credential type by directly marshaling the envelope.
 	// Use buildKeyringKey to create the realm-scoped key that Retrieve will look for.
-	data := []byte(`{"type":"unknown-type","data":{}}`)
+	data := `{"type":"unknown-type","data":{}}`
 	realmKey := buildKeyringKey("test-alias", "test-realm")
 
-	err = store.ring.Set(keyring.Item{
-		Key:  realmKey,
-		Data: data,
-	})
+	err = store.kr.Set(realmKey, data)
 	require.NoError(t, err)
 
 	// Attempting to retrieve should error with unknown type.
@@ -720,10 +694,7 @@ func TestFileKeyring_GetAnyError(t *testing.T) {
 	require.NoError(t, err)
 
 	// Store invalid JSON.
-	err = store.ring.Set(keyring.Item{
-		Key:  "invalid-json",
-		Data: []byte("this is not valid JSON"),
-	})
+	err = store.kr.Set("invalid-json", "this is not valid JSON")
 	require.NoError(t, err)
 
 	// Attempting to retrieve should error.

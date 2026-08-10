@@ -16,7 +16,7 @@ components:
         # Go to plug in a tool of your own.
         notify:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: command
           # We invoke python3 explicitly rather than relying on the
           # script's shebang. That lets the example work on Windows

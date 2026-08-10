@@ -2,9 +2,23 @@
 
 **Status**: Implemented
 **Version**: 1.0
-**Last Updated**: 2025-11-02
+**Last Updated**: 2026-01-11
 
 ## Architecture
+
+### Command Output Requirements
+
+To ensure masking is applied consistently, all CLI output must flow through the masking-enabled I/O writers (`pkg/io`), either directly or via `pkg/ui` (stderr/UI) and `pkg/data` (stdout/data).
+
+This is especially important for `list` and `describe` commands, which frequently emit configuration and provider/auth data.
+
+**Requirements:**
+- Do not write directly to `os.Stdout`, `os.Stderr`, `fmt.Print*`, or `cmd.Print*` in command/exec codepaths.
+- Pipeable output (`list`, `describe` JSON/YAML/table/tree) must write via `pkg/data` (e.g., `data.Write`, `data.Writeln`) or `io.Data`.
+- Human-facing messages must write via `pkg/ui` (e.g., `ui.Info`, `ui.Error`, `ui.Write`) or `io.UI`.
+- Use unmasked/raw writers (`Context.RawData`, `Context.RawUI`) only with explicit justification (debug-only, non-secret content).
+
+**Rationale:** masking is enforced at the writer boundary; bypassing the I/O layer can leak secrets to stdout/stderr, logs, and CI artifacts.
 
 ### Two-Layer Design
 

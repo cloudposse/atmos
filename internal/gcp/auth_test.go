@@ -43,6 +43,22 @@ func TestGetClientOptions(t *testing.T) {
 			expected: 1, // WithCredentialsFile
 		},
 		{
+			name: "custom endpoint",
+			opts: AuthOptions{
+				Endpoint: "localhost:4566",
+			},
+			expected: 1, // WithEndpoint
+		},
+		{
+			name: "custom insecure endpoint without auth",
+			opts: AuthOptions{
+				Endpoint:              "http://localhost:4566",
+				EndpointInsecure:      true,
+				WithoutAuthentication: true,
+			},
+			expected: 3, // WithEndpoint + plaintext gRPC + WithoutAuthentication
+		},
+		{
 			name: "JSON with whitespace",
 			opts: AuthOptions{
 				Credentials: `  {"type": "service_account"}  `,
@@ -58,6 +74,21 @@ func TestGetClientOptions(t *testing.T) {
 				t.Errorf("GetClientOptions() returned %d options, expected %d", len(clientOpts), tt.expected)
 			}
 		})
+	}
+}
+
+func TestNormalizeEndpoint(t *testing.T) {
+	tests := map[string]string{
+		"localhost:4566":        "localhost:4566",
+		"http://localhost:4566": "localhost:4566",
+		"https://example.com":   "example.com",
+		"  localhost:8686  ":    "localhost:8686",
+	}
+
+	for input, expected := range tests {
+		if got := normalizeEndpoint(input); got != expected {
+			t.Fatalf("normalizeEndpoint(%q) = %q, expected %q", input, got, expected)
+		}
 	}
 }
 

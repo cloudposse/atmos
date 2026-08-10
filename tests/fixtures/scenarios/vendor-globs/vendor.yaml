@@ -34,7 +34,7 @@ spec:
       source: "github.com/cloudposse/atmos.git?ref={{.Version}}"
       version: "main"
       included_paths:
-        - "**/demo-localstack/*"
+        - "**/demo-helmfile/*"
         - "**/demo-library/**"
       excluded_paths:
         - "**/demo-library/**/stargazers/**"

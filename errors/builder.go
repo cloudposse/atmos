@@ -51,7 +51,7 @@ func (b *ErrorBuilder) WithHintf(format string, args ...interface{}) *ErrorBuild
 
 // WithExplanation adds a detailed explanation to the error.
 // The explanation provides context about what went wrong and why.
-// It will be displayed in a dedicated "## Explanation" section when formatted.
+// It will be displayed as diagnostic explanation content when formatted.
 func (b *ErrorBuilder) WithExplanation(explanation string) *ErrorBuilder {
 	b.err = errors.WithDetail(b.err, explanation)
 	return b
@@ -104,7 +104,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
-// Hints and context from the cause error are extracted and preserved in the final error.
+// Hints, explanations, and context from the cause error are extracted and preserved in the final error.
 //
 // Example:
 //
@@ -130,6 +130,7 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
 				b.hints = append(b.hints, causeHints...)
 			}
+			causeDetails := errors.GetAllDetails(cause)
 			// Extract context from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb safe details metadata.
 			b.extractContextFromCause(cause)
@@ -138,6 +139,9 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
 			// not the standard library's, which breaks test assertions.
 			b.err = fmt.Errorf("%w: %w", b.err, cause)
+			for _, detail := range causeDetails {
+				b.err = errors.WithDetail(b.err, detail)
+			}
 		}
 	}
 	return b

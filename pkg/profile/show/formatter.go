@@ -43,7 +43,7 @@ func RenderProfile(p *profile.ProfileInfo) (string, error) {
 	output.WriteString(newline)
 
 	output.WriteString(labelStyle.Render("Path:          "))
-	output.WriteString(p.Path)
+	output.WriteString(profile.DisplayPath(p.Path))
 	output.WriteString(newline)
 	output.WriteString(newline)
 

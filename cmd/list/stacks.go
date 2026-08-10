@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -24,6 +26,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -40,6 +43,14 @@ type StacksOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	ErrorMode        string
+	Tags             []string
+	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels): the listed stacks are exactly
+	// the ones a terraform bulk run with the same selection flags would touch.
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // stacksCmd lists atmos stacks.
@@ -53,7 +64,10 @@ var stacksCmd = &cobra.Command{
 		v := viper.GetViper()
 
 		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
-		if err := checkAtmosConfig(cmd, v); err != nil {
+		// Skip the stacks-directory-exists check here: listStacksWithOptions below already
+		// reports a friendly "No stacks found" message when there are no stack manifests yet,
+		// whether the stacks directory is missing or simply empty (a brand-new project).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
@@ -63,6 +77,9 @@ var stacksCmd = &cobra.Command{
 		}
 
 		opts := parseStacksOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
@@ -82,6 +99,9 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		ErrorMode:        v.GetString("error-mode"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -121,10 +141,14 @@ func init() {
 		WithStacksColumnsFlag,
 		WithSortFlag,
 		WithComponentFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
+		WithClosureFlags,
 		WithProvenanceFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
+		WithErrorModeFlag,
 	)
 
 	// Register flags.
@@ -152,11 +176,23 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 	// Initialize configuration and auth.
 	atmosConfig, authManager, err := initStacksConfig(cmd, args, opts)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			ui.Info("No stacks found")
+			return nil
+		}
 		return err
 	}
 
+	// Build the error-mode options once and share the same Collector across every
+	// describe-stacks call this command makes (table path, and the tree path's
+	// re-processing pass below), so the end-of-command summary reports one combined
+	// count instead of printing separately per call site. Deferred so it fires after
+	// whichever render path below has finished writing its output.
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+	defer printErrorModeSummary(opts.ErrorMode, collector)
+
 	// Execute describe stacks and extract results.
-	stacks, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager)
+	stacks, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager, errOpts)
 	if err != nil {
 		return err
 	}
@@ -167,7 +203,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 
 	// Handle tree format specially - it shows import hierarchies.
 	if opts.Format == string(format.FormatTree) {
-		return renderStacksTreeFormat(&atmosConfig, stacks, opts, authManager)
+		return renderStacksTreeFormat(&atmosConfig, stacks, opts, authManager, errOpts)
 	}
 	_ = stacksMap // Unused in non-tree format.
 
@@ -201,17 +237,18 @@ func initStacksConfig(
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
-	// Apply format from config if not set via flag.
-	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
-		opts.Format = atmosConfig.Stacks.List.Format
-	}
+	applyConfigDefaultedFormat(opts, atmosConfig.Stacks.List.Format)
+
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
 
 	// Validate provenance after resolving format from config.
 	if opts.Provenance && opts.Format != string(format.FormatTree) {
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}
@@ -219,22 +256,59 @@ func initStacksConfig(
 	return atmosConfig, authManager, nil
 }
 
+// applyConfigDefaultedFormat applies stacks.list.format from atmos.yaml when --format
+// wasn't set via flag (tree by default — journaled in pkg/edition, so an edition pin
+// restores the table). A defaulted tree steps aside for row-shaped flags (tree renders
+// the import hierarchy and has no rows or columns); only an explicit --format=tree
+// conflicts with them.
+func applyConfigDefaultedFormat(opts *StacksOptions, configFormat string) {
+	if opts.Format != "" || configFormat == "" {
+		return
+	}
+	opts.Format = configFormat
+	if opts.Format == string(format.FormatTree) && len(opts.Columns) > 0 {
+		opts.Format = ""
+	}
+}
+
 // executeAndExtractStacks runs describe stacks and extracts the results.
 func executeAndExtractStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	opts *StacksOptions,
 	authManager auth.AuthManager,
+	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// With closure flags, the whole describe/extract flow goes through the
+	// shared scoped closure engine: only the stacks (and components) the
+	// closure touches are ever evaluated, matching the terraform bulk paths.
+	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
+	if closureRequested {
+		return extractStacksViaScopedClosure(atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
+	}
+
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth.
+	stacksMap, err := e.ExecuteDescribeStacksScoped(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		opts.Skip,
+		skip,
 		authManager,
+		authManager == nil,
+		opts.Tags,
+		labels,
+		errOpts,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -242,15 +316,147 @@ func executeAndExtractStacks(
 
 	var stacks []map[string]any
 	if opts.Component != "" {
-		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
+		stacks, err = extract.StacksForComponent(opts.Component, stacksMap, opts.Tags, labels)
 	} else {
-		stacks, err = extract.Stacks(stacksMap)
+		stacks, err = extract.Stacks(stacksMap, opts.Tags, labels)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return stacks, stacksMap, nil
+}
+
+// scopedDescribeDeps bundles the describe-side dependencies shared by the
+// list commands' scoped closure helpers, keeping the helpers within the
+// argument-count limit.
+type scopedDescribeDeps struct {
+	authManager auth.AuthManager
+	skip        []string
+	errOpts     e.DescribeStacksErrorOptions
+}
+
+// newScopedDescribeFunc builds the dependencies.DescribeFunc the list
+// commands hand to ResolveScopedClosure: one ExecuteDescribeStacksScoped pass
+// per closure stack, narrowed to the closure's own components, never to the
+// caller's tags/labels (closure scoping owns selection).
+func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps *scopedDescribeDeps) dependencies.DescribeFunc {
+	return func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
+		return e.ExecuteDescribeStacksScoped(
+			atmosConfig, stackName, closureComponents, nil, nil,
+			false, // ignoreMissingFiles
+			processTemplates,
+			processFunctions,
+			false, // includeEmptyStacks
+			describeDeps.skip,
+			describeDeps.authManager,
+			describeDeps.authManager == nil,
+			nil, // tagsFilter: closure scoping owns selection.
+			nil, // labelsFilter: closure scoping owns selection.
+			describeDeps.errOpts,
+		)
+	}
+}
+
+// extractStacksViaScopedClosure lists the stacks the dependency closure
+// touches, using the shared three-phase scoped evaluation: a lightweight
+// structural pass seeds the closure (optional component + tags/labels
+// selectors), and only the closure's own components are then fully evaluated —
+// exactly the stacks a terraform bulk run with the same selection flags would
+// touch, without evaluating anything outside the closure. Closure members are
+// kept even when they do not match the selectors that seeded them.
+func extractStacksViaScopedClosure(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *StacksOptions,
+	labels map[string]string,
+	describeDeps *scopedDescribeDeps,
+) ([]map[string]any, map[string]any, error) {
+	defer perf.Track(nil, "list.stacks.extractStacksViaScopedClosure")()
+
+	describe := newScopedDescribeFunc(atmosConfig, describeDeps)
+
+	var components []string
+	if opts.Component != "" {
+		components = []string{opts.Component}
+	}
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(describe, &dependencies.ScopeRequest{
+		Components:       components,
+		Tags:             opts.Tags,
+		Labels:           labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	// Restrict output to the FINAL closure's stacks before extraction.
+	// result.Stacks can hold conservatively evaluated stacks that are not
+	// closure members: the reverse direction evaluates unresolved dependency
+	// sources so their edges materialize, and refineRoots can drop an
+	// initially conservative root once its selector resolves — in both cases
+	// the evaluated stack stays in result.Stacks. list components and
+	// list instances already filter rows by closure membership; stacks must
+	// too so the preview matches the execution set.
+	closureStacks := filterStacksByNames(result.Stacks, dependencies.StackNames(result.Closure))
+	stacks, err := extract.Stacks(closureStacks, nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if opts.Component != "" {
+		annotateStackRowsWithComponent(stacks, closureStacks, opts.Component)
+	}
+	return stacks, closureStacks, nil
+}
+
+// annotateStackRowsWithComponent mirrors extract.StacksForComponent's row
+// shape on the closure path: rows for stacks that actually contain the
+// selected component carry it under "component", so configured columns like
+// `{{ .component }}` render identically with and without closure flags.
+// Prerequisite stacks pulled in by the closure without the component keep no
+// component key rather than claiming one they do not have.
+func annotateStackRowsWithComponent(rows []map[string]any, stacksMap map[string]any, component string) {
+	for _, row := range rows {
+		stackName, _ := row["stack"].(string)
+		if stackContainsComponent(stacksMap, stackName, component) {
+			row["component"] = component
+		}
+	}
+}
+
+// stackContainsComponent reports whether the described stack holds the named
+// component under any component type.
+func stackContainsComponent(stacksMap map[string]any, stackName, component string) bool {
+	stack, _ := stacksMap[stackName].(map[string]any)
+	componentsSection, _ := stack["components"].(map[string]any)
+	for _, typeValue := range componentsSection {
+		typeSection, _ := typeValue.(map[string]any)
+		if _, ok := typeSection[component]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// filterStacksByNames keeps only the named stacks from the describe map.
+func filterStacksByNames(stacks map[string]any, names []string) map[string]any {
+	allowed := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		allowed[name] = struct{}{}
+	}
+	filtered := make(map[string]any, len(names))
+	for name, section := range stacks {
+		if _, ok := allowed[name]; ok {
+			filtered[name] = section
+		}
+	}
+	return filtered
 }
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.
@@ -279,8 +485,10 @@ func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[stri
 func buildStackFilters(opts *StacksOptions) []filter.Filter {
 	var filters []filter.Filter
 
-	// Component filter already handled by extraction logic.
-	// Add any additional filters here in the future.
+	// Component and tags/labels filters are already handled by extraction
+	// logic (extract.Stacks/extract.StacksForComponent), so the tree format
+	// and structured outputs honor them too. Add any additional
+	// renderer-level filters here in the future.
 
 	return filters
 }
@@ -329,6 +537,7 @@ func renderStacksTreeFormat(
 	stacks []map[string]any,
 	opts *StacksOptions,
 	authManager auth.AuthManager,
+	errOpts e.DescribeStacksErrorOptions,
 ) error {
 	defer perf.Track(nil, "list.stacks.renderStacksTreeFormat")()
 
@@ -343,14 +552,17 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacks(
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		opts.Skip,
+		skip,
 		authManager,
+		authManager == nil,
+		errOpts,
 	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)

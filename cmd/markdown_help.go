@@ -53,6 +53,9 @@ var examples = map[string]ExampleContent{
 	"atmos_ai_help": {
 		Suggestion: "https://atmos.tools/cli/commands/ai/help",
 	},
+	"atmos_secret": {
+		Suggestion: "https://atmos.tools/cli/commands/secret/usage",
+	},
 }
 
 func init() {

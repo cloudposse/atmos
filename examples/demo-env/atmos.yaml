@@ -21,6 +21,8 @@ stacks:
 env:
   # GitHub token for the GitHub provider (retrieved dynamically)
   GITHUB_TOKEN: !exec gh auth token
+  # Normal user-defined environment variable; it should remain visible in `atmos env`.
+  DEMO_ENVIRONMENT: local-development
 
 logs:
   level: Info

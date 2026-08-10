@@ -25,6 +25,8 @@ tests:
     snapshot: true
     description: "Describe component using explicit stack name works"
     workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    env:
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"
@@ -49,6 +51,8 @@ tests:
     snapshot: true
     description: "Describe component using filename works when stack has no explicit name"
     workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    env:
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"

@@ -108,10 +108,12 @@ func TestTableHandler_BuildRows(t *testing.T) {
 			{"name": "bob", "age": 25},
 		}
 		columns := []string{"name", "age"}
-		rows := tableHandler.buildRows(data, columns)
+		vars := NewVariables()
+		rows, err := tableHandler.buildRows(data, columns, vars)
+		require.NoError(t, err)
 		assert.Len(t, rows, 2)
-		assert.Equal(t, "alice\t30", rows[0])
-		assert.Equal(t, "bob\t25", rows[1])
+		assert.Equal(t, []string{"alice", "30"}, rows[0])
+		assert.Equal(t, []string{"bob", "25"}, rows[1])
 	})
 
 	t.Run("handles missing columns in data", func(t *testing.T) {
@@ -119,15 +121,19 @@ func TestTableHandler_BuildRows(t *testing.T) {
 			{"name": "alice"},
 		}
 		columns := []string{"name", "age"}
-		rows := tableHandler.buildRows(data, columns)
+		vars := NewVariables()
+		rows, err := tableHandler.buildRows(data, columns, vars)
+		require.NoError(t, err)
 		assert.Len(t, rows, 1)
-		assert.Equal(t, "alice\t", rows[0])
+		assert.Equal(t, []string{"alice", ""}, rows[0])
 	})
 
 	t.Run("handles empty data", func(t *testing.T) {
 		data := []map[string]any{}
 		columns := []string{"name", "age"}
-		rows := tableHandler.buildRows(data, columns)
+		vars := NewVariables()
+		rows, err := tableHandler.buildRows(data, columns, vars)
+		require.NoError(t, err)
 		assert.Empty(t, rows)
 	})
 
@@ -136,12 +142,40 @@ func TestTableHandler_BuildRows(t *testing.T) {
 			{"str": "hello", "int": 42, "float": 3.14, "bool": true},
 		}
 		columns := []string{"str", "int", "float", "bool"}
-		rows := tableHandler.buildRows(data, columns)
+		vars := NewVariables()
+		rows, err := tableHandler.buildRows(data, columns, vars)
+		require.NoError(t, err)
 		assert.Len(t, rows, 1)
 		assert.Contains(t, rows[0], "hello")
 		assert.Contains(t, rows[0], "42")
 		assert.Contains(t, rows[0], "3.14")
 		assert.Contains(t, rows[0], "true")
+	})
+
+	t.Run("resolves templates in data values", func(t *testing.T) {
+		data := []map[string]any{
+			{"command": "atmos terraform deploy -s {{ .steps.stack.value }}"},
+		}
+		columns := []string{"command"}
+		vars := NewVariables()
+		vars.Set("stack", NewStepResult("plat-ue2-dev"))
+
+		rows, err := tableHandler.buildRows(data, columns, vars)
+
+		require.NoError(t, err)
+		assert.Equal(t, [][]string{{"atmos terraform deploy -s plat-ue2-dev"}}, rows)
+	})
+
+	t.Run("returns error for invalid data template", func(t *testing.T) {
+		data := []map[string]any{
+			{"command": "{{ .steps.stack.value"},
+		}
+		columns := []string{"command"}
+		vars := NewVariables()
+
+		_, err := tableHandler.buildRows(data, columns, vars)
+
+		assert.Error(t, err)
 	})
 }
 
@@ -246,6 +280,7 @@ func TestTableHandler_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, result.Value, "Charlie")
 		assert.Contains(t, result.Value, "200")
+		assert.NotContains(t, result.Value, "\t")
 	})
 
 	t.Run("executes with data and title", func(t *testing.T) {
@@ -265,6 +300,26 @@ func TestTableHandler_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, result.Value, "User Data")
 		assert.Contains(t, result.Value, "Dana")
+	})
+
+	t.Run("executes with data and template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test",
+			Type: "table",
+			Data: []map[string]any{
+				{"command": "atmos terraform deploy -s {{ .steps.stack.value }}"},
+			},
+			Columns: []string{"command"},
+		}
+		vars := NewVariables()
+		vars.Set("stack", NewStepResult("plat-ue2-dev"))
+		ctx := context.Background()
+
+		result, err := handler.Execute(ctx, step, vars)
+
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "atmos terraform deploy -s plat-ue2-dev")
+		assert.NotContains(t, result.Value, "{{")
 	})
 
 	t.Run("returns error for invalid content template", func(t *testing.T) {

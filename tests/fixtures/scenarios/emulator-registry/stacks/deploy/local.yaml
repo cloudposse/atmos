@@ -1,0 +1,18 @@
+vars:
+  stage: local
+
+components:
+  # The emulator is a stack-scoped component; `atmos emulator up registry -s local`
+  # starts (or reuses) the standard registry:2 OCI registry.
+  emulator:
+    registry:
+      driver: registry
+      # Pin the registry to a stable host port so the E2E can probe the OCI distribution
+      # API at a known address (consumers in stack manifests would instead use
+      # `!emulator registry url`). The host port is deliberately non-standard: the
+      # conventional 5000 is reserved by macOS (AirPlay Receiver), so it collides on
+      # developer machines. The container still serves on 5000.
+      container:
+        ports:
+          - host: 15500
+            container: 5000

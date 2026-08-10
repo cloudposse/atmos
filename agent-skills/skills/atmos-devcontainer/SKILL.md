@@ -4,6 +4,7 @@ description: "Devcontainer orchestration: start/stop/attach/shell/exec/rebuild, 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 references:
   - references/commands-reference.md
 ---
@@ -96,11 +97,11 @@ Containers follow the naming convention: `atmos-devcontainer.{name}.{instance}`
 All Atmos devcontainers are labeled for management:
 
 ```text
-com.atmos.type=devcontainer
-com.atmos.devcontainer.name={name}
-com.atmos.devcontainer.instance={instance}
-com.atmos.workspace={workspace-path}
-com.atmos.created={timestamp}
+tools.atmos.type=devcontainer
+tools.atmos.devcontainer.name={name}
+tools.atmos.devcontainer.instance={instance}
+tools.atmos.workspace={workspace-path}
+tools.atmos.created={timestamp}
 ```
 
 ### Runtime Auto-Detection

@@ -5,11 +5,13 @@ sidebar_class_name: command
 id: skill
 description: Manage AI skills including install, list, and uninstall operations
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import SkillCount from '@site/src/components/SkillCount'
 
 <Intro>
 Use this command to manage community and custom AI skills. Install skills from GitHub repositories, list installed skills, and remove skills you no longer need.
@@ -17,10 +19,10 @@ Use this command to manage community and custom AI skills. Install skills from G
 
 <Experimental />
 
-**See also:** [AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml` |
-[Skill Marketplace](/ai/skill-marketplace) for browsing available skills
+**See also:** [Agent Skills Directory](/ai/skills) to browse every skill |
+[AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml`
 
-<Screengrab title="atmos ai skill --help" slug="atmos-ai-skill--help" />
+<CastPlayer title="atmos ai skill --help" src="/casts/screengrabs/atmos-ai-skill--help.cast" static chrome />
 
 ## Description
 
@@ -28,8 +30,8 @@ Skills are specialized AI assistants that provide expert knowledge for specific 
 [Agent Skills](https://agentskills.io) open standard and can be installed from GitHub repositories.
 
 The `atmos ai skill` command lets you:
-- Install community-contributed skills from GitHub
-- List all installed skills and their status
+- Install official skills by name (offline) or community skills from GitHub
+- List the full catalog of available skills alongside what's installed
 - Remove skills you no longer need
 
 :::tip Global `--skill` Flag
@@ -43,6 +45,81 @@ atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
 See [Global Flags](/cli/global-flags) for details.
 :::
 
+## What Are Agent Skills?
+
+Atmos ships <SkillCount /> official agent skills that give AI coding assistants deep, accurate knowledge of Atmos
+conventions, stack configuration, Terraform orchestration, authentication, validation, and more -- browse them all in
+the [Agent Skills Directory](/ai/skills). They live in the `agent-skills/` folder at the root of the Atmos repository
+and work across Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+
+Each official skill is a self-contained package with:
+- **SKILL.md** -- The primary instruction file (under 500 lines) with YAML frontmatter metadata
+- **references/** -- Deeper reference files that the AI loads only when the task requires them
+
+Skills use a three-tier progressive disclosure pattern so AI context windows stay focused:
+
+1. **Router** (`AGENTS.md`) -- A lightweight index that maps user tasks to the right skill
+2. **Skill** (`SKILL.md`) -- Domain-specific instructions, patterns, and examples
+3. **References** (`references/*.md`) -- Detailed specifications, schemas, and command references
+
+The AI loads the router first, identifies which skill applies, loads that skill, and only pulls in reference files
+when deep detail is needed. You do **not** invoke skills manually -- your AI tool activates the right skill
+automatically based on your question. For step-by-step client setup, see
+[Configure AI Assistants](/projects/setup-editor/ai-assistants).
+
+### Official SKILL.md Format
+
+<File title="SKILL.md">
+```yaml
+---
+name: atmos-stacks
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+  category: core-config
+references:
+  - references/import-patterns.md
+  - references/inheritance-deep-merge.md
+---
+
+# Atmos Stacks
+
+Instructions for the AI assistant...
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the skill (must match the directory name).</dd>
+
+  <dt>`description`</dt>
+  <dd>Human-readable summary of what the skill teaches.</dd>
+
+  <dt>`metadata.category`</dt>
+  <dd>Groups the skill in the [Agent Skills Directory](/ai/skills) (e.g. `orchestrators`, `security`, `ci-automation`).</dd>
+
+  <dt>`references`</dt>
+  <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
+</dl>
+
+Skills build on two open standards: [AGENTS.md](https://agents.md/) for project-level AI instructions, and
+[Agent Skills](https://agentskills.io/specification) (`SKILL.md`) for packaging AI capabilities with instructions,
+references, and assets.
+
+### Contributing an Official Skill
+
+Official skills are maintained in the Atmos repository under `agent-skills/`. To contribute one:
+
+1. Follow the existing folder structure: `agent-skills/skills/<skill-name>/SKILL.md`
+2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
+3. Place detailed reference material in `references/` subdirectories
+4. Update `AGENTS.md` to include your skill in the routing table
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright`, `version`, and `category`), and optionally `references` fields
+
+New skills appear automatically in the [Agent Skills Directory](/ai/skills) -- no separate doc update needed. See the
+[Atmos Contributing Guide](/community) for general contribution guidelines.
+
 ## Usage
 
 ```shell
@@ -53,11 +130,19 @@ atmos ai skill <subcommand> [flags]
 
 ### `atmos ai skill install`
 
-Install a skill from a GitHub repository.
+Install a skill by its bundled name (offline) or from a GitHub repository.
+
+The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository. Omit `<source>` entirely to install every bundled skill at once.
+
+By default, the skill is also auto-distributed into any detected AI client's project-local skill directory (`.github/skills/` for VS Code/Copilot, `.claude/skills/` for Claude Code, `.gemini/skills/` for Gemini), so it works with zero extra flags. Use `--client`/`--all-clients` to control which clients receive a copy, or `--path` to take full manual control of the install location (this skips auto-distribution).
+
+Use `--scope user` (or `--global`) to distribute into each client's personal, user-level skill directory instead (`~/.claude/skills/`, `~/.copilot/skills/` for VS Code/Copilot, `~/.gemini/skills/`), so the skill is available across every project rather than just this one. When neither `--scope` nor `--global` is given and the command is running in an interactive terminal, Atmos prompts you to choose project or user scope; `--yes`, a non-TTY session, or CI skips the prompt and defaults to `project`.
+
+If a client's target directory already exists as a symbolic link (for example this repo's own `.claude/skills/<name>` entries, which intentionally point into `agent-skills/skills/<name>` for contributor auto-discovery), that client is skipped with a warning instead of writing through the symlink.
 
 **Usage:**
 ```shell
-atmos ai skill install <source> [flags]
+atmos ai skill install [source] [flags]
 ```
 
 **Flags:**
@@ -68,10 +153,31 @@ atmos ai skill install <source> [flags]
 
   <dt>`-y, --yes`</dt>
   <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`--path`</dt>
+  <dd>Override the skill install directory (default: `~/.atmos/skills`). Relative paths resolve against the current working directory, e.g. `--path .github/skills` for VS Code/Copilot auto-discovery. Setting `--path` skips auto-distribution to AI clients.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to distribute the skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Distribute the skill to every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Distribution scope: `project` (writes into this repo's client directories, default) or `user` (writes into each client's personal, user-level directory instead). When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--yes`, no TTY, or CI) fall back to `project`.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
 </dl>
 
 **Examples:**
 ```shell
+# Install an official skill by name (offline)
+atmos ai skill install atmos-terraform
+
+# Install every bundled skill at once (offline)
+atmos ai skill install
+
 # Install a skill from GitHub
 atmos ai skill install github.com/user/skill-name
 
@@ -83,11 +189,23 @@ atmos ai skill install github.com/user/skill-name --force
 
 # Install without confirmation
 atmos ai skill install github.com/user/skill-name --yes
+
+# Install to a custom directory (skips auto-distribution)
+atmos ai skill install atmos-terraform --path .github/skills
+
+# Distribute to a specific AI client
+atmos ai skill install atmos-terraform --client vscode
+
+# Distribute to every supported AI client
+atmos ai skill install atmos-terraform --all-clients
+
+# Distribute into each client's personal, user-level directory
+atmos ai skill install atmos-terraform --scope user
 ```
 
 ### `atmos ai skill list`
 
-List all installed skills with their status.
+List Atmos skills — both the official skills bundled with Atmos and any community skills installed on this system. A filled dot (`●`) marks an installed skill; a hollow dot (`○`) marks one that is available to install. The official catalog is embedded in the binary, so listing works offline.
 
 **Usage:**
 ```shell
@@ -99,12 +217,18 @@ atmos ai skill list [flags]
 <dl>
   <dt>`-d, --detailed`</dt>
   <dd>Show detailed information for each skill, including source, version, install date, and location.</dd>
+
+  <dt>`--installed`</dt>
+  <dd>Show only installed skills, hiding the rest of the available catalog.</dd>
 </dl>
 
 **Examples:**
 ```shell
-# List installed skills
+# List all skills (available and installed)
 atmos ai skill list
+
+# Show only installed skills
+atmos ai skill list --installed
 
 # Show detailed information
 atmos ai skill list --detailed
@@ -112,11 +236,15 @@ atmos ai skill list --detailed
 
 ### `atmos ai skill uninstall`
 
-Remove an installed skill.
+Remove an installed skill. Any copies auto-distributed to AI clients during install are removed as well. Omit `<name>` entirely to uninstall every installed skill at once.
+
+Use `--scope user` (or `--global`) if the skill was installed with `--scope user`, so cleanup targets each client's personal, user-level skill directory instead of the project one. When neither `--scope` nor `--global` is given and the command is running in an interactive terminal, Atmos prompts you to choose project or user scope; `--force`, a non-TTY session, or CI skips the prompt and defaults to `project`.
+
+If a client's copy is actually a symbolic link (for example this repo's own `.claude/skills/<name>` entries), it is left in place with a warning rather than being deleted.
 
 **Usage:**
 ```shell
-atmos ai skill uninstall <name> [flags]
+atmos ai skill uninstall [name] [flags]
 ```
 
 **Flags:**
@@ -124,6 +252,18 @@ atmos ai skill uninstall <name> [flags]
 <dl>
   <dt>`-f, --force`</dt>
   <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to remove the skill from (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Remove the skill from every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Distribution scope: `project` (default) or `user`. Use `user` to clean up a skill that was installed with `--scope user`. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--force`, no TTY, or CI) fall back to `project`.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
 </dl>
 
 **Examples:**
@@ -131,9 +271,187 @@ atmos ai skill uninstall <name> [flags]
 # Uninstall a skill
 atmos ai skill uninstall skill-name
 
+# Uninstall every installed skill at once
+atmos ai skill uninstall
+
 # Uninstall without confirmation
 atmos ai skill uninstall skill-name --force
+
+# Remove the skill from a specific AI client only
+atmos ai skill uninstall skill-name --client vscode
+
+# Remove the skill from every supported AI client
+atmos ai skill uninstall skill-name --all-clients
+
+# Remove a skill that was installed with --scope user
+atmos ai skill uninstall skill-name --scope user
 ```
+
+## Creating and Publishing Your Own Skill
+
+Skills installed via `atmos ai skill install <github-url>` follow the same [Agent Skills open standard](https://agentskills.io) format -- a single SKILL.md file with YAML frontmatter and a Markdown body containing the system prompt.
+
+```
+your-skill-repo/
+├── SKILL.md             # Skill definition (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+The frontmatter declares metadata and tool access. The Markdown body is the AI system prompt.
+
+<File title="SKILL.md (abbreviated)">
+```markdown
+---
+name: terraform-expert
+display_name: "Terraform Expert"
+version: 1.0.0
+author: Cloud Posse
+description: >
+  Specialized AI skill for Terraform component development,
+  debugging, and best practices.
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+  max_version: ""
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - edit_file
+    - execute_bash
+  restricted:
+    - edit_file
+    - execute_bash
+
+capabilities:
+  - terraform-development
+  - component-architecture
+
+dependencies:
+  - terraform
+
+repository: https://github.com/yourorg/atmos-skill-terraform
+---
+
+# Skill: Terraform Expert
+
+## Role
+
+You are a specialized AI skill for Terraform component development...
+
+## Instructions
+
+[Detailed instructions for the AI skill go here]
+
+## Restrictions
+
+- Always confirm before executing destructive commands
+- Never commit secrets or credentials to code
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique skill identifier in kebab-case.</dd>
+
+  <dt>`display_name`</dt>
+  <dd>User-facing display name.</dd>
+
+  <dt>`version`</dt>
+  <dd>Semantic version (e.g., `1.2.3`).</dd>
+
+  <dt>`author`</dt>
+  <dd>Author name or organization.</dd>
+
+  <dt>`description`</dt>
+  <dd>Brief description of skill purpose.</dd>
+
+  <dt>`category`</dt>
+  <dd>One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`.</dd>
+
+  <dt>`atmos.min_version`</dt>
+  <dd>Minimum compatible Atmos version.</dd>
+
+  <dt>`tools.allowed`</dt>
+  <dd>Tools the skill can use. Tools in `restricted` require user confirmation each time.</dd>
+
+  <dt>`repository`</dt>
+  <dd>GitHub repository URL.</dd>
+</dl>
+
+### Publishing Your Skill
+
+Create a GitHub repository with a valid SKILL.md, tag a release, and share it:
+
+<Terminal title="terminal">
+```bash
+mkdir atmos-skill-terraform && cd atmos-skill-terraform
+git init
+
+# Create SKILL.md with frontmatter and prompt (see format above)
+
+git add . && git commit -m "Initial skill release"
+git remote add origin git@github.com:yourorg/atmos-skill-terraform.git
+git push -u origin main
+git tag v1.0.0 && git push origin v1.0.0
+```
+</Terminal>
+
+Share your skill in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions) and add the `atmos-skill` topic to your repository.
+
+:::tip Naming Convention
+- **Repository**: prefix with `atmos-skill-`, use kebab-case (e.g., `atmos-skill-cost-optimizer`)
+- **Skill name**: no prefix, kebab-case (e.g., `cost-optimizer`)
+- **Display name**: title case (e.g., "Cost Optimizer")
+:::
+
+## Tool Access and Security
+
+Skills declare which tools they need. Review the `tools.allowed` section before installing any skill.
+
+:::danger Review Before Installing
+**Always review skill source code on GitHub before installing skills that request:**
+- File write access (`edit_file`, `write_stack_file`, `write_component_file`)
+- Command execution (`execute_bash_command`, `execute_atmos_command`)
+:::
+
+Use the `restricted` field to require user confirmation for sensitive operations. A tool listed in both `allowed` and `restricted` means the skill can use it, but the user must approve each invocation.
+
+## Troubleshooting
+
+### Skill Not Found After Installation
+
+Skill may be disabled or the registry is corrupted. Check with `atmos ai skill list` and inspect `~/.atmos/skills/registry.json`.
+
+### Version Compatibility Error
+
+```
+Error: skill requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+Upgrade Atmos (`brew upgrade atmos`) or install an older skill version (`atmos ai skill install user/skill@v0.9.0`).
+
+### Invalid Metadata Error
+
+The skill's SKILL.md has malformed frontmatter. Report the issue to the skill author or try a different version tag.
+
+### Registry Corruption
+
+<Terminal title="terminal">
+```bash
+# Backup and reset registry
+cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
+rm ~/.atmos/skills/registry.json
+
+# Reinstall skills
+atmos ai skill install cloudposse/atmos
+```
+</Terminal>
 
 ## Related Commands
 
@@ -142,5 +460,4 @@ atmos ai skill uninstall skill-name --force
   {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
   {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
   {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
-  {type: 'link', href: '/ai/skill-marketplace', label: 'Skill Marketplace', description: 'Browse and discover available skills'},
 ]} />

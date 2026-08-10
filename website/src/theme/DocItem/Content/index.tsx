@@ -5,6 +5,7 @@ import type DocItemContentType from '@theme/DocItem/Content';
 import type { WrapperProps } from '@docusaurus/types';
 import { useDoc } from '@docusaurus/plugin-content-docs/client';
 
+import QuickStartExampleDrawer from '@site/src/components/QuickStartExampleDrawer';
 import { deriveMarkdownHref } from '@site/src/theme/docUtils';
 
 type Props = WrapperProps<typeof DocItemContentType>;
@@ -30,6 +31,7 @@ export default function ContentWrapper(props: Props): JSX.Element {
         </Head>
       )}
       <OriginalDocItemContent {...props} />
+      <QuickStartExampleDrawer pageTitle={metadata?.title} />
     </>
   );
 }

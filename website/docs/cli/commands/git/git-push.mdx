@@ -1,0 +1,114 @@
+---
+title: atmos git push
+sidebar_label: push
+sidebar_class_name: command
+id: push
+description: Push commits to a remote Git repository with bounded retry and no force push.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --ff-only`, then re-push, bounded by `push.retries` (default `3`).
+</Intro>
+
+<CastPlayer title="atmos git push --help" src="/casts/screengrabs/atmos-git-push--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos git push <name-or-path> [flags] [-- <native git args>]
+```
+
+With a configured repository:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      push:
+        retries: 3        # bounded pull --ff-only + re-push loop on rejection
+```
+
+```shell
+atmos git push flux-deploy
+```
+
+## Examples
+
+```shell
+# Push a managed repository to its configured remote/branch
+atmos git push flux-deploy
+
+# Push a repository at a local path
+atmos git push ./deployments
+
+# Push a specific branch to a specific remote
+atmos git push flux-deploy --remote=origin --branch=main
+
+# Report what would be pushed without pushing
+atmos git push flux-deploy --dry-run
+
+# Pass native arguments to the underlying git push invocation
+atmos git push flux-deploy -- --follow-tags
+```
+
+## Push Contention
+
+A rejected non-fast-forward push is the most common failure mode in GitOps publishing — multiple components, CI jobs, or humans pushing to the same deployment branch. Atmos handles it instead of surfacing a raw Git error:
+
+1. On rejection, run `pull --ff-only`, then re-push.
+2. Repeat up to `push.retries` times (default `3`; configurable per repository).
+3. After exhaustion, fail with a clear error and hints (serialize publishers, or batch publishing).
+
+## Arguments
+
+<dl>
+    <dt>`name-or-path` <em>(required)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. URIs are not accepted — push operates on a local workdir.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--branch` / `-b` <em>(optional)</em></dt>
+    <dd>
+        Branch to push. Defaults to the repository's configured branch, or the current branch.
+        Environment variable: `ATMOS_GIT_BRANCH`
+    </dd>
+
+    <dt>`--remote` <em>(optional)</em></dt>
+    <dd>
+        Remote name. Default: `origin`.
+        Environment variable: `ATMOS_GIT_REMOTE`
+    </dd>
+
+    <dt>`--dry-run` / `-n` <em>(optional)</em></dt>
+    <dd>
+        Report what would be pushed without pushing.
+        Environment variable: `ATMOS_GIT_DRY_RUN`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to each underlying `git push` invocation (not to the `pull --ff-only` recovery between retries).
+
+```shell
+atmos git push flux-deploy -- --follow-tags
+```
+
+## Related
+
+- [`atmos git commit`](/cli/commands/git/commit) — create the commit to push
+- [`kind: git` hooks](/stacks/hooks#kind-git) — commit and push automatically on lifecycle events
+- [Git Configuration](/cli/configuration/git) — `push.retries` and authentication resolution

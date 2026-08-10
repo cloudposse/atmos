@@ -1,0 +1,76 @@
+commands:
+  - name: casts generate examples hooks-trivy security-scan
+    description: Regenerate the Trivy Hook example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: security-scan
+        working_directory: "../../.context/cast-fixtures/hooks-trivy"
+        title: "Hooks: Trivy scan after a Terraform plan"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/hooks-trivy/security-scan.cast"
+        steps:
+          - type: simulate
+            text: "# run a real Terraform plan and let the Trivy hook scan it"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan bucket -s test
+          - type: shell
+            name: plan
+            duration: 550ms
+            interval: 750ms
+            command: *plan_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/hooks-trivy/security-scan.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root)), str(Path.home()), os.path.realpath(str(Path.home()))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/sanitized")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples hooks-trivy security-scan
+  - name: casts validate examples hooks-trivy security-scan
+    description: Validate the Trivy Hook example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/hooks-trivy/security-scan.cast")
+          plain = strip_ansi(text).lower()
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos terraform plan bucket -s test", "plan: 1 to add", "## trivy", "5 high", "aws-0132"]:
+              if needle not in plain:
+                  raise SystemExit(f"hooks-trivy cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

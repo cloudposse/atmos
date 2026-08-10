@@ -27,6 +27,16 @@ func TestLinePrefixWriterBuffersPartialLines(t *testing.T) {
 	require.Equal(t, "[stack/component] hello world\n[stack/component] next", out.String())
 }
 
+func TestLinePrefixWriterRawUsesPrefixVerbatim(t *testing.T) {
+	var out bytes.Buffer
+	// Raw constructor: no surrounding brackets/spacing are added by the writer.
+	writer := NewLinePrefixWriterRaw("api | ", &out, &sync.Mutex{})
+
+	_, err := writer.Write([]byte("hello\nworld\n"))
+	require.NoError(t, err)
+	require.Equal(t, "api | hello\napi | world\n", out.String())
+}
+
 func TestLinePrefixWriterSerializesCompleteLines(t *testing.T) {
 	var out bytes.Buffer
 	writeMu := &sync.Mutex{}
@@ -94,6 +104,15 @@ func TestLinePrefixWriterWithoutPrefixWritesRawLines(t *testing.T) {
 	require.Equal(t, "raw\n", out.String())
 }
 
+func TestLinePrefixWriterWithoutPrefixNormalizesCarriageReturns(t *testing.T) {
+	var out bytes.Buffer
+	writer := NewLinePrefixWriter("", &out, nil)
+
+	_, err := writer.Write([]byte("first\rsecond\n"))
+	require.NoError(t, err)
+	require.Equal(t, "first\nsecond\n", out.String())
+}
+
 func TestLinePrefixWriterEmptyWriteAndFlushAreNoops(t *testing.T) {
 	var out bytes.Buffer
 	writer := NewLinePrefixWriter("node", &out, nil)
@@ -114,13 +133,59 @@ func TestLinePrefixWriterNilTargetDropsOutput(t *testing.T) {
 	require.NoError(t, writer.Flush())
 }
 
-func TestLinePrefixWriterPrefixesCarriageReturnSegments(t *testing.T) {
-	var out bytes.Buffer
-	writer := NewLinePrefixWriter("node", &out, nil)
+func TestLinePrefixWriterConvertsCarriageReturnsToNewlines(t *testing.T) {
+	testCases := []struct {
+		name   string
+		writes []string
+		want   string
+	}{
+		{
+			name:   "standalone carriage return",
+			writes: []string{"first\rsecond\n"},
+			want:   "[node] first\n[node] second\n",
+		},
+		{
+			name:   "carriage return newline",
+			writes: []string{"first\r\nsecond\n"},
+			want:   "[node] first\n[node] second\n",
+		},
+		{
+			name:   "carriage return newline split across writes",
+			writes: []string{"first\r", "\nsecond\n"},
+			want:   "[node] first\n[node] second\n",
+		},
+		{
+			name:   "trailing carriage return",
+			writes: []string{"first\r"},
+			want:   "[node] first\n",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var out bytes.Buffer
+			writer := NewLinePrefixWriter("node", &out, nil)
+
+			for _, write := range testCase.writes {
+				_, err := writer.Write([]byte(write))
+				require.NoError(t, err)
+			}
+			require.NoError(t, writer.Flush())
+			require.Equal(t, testCase.want, out.String())
+		})
+	}
+}
+
+func TestLinePrefixWriterRetriesCarriageReturnDelimitedLinesAfterWriteError(t *testing.T) {
+	expectedErr := errors.New("write failed")
+	target := &linePrefixFailOnceWriter{err: expectedErr}
+	writer := NewLinePrefixWriter("node", target, nil)
 
 	_, err := writer.Write([]byte("first\rsecond\n"))
-	require.NoError(t, err)
-	require.Equal(t, "[node] first\r[node] second\n", out.String())
+	require.ErrorIs(t, err, expectedErr)
+
+	require.NoError(t, writer.Flush())
+	require.Equal(t, "[node] first\n[node] second\n", target.out.String())
 }
 
 func TestLinePrefixWriterPropagatesWriteErrors(t *testing.T) {

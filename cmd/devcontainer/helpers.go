@@ -17,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // listAvailableDevcontainers returns a sorted list of devcontainer names from the provided AtmosConfiguration.
@@ -110,7 +111,7 @@ func getDevcontainerName(args []string) (string, error) {
 	}
 
 	// Display selected devcontainer to stderr (so it doesn't interfere with stdout).
-	fmt.Fprintf(os.Stderr, "\nSelected devcontainer: %s\n\n", selectedName)
+	ui.Writef("\nSelected devcontainer: %s\n\n", selectedName)
 
 	return selectedName, nil
 }
@@ -166,10 +167,27 @@ func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthM
 	return authManager, nil
 }
 
-// initCommandWithFlags initializes a command's flags using StandardParser.
-// InitCommandWithFlags registers command flags with the provided parser and binds them to Viper.
-// It panics if binding the parser to Viper fails.
-func initCommandWithFlags(cmd *cobra.Command, parser *flags.StandardParser) {
+const devcontainerNameArg = "name"
+
+// newDevcontainerParser creates a StandardFlagParser with the devcontainer name positional arg configured.
+func newDevcontainerParser(nameRequired bool, opts ...flags.Option) (*flags.StandardFlagParser, string) {
+	builder := flags.NewPositionalArgsBuilder()
+	builder.AddArg(&flags.PositionalArgSpec{
+		Name:        devcontainerNameArg,
+		Description: "Devcontainer name",
+		Required:    nameRequired,
+		TargetField: "Name",
+	})
+
+	specs, validator, usage := builder.Build()
+	parser := flags.NewStandardFlagParser(opts...)
+	parser.SetPositionalArgs(specs, validator, usage)
+	return parser, usage
+}
+
+// initCommandWithFlags initializes a command's flags using StandardFlagParser.
+// It registers command flags and binds them to Viper for environment/default precedence.
+func initCommandWithFlags(cmd *cobra.Command, parser *flags.StandardFlagParser) {
 	// Register flags using the standard RegisterFlags method.
 	parser.RegisterFlags(cmd)
 

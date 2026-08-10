@@ -1,3 +1,11 @@
+---
+title: Locals
+tags: [Stacks]
+cast:
+  file: /casts/examples/locals/structured-values.cast
+  title: atmos locals structured values
+---
+
 # Example: Locals
 
 Reduce repetition and build computed values using file-scoped locals.

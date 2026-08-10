@@ -2,9 +2,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	stdio "io"
 	"net"
 	"net/http"
 	"os"
@@ -24,9 +26,42 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+type mcpServerTestStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *mcpServerTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *mcpServerTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *mcpServerTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *mcpServerTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *mcpServerTestStreams) RawError() stdio.Writer  { return s.stderr }
+
+func setupMCPServerCapturedUI(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stderr := &bytes.Buffer{}
+	streams := &mcpServerTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		ui.Reset()
+	})
+
+	return stderr
+}
 
 // createTestAtmosConfig creates a test AtmosConfiguration with the given AI tool settings.
 func createTestAtmosConfig(yoloMode bool, requireConfirmation *bool) *schema.AtmosConfiguration {
@@ -61,7 +96,17 @@ func TestStartCmd_BasicProperties(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 	assert.NotEmpty(t, cmd.Example)
+	assert.NotNil(t, cmd.Args)
 	assert.NotNil(t, cmd.RunE)
+}
+
+func TestStartCmd_RejectsTrailingArgs(t *testing.T) {
+	require.NotNil(t, startCmd.Args)
+
+	err := startCmd.Args(startCmd, []string{"list", "dependencies"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown command "list" for "mcp start"`)
 }
 
 // TestStartCmd_Flags tests that all expected flags are properly defined.
@@ -370,6 +415,42 @@ func TestWaitForShutdown_SignalReceived(t *testing.T) {
 	assert.True(t, cancelCalled, "cancel function should have been called")
 }
 
+func TestWaitForShutdownWithStopMessage_SignalReceived(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	sigChan <- os.Interrupt
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, cancelCalled)
+	assert.True(t, stopCalled)
+}
+
+func TestWaitForShutdownWithStopMessage_ServerReturn(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	errChan <- nil
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.False(t, cancelCalled)
+	assert.True(t, stopCalled)
+}
+
 // TestWaitForShutdown_SIGTERMReceived tests waitForShutdown when SIGTERM is received.
 func TestWaitForShutdown_SIGTERMReceived(t *testing.T) {
 	sigChan := make(chan os.Signal, 1)
@@ -593,9 +674,9 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 					Tools: schema.AIToolSettings{
 						YOLOMode:            tt.yoloMode,
 						RequireConfirmation: tt.requireConfirmation,
-						AllowedTools:        tt.allowedTools,
-						RestrictedTools:     tt.restrictedTools,
-						BlockedTools:        tt.blockedTools,
+						Allowed:             tt.allowedTools,
+						Restricted:          tt.restrictedTools,
+						Blocked:             tt.blockedTools,
 					},
 				},
 			}
@@ -670,14 +751,20 @@ func TestInitializeAIComponents_AIDisabled(t *testing.T) {
 	assert.NotNil(t, executor)
 }
 
-// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents returns error when tools are disabled.
+// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents still registers
+// and exposes tools over MCP even when ai.tools.enabled is false: that setting governs
+// atmos ai chat/ask/exec's own tool-use loop, not MCP tool-serving — mcp.enabled: true is
+// the MCP server's own, sufficient opt-in for exposing tools to external clients.
 func TestInitializeAIComponents_ToolsDisabled(t *testing.T) {
 	atmosConfig := createFullTestAtmosConfig(true, false, false)
 
-	_, _, err := initializeAIComponents(atmosConfig)
+	registryRaw, executorRaw, err := initializeAIComponents(atmosConfig)
 
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled), "error should be ErrAIToolsDisabled")
+	require.NoError(t, err)
+	registry, ok := registryRaw.(*tools.Registry)
+	require.True(t, ok, "registry MUST be a *tools.Registry")
+	assert.Positive(t, registry.Count(), "tools should still be registered for MCP even when ai.tools.enabled is false")
+	assert.NotNil(t, executorRaw)
 }
 
 // TestInitializeAIComponents_ToolsEnabled tests that initializeAIComponents succeeds when tools are enabled.
@@ -770,10 +857,10 @@ func TestInitializeAIComponents_WithToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{"describe_component", "list_stacks"},
-				RestrictedTools: []string{"write_component_file"},
-				BlockedTools:    []string{"dangerous_tool"},
+				Enabled:    true,
+				Allowed:    []string{"describe_component", "list_stacks"},
+				Restricted: []string{"write_component_file"},
+				Blocked:    []string{"dangerous_tool"},
 			},
 		},
 	}
@@ -1131,10 +1218,10 @@ func TestInitializeAIComponents_PermissionCheckerConfiguration(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:      true,
-						YOLOMode:     tt.yoloMode,
-						AllowedTools: tt.allowedTools,
-						BlockedTools: tt.blockedTools,
+						Enabled:  true,
+						YOLOMode: tt.yoloMode,
+						Allowed:  tt.allowedTools,
+						Blocked:  tt.blockedTools,
 					},
 				},
 			}
@@ -1287,11 +1374,12 @@ func TestWaitForShutdown_RaceCondition(t *testing.T) {
 	// The function should handle one of them.
 	err := waitForShutdown(sigChan, errChan, cancel)
 
-	// Either signal or error should be handled.
-	// If signal was handled, cancel should be true and err should be nil.
-	// If error was handled, cancel should be false and err should contain the error.
+	// Either signal or error should be handled. If signal is handled first, the
+	// graceful shutdown wait may still return the buffered server error.
 	if cancelCalled {
-		assert.NoError(t, err)
+		if err != nil {
+			assert.Contains(t, err.Error(), "test error")
+		}
 	} else {
 		assert.Error(t, err)
 	}
@@ -1652,9 +1740,9 @@ func TestInitializeAIComponents_WithRestrictedTools(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				RestrictedTools: []string{"write_component_file", "write_stack_file"},
-				YOLOMode:        false,
+				Enabled:    true,
+				Restricted: []string{"write_component_file", "write_stack_file"},
+				YOLOMode:   false,
 			},
 		},
 	}
@@ -2033,10 +2121,10 @@ func TestInitializeAIComponents_PermissionConfig(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:         true,
-						AllowedTools:    tt.allowedTools,
-						RestrictedTools: tt.restrictedTools,
-						BlockedTools:    tt.blockedTools,
+						Enabled:    true,
+						Allowed:    tt.allowedTools,
+						Restricted: tt.restrictedTools,
+						Blocked:    tt.blockedTools,
 					},
 				},
 			}
@@ -2384,10 +2472,13 @@ func TestWaitForShutdown_ConcurrentSignalAndError(t *testing.T) {
 			err := waitForShutdown(sigChan, errChan, cancel)
 
 			// Either:
-			// 1. Signal was handled: cancelCalled=true, err=nil
-			// 2. Error was handled: cancelCalled=false, err!=nil
+			// 1. Signal was handled first: cancelCalled=true. The graceful
+			//    shutdown wait may still observe the queued server error.
+			// 2. Error was handled first: cancelCalled=false, err!=nil.
 			if cancelCalled {
-				assert.NoError(t, err)
+				if err != nil {
+					assert.Contains(t, err.Error(), "concurrent error")
+				}
 			} else {
 				assert.Error(t, err)
 			}
@@ -2401,10 +2492,10 @@ func TestInitializeAIComponents_EmptyToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{},
-				RestrictedTools: []string{},
-				BlockedTools:    []string{},
+				Enabled:    true,
+				Allowed:    []string{},
+				Restricted: []string{},
+				Blocked:    []string{},
 			},
 		},
 	}
@@ -2561,31 +2652,6 @@ func TestWaitForShutdown_DeeplyWrappedContextCanceled(t *testing.T) {
 	assert.False(t, cancelCalled)
 }
 
-// TestMCPServerEndpoints_HTTPFormat tests the endpoint URL format for HTTP transport.
-func TestMCPServerEndpoints_HTTPFormat(t *testing.T) {
-	tests := []struct {
-		host            string
-		port            int
-		expectedSSE     string
-		expectedMessage string
-	}{
-		{"localhost", 8080, "http://localhost:8080/sse", "http://localhost:8080/message"},
-		{"0.0.0.0", 3000, "http://0.0.0.0:3000/sse", "http://0.0.0.0:3000/message"},
-		{"192.168.1.1", 9000, "http://192.168.1.1:9000/sse", "http://192.168.1.1:9000/message"},
-	}
-
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s:%d", tt.host, tt.port), func(t *testing.T) {
-			addr := fmt.Sprintf("%s:%d", tt.host, tt.port)
-			sseEndpoint := fmt.Sprintf("http://%s/sse", addr)
-			messageEndpoint := fmt.Sprintf("http://%s/message", addr)
-
-			assert.Equal(t, tt.expectedSSE, sseEndpoint)
-			assert.Equal(t, tt.expectedMessage, messageEndpoint)
-		})
-	}
-}
-
 // TestInitializeAIComponents_YOLOModeOverride tests that YOLO mode is always set to true for MCP.
 func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
 	// Even if YOLOMode is false in config, it should be set to true for MCP.
@@ -2731,9 +2797,9 @@ func TestInitializeAIComponents_WithAllSettings(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            true,
 				RequireConfirmation: &boolTrue,
-				AllowedTools:        []string{"tool1", "tool2"},
-				RestrictedTools:     []string{"tool3"},
-				BlockedTools:        []string{"tool4"},
+				Allowed:             []string{"tool1", "tool2"},
+				Restricted:          []string{"tool3"},
+				Blocked:             []string{"tool4"},
 			},
 		},
 	}
@@ -2820,9 +2886,9 @@ func TestGetPermissionMode_DeepNesting(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            false,
 				RequireConfirmation: &boolFalse,
-				AllowedTools:        []string{"a", "b", "c"},
-				RestrictedTools:     []string{"d", "e"},
-				BlockedTools:        []string{"f"},
+				Allowed:             []string{"a", "b", "c"},
+				Restricted:          []string{"d", "e"},
+				Blocked:             []string{"f"},
 			},
 		},
 	}
@@ -2992,7 +3058,14 @@ func createTestAtmosDir(t *testing.T, aiEnabled, toolsEnabled bool) string {
 // Returns the temp directory path.
 func createTestAtmosDirWithMCP(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled bool) string {
 	t.Helper()
+	stackContent := `components:
+  terraform: {}
+`
+	return createTestAtmosDirWithMCPStackContent(t, mcpEnabled, aiEnabled, toolsEnabled, &stackContent)
+}
 
+func createTestAtmosDirWithMCPStackContent(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled bool, stackContent *string) string {
+	t.Helper()
 	tmpDir := t.TempDir()
 
 	// Create directories for stacks and components.
@@ -3003,12 +3076,10 @@ func createTestAtmosDirWithMCP(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled
 	err = os.MkdirAll(componentsDir, 0o755)
 	require.NoError(t, err)
 
-	// Create a minimal valid stack file.
-	stackContent := `components:
-  terraform: {}
-`
-	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackContent), 0o644)
-	require.NoError(t, err)
+	if stackContent != nil {
+		err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(*stackContent), 0o644)
+		require.NoError(t, err)
+	}
 
 	// Create atmos.yaml.
 	atmosConfig := fmt.Sprintf(`
@@ -3034,6 +3105,22 @@ components:
 	require.NoError(t, err)
 
 	return tmpDir
+}
+
+func createTestAtmosDirWithNoStacks(t *testing.T) string {
+	t.Helper()
+	return createTestAtmosDirWithMCPStackContent(t, true, true, true, nil)
+}
+
+func createTestAtmosDirWithBrokenStackImport(t *testing.T) string {
+	t.Helper()
+	stackContent := `import:
+  - catalog/missing
+
+components:
+  terraform: {}
+`
+	return createTestAtmosDirWithMCPStackContent(t, true, true, true, &stackContent)
 }
 
 // TestSetupMCPServer_MCPNotEnabled tests setupMCPServer when MCP is not enabled.
@@ -3062,17 +3149,38 @@ func TestSetupMCPServer_AINotEnabled(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
 }
 
+func TestSetupMCPServer_StartsWithoutStackManifests(t *testing.T) {
+	tmpDir := createTestAtmosDirWithNoStacks(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	server, err := setupMCPServer()
+
+	require.NoError(t, err)
+	assert.NotNil(t, server)
+}
+
+func TestSetupMCPServer_StartsWithBrokenStackImport(t *testing.T) {
+	tmpDir := createTestAtmosDirWithBrokenStackImport(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	server, err := setupMCPServer()
+
+	require.NoError(t, err)
+	assert.NotNil(t, server)
+}
+
 // TestSetupMCPServer_ToolsDisabled tests setupMCPServer when AI tools are disabled.
+// TestSetupMCPServer_ToolsDisabled tests that setupMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestSetupMCPServer_ToolsDisabled(t *testing.T) {
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
-	// setupMCPServer should return error because tools are disabled.
 	server, err := setupMCPServer()
 
-	assert.Error(t, err)
-	assert.Nil(t, server)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
+	require.NoError(t, err)
+	assert.NotNil(t, server)
 }
 
 // TestSetupMCPServer_Success tests setupMCPServer with valid configuration.
@@ -3149,6 +3257,23 @@ func TestExecuteMCPServer_AINotEnabledError(t *testing.T) {
 	// Should fail because AI is not enabled.
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
+}
+
+func TestExecuteMCPServer_DoesNotPrintStoppedWhenSetupFails(t *testing.T) {
+	stderr := setupMCPServerCapturedUI(t)
+	tmpDir := createTestAtmosDir(t, false, true)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "stdio", "")
+	cmd.Flags().String("host", "localhost", "")
+	cmd.Flags().Int("port", 8080, "")
+
+	err := executeMCPServer(cmd, nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
+	assert.NotContains(t, stderr.String(), "MCP server stopped")
 }
 
 // TestSetupMCPServer_ConfigLoadError tests setupMCPServer when config loading fails.
@@ -3261,7 +3386,15 @@ func TestExecuteMCPServer_HTTPTransportWithQuickShutdown(t *testing.T) {
 }
 
 // TestExecuteMCPServer_ToolsDisabled tests executeMCPServer when tools are disabled.
+// TestExecuteMCPServer_ToolsDisabled tests that executeMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
+	// Skip in short mode since this test involves server startup.
+	if testing.Short() {
+		t.Skip("Skipping server startup test in short mode")
+	}
+
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
@@ -3271,51 +3404,28 @@ func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
 	cmd.Flags().String("host", "localhost", "")
 	cmd.Flags().Int("port", 8080, "")
 
-	err := executeMCPServer(cmd, nil)
+	// Run in goroutine since a successful start blocks waiting for shutdown.
+	done := make(chan error, 1)
+	go func() {
+		done <- executeMCPServer(cmd, nil)
+	}()
 
-	// Should fail because tools are disabled.
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
-}
-
-// TestStartHTTPServer_WithHTTPRequest tests that the HTTP server handles requests.
-func TestStartHTTPServer_WithHTTPRequest(t *testing.T) {
-	// Create a real MCP server.
-	registry := tools.NewRegistry()
-	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
-	adapter := mcp.NewAdapter(registry, executor)
-	server := mcp.NewServer(adapter)
-
-	errChan := make(chan error, 1)
-
-	// Use a random available port.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-
-	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
-
-	// Give the server time to start.
+	// Give the server time to start past the setup phase.
 	time.Sleep(100 * time.Millisecond)
 
-	// Make a request to the SSE endpoint.
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
-	if err != nil {
-		// Server might not be ready yet, which is acceptable.
-		t.Logf("HTTP request failed: %v", err)
-		return
+	select {
+	case err := <-done:
+		// Server may exit due to stdin being closed; it must not be the old setup error.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "failed to initialize AI components")
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Server is running, test passes.
+		t.Log("Server is running")
 	}
-	defer resp.Body.Close()
-
-	// The SSE endpoint should return a response.
-	// Status code doesn't matter as long as the handler was invoked.
-	t.Logf("SSE endpoint returned status: %d", resp.StatusCode)
 }
 
-// TestStartHTTPServer_MessageEndpoint tests the message endpoint.
+// TestStartHTTPServer_MessageEndpoint tests posting a message to the streamable HTTP endpoint.
 func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Create a real MCP server.
 	registry := tools.NewRegistry()
@@ -3337,16 +3447,44 @@ func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
 
-	// Make a POST request to the message endpoint.
+	// Streamable HTTP handles every message on a single endpoint (no separate /message path).
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/message", port), "application/json", nil)
+	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/", port), "application/json", nil)
 	if err != nil {
 		t.Logf("HTTP request failed: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	t.Logf("Message endpoint returned status: %d", resp.StatusCode)
+	t.Logf("Streamable HTTP endpoint returned status: %d", resp.StatusCode)
+}
+
+// TestStartHTTPServer_HealthEndpoint tests the liveness probe endpoint.
+func TestStartHTTPServer_HealthEndpoint(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	errChan := make(chan error, 1)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+
+	startHTTPServer(server, "127.0.0.1", port, errChan)
+	time.Sleep(100 * time.Millisecond)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := stdio.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"status":"healthy"}`, string(body))
 }
 
 // TestStartHTTPServer_RootEndpoint tests the root endpoint.
@@ -3434,13 +3572,13 @@ func TestStartHTTPServer_MultipleRequests(t *testing.T) {
 		wg.Add(1)
 		go func(reqNum int) {
 			defer wg.Done()
-			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
+			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
 			if err != nil {
-				t.Logf("Request %d failed: %v", reqNum, err)
+				t.Errorf("request %d failed: %v", reqNum, err)
 				return
 			}
-			resp.Body.Close()
-			t.Logf("Request %d returned status: %d", reqNum, resp.StatusCode)
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusOK, resp.StatusCode, "request %d", reqNum)
 		}(i)
 	}
 

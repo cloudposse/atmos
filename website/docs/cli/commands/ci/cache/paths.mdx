@@ -1,0 +1,104 @@
+---
+title: atmos ci cache paths
+sidebar_label: paths
+sidebar_class_name: command
+sidebar_position: 5
+id: paths
+description: Print the cache key and paths for use with actions/cache.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Print the resolved cache **key**, **paths**, and **restore-keys** so a native cache (such as GitHub's `actions/cache`) can do the storage while Atmos supplies *what* to cache from your `ci.cache` configuration. Unlike `restore`/`save`, this needs no CI provider or runtime token, so it works on any OS and CI system.
+</Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure the CI Cache">
+    The key and paths printed by this command come from the `ci.cache` section of your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos ci cache paths --help" src="/casts/screengrabs/atmos-ci-cache-paths--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos ci cache paths [flags]
+```
+
+With `--format=github`, the values are appended to `$GITHUB_OUTPUT` (as `key`, `path`, and `restore-keys`) so a following `actions/cache` step can reference them as step outputs.
+
+## Examples
+
+```shell
+# Emit GitHub Actions step outputs (key, path, restore-keys)
+atmos ci cache paths --format=github
+
+# Structured output for any other CI or tooling
+atmos ci cache paths --format=json
+atmos ci cache paths --format=yaml
+
+# Shell-evaluable ATMOS_CI_CACHE_* variables
+eval "$(atmos ci cache paths --format=env)"
+```
+
+### Use with `actions/cache`
+
+```yaml
+- name: Resolve Atmos cache key & paths
+  id: atmos-cache
+  run: atmos ci cache paths --format=github
+
+- name: Cache Atmos toolchain
+  uses: actions/cache@v4
+  with:
+    key:          ${{ steps.atmos-cache.outputs.key }}
+    path:         ${{ steps.atmos-cache.outputs.path }}
+    restore-keys: ${{ steps.atmos-cache.outputs.restore-keys }}
+```
+
+:::tip One-line equivalent
+The [`cloudposse/atmos/actions/cache`](/cli/configuration/ci/cache#github-actions-integration) composite action bundles this `paths` step and `actions/cache` into a single `uses:`.
+:::
+
+## Flags
+
+<dl>
+  <dt>`--format`</dt>
+  <dd>Output format: `github` (default, writes `$GITHUB_OUTPUT`), `json`, `yaml`, or `env`.</dd>
+
+  <dt>`--key` / `-k`</dt>
+  <dd>Exact cache key. Defaults to a key derived from the toolchain lockfile plus OS/arch.</dd>
+
+  <dt>`--path` / `-p`</dt>
+  <dd>Root-relative subpaths to cache. Defaults to the entire cache root. Repeatable.</dd>
+
+  <dt>`--root`</dt>
+  <dd>Override the cache root directory (defaults to the Atmos XDG cache directory, e.g. `~/.cache/atmos`).</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_FORMAT`</dt>
+  <dd>Overrides `--format`.</dd>
+
+  <dt>`ATMOS_CI_CACHE_KEY`</dt>
+  <dd>Overrides `--key`.</dd>
+</dl>
+
+## Related
+
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache and the GitHub Actions integration options
+- [`atmos ci cache restore`](/cli/commands/ci/cache/restore) - Restore via the Atmos-managed backend
+- [`atmos ci cache save`](/cli/commands/ci/cache/save) - Save via the Atmos-managed backend

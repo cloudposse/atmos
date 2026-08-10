@@ -530,15 +530,6 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 		aggregateStatusChanged,
 	))
 
-	assert.Empty(t, truncateAggregateDetail(""))
-	longValue := strings.Repeat("x", aggregateDetailOutputMaxBytes+4)
-	assert.True(t, strings.HasPrefix(truncateAggregateDetail(longValue), "... output truncated ..."))
-	line := `resource "google_cloud_run_v2_job" "run_job" {`
-	lineAlignedValue := strings.Repeat(line+"\n", aggregateDetailOutputMaxBytes/len(line)+10)
-	lineAlignedTail := strings.TrimPrefix(truncateAggregateDetail(lineAlignedValue), "... output truncated ...\n")
-	firstLine, _, _ := strings.Cut(lineAlignedTail, "\n")
-	assert.Equal(t, line, firstLine)
-
 	assert.Equal(t, plugin.ResourceCounts{}, resourceCounts(nil))
 	assert.Equal(t, plugin.ResourceCounts{Replace: 2}, resourceCounts(&plugin.TerraformOutputData{
 		ReplacedResources: []string{"aws_instance.a", "aws_instance.b"},

@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: devcontainer
 description: Manage development containers for Atmos workflows
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
@@ -32,7 +32,7 @@ Devcontainers provide isolated, reproducible development environments with all r
     </div>
 </ActionCard>
 
-<Screengrab title="atmos devcontainer --help" slug="atmos-devcontainer--help" />
+<CastPlayer title="atmos devcontainer --help" src="/casts/screengrabs/atmos-devcontainer--help.cast" static chrome />
 
 ## Prerequisites
 
@@ -146,7 +146,7 @@ Atmos devcontainers require either **Docker** or **Podman** to be installed and 
 Atmos automatically detects the available container runtime:
 1. Checks for Docker first
 2. Falls back to Podman if Docker is unavailable
-3. You can override with `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+3. You can override with `ATMOS_CONTAINER_RUNTIME=auto`, `ATMOS_CONTAINER_RUNTIME=docker`, or `ATMOS_CONTAINER_RUNTIME=podman`
 
 ## Usage
 
@@ -163,7 +163,7 @@ atmos devcontainer <subcommand> [options]
 Atmos supports both Docker and Podman as container runtimes:
 
 - **Auto-detection**: Atmos automatically detects the available runtime (Docker first, then Podman)
-- **Explicit selection**: Set `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+- **Explicit selection**: Set `ATMOS_CONTAINER_RUNTIME=auto`, `ATMOS_CONTAINER_RUNTIME=docker`, or `ATMOS_CONTAINER_RUNTIME=podman`
 - **Per-devcontainer**: Configure runtime in `atmos.yaml` under `devcontainer.<name>.settings.runtime`
 
 ## Configuration
@@ -174,7 +174,7 @@ Devcontainers are configured in `atmos.yaml` under the `devcontainer` section:
 devcontainer:
   <name>:  # Choose any name for your devcontainer (e.g., geodesic, terraform, python)
     settings:
-      runtime: podman  # Optional: docker, podman, or omit for auto-detect
+      runtime: auto  # Optional: auto (default), docker, podman, or omit
     spec: !include devcontainer.json
 ```
 

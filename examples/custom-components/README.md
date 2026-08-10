@@ -1,3 +1,11 @@
+---
+title: Custom Component Types
+tags: [Components]
+cast:
+  file: /casts/examples/custom-components/script-command.cast
+  title: atmos custom component command
+---
+
 # Custom Components Example
 
 This example demonstrates how to define custom component types in Atmos using custom commands.
@@ -25,15 +33,15 @@ examples/custom-components/
 
 ## Usage
 
-1. Build atmos (from repo root):
+1. Inspect the custom component type configuration:
    ```bash
-   make build
+   atmos describe config --format=yaml --query .components.script
    ```
 
 2. Run the custom command:
    ```bash
    cd examples/custom-components
-   ../../build/atmos script deploy-app -s dev
+   atmos script deploy-app -s dev
    ```
 
 3. Expected output:
@@ -43,6 +51,7 @@ examples/custom-components/
    App: myapp
    Version: 1.0.0
    Replicas: 1
+   Env: deploying v1.0.0 to us-east-1
    ```
 
 ## How It Works
@@ -59,3 +68,11 @@ examples/custom-components/
 3. **Template Access**:
    - Steps can access component config via `{{ .Component.* }}`
    - All component sections are available: `vars`, `settings`, `metadata`, etc.
+
+4. **Environment Variables**:
+   - The component `env` section is exported as real environment variables to every step,
+     just like the built-in `terraform`/`helmfile`/`packer`/`ansible` component types.
+   - Steps (and scripts they invoke) read them directly as `$APP_VERSION`, `$DEPLOY_REGION`, etc.
+   - For sensitive values, use `!secret NAME` in the `env` section so the value resolves from a
+     secret backend and is masked in output — never inline a secret into the command string.
+     See [Passing secrets](https://atmos.tools/cli/configuration/secrets).

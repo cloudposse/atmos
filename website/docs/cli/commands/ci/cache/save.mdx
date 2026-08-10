@@ -1,0 +1,82 @@
+---
+title: atmos ci cache save
+sidebar_label: save
+sidebar_class_name: command
+sidebar_position: 2
+id: save
+description: Save the well-known cache directory to the CI cache.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Archive the cache root (the toolchain and anything else under it) and upload it under the cache key. Cache entries are write-once: when the exact key was an exact hit at restore time (content unchanged) or has already been saved this lifecycle, the save is skipped.
+</Intro>
+
+<Experimental/>
+
+:::info Runs only inside a CI runner
+`save` transfers cache content through the CI provider's runtime cache API, which requires credentials that exist only inside a runner (on GitHub Actions: `ACTIONS_RUNTIME_TOKEN` and `ACTIONS_RESULTS_URL`). Run outside a runner it reports that the cache is unavailable. To manage the cache from your workstation, use [`list`](/cli/commands/ci/cache/list) and [`delete`](/cli/commands/ci/cache/delete).
+:::
+
+<ActionCard title="Configure the CI Cache">
+    Configure the cache key and paths used by this command in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos ci cache save --help" src="/casts/screengrabs/atmos-ci-cache-save--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos ci cache save [flags]
+```
+
+## Examples
+
+```shell
+# Save using the configured (or default) key
+atmos ci cache save
+
+# Save under an explicit key
+atmos ci cache save --key="toolchain-linux-amd64-abc123"
+
+# Save only specific root-relative subpaths
+atmos ci cache save --path=toolchain
+```
+
+## Flags
+
+<dl>
+  <dt>`--key` / `-k`</dt>
+  <dd>Exact cache key to save under. Defaults to a key derived from the toolchain lockfile plus OS/arch.</dd>
+
+  <dt>`--path` / `-p`</dt>
+  <dd>Root-relative subpaths to save. Defaults to the entire cache root. Repeatable.</dd>
+
+  <dt>`--root`</dt>
+  <dd>Override the cache root directory (defaults to the Atmos XDG cache directory, e.g. `~/.cache/atmos`).</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_KEY`</dt>
+  <dd>Overrides `--key`.</dd>
+
+  <dt>`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`</dt>
+  <dd>Provided automatically inside a GitHub Actions runner; required for the GitHub Actions cache backend.</dd>
+</dl>
+
+## Related
+
+- [`atmos ci cache restore`](/cli/commands/ci/cache/restore) - Restore the cache
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache

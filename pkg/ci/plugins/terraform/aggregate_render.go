@@ -9,13 +9,12 @@ import (
 )
 
 const (
-	aggregateDurationBase          = 10
-	aggregateDetailTruncatedPrefix = "... output truncated ...\n"
-	aggregateDurationSuffix        = "ms"
-	markdownEmptyValue             = "-"
-	markdownLineBreak              = "\n"
-	markdownTableRowEnd            = " |\n"
-	markdownTableSeparator         = " | "
+	aggregateDurationBase   = 10
+	aggregateDurationSuffix = "ms"
+	markdownEmptyValue      = "-"
+	markdownLineBreak       = "\n"
+	markdownTableRowEnd     = " |\n"
+	markdownTableSeparator  = " | "
 )
 
 // renderAggregatePlanMarkdown builds the deterministic CI job summary body.
@@ -154,21 +153,6 @@ func writeAggregateGroup(b *strings.Builder, label string, components []terrafor
 	b.WriteString(markdownTableRowEnd)
 }
 
-// writeAggregateDetails renders collapsible output sections for selected components.
-func writeAggregateDetails(b *strings.Builder, title string, components []terraformPlanAggregateComponent, include func(*terraformPlanAggregateComponent) bool) {
-	selected := selectedAggregateComponents(components, include)
-	if len(selected) == 0 {
-		return
-	}
-
-	b.WriteString("\n### ")
-	b.WriteString(title)
-	b.WriteString(markdownLineBreak)
-	for _, component := range selected {
-		writeAggregateDetail(b, component)
-	}
-}
-
 // writeAggregateDetailsWithinLimit renders detail sections without exceeding
 // the GitHub Actions 1 MB step-summary limit. Overview tables are preserved
 // first; verbose Terraform output details are omitted when the budget is tight.
@@ -252,7 +236,7 @@ func trimAggregateMarkdownToLimit(markdown string, maxBytes int) string {
 
 // writeAggregateDetail renders one collapsible component detail section.
 func writeAggregateDetail(b *strings.Builder, component *terraformPlanAggregateComponent) {
-	body := truncateAggregateDetail(aggregateDetailBody(component))
+	body := plugin.TruncateDetail(aggregateDetailBody(component))
 	b.WriteString("\n<details><summary>")
 	b.WriteString(markdownInline(component.Result.Stack + "/" + component.Result.Component))
 	b.WriteString(" - ")
@@ -291,21 +275,6 @@ func resourceCounts(data *plugin.TerraformOutputData) plugin.ResourceCounts {
 		counts.Replace = len(data.ReplacedResources)
 	}
 	return counts
-}
-
-// truncateAggregateDetail caps long Terraform output while preserving the tail.
-func truncateAggregateDetail(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= aggregateDetailOutputMaxBytes {
-		return value
-	}
-	start := len(value) - aggregateDetailOutputMaxBytes
-	if prev := strings.LastIndexByte(value[:start], '\n'); prev >= 0 && start-prev <= aggregateDetailLineBacktrackMaxBytes {
-		start = prev + 1
-	} else if next := strings.IndexByte(value[start:], '\n'); next >= 0 {
-		start += next + 1
-	}
-	return aggregateDetailTruncatedPrefix + strings.TrimLeft(value[start:], "\r\n")
 }
 
 // markdownTableCell escapes text for a Markdown table cell.

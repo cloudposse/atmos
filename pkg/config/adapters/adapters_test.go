@@ -2,15 +2,21 @@ package adapters
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestGoGetterAdapter_Schemes tests that GoGetterAdapter returns expected schemes.
@@ -356,7 +362,7 @@ settings:
 
 	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, paths)
+	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL})
 }
 
 // TestLocalAdapter_NoNestedImports tests file without nested imports.
@@ -606,6 +612,36 @@ components:
 	assert.Equal(t, config.REMOTE, paths[0].ImportType)
 }
 
+func TestGoGetterAdapter_ResolveNativeGitHubProfileImport(t *testing.T) {
+	repoDir := initAdapterGitRepo(t, map[string]string{
+		"profiles/managers/atmos.yaml": `
+auth:
+  providers:
+    imported-provider:
+      kind: aws/iam-identity-center
+      region: us-east-2
+`,
+	})
+
+	gitConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	gitConfig := fmt.Sprintf("[url %q]\n\tinsteadOf = https://github.com/cloudposse/infra-live\n", adapterGitFileURI(repoDir))
+	require.NoError(t, os.WriteFile(gitConfigPath, []byte(gitConfig), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("HOME", t.TempDir())
+
+	adapter := &GoGetterAdapter{}
+	uri := "github.com/cloudposse/infra-live//profiles/managers/atmos.yaml?ref=profile-import-test"
+	paths, err := adapter.Resolve(context.Background(), uri, t.TempDir(), t.TempDir(), 1, 10, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	require.Len(t, paths, 1)
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+
+	data, err := os.ReadFile(paths[0].FilePath)
+	require.NoError(t, err)
+	assert.Contains(t, normalizeAdapterLineEndings(string(data)), "imported-provider")
+}
+
 // TestDownloadRemoteConfig_LocalFile tests downloading a local file via file:// URL.
 func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
 	tempDir := t.TempDir()
@@ -628,4 +664,67 @@ func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
 	downloadedContent, err := os.ReadFile(resultPath)
 	assert.NoError(t, err)
 	assert.Equal(t, content, string(downloadedContent))
+}
+
+func initAdapterGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+	repoDir := t.TempDir()
+	runAdapterGit(t, repoDir, "init")
+	runAdapterGit(t, repoDir, "checkout", "-b", "main")
+	runAdapterGit(t, repoDir, "config", "user.email", "test@example.com")
+	runAdapterGit(t, repoDir, "config", "user.name", "Test User")
+	runAdapterGit(t, repoDir, "config", "commit.gpgsign", "false")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runAdapterGit(t, repoDir, "add", ".")
+	runAdapterGit(t, repoDir, "commit", "-m", "initial")
+	runAdapterGit(t, repoDir, "checkout", "-b", "profile-import-test")
+	return repoDir
+}
+
+func runAdapterGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func adapterGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
+}
+
+func normalizeAdapterLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}
+
+// TestLocalAdapter_processNestedImports_ResolveFailureSkips verifies that when
+// the nested-import base path cannot be resolved (unreadable declaring file),
+// the nested imports are skipped (nil) rather than aborting the whole resolve.
+func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.Set("import", []string{"nested.yaml"})
+
+	adapter := &LocalAdapter{}
+	got := adapter.processNestedImports(v, nestedImportParams{
+		basePath:     t.TempDir(),
+		tempDir:      t.TempDir(),
+		currentDepth: 1,
+		maxDepth:     10,
+		path:         filepath.Join(t.TempDir(), "does-not-exist.yaml"),
+	})
+	assert.Nil(t, got)
 }

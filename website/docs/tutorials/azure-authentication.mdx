@@ -3,7 +3,7 @@ title: Azure Authentication
 sidebar_label: Azure Authentication
 sidebar_position: 10
 id: azure-authentication
-description: Complete guide for authenticating to Azure using Atmos Auth with device code flow, OIDC, and service principals.
+description: Complete guide for authenticating to Azure using Atmos Auth with interactive browser flow, device code flow, OIDC, and service principals.
 ---
 
 This guide shows you how to configure Azure authentication using the native `atmos auth` system.
@@ -12,7 +12,8 @@ This guide shows you how to configure Azure authentication using the native `atm
 
 Atmos Auth provides native Azure authentication that works identically to `az login`, with support for:
 
-- **Device Code Flow** (browser-based authentication for users)
+- **Interactive Browser Flow** (recommended for users; the same flow as `az login`)
+- **Device Code Flow** (fallback for environments where a browser can't be opened)
 - **OIDC** (workload identity for CI/CD pipelines)
 - **Service Principals** (client credentials for automation)
 - **Sovereign Clouds** (Azure Government / GCC High, Azure China / Mooncake)
@@ -21,15 +22,15 @@ All authentication methods write credentials to the Azure CLI MSAL cache (`~/.az
 
 ## Quick Start
 
-### Basic Azure Device Code Authentication
+### Basic Azure Interactive Browser Authentication
 
-The simplest Azure authentication uses device code flow for interactive user login:
+The simplest Azure authentication uses the interactive browser flow for user login — the same flow `az login` uses:
 
 ```yaml
 auth:
   providers:
     azure-dev:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "12345678-1234-1234-1234-123456789012"
         subscription_id: "87654321-4321-4321-4321-210987654321"
@@ -52,23 +53,71 @@ atmos auth login
 ```
 
 This will:
-1. Display a device code and verification URL
-2. Open your browser to https://microsoft.com/devicelogin
-3. Prompt you to enter the code and sign in
-4. Cache credentials for all Azure providers (azurerm, azuread, azapi)
+1. Open your default browser to Microsoft's sign-in page (authorization code + PKCE)
+2. Prompt you to sign in (with MFA if configured)
+3. Cache credentials for all Azure providers (azurerm, azuread, azapi)
 
 ## Authentication Methods
 
-### Device Code Flow (Interactive)
+### Interactive Browser Flow (Recommended for Users)
 
-Best for: **Developer workstations, interactive sessions**
+Best for: **Developer workstations — the default choice for human logins**
+
+The interactive browser flow performs the exact authentication `az login` does: an authorization code + PKCE sign-in in your default browser, with a localhost redirect. Because the browser session carries full Conditional Access context, it works in tenants where the device code flow is blocked:
+
+```yaml
+auth:
+  providers:
+    azure-browser:
+      kind: azure/interactive
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+        location: "eastus"
+
+  identities:
+    azure-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-browser
+      principal:
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+        location: "eastus"
+```
+
+**How it works:**
+1. Atmos first tries silent acquisition from the persisted MSAL cache — repeat logins are silent (no browser)
+2. If no cached session exists, your default browser opens for sign-in (with MFA if configured)
+3. Atmos acquires tokens for Azure Resource Manager, Microsoft Graph, and Azure Key Vault
+4. Atmos writes the Azure CLI-compatible cache files, so the `az` CLI works without ever running `az login`
+
+**Usage:**
+```bash
+# Authenticate interactively (one command — no az login needed)
+atmos auth login --identity azure-dev
+
+# Use with Terraform
+atmos terraform plan my-component -s my-stack
+```
+
+:::note
+The interactive browser flow requires an interactive terminal and a browser. For headless environments and CI/CD, use [OIDC](#oidc-workload-identity-for-cicd); when a browser can't be opened (e.g., SSH sessions), use the [device code flow](#device-code-flow-fallback).
+:::
+
+### Device Code Flow (Fallback)
+
+Best for: **Environments where a browser can't be opened on the machine running Atmos (e.g., SSH sessions)**
+
+:::warning Conditional Access may block device code
+Microsoft-managed Conditional Access policies now block the device code flow in many tenants (error `AADSTS530035`). If sign-in fails with this error, use the [interactive browser flow](#interactive-browser-flow-recommended-for-users) instead.
+:::
 
 Device code flow provides browser-based authentication with full MFA support:
 
 ```yaml
 auth:
   providers:
-    azure-interactive:
+    azure-device-code:
       kind: azure/device-code
       spec:
         tenant_id: "YOUR_TENANT_ID"
@@ -79,7 +128,7 @@ auth:
     azure-dev:
       kind: azure/subscription
       via:
-        provider: azure-interactive
+        provider: azure-device-code
       principal:
         subscription_id: "YOUR_SUBSCRIPTION_ID"
         location: "eastus"
@@ -227,7 +276,7 @@ Atmos makes it easy to work with multiple Azure subscriptions:
 auth:
   providers:
     azure-main:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "YOUR_TENANT_ID"
         subscription_id: "DEV_SUBSCRIPTION_ID"
@@ -363,7 +412,7 @@ Atmos automatically selects the correct scopes based on the `cloud_environment` 
 
 When you run `atmos auth login`:
 
-1. **Provider Authentication**: Atmos authenticates using configured method (device code/OIDC/service principal)
+1. **Provider Authentication**: Atmos authenticates using configured method (interactive browser/device code/OIDC/service principal)
 2. **Token Acquisition**: Requests all 3 token scopes from Azure AD
 3. **MSAL Cache Update**: Writes tokens to `~/.azure/msal_token_cache.json`
 4. **Profile Update**: Updates `~/.azure/azureProfile.json` with subscription info
@@ -374,13 +423,13 @@ When you run `atmos auth login`:
 
 ### Pattern 1: Developer + CI/CD
 
-Use device code for developers, OIDC for pipelines:
+Use interactive browser login for developers, OIDC for pipelines:
 
 ```yaml
 auth:
   providers:
     azure-dev-interactive:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "YOUR_TENANT_ID"
         subscription_id: "DEV_SUBSCRIPTION_ID"
@@ -417,7 +466,7 @@ Deploy to multiple Azure regions:
 auth:
   providers:
     azure-main:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "YOUR_TENANT_ID"
         subscription_id: "YOUR_SUBSCRIPTION_ID"
@@ -460,7 +509,7 @@ For organizations operating in Azure Government (including GCC High and DoD regi
 auth:
   providers:
     azure-gov:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "YOUR_GOV_TENANT_ID"
         subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
@@ -490,7 +539,7 @@ For organizations operating in Azure China:
 auth:
   providers:
     azure-china:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "YOUR_CHINA_TENANT_ID"
         subscription_id: "YOUR_CHINA_SUBSCRIPTION_ID"
@@ -575,7 +624,7 @@ Atmos uses this `environment` field to resolve the correct blob storage endpoint
 
 ### Supported Cloud Environments
 
-The `cloud_environment` setting applies to all Azure provider kinds: `azure/device-code`, `azure/oidc`, and `azure/cli`.
+The `cloud_environment` setting applies to all Azure provider kinds: `azure/interactive`, `azure/device-code`, `azure/oidc`, and `azure/cli`.
 
 | `cloud_environment` | Cloud | Login Endpoint | Blob Storage | Portal |
 |---------------------|-------|----------------|--------------|--------|
@@ -676,8 +725,8 @@ Both write to the same Azure CLI credential files, so your Terraform code doesn'
 ## Next Steps
 
 - Learn more about [auth commands](/cli/commands/auth/usage)
-- Configure [authentication for workflows](/workflows#using-authentication-with-workflows)
-- Set up [authentication for custom commands](/cli/configuration/commands#using-authentication-with-custom-commands)
+- Configure [authentication for workflow steps](/workflows/steps/identity)
+- Set up [authentication for custom commands](/cli/configuration/commands/identity#using-authentication-with-custom-commands)
 - Explore [auth environment variables](/cli/commands/auth/env)
 
 ## Related Documentation

@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem'
 
 <Intro>
 The `ai.providers` section configures connections to AI model providers. Atmos supports **API providers**
-(Anthropic, OpenAI, Gemini, Grok, Ollama, Bedrock, Azure OpenAI) and **CLI providers** (Claude Code, OpenAI Codex, Gemini CLI) that reuse your existing subscription.
+(Anthropic, OpenAI, Gemini, GitHub Models, Grok, Ollama, Bedrock, Azure OpenAI) and **CLI providers** (Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI) that reuse your existing subscription.
 </Intro>
 
 <Experimental />
@@ -69,6 +69,9 @@ Each provider in the `providers` map supports the following settings:
   <dt>**Google (Gemini)** — `gemini-2.5-flash`</dt>
   <dd>API Key authentication. Fast responses, larger context window.</dd>
 
+  <dt>**GitHub Models** — `openai/gpt-4o-mini`</dt>
+  <dd>GitHub token authentication. OpenAI-compatible. Zero-secret option for CI — in GitHub Actions the built-in `GITHUB_TOKEN` works with `permissions: models: read`.</dd>
+
   <dt>**xAI (Grok)** — `grok-4-latest`</dt>
   <dd>API Key authentication. OpenAI-compatible, real-time knowledge.</dd>
 
@@ -86,6 +89,12 @@ Each provider in the `providers` map supports the following settings:
 
 CLI providers invoke a locally installed AI tool as a subprocess. No API key needed — the CLI tool uses your existing subscription.
 
+:::note Bring your own CLI tool
+Atmos assumes you already have one of these CLI tools installed and authenticated — the same
+assumption it makes about `terraform` or `tofu`. Atmos does not install `claude`, `codex`,
+`copilot`, or `gemini`, or drive their login flows, on your behalf.
+:::
+
 <dl>
   <dt>**Claude Code** — `claude-code`</dt>
   <dd>Claude Pro/Max subscription. Full MCP support. Best for interactive development.</dd>
@@ -93,9 +102,44 @@ CLI providers invoke a locally installed AI tool as a subprocess. No API key nee
   <dt>**OpenAI Codex** — `codex-cli`</dt>
   <dd>ChatGPT Plus/Pro subscription. Full MCP support. Open source (Apache 2.0).</dd>
 
+  <dt>**GitHub Copilot** — `copilot-cli`</dt>
+  <dd>GitHub Copilot subscription. Full MCP support. Authenticates via `copilot /login` or `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`.</dd>
+
   <dt>**Gemini CLI** — `gemini-cli`</dt>
   <dd>Google account (free tier: 1K req/day). MCP blocked for personal accounts.</dd>
 </dl>
+
+### Default Provider
+
+`default_provider` is optional. When it's not set (and `ai.enabled: true`), Atmos looks for
+a CLI provider's binary on `PATH`, in this order, and uses the first one it finds:
+
+1. `claude-code` (`claude`)
+1. `codex-cli` (`codex`)
+1. `copilot-cli` (`copilot`)
+1. `gemini-cli` (`gemini`)
+
+If none are found, Atmos falls back to `anthropic`, which requires an `api_key`. Setting
+`default_provider` explicitly always overrides auto-detection.
+
+Setting `default_provider: "auto"` does the same thing as leaving it unset, but says so
+explicitly. Useful for a shared `atmos.yaml` (checked into git) where teammates use different
+CLI tools — `auto` documents that everyone's Atmos picks up whatever they have installed,
+rather than leaving the field blank and looking like it was never configured.
+
+This means a minimal config works out of the box for anyone with one of these CLI tools
+already installed and authenticated:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+```
+</File>
+
+Auto-detection only looks for the default binary name on `PATH`. If you point `binary` at
+a custom, non-`PATH` location, also set `default_provider` explicitly so Atmos doesn't fall
+through to a different provider.
 
 ### CLI Provider Settings
 
@@ -112,7 +156,7 @@ In addition to `model`, CLI providers support:
   <dd>Budget cap per invocation in USD (Claude Code only).</dd>
 
   <dt>`full_auto`</dt>
-  <dd>Enable automatic approval for file writes (Codex CLI only). When MCP servers are configured, `--dangerously-bypass-approvals-and-sandbox` is used automatically.</dd>
+  <dd>Enable automatic tool approval (Codex CLI and Copilot CLI). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools` (implied automatically when MCP servers are configured).</dd>
 
   <dt>`allowed_tools`</dt>
   <dd>List of tools Claude Code is allowed to use (Claude Code only).</dd>
@@ -134,6 +178,10 @@ ai:
       model: "gpt-5.4-mini"
       full_auto: true
 
+    copilot-cli:
+      model: "claude-sonnet-4.6"
+      full_auto: true
+
     gemini-cli:
       model: "gemini-2.5-flash"
 ```
@@ -145,6 +193,7 @@ When `mcp.servers` is configured, CLI providers automatically pass MCP servers t
 
 - **Claude Code:** Temp `.mcp.json` via `--mcp-config`
 - **Codex CLI:** Written to `~/.codex/config.toml` (backup/restore after exit)
+- **Copilot CLI:** Merged into `~/.copilot/mcp-config.json` (backup/restore after exit; honors `COPILOT_HOME`)
 - **Gemini CLI:** Written to `.gemini/settings.json` in cwd (backup/restore, MCP blocked for personal accounts)
 
 Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH and `ATMOS_*` env vars are injected automatically.
@@ -253,6 +302,11 @@ ai:
       model: "gemini-2.5-flash"
       api_key: !env "GEMINI_API_KEY"
       max_tokens: 8192
+
+    github:
+      model: "openai/gpt-4o-mini"
+      api_key: !env "GITHUB_TOKEN"
+      max_tokens: 4096
 
     grok:
       model: "grok-4-latest"
@@ -417,6 +471,50 @@ The `model` field must be your **deployment name** from Azure Portal, not the Op
 
 </TabItem>
 </Tabs>
+
+## GitHub Models in GitHub Actions (Zero Secrets)
+
+The `github` provider talks to [GitHub Models](https://docs.github.com/en/github-models), an OpenAI-compatible
+inference API at `https://models.github.ai/inference`. Its headline use case is CI: in GitHub Actions the
+workflow's built-in `GITHUB_TOKEN` authenticates when you grant the `models: read` permission — no API keys or
+secrets to provision. Model names use the `publisher/model-name` format (e.g., `openai/gpt-4o-mini`).
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "github"
+  providers:
+    github:
+      model: "openai/gpt-4o-mini"
+      api_key: !env "GITHUB_TOKEN"
+```
+</File>
+
+<File title=".github/workflows/ai.yaml">
+```yaml
+permissions:
+  contents: read
+  models: read
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - run: atmos ai ask "summarize the stacks in this repo"
+        env:
+          # provider config: api_key: !env GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ github.token }}
+```
+</File>
+
+Locally, any GitHub token works (e.g., `export GITHUB_TOKEN=$(gh auth token)`). For GitHub Enterprise, override
+`base_url` to your instance's inference endpoint. Non-interactive commands like `atmos ai ask` require no TTY,
+so they run cleanly in CI logs.
 
 ## Token Caching
 

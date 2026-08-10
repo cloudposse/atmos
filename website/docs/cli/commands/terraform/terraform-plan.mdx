@@ -5,18 +5,17 @@ sidebar_class_name: command
 id: plan
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
-import DemoVideo from '@site/src/components/Video/DemoVideo'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
 </Intro>
 
-<DemoVideo id="terraform-plan" title="atmos terraform plan" showCaption={false} />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/plan.cast" title="atmos terraform plan" chrome controls scrubber />
 
-<Screengrab title="atmos terraform plan --help" slug="atmos-terraform-plan--help" />
+<CastPlayer title="atmos terraform plan --help" src="/casts/screengrabs/atmos-terraform-plan--help.cast" static chrome />
 
 ## Usage
 
@@ -34,7 +33,7 @@ This command generates an execution plan that shows:
 By default, Atmos saves the plan to a file using a standardized naming convention: `<context>-<component>.planfile`. This planfile can later be used with `atmos terraform apply --from-plan` to ensure that only the reviewed changes are applied.
 
 :::tip
-Run `atmos terraform plan --help` to see all the available options
+Run `atmos terraform plan --help=all` to see shared selector and dependency flags.
 :::
 
 ## Examples
@@ -405,6 +404,38 @@ atmos terraform plan --query '.settings.context.account_id == 12345'
 atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
 ```
 
+### Plan Components by Tags and Labels
+
+Filter components by `metadata.tags`/`metadata.labels`. These flags compose with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further, rather than being mutually exclusive with them:
+
+```shell
+# Plan components tagged production or tier-1 (matches any)
+atmos terraform plan --tags production,tier-1
+
+# Plan components labeled cost-center=platform (matches all given labels)
+atmos terraform plan --labels cost-center=platform
+
+# Narrow an --affected run to only production-tagged components
+atmos terraform plan --affected --tags production
+```
+
+### Include Dependencies and Dependents
+
+Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are planned even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately plans prerequisite components outside the `dev` stack:
+
+```shell
+# Plan dev-labeled components plus everything they depend on
+atmos terraform plan --labels=env=dev --include-dependencies
+
+# Bound the expansion to direct dependencies only
+atmos terraform plan --labels=env=dev --include-dependencies=1
+
+# Plan a stack plus everything that depends on it, up to two levels out
+atmos terraform plan -s dev --include-dependents=2
+```
+
+Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separated value is not bound to the flag. The bare flag expands without a depth limit, and `true`/`false` values are accepted for backward compatibility.
+
 ### Multi-Component Flags
 
 <dl>
@@ -420,8 +451,17 @@ atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
     <dt>`--query`</dt>
     <dd>Plan components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
 
+    <dt>`--tags`</dt>
+    <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+    <dt>`--labels`</dt>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+
+    <dt>`--include-dependencies`</dt>
+    <dd>Also plan everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
     <dt>`--include-dependents`</dt>
-    <dd>With `--affected`, also plan components that depend on affected components, recursively.</dd>
+    <dd>Also plan everything that depends on the selected components, in dependency order. Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`). Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds it to two levels.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
     <dt>`--ref`</dt>
     <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>

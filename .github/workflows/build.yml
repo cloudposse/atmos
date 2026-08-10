@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     secrets: inherit
 
   homebrew:
@@ -41,7 +41,7 @@ jobs:
     name: "Build and push Docker image for Atmos CLI"
     runs-on: ubuntu-latest
     needs: release
-    if: ${{ github.event.release.prerelease == false }}
+    if: ${{ github.event_name == 'release' }}
     steps:
       - name: "Checkout source code at current commit"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,7 +50,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@main
+        uses: cloudposse/github-action-docker-build-push@02993d675b44dcc7082e6de7485c1ff8740bce9d # v3.1.0
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
@@ -58,6 +58,7 @@ jobs:
           login: "${{ github.actor }}"
           password: "${{ secrets.GITHUB_TOKEN }}"
           platforms: linux/amd64,linux/arm64
+          binfmt-image: mirror.gcr.io/tonistiigi/binfmt:qemu-v7.0.0
           file: Dockerfile
           build-args: |
             ATMOS_VERSION=${{ github.event.release.tag_name }}

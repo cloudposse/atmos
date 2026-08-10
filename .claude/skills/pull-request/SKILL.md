@@ -72,18 +72,15 @@ gh pr edit <pr-number> --remove-label patch --add-label minor
 
 Required **only** when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.
 
-The how-to lives elsewhere — don't re-derive it:
-
-- **Template, MDX syntax, front-matter fields:** see the "Blog Posts (CI Enforced)" section in `CLAUDE.md`.
-- **Valid tag values:** read `website/blog/tags.yml`. Never invent a tag.
-- **Authors:** read `website/blog/authors.yml`. Add yourself if missing (in the same PR).
-- **What does NOT get a blog post** (internal refactors with zero user-visible change): the `roadmap` agent owns this invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
+For the template, tags, authors, and style rules, use the **`changelog` skill** — don't re-derive them here.
+For what does NOT get a post (internal-only, zero-user-impact refactors), the **`roadmap` skill** owns that
+invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
 
 ## Roadmap — when required, who owns it
 
 Required **only** when the PR is labeled `minor` or `major`. CI checks for changes to `website/src/data/roadmap.js`.
 
-**Always delegate the edit to the [`roadmap` agent](../../agents/roadmap.md)** — invoke via `Agent` with `subagent_type: "roadmap"`. The agent owns the milestone schema, the `featured[]`-is-curated rule, the no-changelog-for-internal-refactors invariant, and progress-percentage math. Do not edit `roadmap.js` directly from this skill; call the agent and let it do the work.
+**Always delegate the edit to the `roadmap` skill** (`.claude/skills/roadmap/SKILL.md`) — invoke via `Skill` with `skill: "roadmap"`. It owns the milestone schema, the `featured[]`-is-curated rule, the no-changelog-for-internal-refactors invariant, and progress-percentage math. Do not edit `roadmap.js` directly from this skill; invoke the `roadmap` skill and let it do the work.
 
 If your PR is `no-release` or `patch`, **don't touch the roadmap at all** — CI doesn't require it for those labels, and adding noise milestones dilutes the roadmap's signal value.
 
@@ -137,7 +134,8 @@ Run through these in order before `git push`. Every item has burned someone befo
    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
    - Read `website/blog/tags.yml` and pick a defined tag.
    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
-   - Delegate the roadmap update to the `roadmap` agent (do not touch `featured[]`).
+   - Embed the feature's cast (`CastPlayer`) if one exists or was recorded for this PR.
+   - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**
 
@@ -196,11 +194,12 @@ If a PR has already been opened without a label, or with the wrong one:
 5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
 6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
 
-## Related agents
+## Related skills and agents
 
-This skill orchestrates the PR workflow but delegates the deep domain work to dedicated agents. Use them — don't re-derive their rules here.
+This skill orchestrates the PR workflow but delegates the deep domain work to dedicated skills and agents. Use them — don't re-derive their rules here.
 
-- **[`roadmap` agent](../../agents/roadmap.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Agent` with `subagent_type: "roadmap"`.
+- **[`changelog` skill](../changelog/SKILL.md)** — invoke when writing or editing a `website/blog/*.mdx` post. Owns the template, tags, authors, and style rules. Invoke via `Skill` with `skill: "changelog"`.
+- **[`roadmap` skill](../roadmap/SKILL.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Skill` with `skill: "roadmap"`.
 - **[`coderabbit-review` agent](../../agents/coderabbit-review.md)** — invoke when a CodeRabbit review lands with substantial feedback. Knows how to parse CR threads, verify findings against current code, apply valid suggestions, and skip stale/wrong ones with explanation. Invoke via `Agent` with `subagent_type: "coderabbit-review"`.
 
 If your PR also touches a specific Atmos subsystem, the matching domain agent is the right collaborator for the implementation work (separate from this PR-workflow skill):
@@ -217,7 +216,6 @@ If your PR also touches a specific Atmos subsystem, the matching domain agent is
 
 - CI workflow: `.github/workflows/changelog-check.yml` (release docs gate)
 - CI workflow: `.github/workflows/feature-release.yml` (semver label gate)
-- Tags: `website/blog/tags.yml`
-- Authors: `website/blog/authors.yml`
-- Roadmap data: `website/src/data/roadmap.js`
+- Blog post authoring: `changelog` skill (`.claude/skills/changelog/SKILL.md`)
+- Roadmap data and editing rules: `roadmap` skill (`.claude/skills/roadmap/SKILL.md`)
 - Project rules: `CLAUDE.md` (search for "Pull Requests", "Blog Posts", "Roadmap Updates")

@@ -4,13 +4,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profile"
@@ -115,7 +115,7 @@ func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Print(output)
+	_ = data.Write(output)
 
 	return nil
 }

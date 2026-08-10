@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: shell
 description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform commands inside the shell without using any atmos-specific arguments and flags. This may by helpful to debug a component without going through Atmos.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -13,7 +13,7 @@ This command starts a new `SHELL` configured with the environment for an Atmos c
 inside the shell without using any atmos-specific arguments and flags.
 </Intro>
 
-<Screengrab title="atmos terraform shell --help" slug="atmos-terraform-shell--help" />
+<CastPlayer title="atmos terraform shell --help" src="/casts/screengrabs/atmos-terraform-shell--help.cast" static chrome />
 
 ## Usage
 
@@ -198,6 +198,43 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
         ```shell
         atmos terraform shell <component> -s <stack> --skip=eval --skip=include
         atmos terraform shell <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+
+    <dt>`--with-secrets` <em>(optional)</em></dt>
+    <dd>
+        Export the component's secret-bearing variables into the interactive shell as
+        `TF_VAR_<name>` environment variables. **Disabled by default** so secrets are not
+        exposed in the shell environment.
+
+        Resolved secrets are never written to the on-disk varfile. By default they are also
+        withheld from the shell, so `terraform` commands run inside the shell will not see them
+        (variables that require a secret will prompt or fail). Pass `--with-secrets` when you
+        need those commands to work with the real values.
+
+        Can also be set via the `ATMOS_WITH_SECRETS` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --with-secrets
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before launching the shell. By default Atmos runs
+        `terraform init` (and selects/creates the workspace) so you enter an initialized
+        component, matching the behavior described above. Use this to enter the shell faster
+        when the component is already initialized.
+
+        Workspace selection is unaffected by this flag — it stays governed by the
+        [`workspaces_enabled`](/cli/configuration/components/terraform) setting. For a shell that
+        neither initializes nor switches workspaces, combine `--skip-init` with
+        `workspaces_enabled: false`.
+
+        Can also be set via the `ATMOS_SKIP_INIT` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --skip-init
         ```
     </dd>
 </dl>

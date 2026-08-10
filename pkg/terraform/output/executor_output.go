@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -38,6 +39,20 @@ func processOutputs(outputMeta map[string]tfexec.OutputMeta, atmosConfig *schema
 		if err != nil {
 			log.Error("Failed to convert output", "key", k, "error", err)
 			return k, nil
+		}
+
+		// Terraform marks sensitive outputs with `sensitive = true`. When masking is enabled,
+		// register every secret-bearing representation (strings plus nested map/list leaves)
+		// with the I/O masker so the value is redacted everywhere it flows: !terraform.output,
+		// atmos.Component(), `atmos describe component`, and `atmos terraform output`.
+		//
+		// Do not register values when the user has explicitly disabled masking. Registration
+		// also classifies a consuming Terraform variable as secret-bearing, which moves it from
+		// the JSON varfile to TF_VAR_. Terraform cannot infer an object type from that string
+		// transport when the consumer omits a type constraint. Keeping the value unregistered
+		// preserves its JSON structure in that explicit opt-out mode.
+		if v.Sensitive && iolib.MaskingEnabled() {
+			iolib.RegisterSecretValue(d)
 		}
 
 		return k, d

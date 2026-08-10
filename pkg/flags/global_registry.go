@@ -51,6 +51,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -82,6 +83,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 
 		// Settings overrides.
 		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+
+		// Edition pin.
+		Edition: v.GetString("edition"),
 	}
 }
 
@@ -175,6 +179,23 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 // Deprecated: Use cfg.NormalizeIdentityValue() instead. This wrapper exists for backward compatibility.
 func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
+}
+
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
+	if flag == nil {
+		return ""
+	}
+	if changed {
+		return flag.Value.String()
+	}
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
+	}
+	return ""
 }
 
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
@@ -320,6 +341,16 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
 	})
+
+	registry.Register(&StringFlag{
+		Name:                    cfg.CastFlagName,
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Record command output as an asciinema cast",
+		NoOptDefVal:             cfg.CastFlagAutoValue,
+		NoOptDefValNoSpaceValue: true,
+		EnvVars:                 []string{cfg.CastEnvVarName},
+	})
 }
 
 // registerProfilingFlags registers profiling configuration flags.
@@ -433,6 +464,14 @@ func registerSettingsFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
 		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "edition",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+		EnvVars:     []string{"ATMOS_EDITION"},
 	})
 }
 

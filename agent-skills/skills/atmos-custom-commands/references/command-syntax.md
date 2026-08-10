@@ -302,22 +302,17 @@ Go template syntax.
 
 ```yaml
 env:
-  - key: string            # Required: Environment variable name
-    value: string          # Required: Value (supports Go templates)
+  NAME: string             # Value supports Go templates
 ```
 
 ### Examples
 
 ```yaml
 env:
-  - key: ATMOS_COMPONENT
-    value: "{{ .Arguments.component }}"
-  - key: ATMOS_STACK
-    value: "{{ .Flags.stack }}"
-  - key: AWS_REGION
-    value: "{{ .ComponentConfig.vars.region }}"
-  - key: KUBECONFIG
-    value: "/dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}"
+  ATMOS_COMPONENT: "{{ .Arguments.component }}"
+  ATMOS_STACK: "{{ .Flags.stack }}"
+  AWS_REGION: "{{ .ComponentConfig.vars.region }}"
+  KUBECONFIG: "/dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}"
 ```
 
 Environment variables are accessible in steps as standard shell variables (`$ATMOS_COMPONENT`).
@@ -406,7 +401,7 @@ commands:
       - name: stacks
         description: List all stacks
         steps:
-          - atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+          - atmos describe stacks --sections=none | grep -e "^\S" | sed s/://g
       - name: components
         description: List components
         flags:
@@ -416,10 +411,10 @@ commands:
         steps:
           - >
             {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none |
+            atmos describe stacks --stack={{ .Flags.stack }} --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ else }}
-            atmos describe stacks --format json --sections none |
+            atmos describe stacks --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ end }}
 ```
@@ -433,20 +428,37 @@ Nesting can go multiple levels deep.
 
 ## Steps (Required)
 
-Steps are the commands to execute, defined as a list of strings. Each step is a shell command
-that supports Go template syntax.
+Steps are the work to execute. String steps are shorthand for simple shell commands. For anything
+with output, prompts, orchestration, container actions, CI behavior, or nontrivial control flow, use
+structured steps with the same native step types supported by workflows.
 
 ```yaml
 steps:
-  - "echo Hello {{ .Arguments.name }}"
-  - "atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}"
-  - |
-    {{ if .Flags.verbose }}
-    echo "Verbose mode enabled"
-    {{ end }}
+  - type: atmos
+    command: terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+  - type: shell
+    command: |
+      if [ "{{ .Flags.verbose }}" = "true" ]; then
+        echo "Checking {{ .Arguments.component }} in {{ .Flags.stack }}"
+      fi
+      ./scripts/check-plan.sh "{{ .Arguments.component }}" "{{ .Flags.stack }}"
+  - type: toast
+    level: success
+    content: Plan complete
 ```
 
 Steps execute sequentially. If a step fails, subsequent steps are not executed.
+
+Go templates work in both structured steps and shell scripts, so flags and arguments can still be
+passed into scripts with `{{ .Flags.<name> }}` and `{{ .Arguments.<name> }}`. The point is not to
+ban shell; it is to keep shell steps focused on script logic and use native steps for Atmos commands,
+output rendering, orchestration, and CI-aware behavior.
+
+Large multiline shell steps and repeated `echo` statements are a maintainability warning. Prefer
+`atmos` for Atmos commands, `toast`/`markdown`/`table`/`pager`/`format`/`log` for user-facing output,
+`parallel`/`matrix`/`wait` for orchestration, and `container`/`emulator`/`http` for native operations.
+Shell is still valid for short glue commands, external CLIs, terminal-native sessions, or checked-in
+scripts.
 
 ### Go Template Functions Available
 
@@ -494,8 +506,7 @@ commands:
       tools:
         terraform: "^1.10.0"
     env:
-      - key: DEPLOY_STACK
-        value: "{{ .Flags.stack }}"
+      DEPLOY_STACK: "{{ .Flags.stack }}"
     steps:
       - |
         {{ if .Flags.verbose }}

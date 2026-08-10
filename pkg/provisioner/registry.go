@@ -15,14 +15,30 @@ import (
 // Use pkg/hooks.HookEvent constants (e.g., hooks.BeforeTerraformInit) when registering provisioners.
 type HookEvent string
 
+// TerraformExecContext carries the live execution environment for provisioners that
+// must run a terraform/tofu subcommand against the same working directory, binary, RC,
+// and environment as the triggering command (e.g. the post-init providers-lock hook).
+// It is nil for events where no subprocess context is available (e.g. before.terraform.init,
+// whose provisioners use in-process SDKs). It lives here, with the runner closure built in
+// the exec layer, so pkg/provisioner does not need to import internal/exec (a cycle).
+type TerraformExecContext struct {
+	// Run executes a terraform/tofu subcommand (args after the binary, e.g.
+	// {"providers","lock","-platform=linux_amd64"}) with the live env, RC, and workdir.
+	Run func(args []string) error
+	// WorkingDir is the resolved component/workdir path the subcommand runs in.
+	WorkingDir string
+}
+
 // ProvisionerFunc is a function that provisions infrastructure.
-// It receives the Atmos configuration, component configuration, and auth context.
+// It receives the Atmos configuration, component configuration, auth context, and an
+// optional terraform execution context (nil unless the dispatching event provides one).
 // Returns an error if provisioning fails.
 type ProvisionerFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	execCtx *TerraformExecContext,
 ) error
 
 // Provisioner represents a self-registering provisioner.
@@ -87,14 +103,24 @@ func GetProvisionersForEvent(event HookEvent) []Provisioner {
 
 // ExecuteProvisioners executes all provisioners registered for a specific hook event.
 // Returns an error if any provisioner fails (fail-fast behavior).
+//
+// The execCtx is optional: events that run a terraform subcommand (e.g. after.terraform.init)
+// pass a single *TerraformExecContext; before-events and callers without one pass nothing.
+// It is variadic so the many existing call sites that have no execution context need no change.
 func ExecuteProvisioners(
 	ctx context.Context,
 	event HookEvent,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	execCtx ...*TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.ExecuteProvisioners")()
+
+	var ec *TerraformExecContext
+	if len(execCtx) > 0 {
+		ec = execCtx[0]
+	}
 
 	provisioners := GetProvisionersForEvent(event)
 	if len(provisioners) == 0 {
@@ -113,7 +139,7 @@ func ExecuteProvisioners(
 				Err()
 		}
 
-		if err := p.Func(ctx, atmosConfig, componentConfig, authContext); err != nil {
+		if err := p.Func(ctx, atmosConfig, componentConfig, authContext, ec); err != nil {
 			return errUtils.Build(errUtils.ErrProvisionerFailed).
 				WithCause(err).
 				WithContext("provisioner_type", p.Type).

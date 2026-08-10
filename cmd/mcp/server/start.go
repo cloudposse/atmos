@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
@@ -25,15 +26,17 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
-	transportStdio     = "stdio"
-	transportHTTP      = "http"
-	defaultHTTPPort    = 8080
-	defaultHTTPHost    = "localhost"
-	mcpProtocolVersion = "2025-03-26"
+	transportStdio      = "stdio"
+	transportHTTP       = "http"
+	defaultHTTPPort     = 8080
+	defaultHTTPHost     = "localhost"
+	mcpProtocolVersion  = "2025-03-26"
+	shutdownGracePeriod = 250 * time.Millisecond
 )
 
 // transportConfig holds the validated transport configuration.
@@ -50,6 +53,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Atmos MCP server",
 	Long:  startLongMarkdown,
+	Args:  cobra.NoArgs,
 	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp start
 
@@ -78,8 +82,6 @@ func init() {
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
-	defer ui.Info("MCP server stopped")
-
 	// Get and validate transport flags.
 	config, err := getTransportConfig(cmd)
 	if err != nil {
@@ -92,6 +94,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	releaseInterruptExit := signals.SuspendInterruptExit()
+	defer releaseInterruptExit()
+
 	// Create context with cancellation for signal handling.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -99,6 +104,7 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	// Set up signal handling.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	// Start server based on transport type.
 	errChan := make(chan error, 1)
@@ -113,7 +119,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Wait for signal or error.
-	return waitForShutdown(sigChan, errChan, cancel)
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		ui.Info("MCP server stopped")
+	})
 }
 
 // getTransportConfig extracts and validates transport configuration from command flags.
@@ -136,16 +144,20 @@ func getTransportConfig(cmd *cobra.Command) (*transportConfig, error) {
 
 // setupMCPServer initializes the MCP server with all required components.
 func setupMCPServer() (*mcp.Server, error) {
-	// Load Atmos configuration.
+	// Load base Atmos configuration. Stack graph tools load stack manifests
+	// lazily so the MCP server can start before stacks exist or while stack
+	// imports are temporarily broken.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Check if MCP server is explicitly enabled.
 	if !atmosConfig.MCP.Enabled {
-		return nil, errUtils.ErrMCPNotEnabled
+		return nil, errUtils.Build(errUtils.ErrMCPNotEnabled).
+			WithHint("Run `atmos config set mcp.enabled true`, or add to atmos.yaml:\n\n```yaml\nmcp:\n  enabled: true\n```").
+			Err()
 	}
 
 	// Check if AI is enabled.
@@ -169,17 +181,42 @@ func setupMCPServer() (*mcp.Server, error) {
 
 // waitForShutdown waits for either a shutdown signal or server error.
 func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, nil)
+}
+
+func waitForShutdownWithStopMessage(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc, onStop func()) error {
 	select {
-	case sig := <-sigChan:
-		ui.Infof("Received signal: %v", sig)
-		cancel()
-		return nil
-	case err := <-errChan:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return fmt.Errorf("MCP server error: %w", err)
+	case <-sigChan:
+		if onStop != nil {
+			onStop()
 		}
+		cancel()
+		return waitForServerStop(errChan)
+	case err := <-errChan:
+		if onStop != nil {
+			onStop()
+		}
+		return normalizeServerStopError(err)
+	}
+}
+
+func waitForServerStop(errChan chan error) error {
+	select {
+	case err, ok := <-errChan:
+		if !ok {
+			return nil
+		}
+		return normalizeServerStopError(err)
+	case <-time.After(shutdownGracePeriod):
 		return nil
 	}
+}
+
+func normalizeServerStopError(err error) error {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("MCP server error: %w", err)
+	}
+	return nil
 }
 
 // startStdioServer starts the MCP server with stdio transport.
@@ -196,13 +233,15 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 	addr := fmt.Sprintf("%s:%d", host, port)
 	logServerInfo(server, transportHTTP, addr)
 	go func() {
-		handler := mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
+		mux := http.NewServeMux()
+		mux.Handle("/", mcpsdk.NewStreamableHTTPHandler(func(req *http.Request) *mcpsdk.Server {
 			return server.SDK()
-		}, nil)
+		}, nil))
+		mux.HandleFunc("/health", handleHealthCheck)
 
 		httpServer := &http.Server{
 			Addr:              addr,
-			Handler:           handler,
+			Handler:           mux,
 			ReadTimeout:       30 * time.Second,
 			WriteTimeout:      30 * time.Second,
 			IdleTimeout:       60 * time.Second,
@@ -210,6 +249,12 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 		}
 		errChan <- httpServer.ListenAndServe()
 	}()
+}
+
+// handleHealthCheck responds to liveness probes against the HTTP transport.
+func handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"status":"healthy"}`))
 }
 
 // logServerInfo displays the server startup information to the user.
@@ -220,12 +265,12 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 	ui.Writef("  Protocol: MCP %s\n", mcpProtocolVersion)
 	if transportType == transportHTTP {
 		ui.Writef("  Transport: HTTP (listening on %s)\n", addr)
-		ui.Writef("    - SSE endpoint: http://%s/sse\n", addr)
-		ui.Writef("    - Message endpoint: http://%s/message\n", addr)
+		ui.Writef("    - MCP endpoint: http://%s/\n", addr)
+		ui.Writef("    - Health check: http://%s/health\n", addr)
 	} else {
 		ui.Writeln("  Transport: stdio")
 	}
-	ui.Info("Waiting for client connection...")
+	ui.Success("MCP running. Waiting for an agent…")
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.
@@ -242,13 +287,30 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 // not have an LSP context. RegisterTools handles this gracefully (the
 // LSP-only `validate_file_lsp` tool is skipped when lspManager is nil).
 func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}, interface{}, error) {
-	if !atmosConfig.AI.Tools.Enabled {
-		return nil, nil, errUtils.ErrAIToolsDisabled
-	}
+	registry := tools.NewRegistry()
 
+	// `ai.tools.enabled` governs whether `atmos ai chat`/`ask`/`exec` — Atmos's own AI
+	// assistant — is allowed to call tools during its reasoning loop. It doesn't apply here:
+	// the MCP server's entire purpose is exposing Atmos tools to external clients, and
+	// `mcp.enabled: true` (already required to reach this function) is its own, sufficient
+	// opt-in. So tools are always registered for MCP, regardless of ai.tools.enabled.
 	log.Debug("Initializing AI tools")
 
-	registry := tools.NewRegistry()
+	// atmos_list_commands/atmos_command_help snapshot the Cobra command tree lazily via this
+	// injected provider, since pkg/ai/tools/atmos cannot import cmd/internal directly (Go's
+	// internal-package visibility rule restricts it to importers rooted at cmd/). This is the
+	// one place in the cmd/ tree wired to do that lookup.
+	atmosTools.SetCommandTreeProvider(func() []*atmosTools.CommandNode {
+		var roots []*atmosTools.CommandNode
+		for group, providers := range internal.ListProviders() {
+			for _, provider := range providers {
+				if cmd := provider.GetCommand(); cmd != nil {
+					roots = append(roots, atmosTools.NewCommandNodeFromCobra(cmd, group))
+				}
+			}
+		}
+		return roots
+	})
 
 	// Delegate to the shared registration factory. Errors are surfaced as
 	// warnings rather than fatals to preserve the previous hand-rolled
@@ -260,14 +322,16 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 
 	log.Debugf("Registered %d tools", registry.Count())
 
-	// Create permission checker with MCP-appropriate settings.
+	// Create permission checker with MCP-appropriate settings. Allowed/Restricted/Blocked
+	// still apply — they govern *which* tools and *how* they run, not whether tool-serving
+	// is enabled at all.
 	// For MCP server, use a non-interactive prompter since stdio is used for protocol.
 	permConfig := &permission.Config{
-		Mode:            getPermissionMode(atmosConfig),
-		AllowedTools:    atmosConfig.AI.Tools.AllowedTools,
-		RestrictedTools: atmosConfig.AI.Tools.RestrictedTools,
-		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
-		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
+		Mode:       getPermissionMode(atmosConfig),
+		Allowed:    atmosConfig.AI.Tools.Allowed,
+		Restricted: atmosConfig.AI.Tools.Restricted,
+		Blocked:    atmosConfig.AI.Tools.Blocked,
+		YOLOMode:   atmosConfig.AI.Tools.YOLOMode,
 	}
 	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
 	permConfig.YOLOMode = true

@@ -1,0 +1,77 @@
+---
+title: matrix
+sidebar_label: matrix
+slug: /workflows/steps/type/matrix
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `matrix` step type expands a set of axes into a Cartesian product and runs the generated child steps concurrently through the same scheduler as [`parallel`](/workflows/steps/type/parallel). Use it to fan a single step template out across combinations — operating systems, versions, regions — without copying YAML.
+</Intro>
+
+Define the axes under `matrix` and a child step template under `steps`. Atmos generates one set of child steps per axis combination and substitutes the axis values with `{{ .matrix.<axis> }}`.
+
+```yaml
+steps:
+  - name: test-matrix
+    type: matrix
+    max_concurrency: 3
+    fail:
+      mode: wait_all
+    output:
+      mode: grouped
+      order: definition
+      show_summary: true
+    matrix:
+      os: [linux, darwin]
+      go: ["1.22", "1.23"]
+    steps:
+      - name: test
+        type: shell
+        command: echo "testing {{ .matrix.os }} with Go {{ .matrix.go }}"
+```
+
+The example above expands into four generated runs (`linux`/`darwin` × `1.22`/`1.23`), each scheduled like a [`parallel`](/workflows/steps/type/parallel) child.
+
+## Fields
+
+`matrix` accepts the [`steps`](/workflows/steps/type/parallel#fields), [`max_concurrency`](/workflows/steps/type/parallel#fields), [`fail`](/workflows/steps/type/parallel#failure-behavior), and [`output`](/workflows/steps/type/parallel#output) fields exactly as `parallel` does, plus the `matrix` axes:
+
+<dl>
+  <dt>`matrix`</dt>
+  <dd>Required. Map of axis name to a list of string values. Atmos builds the Cartesian product of all axes and generates one set of child steps per combination.</dd>
+
+  <dt>`steps`</dt>
+  <dd>Required. Child step template(s) instantiated for every matrix combination. Each child must be a `shell`, `atmos`, or `sleep` step.</dd>
+
+  <dt>`max_concurrency`</dt>
+  <dd>Maximum number of generated child steps to run at once. Applies across all combinations. Defaults to unbounded.</dd>
+
+  <dt>`fail`</dt>
+  <dd>Failure behavior for the expanded group. See [Failure behavior](/workflows/steps/type/parallel#failure-behavior).</dd>
+
+  <dt>`output`</dt>
+  <dd>How the parent renders generated child output. See [Output](/workflows/steps/type/parallel#output).</dd>
+</dl>
+
+## Templating
+
+Each generated child can reference its combination through the `matrix` template namespace in `command`, `stack`, `env`, and `timeout` fields:
+
+```yaml
+steps:
+  - name: plan
+    type: shell
+    command: echo "planning {{ .matrix.region }}"
+```
+
+Generated steps are named after the parent and their axis values so they remain distinct in output and summaries. Steps within a single generated combination run in declared order unless they use `needs` to depend on a sibling.
+
+## Example
+
+A runnable example lives in [`examples/parallel-steps`](https://github.com/cloudposse/atmos/tree/main/examples/parallel-steps):
+
+```shell
+atmos workflow matrix -f parallel
+```

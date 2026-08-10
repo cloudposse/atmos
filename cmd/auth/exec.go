@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -19,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
@@ -103,7 +102,7 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	defer revokeEphemeralAuthExec(execCtx)
 
 	// Execute the command with authentication environment.
-	return executeCommandWithEnv(commandArgs, execCtx.envList)
+	return shell.RunCommand(commandArgs, execCtx.envList)
 }
 
 // revokeEphemeralAuthExec performs command-end revocation of ephemeral auth
@@ -228,63 +227,5 @@ func getSeparatedArgsForExec(cmd *cobra.Command) []string {
 	if dashIndex >= 0 && dashIndex < len(args) {
 		return args[dashIndex:]
 	}
-	return nil
-}
-
-// executeCommandWithEnv executes a command with the sanitised environment list
-// produced by prepareAuthenticatedEnv. The list already includes the full
-// environment (OS env + global env + auth vars, with credential leaks removed)
-// and must be passed through to the child process verbatim — do NOT prepend
-// os.Environ() or convert to a map (that would lose ordering and could collide
-// on duplicate keys like Windows-style drive-scoped vars).
-func executeCommandWithEnv(args []string, envList []string) error {
-	defer perf.Track(nil, "auth.executeCommandWithEnv")()
-
-	if len(args) == 0 {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
-	}
-
-	// Prepare the command.
-	cmdName := args[0]
-	cmdArgs := args[1:]
-
-	// Look for the command in PATH.
-	cmdPath, err := exec.LookPath(cmdName)
-	if err != nil {
-		// Use the error builder so the missing executable is reported clearly
-		// (with the command name, the underlying cause, and a PATH hint) and exits
-		// with the conventional shell "command not found" code (127). This keeps the
-		// ErrCommandNotFound sentinel — distinct from ErrUnknownSubcommand — so the
-		// root handler does not mistake it for an unknown Atmos subcommand.
-		return errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
-			WithContext("command", cmdName).
-			WithHintf("Ensure %q is installed and available on your PATH", cmdName).
-			WithExitCode(127).
-			Err()
-	}
-
-	// Execute the command.
-	// #nosec G204 -- This is intentional: auth exec is designed to run user-specified commands.
-	execCmd := exec.Command(cmdPath, cmdArgs...)
-	execCmd.Env = envList
-	execCmd.Stdin = os.Stdin
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-
-	// Run the command and wait for completion.
-	err = execCmd.Run()
-	if err != nil {
-		// If it's an exit error, propagate as a typed error so the root can exit with the same code.
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				// Return a typed error so the root can os.Exit(status.ExitStatus()).
-				return errUtils.ExitCodeError{Code: status.ExitStatus()}
-			}
-		}
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
-	}
-
 	return nil
 }

@@ -12,20 +12,27 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/xdg"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 )
 
 const (
-	terraformPluginCacheDirEnv              = "TF_PLUGIN_CACHE_DIR"
-	terraformPluginCacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
+	terraformPluginCacheDirEnv              = tfplugin.CacheDirEnv
+	terraformPluginCacheMayBreakLockFileEnv = tfplugin.CacheMayBreakLockFileEnv
 
 	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
+
+	// AfterTerraformInitEvent is the hook event name for provisioners that run after a
+	// successful terraform init (e.g. the multi-platform providers-lock hook in
+	// pkg/provisioner/lock). It is dispatched with a TerraformExecContext so the provisioner
+	// can run a terraform subcommand against the live env, RC, and working directory.
+	afterTerraformInitEvent = "after.terraform.init"
 
 	subcommandApply     = "apply"
 	subcommandDeploy    = "deploy"
@@ -54,6 +61,28 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 	}
 
 	return tenv, nil
+}
+
+// startManagedTerraformCache starts the registry cache for this execution and returns
+// its cleanup. It returns a no-op cleanup when caching is disabled or when the caller
+// owns the cache lifecycle (info.TerraformCacheExternal, e.g. a graph-backed bulk run
+// sharing one proxy across components). On a trust failure the proxy is closed before
+// returning so it does not leak.
+func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, func(), error) {
+	defer perf.Track(atmosConfig, "exec.startManagedTerraformCache")()
+
+	if info.TerraformCacheExternal {
+		return nil, func() {}, nil
+	}
+	setup, cleanup, err := tfcache.StartForExecution(context.Background(), atmosConfig)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if setup == nil {
+		return nil, cleanup, nil
+	}
+	info.TerraformCache = setup
+	return setup, cleanup, nil
 }
 
 // ExecuteTerraform executes terraform commands.
@@ -116,10 +145,32 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
 	broker.EnsureCredentials(context.Background(), &atmosConfig)
 
+	// Start the Terraform registry cache (no-op when disabled or caller-owned). The
+	// ephemeral proxy must outlive the whole pipeline, so its Close is deferred here.
+	// Env assembly merges its CLI-config contribution into the generated RC.
+	cacheSetup, closeCache, err := startManagedTerraformCache(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
+	if cacheSetup != nil {
+		defer closeCache()
+	}
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
+	}
+
+	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
+	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
+	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
+	if info.RCCleanup != nil {
+		defer func() {
+			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+			}
+		}()
 	}
 
 	// Persist auth context so PostRunE hooks (e.g. store hooks that read
@@ -130,82 +181,44 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, WithEnvironment(info.SanitizedEnv))
-	return executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+	err = executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+	if err == nil {
+		// A successful Terraform command can create, change, or remove state. Drop
+		// any preflight snapshot so a dependent graph node reads the current outputs.
+		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+	}
+	return err
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.
 // It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
 // and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
 func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
-	// Check both OS env and global env (atmos.yaml env: section) for user override.
-	// If user has TF_PLUGIN_CACHE_DIR set to a valid path, do nothing - they manage their own cache.
-	// Invalid values (empty string or "/") are ignored with a warning, and we use our default.
-	if userCacheDir := getValidUserPluginCacheDir(atmosConfig); userCacheDir != "" {
-		log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
-		return nil
-	}
-
-	if !atmosConfig.Components.Terraform.PluginCache {
-		return nil
-	}
-
-	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
-
-	// Use XDG cache directory if no custom path configured.
-	if pluginCacheDir == "" {
-		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
-		if err != nil {
-			log.Warn("Failed to create plugin cache directory", "error", err)
-			return nil
+	override, overrideSet := pluginCacheOverride(atmosConfig)
+	cache := tfplugin.Resolve(atmosConfig, override, overrideSet)
+	if !cache.Automatic {
+		if cache.Directory != "" {
+			log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
 		}
-		pluginCacheDir = cacheDir
-	}
-
-	if pluginCacheDir == "" {
 		return nil
 	}
-
 	return []string{
-		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, pluginCacheDir),
+		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, cache.Directory),
 		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
 	}
 }
 
-// getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
-// Returns the valid path if set, or empty string if not set or invalid.
-// Invalid values (empty string or "/") are logged as warnings.
-func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
-	// Check OS environment first.
-	if osEnvDir, inOsEnv := os.LookupEnv(terraformPluginCacheDirEnv); inOsEnv {
-		if isValidPluginCacheDir(osEnvDir, "environment variable") {
-			return osEnvDir
-		}
-		return ""
+// pluginCacheOverride resolves explicit user configuration with the historical
+// command-path precedence: process environment first, then atmos.yaml global env.
+func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) {
+	if value, ok := os.LookupEnv(terraformPluginCacheDirEnv); ok {
+		return value, true
 	}
-
-	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env[terraformPluginCacheDirEnv]; inGlobalEnv {
-		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
-			return globalEnvDir
-		}
-		return ""
+	if atmosConfig != nil {
+		value, ok := atmosConfig.Env[terraformPluginCacheDirEnv]
+		return value, ok
 	}
-
-	return ""
-}
-
-// isValidPluginCacheDir checks if a plugin cache directory path is valid.
-// Invalid paths (empty string or "/") are logged as warnings and return false.
-func isValidPluginCacheDir(path, source string) bool {
-	if path == "" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is empty, ignoring and using Atmos default", "source", source)
-		return false
-	}
-	if path == "/" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
-		return false
-	}
-	return true
+	return "", false
 }
 
 // disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache

@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -14,7 +15,9 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestIsWorkdirEnabled(t *testing.T) {
@@ -394,6 +397,13 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -407,10 +417,11 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	}
 
 	// Hash failure is a warning, not an error.
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(WithOutputSuppressed(context.Background()), atmosConfig, componentConfig)
 	require.NoError(t, err)
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
+	assert.Empty(t, uiOutput.String())
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
@@ -1115,7 +1126,7 @@ func TestDefaultHasher_HashDir_WithSubdirectories(t *testing.T) {
 	hash, err := hasher.HashDir(tmpDir)
 	require.NoError(t, err)
 	assert.NotEmpty(t, hash)
-	assert.Len(t, hash, 64) // SHA256 hex is 64 chars.
+	assert.Len(t, hash, 32) // FNV-128a hex is 32 chars.
 }
 
 // TestExtractComponentName_EmptyStrings tests extraction with empty string values.

@@ -1,0 +1,60 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    plugin_cache: false
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds every component to the `local/aws` sandbox.
+# `atmos emulator up aws -s local` starts the emulator; both the Terraform
+# provider-config contributor AND the `atmos terraform backend` provisioner
+# resolve this identity's live endpoint automatically — no providers.tf, no
+# endpoint configuration, no hand-rolled docker-compose.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+
+# Custom CLI commands
+commands:
+  - name: "test"
+    description: "Bring up the sandbox and exercise the backend CRUD lifecycle (create, update, delete) against two stacks"
+    steps:
+      - atmos validate stacks
+      # dev - full backend lifecycle. `list`/`describe` are excluded: both are wired up on
+      # the CLI (flags, --stack) but their underlying provisioner logic is still a stub
+      # ("not yet implemented") as of this writing — see the README for details.
+      - atmos emulator up aws -s local
+      - atmos terraform backend create demo -s dev
+      - atmos terraform backend update demo -s dev
+      - atmos terraform backend delete demo -s dev --force
+      # staging - prove --stack correctly targets a second, independent stack.
+      - atmos terraform backend create demo -s staging
+      - atmos terraform backend delete demo -s staging --force
+      - atmos emulator down aws -s local
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - 'find . \( -name "*.tfstate" -o -name "*.tfstate.backup" -o -path "*/terraform.tfstate.d/*" -o -path "*/.terraform.tfstate/*" -o -path "*/.terraform.tfstate.backup/*" \) -delete'
+          - echo "Deleted all state files"

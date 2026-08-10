@@ -1,0 +1,41 @@
+components:
+  terraform:
+    app-config:
+      metadata:
+        component: app-config
+        description: "Publishes resolved app configuration and secrets to SSM Parameter Store."
+        tags: [config, secrets]
+        labels:
+          tier: application
+      # Component dependencies declare the apply order in the DAG (consumed by
+      # `atmos describe dependents`, `--affected` runs, and workflows). This is the
+      # current form; the legacy `settings.depends_on` map is deprecated.
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: kms-key
+          - name: s3-bucket
+          - name: dynamodb-table
+          - name: sns-topic
+          - name: sqs-queue
+      secrets:
+        vars:
+          API_KEY:
+            description: "Third-party API key for the application."
+            store: secrets/ssm
+            required: true
+          DB_CONFIG:
+            description: "Structured database credentials (JSON) stored in Secrets Manager."
+            store: secrets/asm
+            required: true
+      vars:
+        name: app
+        # Real upstream state supersedes these deterministic plan-time placeholders
+        # (provider-valid mock values so a cold `terraform plan --all` succeeds).
+        kms_key_arn: !terraform.state kms-key .key_arn // "arn:aws:kms:{{ .vars.region }}:000000000000:key/00000000-0000-0000-0000-000000000000"
+        bucket_id: !terraform.state s3-bucket .bucket_id // "mock-assets"
+        table_name: !terraform.state dynamodb-table .table_name // "mock-state"
+        topic_arn: !terraform.state sns-topic .topic_arn // "arn:aws:sns:{{ .vars.region }}:000000000000:mock-events"
+        queue_url: !terraform.state sqs-queue .queue_url // "http://localhost:4566/000000000000/mock-events"
+        api_key: !secret API_KEY
+        db_password: !secret DB_CONFIG | path ".password"

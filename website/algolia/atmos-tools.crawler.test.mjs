@@ -82,7 +82,7 @@ test("crawler config keeps definition terms searchable at lower hierarchy", () =
   assert.equal(recordProps.lvl6, "article h6, article dt");
   assert.equal(
     recordProps.content,
-    "article p, article li, article dd, article td",
+    "article .intro, article p, article li, article dd, article td",
   );
   assert.equal(recordProps.lvl0.defaultValue, "CLI Configuration");
   assert.equal(recordProps.pageRank, 35);
@@ -95,8 +95,8 @@ test("crawler config uses pageRank and respects canonical URLs", () => {
   assert.equal(config.ignoreCanonicalTo, false);
   assert.deepEqual(config.initialIndexSettings[indexName].customRanking, [
     "desc(weight.pageRank)",
-    "desc(weight.level)",
     "asc(weight.position)",
+    "desc(weight.level)",
   ]);
 });
 

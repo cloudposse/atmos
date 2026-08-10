@@ -69,32 +69,6 @@ func TestBaseHandler_RequiresTTY(t *testing.T) {
 	})
 }
 
-func TestBaseHandler_CheckTTY(t *testing.T) {
-	t.Run("returns nil when TTY not required", func(t *testing.T) {
-		handler := NewBaseHandler("shell", CategoryCommand, false)
-		step := &schema.WorkflowStep{Name: "test_step", Type: "shell"}
-
-		err := handler.CheckTTY(step)
-		assert.NoError(t, err)
-	})
-
-	// Note: Testing the TTY required case is environment-dependent.
-	// In CI/non-TTY environments, this will return an error.
-	// In TTY environments, this will return nil.
-	t.Run("returns error when TTY required but not available", func(t *testing.T) {
-		handler := NewBaseHandler("input", CategoryInteractive, true)
-		step := &schema.WorkflowStep{Name: "test_step", Type: "input"}
-
-		err := handler.CheckTTY(step)
-		// In CI or piped environment, this should error.
-		// We can't guarantee this test will fail in all environments,
-		// but we can verify the error type when it does fail.
-		if err != nil {
-			assert.True(t, errors.Is(err, errUtils.ErrStepTTYRequired))
-		}
-	})
-}
-
 func TestBaseHandler_ValidateRequired(t *testing.T) {
 	handler := NewBaseHandler("test", CategoryCommand, false)
 

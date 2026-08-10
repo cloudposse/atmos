@@ -350,86 +350,6 @@ func TestGoToCty(t *testing.T) {
 	})
 }
 
-// TestGoToCtyRoundTrip tests converting to cty and back to Go types.
-func TestGoToCtyRoundTrip(t *testing.T) {
-	t.Run("round trip simple types", func(t *testing.T) {
-		testCases := []struct {
-			name  string
-			input any
-		}{
-			{"string", "hello"},
-			{"int", 42},
-			{"bool true", true},
-			{"bool false", false},
-			{"float", 3.14},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				ctyVal := GoToCty(tc.input)
-				goVal := CtyToGo(ctyVal)
-				// Note: int converts to int64 through cty
-				// Note: float64 converts to int64 through cty (loses decimal precision)
-				if _, ok := tc.input.(int); ok {
-					assert.Equal(t, int64(tc.input.(int)), goVal)
-				} else if f, ok := tc.input.(float64); ok {
-					// CtyToGo always returns int64 for numbers, losing decimal precision
-					assert.Equal(t, int64(f), goVal)
-				} else {
-					assert.Equal(t, tc.input, goVal)
-				}
-			})
-		}
-	})
-
-	t.Run("round trip map", func(t *testing.T) {
-		input := map[string]any{
-			"name":  "test",
-			"count": int64(42), // Use int64 to match what CtyToGo returns
-			"flag":  true,
-		}
-
-		ctyVal := GoToCty(input)
-		goVal := CtyToGo(ctyVal)
-
-		result, ok := goVal.(map[string]any)
-		require.True(t, ok, "should convert back to map")
-		assert.Equal(t, input, result)
-	})
-
-	t.Run("round trip slice", func(t *testing.T) {
-		input := []any{"one", "two", "three"}
-
-		ctyVal := GoToCty(input)
-		goVal := CtyToGo(ctyVal)
-
-		result, ok := goVal.([]any)
-		require.True(t, ok, "should convert back to slice")
-		assert.Equal(t, input, result)
-	})
-
-	t.Run("round trip nested structure", func(t *testing.T) {
-		input := map[string]any{
-			"outer": map[string]any{
-				"inner": []any{"a", "b", "c"},
-			},
-		}
-
-		ctyVal := GoToCty(input)
-		goVal := CtyToGo(ctyVal)
-
-		result, ok := goVal.(map[string]any)
-		require.True(t, ok, "should convert back to map")
-
-		outer, ok := result["outer"].(map[string]any)
-		require.True(t, ok, "outer should be map")
-
-		inner, ok := outer["inner"].([]any)
-		require.True(t, ok, "inner should be slice")
-		assert.Equal(t, []any{"a", "b", "c"}, inner)
-	})
-}
-
 // TestGoToCtyEdgeCases tests edge cases and boundary conditions.
 func TestGoToCtyEdgeCases(t *testing.T) {
 	t.Run("handles large numbers", func(t *testing.T) {
@@ -495,26 +415,5 @@ func TestGoToCtyEdgeCases(t *testing.T) {
 		valueSlice := result.AsValueSlice()
 		assert.Len(t, valueSlice, 1)
 		assert.Equal(t, "single", valueSlice[0].AsString())
-	})
-
-	t.Run("handles zero values", func(t *testing.T) {
-		testCases := []struct {
-			name     string
-			input    any
-			expected any
-		}{
-			{"zero int", 0, int64(0)},
-			{"zero float", 0.0, int64(0)}, // CtyToGo converts all numbers to int64
-			{"empty string", "", ""},
-			{"false bool", false, false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				ctyVal := GoToCty(tc.input)
-				goVal := CtyToGo(ctyVal)
-				assert.Equal(t, tc.expected, goVal)
-			})
-		}
 	})
 }

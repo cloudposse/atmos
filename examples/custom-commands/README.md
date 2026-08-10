@@ -1,3 +1,14 @@
+---
+title: Custom Commands
+tags: [Automation]
+description: >-
+  Extend the Atmos CLI with custom commands defined in atmos.yaml — arguments,
+  flags, nested subcommands, and shell steps.
+cast:
+  file: /casts/examples/custom-commands/hello-greet.cast
+  title: atmos custom commands
+---
+
 # Custom Commands
 
 This example demonstrates how to extend Atmos with custom CLI commands, making it easier for teams to use your toolchain through a single, consistent interface.

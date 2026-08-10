@@ -1,0 +1,62 @@
+commands:
+  - name: casts generate examples demo-library modules
+    description: Regenerate the Component Library example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: modules
+        working_directory: "../../.context/cast-fixtures/demo-library"
+        title: "Component Library: reusable Terraform modules"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-library/modules.cast"
+        steps:
+          - type: simulate
+            text: "# a reusable component library exposes module directories"
+          - type: simulate
+            text: &list_cmd find . -mindepth 1 -maxdepth 2 -name main.tf | sort
+          - type: shell
+            name: list-modules
+            duration: 450ms
+            interval: 750ms
+            command: *list_cmd
+          - type: simulate
+            text: "# inspect the weather module inputs"
+          - type: simulate
+            text: &vars_cmd sed -n '1,80p' weather/variables.tf
+          - type: shell
+            name: weather-vars
+            duration: 450ms
+            interval: 750ms
+            command: *vars_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-library modules
+  - name: casts validate examples demo-library modules
+    description: Validate the Component Library example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-library/modules.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in ["./ipinfo/main.tf", "./weather/main.tf", "variable \"location\"", "variable \"units\"", "variable \"lang\""]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-library cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

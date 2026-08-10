@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -242,7 +243,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse main config")
 	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
@@ -265,7 +266,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML, "")
 	// The error handling path exists, but may not always trigger with this input
 	// This tests that the function handles errors from MergeConfig
 	if err != nil {
@@ -480,10 +481,11 @@ func TestLoadAtmosDFromDirectory_NotFoundPath(t *testing.T) {
 
 	// Call loadAtmosDFromDirectory with a directory that has no atmos.d or .atmos.d
 	// This should hit the "No atmos.d directory found" and "No .atmos.d directory found" paths.
-	loadAtmosDFromDirectory(tempDir, v)
+	err := loadAtmosDFromDirectory(tempDir, v)
 
-	// Function should complete without panic - the directories don't exist
+	// Function should complete without error - the directories don't exist
 	// which is handled gracefully by logging at Trace level.
+	assert.NoError(t, err)
 }
 
 // TestLoadAtmosDFromDirectory_DirectoryExists tests when atmos.d directory exists.
@@ -506,7 +508,8 @@ settings:
 	v.SetConfigType("yaml")
 
 	// Call loadAtmosDFromDirectory - should find and process the atmos.d directory.
-	loadAtmosDFromDirectory(tempDir, v)
+	err = loadAtmosDFromDirectory(tempDir, v)
+	assert.NoError(t, err)
 
 	// Verify the config was actually loaded into viper.
 	assert.Equal(t, "from_atmos_d", v.GetString("settings.test_value"))
@@ -532,7 +535,8 @@ settings:
 	v.SetConfigType("yaml")
 
 	// Call loadAtmosDFromDirectory - should find and process the .atmos.d directory.
-	loadAtmosDFromDirectory(tempDir, v)
+	err = loadAtmosDFromDirectory(tempDir, v)
+	assert.NoError(t, err)
 
 	// Verify the config was actually loaded into viper.
 	assert.Equal(t, "from_dot_atmos_d", v.GetString("settings.test_value"))
@@ -571,7 +575,8 @@ settings:
 
 	// Call loadAtmosDFromDirectory - should process both directories.
 	// atmos.d is processed first, then .atmos.d, so .atmos.d values should win for overlapping keys.
-	loadAtmosDFromDirectory(tempDir, v)
+	err = loadAtmosDFromDirectory(tempDir, v)
+	assert.NoError(t, err)
 
 	// Verify both configs were loaded and merged correctly.
 	// .atmos.d is processed after atmos.d, so its value should win for test_value.
@@ -595,7 +600,158 @@ func TestLoadAtmosDFromDirectory_FileNotDirectory(t *testing.T) {
 
 	// Call loadAtmosDFromDirectory - should handle file gracefully.
 	// Since it's not a directory, it should skip processing (stat.IsDir() returns false).
-	loadAtmosDFromDirectory(tempDir, v)
+	err = loadAtmosDFromDirectory(tempDir, v)
 
-	// Function should complete without panic.
+	// Function should complete without error.
+	assert.NoError(t, err)
+}
+
+// TestLoadAtmosDFromDirectory_MalformedYAML_AtmosD tests that a YAML parse error
+// in an atmos.d/ file is surfaced as an error instead of being silently swallowed.
+// See https://github.com/cloudposse/atmos/issues/2836.
+func TestLoadAtmosDFromDirectory_MalformedYAML_AtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDPath, 0o755))
+
+	badFile := filepath.Join(atmosDPath, "bad.yaml")
+	badContent := "settings:\n  test_value: has: an unquoted colon\n"
+	require.NoError(t, os.WriteFile(badFile, []byte(badContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := loadAtmosDFromDirectory(tempDir, v)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile))
+	assert.Contains(t, err.Error(), badFile)
+	assert.Contains(t, err.Error(), "line ")
+}
+
+// TestLoadAtmosDFromDirectory_MalformedYAML_DotAtmosD is the .atmos.d/ counterpart
+// of TestLoadAtmosDFromDirectory_MalformedYAML_AtmosD.
+func TestLoadAtmosDFromDirectory_MalformedYAML_DotAtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(dotAtmosDPath, 0o755))
+
+	badFile := filepath.Join(dotAtmosDPath, "bad.yaml")
+	badContent := "settings:\n  test_value: has: an unquoted colon\n"
+	require.NoError(t, os.WriteFile(badFile, []byte(badContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := loadAtmosDFromDirectory(tempDir, v)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile))
+	assert.Contains(t, err.Error(), badFile)
+	assert.Contains(t, err.Error(), "line ")
+}
+
+// TestLoadAtmosDFromDirectory_MalformedYAML_SortOrderStillSurfacesError reproduces
+// the exact repro shape from issue #2836: a good file, a broken file, and another
+// good file that sorts after the broken one. Before the fix, the error from the
+// broken file was silently dropped and files sorting after it never loaded, with
+// no indication anything was wrong. The fix must surface the error naming the
+// broken file, regardless of where it sorts among its siblings.
+func TestLoadAtmosDFromDirectory_MalformedYAML_SortOrderStillSurfacesError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(dotAtmosDPath, 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dotAtmosDPath, "a-good.yaml"),
+		[]byte("commands:\n  - name: alpha\n    description: from the first file\n    steps: [\"echo alpha ran\"]\n"),
+		0o644,
+	))
+	brokenFile := filepath.Join(dotAtmosDPath, "m-broken.yaml")
+	require.NoError(t, os.WriteFile(
+		brokenFile,
+		[]byte("commands:\n  - name: broken\n    description: has: an unquoted colon\n    steps: [\"echo never\"]\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dotAtmosDPath, "z-good.yaml"),
+		[]byte("commands:\n  - name: zulu\n    description: from the last file\n    steps: [\"echo zulu ran\"]\n"),
+		0o644,
+	))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := loadAtmosDFromDirectory(tempDir, v)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile))
+	assert.Contains(t, err.Error(), brokenFile)
+	assert.Contains(t, err.Error(), "line ")
+}
+
+// TestProcessConfigImportsAndReapply_BasePathDeclarationError covers the error branch
+// where parsing the main config's base_path declaration fails.
+func TestProcessConfigImportsAndReapply_BasePathDeclarationError(t *testing.T) {
+	orig := parseBasePathDeclaration
+	parseBasePathDeclaration = func([]byte) (bool, string, error) {
+		return false, "", errors.New("boom")
+	}
+	defer func() { parseBasePathDeclaration = orig }()
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	_, err := processConfigImportsAndReapply(t.TempDir(), v, []byte("base_path: .\n"), "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+	assert.Contains(t, err.Error(), "parse main config base path")
+}
+
+// TestMergeConfigFileWithImports_BasePathDeclarationError covers the error branch where
+// parsing an imported config file's base_path declaration fails.
+func TestMergeConfigFileWithImports_BasePathDeclarationError(t *testing.T) {
+	setupTestAdapters()
+	orig := parseBasePathDeclaration
+	parseBasePathDeclaration = func([]byte) (bool, string, error) {
+		return false, "", errors.New("boom")
+	}
+	defer func() { parseBasePathDeclaration = orig }()
+
+	cfg := filepath.Join(t.TempDir(), "atmos.yaml")
+	require.NoError(t, os.WriteFile(cfg, []byte("import:\n  - x.yaml\n"), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	err := mergeConfigFileWithImports(cfg, v)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+	assert.Contains(t, err.Error(), "parse config base path")
+}
+
+// TestMergeImports_ProcessImportsError covers the branch where processing imports fails:
+// an absolute base_path resolves cleanly, but the temp-dir creation used by import
+// processing fails (injected via the package filesystem seam).
+func TestMergeImports_ProcessImportsError(t *testing.T) {
+	setupTestAdapters()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().MkdirTemp(gomock.Any(), gomock.Any()).Return("", errors.New("mkdir failed")).AnyTimes()
+
+	orig := defaultFileSystem
+	defaultFileSystem = mockFS
+	defer func() { defaultFileSystem = orig }()
+
+	dir := t.TempDir()
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set("base_path", dir) // Absolute, so resolveAbsolutePath returns it unchanged.
+	v.Set("import", []string{"x.yaml"})
+
+	_, err := mergeImports(v, dir, "", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mkdir failed")
 }

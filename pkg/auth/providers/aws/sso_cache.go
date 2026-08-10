@@ -9,12 +9,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	ssoTokenCacheSubdir     = "aws-sso"
+	// This aliases cachepaths.AWSSSOSubdir, the single source of truth also
+	// used by pkg/ci/cache to exclude this directory from CI cache archives.
+	ssoTokenCacheSubdir     = cachepaths.AWSSSOSubdir
 	ssoTokenCacheSessionDir = "sessions"
 	ssoTokenCacheDirPerms   = 0o700
 	ssoTokenCacheFilePerms  = 0o600

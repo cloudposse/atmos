@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -22,7 +23,11 @@ func init() {
 	_ = provisioner.RegisterProvisioner(provisioner.Provisioner{
 		Type:      "workdir",
 		HookEvent: HookEventBeforeTerraformInit,
-		Func:      ProvisionWorkdir,
+		// Adapt ProvisionWorkdir (a public function with many direct callers) to the
+		// ProvisionerFunc signature; the before-init event carries no exec context.
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *provisioner.TerraformExecContext) error {
+			return ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
+		},
 	})
 }
 
@@ -31,6 +36,23 @@ func init() {
 type Service struct {
 	fs     FileSystem
 	hasher Hasher
+}
+
+type outputSuppressedContextKey struct{}
+
+// WithOutputSuppressed disables transient workdir provisioning output for this context.
+func WithOutputSuppressed(ctx context.Context) context.Context {
+	defer perf.Track(nil, "workdir.WithOutputSuppressed")()
+
+	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+}
+
+// OutputSuppressed reports whether transient provisioning output is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "workdir.OutputSuppressed")()
+
+	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
+	return ok
 }
 
 // NewService creates a new workdir service with default implementations.
@@ -141,8 +163,11 @@ func (s *Service) Provision(
 			Err()
 	}
 
-	ui.ClearLine()
-	ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
+	suppressOutput := OutputSuppressed(ctx)
+	if !suppressOutput {
+		ui.ClearLine()
+		ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
+	}
 
 	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
 	workdirPath, err := s.createWorkdirDirectory(atmosConfig, stack, workdirComponent)
@@ -152,7 +177,7 @@ func (s *Service) Provision(
 
 	// 2. Sync local component files to workdir (incremental, per-file checksum).
 	// Use sourceComponent for finding the source directory, workdirComponent for metadata.
-	metadata, changed, err := s.syncLocalToWorkdir(atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack)
+	metadata, changed, err := s.syncLocalToWorkdir(atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack, suppressOutput)
 	if err != nil {
 		return err
 	}
@@ -165,17 +190,29 @@ func (s *Service) Provision(
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
 
+	// 5. Restore the committed per-instance provider lock (if any) from the source dir into
+	// the workdir as the canonical .terraform.lock.hcl, so init honors the instance's pinned
+	// providers; the after.terraform.init hook completes and re-persists it. Best-effort: a
+	// restore failure must not block provisioning (init simply re-resolves).
+	if err := provisioner.RestorePerInstanceLock(metadata.Source, workdirPath, componentConfig); err != nil {
+		log.Debug("Failed to restore per-instance provider lock", "error", err)
+	}
+
 	// Signal that the workdir was actively provisioned (files synced) this invocation.
 	// This tells buildInitArgs to add -reconfigure to terraform init.
 	// When changed==false the sync was a no-op (checksums matched), so .terraform/
 	// is still intact and -reconfigure is not needed.
 	if changed {
 		componentConfig[WorkdirReprovisionedKey] = struct{}{}
-		ui.ClearLine()
-		ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+		if !suppressOutput {
+			ui.ClearLine()
+			ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+		}
 	} else {
-		ui.ClearLine()
-		ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+		if !suppressOutput {
+			ui.ClearLine()
+			ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+		}
 	}
 	return nil
 }
@@ -211,7 +248,7 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 func (s *Service) syncLocalToWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
-	workdirPath, workdirComponent, sourceComponent, stack string,
+	workdirPath, workdirComponent, sourceComponent, stack string, suppressOutput bool,
 ) (*WorkdirMetadata, bool, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
@@ -233,12 +270,12 @@ func (s *Service) syncLocalToWorkdir(
 			Err()
 	}
 
-	if changed {
+	if changed && !suppressOutput {
 		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
 	}
 
-	contentHash := s.computeContentHash(workdirPath)
+	contentHash := s.computeContentHash(workdirPath, suppressOutput)
 	// Use workdirComponent (instance name) in metadata for identification.
 	metadata := buildLocalMetadata(&localMetadataParams{
 		component:        workdirComponent,
@@ -278,10 +315,12 @@ func (s *Service) validateComponentPath(
 }
 
 // computeContentHash computes the content hash, logging a warning on failure.
-func (s *Service) computeContentHash(workdirPath string) string {
+func (s *Service) computeContentHash(workdirPath string, suppressOutput bool) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
-		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		if !suppressOutput {
+			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		}
 		return ""
 	}
 	return contentHash

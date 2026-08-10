@@ -256,6 +256,8 @@ func (p *StandardFlagParser) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag
 		p.registerIntFlag(flagSet, f, markRequired)
 	case *StringSliceFlag:
 		p.registerStringSliceFlag(flagSet, f, markRequired)
+	case *StringMapFlag:
+		p.registerStringMapFlag(flagSet, f, markRequired)
 	default:
 		// Unknown flag type - skip.
 		// In production, this could log a warning.
@@ -303,6 +305,40 @@ func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *
 	defer perf.Track(nil, "flags.StandardFlagParser.registerStringSliceFlag")()
 
 	flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
+
+	if f.Required {
+		_ = markRequired(f.Name)
+	}
+}
+
+// registerStringMapFlag registers a string map flag as a StringArray for Cobra.
+// StringMapFlag is registered as StringArray (not StringSlice) because Cobra doesn't
+// have native map support, and StringSlice splits each occurrence's value on commas
+// before ParseStringMap ever sees it — breaking a value that legitimately contains a
+// comma, e.g. `--set tags=a,b,c` would arrive as ["tags=a", "b", "c"] instead of one
+// "tags=a,b,c" entry. StringArray takes each --flag occurrence verbatim.
+// The parsing of key=value pairs happens in ParseStringMap() helper (viper_helpers.go).
+func (p *StandardFlagParser) registerStringMapFlag(flagSet *pflag.FlagSet, f *StringMapFlag, markRequired func(string) error) {
+	defer perf.Track(nil, "flags.StandardFlagParser.registerStringMapFlag")()
+
+	// Convert default map to []string for Cobra registration.
+	// This allows Cobra to handle the flag as a repeated string value.
+	// Keys are sorted to ensure deterministic output for help and tests.
+	var defaultSlice []string
+	if f.Default != nil {
+		keys := make([]string, 0, len(f.Default))
+		for k := range f.Default {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			defaultSlice = append(defaultSlice, k+"="+f.Default[k])
+		}
+	}
+
+	// Register as StringArray - Cobra will accept repeated --flag key=value,
+	// each occurrence kept verbatim (no comma-splitting).
+	flagSet.StringArrayP(f.Name, f.Shorthand, defaultSlice, f.Description)
 
 	if f.Required {
 		_ = markRequired(f.Name)
@@ -469,7 +505,7 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 		}
 
 		// Then bind the Cobra pflag to Viper for CLI precedence.
-		cobraFlag := cmd.Flags().Lookup(flag.GetName())
+		cobraFlag, _ := lookupCommandFlag(cmd, flag.GetName())
 		if cobraFlag == nil {
 			continue
 		}
@@ -502,8 +538,14 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 func (p *StandardFlagParser) parseFlags(args []string, result *ParsedConfig) (*pflag.FlagSet, error) {
 	defer perf.Track(nil, "flags.StandardFlagParser.parseFlags")()
 
-	// Early return: no command or no args.
-	if p.cmd == nil || len(args) == 0 {
+	// Early return: parser has no bound command (e.g. RegisterFlags/RegisterPersistentFlags
+	// was never called). Without p.cmd we cannot build a combined FlagSet.
+	//
+	// Do NOT also early-return on len(args) == 0: commands with zero leftover positional
+	// args (Args: cobra.NoArgs, or an optional/prompted positional arg left empty) still
+	// need bindChangedFlagsToViper below to run, otherwise CLI-supplied flag values (e.g.
+	// --stack) never reach Viper and Parse() silently returns their defaults.
+	if p.cmd == nil {
 		result.PositionalArgs = args
 		result.SeparatedArgs = []string{}
 		return nil, nil
@@ -1004,6 +1046,9 @@ func (p *StandardFlagParser) promptForMissingPositionalArgs(result *ParsedConfig
 		promptConfig, hasPrompt := p.positionalPrompts[spec.Name]
 		if !hasPrompt {
 			continue // No prompt configured for this arg.
+		}
+		if promptConfig.ShouldPrompt != nil && !promptConfig.ShouldPrompt(result) {
+			continue
 		}
 
 		// Prompt for missing positional argument.

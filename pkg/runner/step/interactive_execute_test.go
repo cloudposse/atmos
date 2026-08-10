@@ -12,16 +12,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
-// Interactive step handlers require a TTY. Under `go test` there is no TTY, so
-// Execute must short-circuit via BaseHandler.CheckTTY and return
-// ErrStepTTYRequired before attempting to run a huh form. This verifies that
-// guard for every interactive handler.
+// Interactive step handlers require a TTY. Under `go test` there is no TTY and
+// (with no default configured) Execute must short-circuit via
+// BaseHandler.resolveInteractive and return ErrStepTTYRequired before attempting
+// to run a huh form. This verifies that guard for every interactive handler.
 func TestInteractiveHandlers_ExecuteWithoutTTY(t *testing.T) {
-	// CheckTTY only returns ErrStepTTYRequired when stdin or stdout is not a TTY.
-	// If this test is run from an interactive terminal (both stdin and stdout are
-	// TTYs), Execute would pass CheckTTY and block on an interactive huh prompt,
-	// hanging the test. Skip in that case; the hang-proof sibling
-	// TestInteractiveHandlersExecuteFailFast covers the TTY-present path safely.
+	// resolveInteractive only returns ErrStepTTYRequired when stdin or stdout is
+	// not a TTY and no default is set. If this test is run from an interactive
+	// terminal (both stdin and stdout are TTYs), Execute would pass the gate and
+	// block on an interactive huh prompt, hanging the test. Skip in that case;
+	// the hang-proof sibling TestInteractiveHandlersExecuteFailFast covers the
+	// TTY-present path safely.
 	termState := terminal.New()
 	if termState.IsTTY(terminal.Stdin) && termState.IsTTY(terminal.Stdout) {
 		t.Skip("stdin and stdout are both TTYs; Execute would block on an interactive prompt")

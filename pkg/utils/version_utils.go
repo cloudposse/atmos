@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -46,5 +47,5 @@ func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	box := style.Render(messageContent)
 
 	// Print the box
-	fmt.Println(box)
+	ui.Writeln(box)
 }

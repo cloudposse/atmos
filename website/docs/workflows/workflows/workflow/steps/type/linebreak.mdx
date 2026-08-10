@@ -1,0 +1,27 @@
+---
+title: linebreak
+sidebar_label: linebreak
+slug: /workflows/steps/type/linebreak
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `linebreak` step type prints one or more blank lines, a simple building block for spacing out the human-facing output of your custom commands and workflows.
+</Intro>
+
+```yaml
+steps:
+  - name: spacer
+    type: linebreak
+    count: 2
+```
+
+## Fields
+
+<dl>
+  <dt>`count`</dt>
+  <dd>Optional number of blank lines. Defaults to `1`.</dd>
+</dl>
+
+Use `linebreak` to separate sections in interactive or human-facing workflow output.

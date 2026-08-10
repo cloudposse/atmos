@@ -160,6 +160,8 @@ auth:
         secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
         region: us-east-1
         mfa_arn: arn:aws:iam::123456789012:mfa/username  # Optional
+      spec:
+        endpoint_url: "http://localhost:4566"             # Optional for Floci/LocalStack-compatible endpoints
 ```
 </File>
 
@@ -181,6 +183,9 @@ auth:
 
   <dt>`credentials.webflow_enabled`</dt>
   <dd>Optional. Defaults to `true`. Set to `false` to disable browser-based authentication fallback.</dd>
+
+  <dt>`spec.endpoint_url`</dt>
+  <dd>Optional. AWS-compatible base endpoint URL for SDK calls, useful for Floci, LocalStack, and other test endpoints.</dd>
 </dl>
 
 :::tip
@@ -196,6 +201,14 @@ When neither configuration nor keyring entries provide credentials, Atmos automa
 1. Static credentials from `atmos.yaml` (`access_key_id` + `secret_access_key`, including `!env` references)
 2. Credentials stored in the system keyring (via `atmos auth user configure`)
 3. Browser-based OAuth2 PKCE flow (when `webflow_enabled` is `true`, which is the default)
+
+To explicitly use the browser flow without removing or changing configured IAM access keys, add
+`--webflow` to an `aws/user` login. This skips cached temporary sessions and configured credentials
+only for that invocation, then writes the newly issued temporary credentials to the usual session cache:
+
+```shell
+atmos auth login --profile=legacy --identity=cp-root/admin --webflow
+```
 
 Atmos does **not** consult ambient AWS credentials (environment variables, `~/.aws/credentials`, instance profiles) for `aws/user` identities — credentials must be supplied through one of the three sources above.
 

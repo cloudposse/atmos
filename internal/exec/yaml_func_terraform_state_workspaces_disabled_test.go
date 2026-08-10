@@ -4,9 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
@@ -32,15 +30,8 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state workspaces-disabled integration test)")
 		}
 	}
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
@@ -49,39 +40,7 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 
 	// Define the working directory (workspaces-disabled fixture).
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
-
-	// Compute the absolute path to the mock component before changing directories so that the
-	// cleanup defer below uses a stable path regardless of the working-directory changes made
-	// by t.Chdir further down.  Use the direct path (not a multi-hop via workDir) so a rename
-	// of the scenarios directory does not silently produce a wrong path.
-	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
-	if err != nil {
-		t.Fatalf("Failed to compute absolute mock component path: %v", err)
-	}
-
-	defer func() {
-		// Delete the generated files and folders after the test.
-		// Clean up terraform state files.
-		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
-		assert.NoError(t, err)
-
-		// When workspaces are disabled, state is stored at terraform.tfstate (not in terraform.tfstate.d/).
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
-		// Ignore error if file doesn't exist.
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
-		// Ignore error if file doesn't exist.
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-	}()
-
+	setupTerraformStateSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// Deploy component-1 first to create terraform state.
@@ -96,7 +55,7 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	require.NoError(t, err, "Failed to execute 'ExecuteTerraform' for component-1")
 
 	// Initialize CLI config.
@@ -148,36 +107,18 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for workspaces-disabled state location test)")
 		}
 	}
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "test"
 
-	// Get the absolute path to the mock component before changing directories.
-	// The path is relative to the current working directory (internal/exec).
-	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
-	require.NoError(t, err)
-
-	defer func() {
-		// Clean up terraform state files from the shared fixture directory.
-		// Failing to remove these would leak state into subsequent test runs.
-		assert.NoError(t, os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")))
-		assert.NoError(t, os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")))
-
-		// Single files may be locked briefly on Windows; retry before failing.
-		for _, name := range []string{"terraform.tfstate", "terraform.tfstate.backup"} {
-			removeWithRetry(t, filepath.Join(mockComponentPath, name))
-		}
-	}()
-
 	// Define the working directory (workspaces-disabled fixture).
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
+	terraformComponentsPath := setupTerraformStateSandbox(t, workDir)
+	mockComponentPath := filepath.Join(terraformComponentsPath, "mock")
 	t.Chdir(workDir)
 
 	// Deploy component-1.
@@ -192,7 +133,7 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	require.NoError(t, err, "Failed to deploy component-1")
 
 	// Verify that the state file is at terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate).
@@ -206,24 +147,4 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 	// State should NOT exist at the wrong location.
 	_, err = os.Stat(wrongStatePath)
 	assert.True(t, os.IsNotExist(err), "State file should NOT exist at %s when workspaces are disabled", wrongStatePath)
-}
-
-// removeWithRetry removes a file, retrying on Windows where brief file locks
-// can cause transient failures.  Missing files are not an error.  If the file
-// still exists after all retries the test is failed so stale state is never
-// silently left in a shared fixture.
-func removeWithRetry(t *testing.T, path string) {
-	t.Helper()
-	const maxAttempts = 3
-	for i := range maxAttempts {
-		err := os.Remove(path)
-		if err == nil || os.IsNotExist(err) {
-			return
-		}
-		if i < maxAttempts-1 && runtime.GOOS == "windows" {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		assert.NoError(t, err, "failed to remove %s after %d attempt(s)", path, i+1)
-	}
 }

@@ -6,13 +6,19 @@ sidebar_class_name: command
 description: Learn how to configure components in Atmos stack manifests, including metadata attributes and common configuration patterns.
 id: index
 ---
-import Intro from '@site/src/components/Intro'
-import Tabs from '@theme/Tabs'
-import TabItem from '@theme/TabItem'
-import DocCardList from '@theme/DocCardList'
+
+import Intro from "@site/src/components/Intro";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, Packer, or Ansible) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
+  Components are the building blocks of your infrastructure, defined in the
+  `components` section of stack manifests. Each component represents
+  infrastructure-as-code or deployment logic (Terraform, Helmfile, Kubernetes,
+  Packer, or Ansible) combined with its configuration. This page covers how to
+  configure components in stacks and the common attributes available across all
+  component types.
 </Intro>
 
 ## Supported Component Types
@@ -31,6 +37,7 @@ A component consists of infrastructure-as-code business logic (e.g., a Terraform
 
 - **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component)
   and is defined in one or more YAML stack config files (which are called [Atmos stacks](/learn/stacks))
+
 :::
 
 ## Common Configuration Sections
@@ -41,20 +48,26 @@ All component types support these configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to the component. Use [component validation](/validation/validating) to enforce policies.</dd>
 
-  <dt>[`locals`](/stacks/locals)</dt>
-  <dd>File-scoped temporary variables for DRY configuration within a single manifest.</dd>
+<dt>[`locals`](/stacks/locals)</dt>
+<dd>
+  File-scoped temporary variables for DRY configuration within a single
+  manifest.
+</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables set during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables set during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations and custom metadata.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integrations and custom metadata.</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance. See [Metadata Attributes](#metadata-attributes) below.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>
+  Component behavior and inheritance. See [Metadata
+  Attributes](#metadata-attributes) below.
+</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override the default executable.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override the default executable.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -75,6 +88,12 @@ components:
     nginx:
       vars:
         replicas: 3
+
+  kubernetes:
+    argocd:
+      provider: kustomize
+      paths:
+        - overlays/dev
 
   packer:
     ami-builder:
@@ -171,7 +190,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: alpha/vpc  # Subscribe to alpha track
+        component: alpha/vpc # Subscribe to alpha track
 ```
 
 ```yaml
@@ -180,7 +199,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: prod/vpc  # Subscribe to production track
+        component: prod/vpc # Subscribe to production track
 ```
 
 </TabItem>
@@ -194,7 +213,7 @@ components:
   terraform:
     vpc:
       metadata:
-        component: vpc/1.2  # Pinned version
+        component: vpc/1.2 # Pinned version
       vars:
         name: prod-vpc
 ```

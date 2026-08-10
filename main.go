@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/panics"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 func main() {
@@ -18,16 +20,25 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		sig := <-sigChan
-		// Clean up resources before exit.
-		cmd.Cleanup()
-		// Exit with correct POSIX exit code (128 + signal number).
-		// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-		if s, ok := sig.(syscall.Signal); ok {
-			errUtils.OsExit(128 + int(s))
+		for sig := range sigChan {
+			// While an interactive/TTY step owns the terminal, SIGINT belongs to
+			// the foreground child process - keep waiting instead of exiting.
+			if !shouldExitOnSignal(sig) {
+				continue
+			}
+			// Run registered exit cleanups (e.g. restore the terminal from raw
+			// mode) - os.Exit below skips deferred functions.
+			signals.RunExitCleanups()
+			// Clean up resources before exit.
+			cmd.Cleanup()
+			// Exit with correct POSIX exit code (128 + signal number).
+			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
+			if s, ok := sig.(syscall.Signal); ok {
+				errUtils.OsExit(128 + int(s))
+			}
+			// Fallback to SIGINT exit code if signal type assertion fails.
+			errUtils.OsExit(130)
 		}
-		// Fallback to SIGINT exit code if signal type assertion fails.
-		errUtils.OsExit(130)
 	}()
 
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
@@ -52,6 +63,22 @@ func run() (exitCode int) {
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
+	// A generated toolchain proxy invokes this executable under a command name
+	// such as "ls". Dispatch it before generic flag handling so "ls --version"
+	// reaches the proxied tool rather than Atmos's --version handler.
+	if handled, err := cmd.TryRunToolchainProxy(os.Args); handled {
+		if err != nil {
+			if code, ok := silentExitCode(err); ok {
+				return code
+			}
+			errUtils.CaptureError(err)
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+			return errUtils.GetExitCode(err)
+		}
+		return 0
+	}
+
 	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
 	// This eliminates the need for os.Exit in PersistentPreRun, making tests work with Go 1.25.
 	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).
@@ -73,7 +100,7 @@ func run() (exitCode int) {
 		if err != nil {
 			errUtils.CaptureError(err)
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 			return errUtils.GetExitCode(err)
 		}
 		return 0 // Exit normally after printing version.
@@ -81,12 +108,19 @@ func run() (exitCode int) {
 
 	err := cmd.Execute()
 	if err != nil {
+		// Silent exit-code carriers (terminal-handoff steps) propagate the
+		// child's code without themed rendering, which would query the
+		// terminal and can hang when stdin is still contended by the session.
+		if code, ok := silentExitCode(err); ok {
+			return code
+		}
+
 		// Capture error to Sentry if configured (safe to call even if Sentry not initialized).
 		errUtils.CaptureError(err)
 
 		// Format and print error using centralized formatter.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)
@@ -95,6 +129,25 @@ func run() (exitCode int) {
 	}
 
 	return 0
+}
+
+// silentExitCode reports the exit code to use when err is a silent exit-code
+// carrier (a terminal-handoff step that exited non-zero). Such errors must
+// propagate the code without themed rendering, which would query the terminal
+// and can hang when the session still contends for stdin.
+func silentExitCode(err error) (int, bool) {
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) && exitCodeErr.Silent {
+		return exitCodeErr.Code, true
+	}
+	return 0, false
+}
+
+// shouldExitOnSignal reports whether the process should exit in response to sig.
+// SIGINT is ignored while a foreground interactive/TTY step owns the terminal
+// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+func shouldExitOnSignal(sig os.Signal) bool {
+	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 
 // hasVersionFlag checks if --version flag is present in args.
