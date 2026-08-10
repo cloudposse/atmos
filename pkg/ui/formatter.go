@@ -327,6 +327,8 @@ func Success(text string) {
 
 // SuccessTo writes a success message to writer, or the UI channel when writer is nil.
 func SuccessTo(writer stdio.Writer, text string) {
+	defer perf.Track(nil, "ui.SuccessTo")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.SuccessTo called before InitFormatter")
@@ -342,6 +344,8 @@ func Successf(format string, a ...interface{}) {
 
 // SuccessTof writes a formatted success message to writer, or the UI channel when writer is nil.
 func SuccessTof(writer stdio.Writer, format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.SuccessTof")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.SuccessTof called before InitFormatter")
@@ -387,6 +391,8 @@ func Warning(text string) {
 
 // WarningTo writes a warning message to writer, or the UI channel when writer is nil.
 func WarningTo(writer stdio.Writer, text string) {
+	defer perf.Track(nil, "ui.WarningTo")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.WarningTo called before InitFormatter")
@@ -402,6 +408,8 @@ func Warningf(format string, a ...interface{}) {
 
 // WarningTof writes a formatted warning message to writer, or the UI channel when writer is nil.
 func WarningTof(writer stdio.Writer, format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.WarningTof")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.WarningTof called before InitFormatter")
@@ -417,6 +425,8 @@ func Info(text string) {
 
 // InfoTo writes an info message to writer, or the UI channel when writer is nil.
 func InfoTo(writer stdio.Writer, text string) {
+	defer perf.Track(nil, "ui.InfoTo")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.InfoTo called before InitFormatter")
@@ -432,6 +442,8 @@ func Infof(format string, a ...interface{}) {
 
 // InfoTof writes a formatted info message to writer, or the UI channel when writer is nil.
 func InfoTof(writer stdio.Writer, format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.InfoTof")()
+
 	f, err := getFormatter()
 	if err != nil {
 		log.Debug("ui.InfoTof called before InitFormatter")
