@@ -36,14 +36,25 @@ type Variables struct {
 	// updates templateEnv without changing the environment of later processes.
 	templateEnv map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
-	Flags            map[string]string
-	AtmosConfig      *schema.AtmosConfiguration
-	ToolchainPATH    string
-	componentInfo    ComponentInfoResolver
-	templateRoots    map[string]any
-	templateRenderer TemplateRenderer
-	templatePasses   int
-	protectedRoots   map[string]struct{}
+	Flags         map[string]string
+	AtmosConfig   *schema.AtmosConfiguration
+	ToolchainPATH string
+	componentInfo ComponentInfoResolver
+	// componentWorkingDir is the effective on-disk working directory of the
+	// hook's component (pkg/hooks.ComponentPath's return value), used only to
+	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory
+	// value in BaseHandler.resolveWorkingDirectory. Populated exclusively by
+	// pkg/hooks (via SetComponentWorkingDirectory); workflows and custom
+	// commands never set it, so bare-relative working_directory values there
+	// keep resolving against the process cwd exactly as before this field
+	// existed. Distinct from componentInfo/SetComponentInfoResolver above,
+	// which is an unrelated lookup-by-name resolver for arbitrary components,
+	// used only by tflint.go and populated only by workflows/custom commands.
+	componentWorkingDir string
+	templateRoots       map[string]any
+	templateRenderer    TemplateRenderer
+	templatePasses      int
+	protectedRoots      map[string]struct{}
 	// stageIndex tracks current stage position (1-indexed).
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
@@ -236,6 +247,16 @@ func (v *Variables) SetComponentInfoResolver(resolver ComponentInfoResolver) {
 	defer perf.Track(nil, "step.Variables.SetComponentInfoResolver")()
 
 	v.componentInfo = resolver
+}
+
+// SetComponentWorkingDirectory records the effective on-disk working
+// directory of the current hook's component (pkg/hooks.ComponentPath(ctx)),
+// used to anchor a bare-relative explicit step.WorkingDirectory value. Only
+// pkg/hooks calls this.
+func (v *Variables) SetComponentWorkingDirectory(path string) {
+	defer perf.Track(nil, "step.Variables.SetComponentWorkingDirectory")()
+
+	v.componentWorkingDir = path
 }
 
 func (v *Variables) ResolveComponentInfo(ctx context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
