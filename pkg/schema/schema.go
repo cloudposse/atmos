@@ -1572,17 +1572,17 @@ type ConfigAndStacksInfo struct {
 	// InvokedSubCommand is the original subcommand as typed by the user, captured before any
 	// internal conversion (e.g., before "deploy" is normalized to "apply" by handleDeploySubcommand).
 	// When set, upload paths use this value for audit trail fidelity instead of SubCommand.
-	InvokedSubCommand             string
-	StackSection                  AtmosSectionMapType
-	ComponentSection              AtmosSectionMapType
-	ComponentVarsSection          AtmosSectionMapType
-	ComponentSettingsSection      AtmosSectionMapType
-	ComponentOverridesSection     AtmosSectionMapType
-	ComponentProvidersSection     AtmosSectionMapType
-	ComponentHooksSection         AtmosSectionMapType
-	ComponentEnvSection           AtmosSectionMapType
-	ComponentAuthSection          AtmosSectionMapType
-	ComponentEnvList              []string
+	InvokedSubCommand         string
+	StackSection              AtmosSectionMapType
+	ComponentSection          AtmosSectionMapType
+	ComponentVarsSection      AtmosSectionMapType
+	ComponentSettingsSection  AtmosSectionMapType
+	ComponentOverridesSection AtmosSectionMapType
+	ComponentProvidersSection AtmosSectionMapType
+	ComponentHooksSection     AtmosSectionMapType
+	ComponentEnvSection       AtmosSectionMapType
+	ComponentAuthSection      AtmosSectionMapType
+	ComponentEnvList          []string
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as
@@ -1590,7 +1590,7 @@ type ConfigAndStacksInfo struct {
 	// Computed once early in the execution pipeline (right after secret resolution,
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
-	TerraformSecretVarKeys        map[string]bool
+	TerraformSecretVarKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
