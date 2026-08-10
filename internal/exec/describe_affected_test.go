@@ -1910,6 +1910,13 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 		t.Setenv("GITHUB_BASE_REF", "main")
+		// Force the GITHUB_BASE_REF fallback path deterministically. Without
+		// this, resolveMergeGroupBase reads the real ambient $GITHUB_EVENT_PATH
+		// when the test suite itself happens to run inside an actual
+		// merge_group-triggered CI job -- succeeding via event.merge_group.base_sha
+		// instead of the fallback this test means to exercise, leaving
+		// describe.Ref empty and failing the assertion below.
+		t.Setenv("GITHUB_EVENT_PATH", "")
 
 		flags := newDescribeAffectedFlagSet()
 		describe := &DescribeAffectedCmdArgs{
