@@ -235,6 +235,39 @@ func TestClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 	assert.Contains(t, client.mcpServers, "aws-docs")
 }
 
+// TestClient_MCPServers_OnlyFilteredSubset_WhenMCPFlagUsed documents that this
+// client always captures exactly atmosConfig.MCP.Servers verbatim — it has no
+// awareness of the --mcp flag itself. The actual `--mcp` filtering for CLI
+// providers happens one layer up, in cmd/ai's clientConfigForMCP (see
+// cmd/ai/init_test.go's TestClientConfigForMCP), which passes this client an
+// atmosConfig whose MCP.Servers is already narrowed to the requested subset.
+// This test simulates that pre-filtered input and confirms the client passes
+// exactly that subset through to the CLI subprocess, with no server outside
+// the --mcp selection leaking in.
+func TestClient_MCPServers_OnlyFilteredSubset_WhenMCPFlagUsed(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				ProviderName: {Binary: "/usr/local/bin/claude"},
+			},
+		},
+		MCP: schema.MCPSettings{
+			// Simulates cmd/ai's clientConfigForMCP already having filtered
+			// "gcp" and "azure" out in response to e.g. `--mcp aws-docs`.
+			Servers: map[string]schema.MCPServerConfig{
+				"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Len(t, client.mcpServers, 1)
+	assert.Contains(t, client.mcpServers, "aws-docs")
+	assert.NotContains(t, client.mcpServers, "gcp")
+	assert.NotContains(t, client.mcpServers, "azure")
+}
+
 func TestParseResponse_WhitespaceOnly(t *testing.T) {
 	_, err := parseResponse([]byte("   \n  \t  "))
 	assert.Error(t, err)
