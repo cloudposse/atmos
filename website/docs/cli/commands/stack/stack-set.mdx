@@ -34,12 +34,21 @@ atmos stack set <path> <value> -s <stack> -c <component> [--type <type>] [--file
 # a bool/int stays a bool/int, not a quoted string.
 atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
 
+# A brand-new vars.<name> key with nothing existing to infer from still infers
+# correctly if the component's variables.tf declares a type for it -- writes
+# an unquoted number, not the string "3", because `variable "replicas" { type
+# = number }` says so. This also retypes an existing value if it disagrees
+# with the declared type (e.g. a number stored as a quoted string).
+atmos stack set vars.replicas 3 -s plat-ue2-prod -c vpc
+
 # Explicit --type skips inference (needed for a brand-new key with nothing to
 # infer from, or to override).
 atmos stack set settings.spacelift.workspace_enabled true --type=bool -s plat-ue2-prod -c vpc
 
-# Edit (or create the key in) a specific manifest.
-atmos stack set vars.new_flag yes --file stacks/deploy/prod.yaml -s plat-ue2-prod -c vpc
+# Edit (or create the key in) a specific manifest. A brand-new key with no
+# Terraform-declared type still infers from its own shape -- "true" is
+# written as a bool here, not the literal string "true".
+atmos stack set vars.new_flag true --file stacks/deploy/prod.yaml -s plat-ue2-prod -c vpc
 ```
 
 ## Arguments
@@ -59,7 +68,10 @@ atmos stack set vars.new_flag yes --file stacks/deploy/prod.yaml -s plat-ue2-pro
   <dt>`--component` / `-c` (string, required)</dt>
   <dd>The component name.</dd>
   <dt>`--type` (string, default `auto`)</dt>
-  <dd>How to interpret `<value>`: `auto` (infer from the type of the value already at the path, falling back to string with a warning), `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
+  <dd>How to interpret `<value>`: `auto` (infer from the component's declared Terraform variable
+  type for `vars.*` paths, then from the type of the value already at the path, then from the new
+  value's own shape, falling back to string with a warning), `string`, `int`, `bool`, `float`,
+  `null`, or `yaml` (raw literal).</dd>
   <dt>`--file` (string)</dt>
   <dd>Edit this manifest explicitly instead of resolving via provenance. Required when the value is not yet defined anywhere; can also be used to create new keys.</dd>
 </dl>

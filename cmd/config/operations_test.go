@@ -306,7 +306,14 @@ func TestConfigSetCommand_AutoInfersFromExistingValue(t *testing.T) {
 // TestConfigSetCommand_AutoFallsBackToStringForNewKey covers --type=auto when
 // the path is neither schema-modeled nor already present in the file -- there
 // is nothing to infer from, so it must fall back to string.
-func TestConfigSetCommand_AutoFallsBackToStringForNewKey(t *testing.T) {
+// TestConfigSetCommand_AutoGuessesTypeForNewNumericLookingKey is a
+// regression test for the "auto nag" fix: --type=auto used to fall all the
+// way back to a plain string for a path the schema doesn't model with no
+// existing value, only warning that the value looked like it could've been
+// a bool/int/float without ever acting on that judgment. "settings.replicas"
+// isn't a real AtmosSettings field, so this exercises the shape-guess
+// fallback tier specifically: "5" must now be inferred as TypeInt.
+func TestConfigSetCommand_AutoGuessesTypeForNewNumericLookingKey(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")
 	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
@@ -328,7 +335,73 @@ func TestConfigSetCommand_AutoFallsBackToStringForNewKey(t *testing.T) {
 
 	content, err := os.ReadFile(file)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), `replicas: "5"`)
+	contentStr := string(content)
+	assert.Contains(t, contentStr, "replicas: 5")
+	assert.NotContains(t, contentStr, `replicas: "5"`)
+}
+
+// TestConfigSetCommand_AutoFallsBackToStringForGenuineNewStringKey keeps
+// real string-fallback coverage alive: a brand-new, schema-unmodeled path
+// whose value doesn't look like a bool/int/float at all must still land on
+// TypeString, with no change in behavior from before the "auto nag" fix.
+func TestConfigSetCommand_AutoFallsBackToStringForGenuineNewStringKey(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.color", "blue"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.color")
+	require.NoError(t, err)
+	assert.Equal(t, "blue", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "settings.color")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ)
+}
+
+// TestConfigSetCommand_ShapeGuess_NaNFailsClosed is a regression test for
+// the one narrow case where GuessScalarType still fails closed: a
+// brand-new, schema-unmodeled path whose value is the bare "nan" literal
+// must land on TypeString, not error out and not silently coerce to a
+// numeric type it can't safely write (see
+// pkg/yaml.TestBuildValidatedRHS_FloatRejectsNaNAndInf). Asserted via
+// GetFile's resolved value, not a specific quote style: pkg/yaml.GetType and
+// yaml.v3 (Atmos's actual config loader) both already resolve an unquoted
+// "nan" as a plain string -- unlike ".nan", the bare form was never
+// ambiguous on read, so either quoting is a correct, safe result here.
+func TestConfigSetCommand_ShapeGuess_NaNFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.threshold", "nan"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.threshold")
+	require.NoError(t, err)
+	assert.Equal(t, "nan", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "settings.threshold")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ, "must resolve back as a string, not a numeric type")
 }
 
 // TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull is a regression

@@ -21,15 +21,16 @@ preserves comments, anchors/aliases, Atmos YAML functions, and Go templates.
 atmos config set <path> <value> [--type <type>]
 ```
 
-By default (`--type=auto`) the value's type is inferred in two steps: first from
+By default (`--type=auto`) the value's type is inferred in order: first from
 the Atmos config schema when `<path>` matches a known field (`mcp.enabled` writes
 a boolean, `settings.terminal.max_width` writes an int, and so on); otherwise from
 the type of the value already at `<path>` (a `true`/`false` already there infers
-bool, a bare number infers int/float). If neither source has an answer — most
-commonly a free-form `vars` path being set for the first time — it falls back to
-writing a string, and Atmos prints a warning when the value looks like it could
-have been a bool or number, since that fallback is easy to miss. Pass `--type`
-explicitly to skip inference entirely.
+bool, a bare number infers int/float); otherwise from the new value's own shape
+(`5` infers int, `true` infers bool, `3.14` infers float). Only when none of those
+have an answer — the value doesn't even look like a bool/int/float, e.g. a plain
+word for a brand-new `vars` path — does it fall back to writing a string, and
+Atmos prints a warning in that case since the fallback is easy to miss. Pass
+`--type` explicitly to skip inference entirely.
 
 ## Examples
 
@@ -41,9 +42,15 @@ atmos config set components.terraform.apply_auto_approve true
 # Type inferred from the existing value at the path (no schema entry needed).
 atmos config set vars.replicas 5
 
-# String value (the fallback when neither the schema nor an existing value
-# has an answer -- Atmos warns here since "true" looks non-string).
+# Type inferred from the new value's own shape -- vars.debug_enabled has no
+# schema entry and no existing value, but "true" looks like a bool, so it's
+# written as one, not the literal string "true".
 atmos config set vars.debug_enabled true
+
+# String value (the fallback when nothing above has an answer -- Atmos warns
+# here since "nan" looks like it could be numeric but can't be written as a
+# float safely, so it's stored as the literal string instead).
+atmos config set vars.threshold nan
 
 # Explicit --type overrides inference.
 atmos config set --type=string logs.level Debug
@@ -69,7 +76,7 @@ atmos config set logs.level Trace --config ./atmos.yaml
 
 <dl>
   <dt>`--type` (string, default: `auto`)</dt>
-  <dd>How to interpret `<value>`: `auto` (infer from the schema, then from the existing value at the path, falling back to string), `string`, `int`, `bool`, `float`, `null`, or `yaml` (a raw YAML/yq literal inserted verbatim).</dd>
+  <dd>How to interpret `<value>`: `auto` (infer from the schema, then from the existing value at the path, then from the new value's own shape, falling back to string), `string`, `int`, `bool`, `float`, `null`, or `yaml` (a raw YAML/yq literal inserted verbatim).</dd>
   <dt>`--config` (string, inherited)</dt>
   <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
 </dl>

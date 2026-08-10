@@ -68,6 +68,47 @@ func LooksNonString(raw string) bool {
 	return looksNonStringPattern.MatchString(strings.TrimSpace(raw))
 }
 
+// GuessNumericType reports whether raw parses, via the same validated logic
+// buildValidatedRHS uses, as TypeInt or TypeFloat -- int tried first, then
+// float. Returns ("", false) when raw matches neither, including when the
+// float branch would only succeed as NaN/Infinity: buildValidatedRHS
+// deliberately rejects those (see its doc comment), so the guess fails
+// closed to "no signal" instead of propagating that error to the caller.
+func GuessNumericType(raw string) (string, bool) {
+	defer perf.Track(nil, "yaml.GuessNumericType")()
+
+	trimmed := strings.TrimSpace(raw)
+	if _, err := buildValidatedRHS(trimmed, TypeInt); err == nil {
+		return TypeInt, true
+	}
+	if _, err := buildValidatedRHS(trimmed, TypeFloat); err == nil {
+		return TypeFloat, true
+	}
+	return "", false
+}
+
+// GuessScalarType reports the concrete TypeBool/TypeInt/TypeFloat implied by
+// raw's shape (bool/int/float, per LooksNonString), validated via
+// GuessNumericType so the guess is guaranteed to write successfully.
+// Returns ("", false) for anything LooksNonString rejects, and -- narrowly
+// -- for values LooksNonString accepts but the numeric guess rejects
+// (currently: the bare literal "nan", never a signed or dotted form).
+func GuessScalarType(raw string) (string, bool) {
+	defer perf.Track(nil, "yaml.GuessScalarType")()
+
+	trimmed := strings.TrimSpace(raw)
+	if !LooksNonString(trimmed) {
+		return "", false
+	}
+	// Checked as literal words, not strconv.ParseBool: ParseBool also
+	// accepts "1"/"0"/"t"/"f", which would wrongly steal digit-shaped
+	// values away from the int branch below.
+	if strings.EqualFold(trimmed, "true") || strings.EqualFold(trimmed, "false") {
+		return TypeBool, true
+	}
+	return GuessNumericType(trimmed)
+}
+
 // buildRHS coerces a CLI string value into a yq right-hand-side expression
 // according to valueType. An empty valueType defaults to TypeString. Plain
 // (non-validating) types are handled here; numeric/boolean types that need

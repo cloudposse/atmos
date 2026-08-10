@@ -47,7 +47,9 @@ var configSetCmd = &cobra.Command{
 anchors, YAML functions, and templates. By default (--type=auto) the value's
 type is inferred: from the Atmos config schema when the path matches a known
 field (e.g. mcp.enabled infers bool), otherwise from the type of the value
-already at that path, otherwise string. Pass --type explicitly to override.`,
+already at that path, otherwise from the new value's own shape (e.g. "5"
+infers int, "true" infers bool), otherwise string. Pass --type explicitly to
+override.`,
 	Example: "atmos config set logs.level debug\natmos config set mcp.enabled true\natmos config set --type=yaml logs.exclude '[\"a\", \"b\"]'",
 	Args:    cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,7 +60,7 @@ already at that path, otherwise string. Pass --type explicitly to override.`,
 			return err
 		}
 
-		effectiveType, resolved, err := effectiveValueType(file, args[0])
+		effectiveType, resolved, err := effectiveValueType(file, args[0], args[1])
 		if err != nil {
 			return err
 		}
@@ -102,7 +104,13 @@ already at that path, otherwise string. Pass --type explicitly to override.`,
 // silently falling through to TypeString, which would otherwise replace the
 // list/map with a plain string with no indication anything destructive
 // happened.
-func effectiveValueType(file, dotPath string) (valType string, resolved bool, err error) {
+//
+// When neither source resolves anything, rawValue's own shape is tried last
+// (atmosyaml.GuessScalarType) -- e.g. "true"/"5"/"3.14" are inferred as
+// bool/int/float directly instead of falling back to string. Only a value
+// that doesn't even look like a bool/int/float reaches the final
+// TypeString/resolved=false fallback.
+func effectiveValueType(file, dotPath, rawValue string) (valType string, resolved bool, err error) {
 	if valueType != atmosyaml.TypeAuto {
 		return valueType, true, nil
 	}
@@ -117,6 +125,9 @@ func effectiveValueType(file, dotPath string) (valType string, resolved bool, er
 			return "", false, newNonScalarInferenceError(dotPath)
 		}
 		return inferred, true, nil
+	}
+	if guessed, ok := atmosyaml.GuessScalarType(rawValue); ok {
+		return guessed, true, nil
 	}
 	return atmosyaml.TypeString, false, nil
 }
@@ -133,9 +144,14 @@ func newNonScalarInferenceError(dotPath string) error {
 
 // warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything
 // (effectiveValueType's resolved was false) and a value that looks like a
-// bool or number is about to be written as a literal string -- otherwise
-// `atmos config set settings.foo true` silently stores the string "true",
-// not the boolean, with no indication it happened.
+// bool or number is about to be written as a literal string anyway. Since
+// GuessScalarType now handles the ordinary case (e.g. "true" on an
+// unmodeled path infers TypeBool directly, never reaching here), this fires
+// only for the one case GuessScalarType itself deliberately fails closed on:
+// a bare "nan" literal, which looks numeric but can't be safely written as a
+// float (see pkg/yaml.GuessNumericType) -- otherwise it would silently store
+// the string "nan" with no indication a numeric interpretation was
+// attempted and rejected.
 func warnIfSilentlyStoredAsString(value string) {
 	if !atmosyaml.LooksNonString(value) {
 		return
@@ -197,7 +213,8 @@ Atmos YAML functions, and Go templates.`,
 func init() {
 	configSetCmd.Flags().StringVar(&valueType, "type", atmosyaml.TypeAuto,
 		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
-			"auto infers from the Atmos config schema, then from the existing value at the path, falling back to string.")
+			"auto infers from the Atmos config schema, then from the existing value at the path, "+
+			"then from the new value's own shape, falling back to string.")
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent

@@ -20,6 +20,12 @@ components:
         foo: "foo catalog default"
         bar: "bar catalog default"
         baz: "baz catalog default"
+        # Deliberately quoted, even though variables.tf declares `quota` as
+        # `number` -- used to field-test that a Terraform-declared type wins
+        # over an already-stored value's type ("stack set" must retype this
+        # to an unquoted number, not leave it quoted because a value already
+        # exists here).
+        quota: "5"
 
     # A component whose `region` is a YAML anchor definition, aliased by the
     # component below IN THIS SAME FILE (anchors/aliases don't cross files --

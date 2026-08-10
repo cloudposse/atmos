@@ -136,3 +136,84 @@ func TestBuildValidatedRHS_FloatRejectsNaNAndInf(t *testing.T) {
 		})
 	}
 }
+
+// TestGuessNumericType is a regression test for the "auto nag" fix: --type=auto
+// used to only warn that a brand-new value looked numeric, never actually
+// infer int/float from it. GuessNumericType is the function that now does
+// that inference, reusing buildValidatedRHS so a guess is guaranteed to
+// write successfully.
+func TestGuessNumericType(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		want   string
+		wantOK bool
+	}{
+		{"plain int", "5", TypeInt, true},
+		{"negative int", "-5", TypeInt, true},
+		{"leading-zero int canonicalizes", "010", TypeInt, true},
+		{"plain float", "5.5", TypeFloat, true},
+		{"leading-dot float", ".5", TypeFloat, true},
+		{"trailing-dot float", "5.", TypeFloat, true},
+		{"scientific notation", "1e3", TypeFloat, true},
+		// Go's strconv.ParseInt(v, 10, 64) rejects underscore digit
+		// separators at base 10 (they require base 0), but
+		// strconv.ParseFloat accepts them unconditionally -- so this lands
+		// on TypeFloat, not TypeInt. Pre-existing buildValidatedRHS quirk,
+		// documented here rather than "fixed", since GuessNumericType is
+		// defined to reuse that exact validation.
+		{"underscore-separated int lands on float", "1_000", TypeFloat, true},
+		{"bare nan fails closed (rejected by buildValidatedRHS)", "nan", "", false},
+		{"bare inf fails closed", "Infinity", "", false},
+		{"not numeric at all", "hello", "", false},
+		{"empty string", "", "", false},
+		{"region-like string", "us-east-1", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := GuessNumericType(tt.raw)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestGuessScalarType is a regression test for the "auto nag" fix:
+// GuessScalarType is what effectiveStackValueType/effectiveValueType now
+// call as the last inference tier before falling back to string, so a
+// brand-new key like `vars.replicas 5` infers TypeInt directly instead of
+// warning and storing "5" as a literal string.
+func TestGuessScalarType(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		want   string
+		wantOK bool
+	}{
+		{"bool true", "true", TypeBool, true},
+		{"bool false lowercase", "false", TypeBool, true},
+		{"bool mixed case", "True", TypeBool, true},
+		{"int", "5", TypeInt, true},
+		{"float", "3.14", TypeFloat, true},
+		// "1"/"0" must NOT be stolen by a strconv.ParseBool-style bool
+		// check -- they're digits, so they belong to the int branch.
+		{"digit one is int not bool", "1", TypeInt, true},
+		{"digit zero is int not bool", "0", TypeInt, true},
+		// The narrow case where LooksNonString says "looks numeric" but the
+		// validated guess still fails closed: bare "nan", never a signed or
+		// dotted form (those don't match LooksNonString to begin with).
+		{"bare nan fails closed", "nan", "", false},
+		{"NaN mixed case fails closed", "NaN", "", false},
+		{"not non-string at all", "hello", "", false},
+		{"region-like string", "us-east-1", "", false},
+		{"hex literal (LooksNonString excludes it)", "0x1A", "", false},
+		{"leading-dot inf (LooksNonString excludes it)", ".inf", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := GuessScalarType(tt.raw)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
