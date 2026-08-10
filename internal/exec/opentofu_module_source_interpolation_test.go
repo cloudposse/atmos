@@ -112,10 +112,11 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 		componentInfo, ok := componentSection["component_info"].(map[string]any)
 		require.True(t, ok, "component_info should be present")
 
-		// Check if validation was skipped for the known module-source-interpolation diagnostic.
-		if skipped, exists := componentInfo["validation_skipped_module_source_interpolation"]; exists {
-			assert.True(t, skipped.(bool), "validation_skipped_module_source_interpolation should be true when module source interpolation is detected")
-		}
+		// Check that validation was skipped for the known module-source-interpolation diagnostic.
+		skipped, exists := componentInfo["validation_skipped_module_source_interpolation"]
+		require.True(t, exists, "validation_skipped_module_source_interpolation should be present")
+		require.IsType(t, true, skipped, "validation_skipped_module_source_interpolation should be a bool")
+		assert.True(t, skipped.(bool), "validation_skipped_module_source_interpolation should be true when module source interpolation is detected")
 
 		// Terraform config may be nil (validation skipped) or contain partial info.
 		// Either is acceptable - the important part is that the error didn't fail the operation.

@@ -188,7 +188,9 @@ func TestAppendModulesForDirectoryHandlesRunTerraformModulesErrors(t *testing.T)
 // appendModulesForDirectory passes that resolved value straight through rather than needing to
 // resolve it itself (see issue #2913 investigation).
 func TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource(t *testing.T) {
-	t.Parallel()
+	// Not t.Parallel(): this test replaces the package-global runTerraformModules hook, as does
+	// TestAppendTerraformMarksModulesIncompleteWhenLocalModuleUnresolvable. Running both in
+	// parallel risks one test's assignment/cleanup racing the other's.
 	directory := t.TempDir()
 	moduleDir := filepath.Join(directory, "mods", "acme")
 	require.NoError(t, os.MkdirAll(moduleDir, 0o755))
