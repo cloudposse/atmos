@@ -24,6 +24,7 @@ overrides:
   mermaid@^11: ^11.16.1
   minimatch@^9: ^9.0.7
   nanoid@3.3.3: ^3.3.17
+  nanoid@^3.3.16: ^3.3.17
   nanoid@4.0.2: ^5.1.16
   nanoid@^3.3.16: ^3.3.17
   node-forge@^1: ^1.4.0
