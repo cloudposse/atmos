@@ -72,15 +72,20 @@ jobs:
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
-          # soon as the queue cycles (every few minutes), which routinely races
-          # the upload for this multi-minute analysis and fails it with "ref
-          # not found" / "configuration error" -- even though nothing is
-          # actually wrong. Results can't be meaningfully associated with a ref
-          # that no longer exists by the time the queue re-evaluates, so only
-          # upload on pull_request/push, where the ref is stable. `upload`
-          # only accepts the string enum always/failure-only/never, not a
-          # boolean.
-          upload: ${{ case(github.event_name == 'merge_group', 'never', 'always') }}
+          # soon as the queue cycles, which routinely races the upload for this
+          # multi-minute analysis and fails it with "ref not found" if the
+          # action is left to auto-detect ref/sha from GITHUB_REF/GITHUB_SHA
+          # (the doomed ephemeral ref). Skipping the upload entirely (an
+          # earlier attempt at this fix) isn't right either: the native
+          # "CodeQL" required status check is only created when a SARIF
+          # upload actually happens, so skipping it left that required check
+          # permanently missing for merge_group commits -- the merge queue
+          # then waits out its full timeout for a check that will never
+          # report, exactly like the PR Semver Labels gap. Instead, point the
+          # upload at the queue's real target branch ref (which persists)
+          # while still analyzing the actual queued merge commit.
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   lint-golangci:
     name: "Lint (golangci)"
@@ -191,14 +196,19 @@ jobs:
       - name: Upload filtered SARIF results
         # merge_group's ephemeral gh-readonly-queue/... ref is deleted as soon
         # as the queue cycles, which routinely races this upload and fails it
-        # with "ref not found" even though nothing is actually wrong. Only
-        # upload on pull_request/push, where the ref is stable; still run
-        # (and still report pass/fail) on merge_group so the merge queue's
-        # required check gets a result, it just skips the doomed upload.
-        if: always() && github.event_name != 'merge_group'
+        # with "ref not found" if left to auto-detect ref/sha from
+        # GITHUB_REF/GITHUB_SHA (the doomed ephemeral ref). Point it at the
+        # queue's real target branch ref (which persists) while still
+        # uploading results for the actual queued merge commit, same as the
+        # CodeQL analyze step above -- skipping the upload outright isn't an
+        # option here either: it would leave the native "CodeQL" code-scanning
+        # required check without this SARIF's contribution.
+        if: always()
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: golangci-lint.sarif
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   pr-semver-labels:
     name: PR Semver Labels
