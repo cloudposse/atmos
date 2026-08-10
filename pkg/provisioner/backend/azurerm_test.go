@@ -573,6 +573,36 @@ func TestDeleteAzurermBackend(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrDeleteStorageAccount)
 	})
+
+	t.Run("storage account check error", func(t *testing.T) {
+		mock := &mockAzureBackendClient{
+			storageAccountExistsFunc: func(context.Context, string, string) (bool, error) { return false, errors.New("boom") },
+		}
+		useMockAzureClient(t, mock)
+		err := DeleteAzurermBackend(context.Background(), nil, validAzurermBackendConfig(), nil, true)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCheckStorageAccountExist)
+	})
+}
+
+// TestAzurerm_InvalidConfigPropagates covers the extractAzurermConfig error branch shared by
+// Create/Exists/Delete — a bad config must surface before any client is built.
+func TestAzurerm_InvalidConfigPropagates(t *testing.T) {
+	// Missing storage_account_name.
+	bad := map[string]any{
+		"container_name":      "tfstate",
+		"resource_group_name": "rg-tfstate",
+		"subscription_id":     "sub",
+	}
+
+	_, err := CreateAzurermBackend(context.Background(), nil, bad, nil)
+	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
+
+	_, err = AzurermBackendExists(context.Background(), nil, bad, nil)
+	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
+
+	err = DeleteAzurermBackend(context.Background(), nil, bad, nil, true)
+	assert.ErrorIs(t, err, errUtils.ErrStorageAccountRequired)
 }
 
 func TestNewAzureBackendClient(t *testing.T) {
