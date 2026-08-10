@@ -55,16 +55,18 @@ var listUsageMarkdown string
 // listEntry is the merged view of a skill: a catalog entry, an installed skill,
 // or both. It powers the available-vs-installed listing.
 type listEntry struct {
-	name          string
-	displayName   string
-	description   string
-	version       string
-	source        string
-	displaySource string
-	category      string
-	available     bool                        // True when part of the bundled catalog.
-	installed     bool                        // True when installed locally.
-	skill         *marketplace.InstalledSkill // Non-nil when installed.
+	name            string
+	displayName     string
+	description     string
+	version         string
+	catalogVersion  string // Catalog's current version; only set for catalog-tracked entries, used to detect updateAvailable.
+	source          string
+	displaySource   string
+	category        string
+	available       bool                        // True when part of the bundled catalog.
+	installed       bool                        // True when installed locally.
+	updateAvailable bool                        // True when an installed catalog skill's version differs from the catalog's current version.
+	skill           *marketplace.InstalledSkill // Non-nil when installed.
 }
 
 // listCmd represents the 'atmos ai skill list' command.
@@ -156,20 +158,25 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 	for _, c := range catalog {
 		seen[c.Name] = true
 		e := listEntry{
-			name:          c.Name,
-			displayName:   c.DisplayName,
-			description:   c.Description,
-			version:       c.Version,
-			source:        c.Source,
-			displaySource: sourceBuiltIn,
-			category:      c.Category,
-			available:     true,
+			name:           c.Name,
+			displayName:    c.DisplayName,
+			description:    c.Description,
+			version:        c.Version,
+			catalogVersion: c.Version,
+			source:         c.Source,
+			displaySource:  sourceBuiltIn,
+			category:       c.Category,
+			available:      true,
 		}
 		if s, ok := byName[c.Name]; ok {
 			e.installed = true
 			e.version = s.Version
 			e.source = s.Source
 			e.skill = s
+			// Same rule `atmos ai skill update` uses to decide whether to
+			// reinstall, so the "update available" indicator here always
+			// agrees with what update would actually do.
+			e.updateAvailable = marketplace.SkillVersionOutdated(s.Version, c.Version)
 		}
 		entries = append(entries, e)
 	}
@@ -335,7 +342,11 @@ func entryState(e *listEntry) string {
 		status = "disabled"
 	}
 
-	return fmt.Sprintf("installed, %s (%s)", status, versionLabel(e.version))
+	state := fmt.Sprintf("installed, %s (%s)", status, versionLabel(e.version))
+	if e.updateAvailable {
+		state += " (update available)"
+	}
+	return state
 }
 
 func entryType(e *listEntry) string {
@@ -350,6 +361,16 @@ func versionLabel(version string) string {
 		return version
 	}
 	return "v" + version
+}
+
+// versionWithUpdateNote appends a note pointing at the catalog's current version
+// when e.updateAvailable, so the detailed view surfaces the same signal as the
+// summary table's "(update available)" state suffix.
+func versionWithUpdateNote(e *listEntry) string {
+	if !e.updateAvailable {
+		return e.version
+	}
+	return fmt.Sprintf("%s (update available: %s)", e.version, e.catalogVersion)
 }
 
 func legend() string {
@@ -385,7 +406,7 @@ func writeEntryDetail(b *strings.Builder, e *listEntry) {
 	b.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 	writeDetailField(b, "Name", e.name)
-	writeDetailField(b, "Version", e.version)
+	writeDetailField(b, "Version", versionWithUpdateNote(e))
 	writeDetailField(b, "Source", e.source)
 	writeDetailField(b, "Type", entryType(e))
 	if e.description != "" {
@@ -418,6 +439,9 @@ func writeInstalledEntryDetail(b *strings.Builder, skill *marketplace.InstalledS
 	writeDetailField(b, "Installed", formatTime(skill.InstalledAt))
 	writeDetailField(b, "Last Updated", formatTime(skill.UpdatedAt))
 	writeDetailField(b, "Location", skill.Path)
+	if skill.MinAtmosVersion != "" {
+		writeDetailField(b, "Min Atmos", skill.MinAtmosVersion)
+	}
 }
 
 func writeSkillListOutput(content string) error {

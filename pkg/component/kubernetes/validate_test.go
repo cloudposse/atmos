@@ -45,6 +45,24 @@ func TestValidateObjectsStructuralReportsAllFailures(t *testing.T) {
 	assert.ErrorContains(t, err, "missing group/version/kind")
 }
 
+func TestValidateObjectsStructuralInvalidNameMessageIsBacktickFenced(t *testing.T) {
+	// The upstream k8s DNS-1123 message embeds an unbroken regex with '[', ']',
+	// '(', ')' and no spaces to wrap on. Rendered as plain markdown by the CLI's
+	// glamour renderer, those characters collide with link syntax and get
+	// mangled, and the token hard-wraps mid-character at terminal width. Fence
+	// it as a code span so it renders verbatim, monospaced, and unwrapped.
+	objects := []*unstructured.Unstructured{
+		kubernetesObject("v1", "Service", "Bad_Name", ""),
+	}
+
+	err := validateObjectsStructural(objects)
+	require.Error(t, err)
+	msg := err.Error()
+	assert.Contains(t, msg, "`", "the DNS-1123 detail must be backtick-fenced as a code span")
+	assert.Regexp(t, "`[^`]*regex used for validation is[^`]*`", msg,
+		"the regex-bearing detail text must be inside the code span, not plain markdown text")
+}
+
 func TestValidateObjectsStructuralKustomizeConfigObjectsExemptFromName(t *testing.T) {
 	objects := []*unstructured.Unstructured{
 		kubernetesObject("kustomize.config.k8s.io/v1beta1", "Kustomization", "", ""),
@@ -105,11 +123,27 @@ func TestIsKustomizeConfigObject(t *testing.T) {
 }
 
 func TestResolveComponentValidateEnabled(t *testing.T) {
-	assert.True(t, resolveComponentValidateEnabled(nil), "unset defaults to enabled")
-	assert.True(t, resolveComponentValidateEnabled(map[string]any{}), "unset defaults to enabled")
-	assert.True(t, resolveComponentValidateEnabled(map[string]any{"validate": true}))
-	assert.False(t, resolveComponentValidateEnabled(map[string]any{"validate": false}))
-	assert.True(t, resolveComponentValidateEnabled(map[string]any{"validate": "false"}), "non-bool values are ignored, defaulting to enabled")
+	enabled, err := resolveComponentValidateEnabled(nil)
+	require.NoError(t, err)
+	assert.True(t, enabled, "unset defaults to enabled")
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{})
+	require.NoError(t, err)
+	assert.True(t, enabled, "unset defaults to enabled")
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{"validate": true})
+	require.NoError(t, err)
+	assert.True(t, enabled)
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{"validate": false})
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
+func TestResolveComponentValidateEnabledRejectsNonBool(t *testing.T) {
+	_, err := resolveComponentValidateEnabled(map[string]any{"validate": "false"})
+	require.Error(t, err, "a present but non-bool value fails closed instead of silently defaulting to enabled")
+	assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
 }
 
 func TestRunValidate(t *testing.T) {
