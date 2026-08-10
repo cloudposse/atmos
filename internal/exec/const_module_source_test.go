@@ -58,4 +58,5 @@ func TestDescribeComponentWithGenuineSyntaxErrorStillFails(t *testing.T) {
 
 	require.Error(t, err, "a genuine HCL syntax error must still fail")
 	assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+	assert.Contains(t, err.Error(), "block definition")
 }
