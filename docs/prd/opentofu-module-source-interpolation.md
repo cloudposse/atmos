@@ -65,18 +65,17 @@ Atmos performs Terraform/OpenTofu configuration validation during the `ProcessSt
 // internal/exec/utils.go:630
 terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
 if !diags.HasErrors() {
-	componentInfo["terraform_config"] = terraformConfiguration
+  componentInfo["terraform_config"] = terraformConfiguration
 } else {
-	diagErr := diags.Err()
-	// ... error handling
-	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  diagErr := diags.Err()
+  // ... error handling
+  return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
 ### The Problem
 
-1. **Atmos uses `terraform-config-inspect` library** (`github.com/hashicorp/terraform-config-inspect`) to parse and
-   validate Terraform/OpenTofu configurations
+1. **Atmos uses `terraform-config-inspect` library** (`github.com/hashicorp/terraform-config-inspect`) to parse and validate Terraform/OpenTofu configurations
 2. **This library uses Terraform's HCL parser**, which does not recognize OpenTofu-specific syntax extensions
 3. **The validation happens early** in the Atmos pipeline, before any `tofu` commands are executed
 4. **The error is treated as fatal**, preventing any subsequent operations
@@ -205,11 +204,11 @@ The `ProcessStacks()` function already has lenient error handling for certain ca
 // internal/exec/utils.go:636-651
 isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
 isNotExistString := strings.Contains(errMsg, "does not exist") ||
-	strings.Contains(errMsg, "Failed to read directory")
+  strings.Contains(errMsg, "Failed to read directory")
 
 if !isNotExist && !isNotExistString {
-	// For other errors (syntax errors, permission issues, etc.), return error
-	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  // For other errors (syntax errors, permission issues, etc.), return error
+  return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
@@ -252,45 +251,45 @@ internal/exec/utils.go                        # ProcessStacks() integration
 // internal/exec/terraform_detection.go
 
 func IsOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
-	command := atmosConfig.Components.Terraform.Command
-	if command == "" {
-		command = "terraform"
-	}
+  command := atmosConfig.Components.Terraform.Command
+  if command == "" {
+    command = "terraform"
+  }
 
-	// Check cache first
-	if cached, exists := detectionCache[command]; exists {
-		return cached
-	}
+  // Check cache first
+  if cached, exists := detectionCache[command]; exists {
+    return cached
+  }
 
-	// Fast path: Check basename for "tofu"
-	baseName := filepath.Base(command)
-	if strings.Contains(strings.ToLower(baseName), "tofu") {
-		cacheDetectionResult(command, true)
-		return true
-	}
+  // Fast path: Check basename for "tofu"
+  baseName := filepath.Base(command)
+  if strings.Contains(strings.ToLower(baseName), "tofu") {
+    cacheDetectionResult(command, true)
+    return true
+  }
 
-	// Slow path: Execute version command
-	isTofu := detectByVersionCommand(atmosConfig, command)
-	cacheDetectionResult(command, isTofu)
-	return isTofu
+  // Slow path: Execute version command
+  isTofu := detectByVersionCommand(atmosConfig, command)
+  cacheDetectionResult(command, isTofu)
+  return isTofu
 }
 
 func isKnownOpenTofuFeature(err error) bool {
-	if err == nil {
-		return false
-	}
+  if err == nil {
+    return false
+  }
 
-	errMsg := err.Error()
-	openTofuPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
-	}
+  errMsg := err.Error()
+  openTofuPatterns := []string{
+    "Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
+  }
 
-	for _, pattern := range openTofuPatterns {
-		if strings.Contains(errMsg, pattern) {
-			return true
-		}
-	}
-	return false
+  for _, pattern := range openTofuPatterns {
+    if strings.Contains(errMsg, pattern) {
+      return true
+    }
+  }
+  return false
 }
 ```
 
@@ -300,16 +299,16 @@ func isKnownOpenTofuFeature(err error) bool {
 // internal/exec/utils.go:650-661
 
 if !isNotExist && !isNotExistString {
-	// Check if this is an OpenTofu-specific feature
-	if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
-		// For other errors (syntax errors, permission issues, etc.), return error
-		return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
-	}
+  // Check if this is an OpenTofu-specific feature
+  if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
+    // For other errors (syntax errors, permission issues, etc.), return error
+    return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  }
 
-	// Skip validation for known OpenTofu-specific features
-	log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
-	componentInfo["terraform_config"] = nil
-	componentInfo["validation_skipped_opentofu"] = true
+  // Skip validation for known OpenTofu-specific features
+  log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+  componentInfo["terraform_config"] = nil
+  componentInfo["validation_skipped_opentofu"] = true
 }
 ```
 
@@ -401,20 +400,20 @@ func BenchmarkIsKnownOpenTofuFeature(b *testing.B)
 
 ```go
 func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
-	t.Run("describe component with module source interpolation", func(t *testing.T) {
-		// Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
-		componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
-		require.NoError(t, err)
-		// Validates nested variable structure is preserved
-	})
+  t.Run("describe component with module source interpolation", func(t *testing.T) {
+    // Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
+    componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
+    require.NoError(t, err)
+    // Validates nested variable structure is preserved
+  })
 
-	t.Run("varfile generation with nested variables", func(t *testing.T) {
-		// Confirms nested context.build.* variables are in varfile
-	})
+  t.Run("varfile generation with nested variables", func(t *testing.T) {
+    // Confirms nested context.build.* variables are in varfile
+  })
 
-	t.Run("component info validation skipped for opentofu", func(t *testing.T) {
-		// Verifies validation_skipped_opentofu flag is set
-	})
+  t.Run("component info validation skipped for opentofu", func(t *testing.T) {
+    // Verifies validation_skipped_opentofu flag is set
+  })
 }
 ```
 
