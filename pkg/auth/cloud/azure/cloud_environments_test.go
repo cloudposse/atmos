@@ -18,6 +18,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 		expectedName           string
 		expectedLogin          string
 		expectedMgmt           string
+		expectedLegacyMgmt     []string
 		expectedGraph          string
 		expectedKeyVault       string
 		expectedBlobSufx       string
@@ -30,6 +31,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			expectedName:           "public",
 			expectedLogin:          "login.microsoftonline.com",
 			expectedMgmt:           "https://management.azure.com/.default",
+			expectedLegacyMgmt:     []string{"https://management.core.windows.net/.default", "https://management.core.windows.net//.default"},
 			expectedGraph:          "https://graph.microsoft.com/.default",
 			expectedKeyVault:       "https://vault.azure.net/.default",
 			expectedBlobSufx:       "blob.core.windows.net",
@@ -42,6 +44,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			expectedName:           "usgovernment",
 			expectedLogin:          "login.microsoftonline.us",
 			expectedMgmt:           "https://management.usgovcloudapi.net/.default",
+			expectedLegacyMgmt:     []string{"https://management.core.usgovcloudapi.net/.default", "https://management.core.usgovcloudapi.net//.default"},
 			expectedGraph:          "https://graph.microsoft.us/.default",
 			expectedKeyVault:       "https://vault.usgovcloudapi.net/.default",
 			expectedBlobSufx:       "blob.core.usgovcloudapi.net",
@@ -54,6 +57,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			expectedName:           "china",
 			expectedLogin:          "login.chinacloudapi.cn",
 			expectedMgmt:           "https://management.chinacloudapi.cn/.default",
+			expectedLegacyMgmt:     []string{"https://management.core.chinacloudapi.cn/.default", "https://management.core.chinacloudapi.cn//.default"},
 			expectedGraph:          "https://microsoftgraph.chinacloudapi.cn/.default",
 			expectedKeyVault:       "https://vault.azure.cn/.default",
 			expectedBlobSufx:       "blob.core.chinacloudapi.cn",
@@ -66,6 +70,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			expectedName:           "public",
 			expectedLogin:          "login.microsoftonline.com",
 			expectedMgmt:           "https://management.azure.com/.default",
+			expectedLegacyMgmt:     []string{"https://management.core.windows.net/.default", "https://management.core.windows.net//.default"},
 			expectedGraph:          "https://graph.microsoft.com/.default",
 			expectedKeyVault:       "https://vault.azure.net/.default",
 			expectedBlobSufx:       "blob.core.windows.net",
@@ -78,6 +83,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			expectedName:           "public",
 			expectedLogin:          "login.microsoftonline.com",
 			expectedMgmt:           "https://management.azure.com/.default",
+			expectedLegacyMgmt:     []string{"https://management.core.windows.net/.default", "https://management.core.windows.net//.default"},
 			expectedGraph:          "https://graph.microsoft.com/.default",
 			expectedKeyVault:       "https://vault.azure.net/.default",
 			expectedBlobSufx:       "blob.core.windows.net",
@@ -93,6 +99,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			assert.Equal(t, tt.expectedName, env.Name)
 			assert.Equal(t, tt.expectedLogin, env.LoginEndpoint)
 			assert.Equal(t, tt.expectedMgmt, env.ManagementScope)
+			assert.Equal(t, tt.expectedLegacyMgmt, env.LegacyManagementScopes)
 			assert.Equal(t, tt.expectedGraph, env.GraphAPIScope)
 			assert.Equal(t, tt.expectedKeyVault, env.KeyVaultScope)
 			assert.Equal(t, tt.expectedBlobSufx, env.BlobStorageSuffix)
