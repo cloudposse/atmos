@@ -226,7 +226,7 @@ tests are sufficient; **no integration tests** — Phase 1 is fully offline.
 - [ ] Problem-first changelog blog post (tags from `tags.yml`, author from `authors.yml`; no line opens with a backtick).
 - [ ] `roadmap.js` shipped milestone on the Unified Authentication initiative (`featured[]` untouched).
 - [ ] This PRD committed at `docs/prd/rds-iam-authentication.md`.
-- [ ] Open the follow-up GitHub issue (connect/discovery + `aws/rds` integration); link its `#number` in blog/roadmap/PR.
+- [x] Open the follow-up GitHub issue (#2904, connect/discovery + `aws/rds` integration); linked in the PRD/PR.
 
 ## Success Metrics
 
@@ -250,7 +250,7 @@ tests are sufficient; **no integration tests** — Phase 1 is fully offline.
 
 - AWS: IAM database authentication for RDS and Aurora.
 - [`eks-kubeconfig.md`](./eks-kubeconfig.md), [`ecr-public-authentication.md`](./ecr-public-authentication.md).
-- Implementing PR: #<pr>. Follow-up issue: #<issue>.
+- Implementing PR: #2817. Follow-up issue: #2904.
 
 ## Changelog
 
