@@ -1864,6 +1864,16 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 	// Clear CI env vars so auto-detect doesn't interfere.
 	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("CI", "")
+	// Clear GITHUB_EVENT_PATH too: this test suite may itself be running inside a
+	// real GitHub Actions job (e.g. a merge_group-triggered merge-queue run), in
+	// which case the runner sets a real event payload file. Without clearing it,
+	// the "CI auto-detect" subtest below would inherit that real ambient event and
+	// resolveMergeGroupBase would correctly prefer its real merge_group.base_sha
+	// over the subtest's simulated GITHUB_BASE_REF, returning SHA-based resolution
+	// instead of the Ref this subtest asserts on -- a failure that only reproduces
+	// when this test happens to run inside an actual merge_group event, not locally
+	// or in a regular pull_request-triggered CI run.
+	t.Setenv("GITHUB_EVENT_PATH", "")
 
 	t.Run("base with SHA populates SHA field", func(t *testing.T) {
 		flags := newDescribeAffectedFlagSet()

@@ -107,6 +107,44 @@ func TestArchiveHandler_Execute(t *testing.T) {
 	assert.Equal(t, "exports.handler = 1;", string(content))
 }
 
+// TestArchiveHandler_Execute_ResolvesRelativePathsAgainstWorkingDirectory
+// reproduces the reported regression: a relative source/destination must
+// resolve against step.WorkingDirectory, not the Atmos process's own cwd
+// (e.g. when the step runs as a component lifecycle hook).
+func TestArchiveHandler_Execute_ResolvesRelativePathsAgainstWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	// Pin the process cwd to an unrelated scratch dir so this test actually
+	// distinguishes "resolved against WorkingDirectory" from "resolved
+	// against cwd" — the pre-fix behavior.
+	t.Chdir(t.TempDir())
+
+	handler := mustGetArchiveHandler(t)
+	step := &schema.WorkflowStep{
+		Name:             "pkg",
+		Type:             "archive",
+		Source:           "src",
+		Destination:      "out/handler.zip",
+		WorkingDirectory: workDir,
+	}
+	require.NoError(t, handler.Validate(step))
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	wantDest := filepath.Join(workDir, "out", "handler.zip")
+	assert.Equal(t, wantDest, result.Value)
+
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
 func TestArchiveHandler_Execute_ResolvesTemplatedFields(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
