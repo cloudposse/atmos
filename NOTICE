@@ -1376,9 +1376,9 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
 
-  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/storage/armstorage/v1.8.1/sdk/resourcemanager/storage/armstorage/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/storage/armstorage/v4.1.0/sdk/resourcemanager/storage/armstorage/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys
     License: MIT
