@@ -132,6 +132,8 @@ type AtmosConfiguration struct {
 	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
 	HelmDirAbsolutePath           string             `yaml:"helmDirAbsolutePath,omitempty" json:"helmDirAbsolutePath,omitempty" mapstructure:"helmDirAbsolutePath"`
+	VendorDirAbsolutePath         string             `yaml:"vendorDirAbsolutePath,omitempty" json:"vendorDirAbsolutePath,omitempty" mapstructure:"vendorDirAbsolutePath"`
+	WorkflowsDirAbsolutePath      string             `yaml:"workflowsDirAbsolutePath,omitempty" json:"workflowsDirAbsolutePath,omitempty" mapstructure:"workflowsDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -145,22 +147,35 @@ type AtmosConfiguration struct {
 	// SecretsAuth carries the auth-context resolver and effective default identity for cloud-KMS
 	// SOPS providers (sops/aws-kms, sops/gcp-kms, sops/azure-kv). It is transient (never serialized)
 	// and populated alongside the store auth resolver in the `atmos secret` and terraform code paths.
-	SecretsAuth     *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
-	CliConfigPath   string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import          []string                  `yaml:"import" json:"import" mapstructure:"import"`
-	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
-	Compositions    map[string]Composition    `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
-	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
-	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
-	TrackProvenance bool                      `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
-	Toolchain       Toolchain                 `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
-	Git             GitConfig                 `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
-	Devcontainer    map[string]any            `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
-	Profiles        ProfilesConfig            `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
-	Metadata        ConfigMetadata            `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	SecretsAuth   *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
+	CliConfigPath string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	// BasePathConfigDir is the directory of the --config/--config-path source that declared
+	// (or, absent any declaration, the first source that contributed) base_path, used to resolve
+	// a relative (dot-prefixed or empty) base_path correctly when multiple --config files or
+	// --config-path directories are given. CliConfigPath itself becomes a ";"-joined multi-directory
+	// string in that case, which is not a valid single directory to join a relative path against.
+	// Transient, populated during LoadConfig, never serialized.
+	BasePathConfigDir string `yaml:"-" json:"-" mapstructure:"-"`
+	// ProfilesBasePathConfigDir is the directory of the --config file that declared
+	// profiles.base_path, used to resolve a relative profiles.base_path correctly when multiple
+	// --config files are given (cloudposse/atmos#2867: previously always resolved against the
+	// FIRST --config file's directory regardless of which file actually declared it). Transient,
+	// populated during LoadConfig, never serialized.
+	ProfilesBasePathConfigDir string                 `yaml:"-" json:"-" mapstructure:"-"`
+	Import                    []string               `yaml:"import" json:"import" mapstructure:"import"`
+	Docs                      Docs                   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth                      AuthConfig             `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Container                 ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions              map[string]Composition `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
+	Env                       map[string]string      `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps                  *casemap.CaseMaps      `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Profiler                  profiler.Config        `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance           bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain                 Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git                       GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Devcontainer              map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles                  ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata                  ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
@@ -1881,6 +1896,7 @@ type BaseComponentConfig struct {
 	BaseComponentProvider                  string
 	BaseComponentPaths                     any
 	BaseComponentManifests                 any
+	BaseComponentValidate                  any
 	BaseComponentPlugins                   any
 	BaseComponentRender                    AtmosSectionMapType
 	BaseComponentHelm                      AtmosSectionMapType

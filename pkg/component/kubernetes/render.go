@@ -1,7 +1,6 @@
 package kubernetes
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -157,21 +157,15 @@ func writeSplitManifestFiles(outputDir string, objects []*unstructured.Unstructu
 }
 
 func multiDocumentYAML(objects []*unstructured.Unstructured) ([]byte, error) {
-	var buffer bytes.Buffer
-	for i, obj := range objects {
-		if i > 0 {
-			buffer.WriteString("---\n")
-		}
+	docs := make([][]byte, 0, len(objects))
+	for _, obj := range objects {
 		manifest, err := objectYAML(obj)
 		if err != nil {
 			return nil, err
 		}
-		buffer.Write(manifest)
-		if !bytes.HasSuffix(manifest, []byte("\n")) {
-			buffer.WriteByte('\n')
-		}
+		docs = append(docs, manifest)
 	}
-	return buffer.Bytes(), nil
+	return target.MergeYAMLDocuments(docs), nil
 }
 
 func objectYAML(obj *unstructured.Unstructured) ([]byte, error) {

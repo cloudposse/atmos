@@ -4,6 +4,7 @@ description: "Toolchain management: declarative dependencies, automatic installs
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 references:
   - references/commands-reference.md
 ---
