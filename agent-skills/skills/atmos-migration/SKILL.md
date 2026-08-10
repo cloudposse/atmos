@@ -4,6 +4,7 @@ description: "This skill helps you migrate a repository to Atmos. It covers nati
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md

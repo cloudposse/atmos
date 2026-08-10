@@ -91,24 +91,14 @@ func (h *FileHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	return NewStepResult(fullPath), nil
 }
 
-// resolveStartPath resolves and validates the starting path for file scanning.
+// resolveStartPath resolves and validates the starting path for file scanning,
+// anchoring a relative path to step.WorkingDirectory.
 func (h *FileHandler) resolveStartPath(step *schema.WorkflowStep, vars *Variables) (string, error) {
 	startPath := step.Path
 	if startPath == "" {
 		startPath = "."
-	} else {
-		var err error
-		startPath, err = vars.Resolve(startPath)
-		if err != nil {
-			return "", fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
-		}
 	}
-
-	absPath, err := filepath.Abs(startPath)
-	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
-	}
-	return absPath, nil
+	return h.ResolveInWorkingDirectory(step, vars, startPath, "path")
 }
 
 // collectFiles walks the directory and collects matching files.
