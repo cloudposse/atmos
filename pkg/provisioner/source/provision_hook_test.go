@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -1492,7 +1493,7 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{Stderr: &componentOutput})
 	require.NoError(t, err)
 	assert.Empty(t, uiOutput.String())
-	assert.Contains(t, componentOutput.String(), "Auto-provisioned source to")
+	assert.Contains(t, atmosansi.Strip(componentOutput.String()), "Auto-provisioned source to")
 }
 
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies

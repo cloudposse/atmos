@@ -16,7 +16,7 @@ Added `ui.New(writer)` with semantic success, warning, and info methods. Updated
 
 ## Validation
 
-Passed `go build ./...`, focused provisioning and UI tests, and `atmos lint --changed`. `atmos test` has unrelated failures from an inherited `TF_PLUGIN_CACHE_DIR` under `/Users/...` and a CLI cleanup timeout. The website build is blocked by the existing `website` lockfile/dependency mismatch.
+Passed `go build ./...`, focused provisioning and UI tests, and `atmos lint --changed`. Component-output tests strip ANSI sequences before semantic assertions so they are stable on color-capable macOS runners.
 
 ## Follow-ups
 

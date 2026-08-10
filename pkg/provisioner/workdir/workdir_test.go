@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -425,9 +426,10 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 	assert.Empty(t, uiOutput.String())
-	assert.Contains(t, componentOutput.String(), "Provisioning workdir for component 'vpc'")
-	assert.Contains(t, componentOutput.String(), "Local component files synced")
-	assert.Contains(t, componentOutput.String(), "Failed to compute content hash: hash failed")
+	plainOutput := atmosansi.Strip(componentOutput.String())
+	assert.Contains(t, plainOutput, "Provisioning workdir for component 'vpc'")
+	assert.Contains(t, plainOutput, "Local component files synced")
+	assert.Contains(t, plainOutput, "Failed to compute content hash: hash failed")
 }
 
 func TestServiceComputeContentHash_WarnsWithoutOutputWriter(t *testing.T) {
@@ -446,7 +448,7 @@ func TestServiceComputeContentHash_WarnsWithoutOutputWriter(t *testing.T) {
 	contentHash := service.computeContentHash(WithOutputSuppressed(t.Context()), "workdir", provisioner.OutputWriters{})
 
 	assert.Empty(t, contentHash)
-	assert.Contains(t, output.String(), "Failed to compute content hash: hash failed")
+	assert.Contains(t, atmosansi.Strip(output.String()), "Failed to compute content hash: hash failed")
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {

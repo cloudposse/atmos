@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -229,8 +230,8 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 	}, nil, OutputWriters{Stderr: &output}, nil)
 
 	require.NoError(t, err)
-	assert.Contains(t, output.String(), "Provisioned S3 backend")
-	assert.Contains(t, output.String(), "bucket policy is permissive")
+	assert.Contains(t, atmosansi.Strip(output.String()), "Provisioned S3 backend")
+	assert.Contains(t, atmosansi.Strip(output.String()), "bucket policy is permissive")
 }
 
 func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
