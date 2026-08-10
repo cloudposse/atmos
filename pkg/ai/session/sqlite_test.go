@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -72,6 +74,51 @@ func TestNewSQLiteStorage(t *testing.T) {
 				storage.Close()
 			}
 		})
+	}
+}
+
+// TestNewSQLiteStorage_ConcurrentOpen is a regression test: two Atmos
+// processes opening the same session database at (almost) the same moment
+// -- e.g. concurrent `atmos ai exec --session <same-name>` invocations --
+// must not fail with SQLITE_BUSY. Before this fix, the pragma order set
+// "PRAGMA journal_mode = WAL" (which briefly needs exclusive access) BEFORE
+// "PRAGMA busy_timeout", so a connection that lost the initial race had no
+// busy timeout in effect yet and failed immediately instead of waiting for
+// the winner to finish. Each goroutine here opens its own *sql.DB against the
+// same file, mirroring separate OS processes contending for the same file
+// lock.
+func TestNewSQLiteStorage_ConcurrentOpen(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "concurrent.db")
+
+	const concurrency = 10
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make([]error, concurrency)
+	storages := make([]*SQLiteStorage, concurrency)
+
+	for i := range concurrency {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			storages[idx], errs[idx] = NewSQLiteStorage(dbPath)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for _, s := range storages {
+		if s != nil {
+			defer s.Close()
+		}
+	}
+
+	for i, err := range errs {
+		if err != nil {
+			assert.NotContains(t, strings.ToLower(err.Error()), "locked",
+				"concurrent open %d must not fail with SQLITE_BUSY: %v", i, err)
+		}
 	}
 }
 
