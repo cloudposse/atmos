@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -328,6 +329,97 @@ func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
 			err := errors.New("Error in configuration: " + pattern + " - please check your syntax")
 			result := isKnownModuleSourceInterpolationDiagnostic(err)
 			assert.True(t, result, "Should detect known pattern: %s", pattern)
+		})
+	}
+}
+
+// TestAllDiagnosticsAreModuleSourceInterpolation tests the position-grouped diagnostics check
+// used to decide whether the whole diagnostics set is safe to skip.
+func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
+	knownDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 10},
+	}
+	// A companion diagnostic terraform-config-inspect emits at the SAME position as knownDiag --
+	// a side effect of the same nil-hcl.EvalContext decode failure, not a separate error.
+	companionDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: value must be known",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 10},
+	}
+	// A genuine, unrelated error at a DIFFERENT position.
+	unrelatedDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: bool required, but have tuple",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 25},
+	}
+	warningDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagWarning,
+		Summary:  "Some warning",
+		Detail:   "unrelated warning text",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 3},
+	}
+	noPosDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+	}
+
+	tests := []struct {
+		name     string
+		diags    tfconfig.Diagnostics
+		expected bool
+	}{
+		{
+			name:     "empty diagnostics",
+			diags:    tfconfig.Diagnostics{},
+			expected: false,
+		},
+		{
+			name:     "single known diagnostic",
+			diags:    tfconfig.Diagnostics{knownDiag},
+			expected: true,
+		},
+		{
+			name:     "known diagnostic plus its same-position companion",
+			diags:    tfconfig.Diagnostics{knownDiag, companionDiag},
+			expected: true,
+		},
+		{
+			name:     "known diagnostic plus a genuine unrelated error at a different position",
+			diags:    tfconfig.Diagnostics{knownDiag, unrelatedDiag},
+			expected: false,
+		},
+		{
+			name:     "only a genuine unrelated error",
+			diags:    tfconfig.Diagnostics{unrelatedDiag},
+			expected: false,
+		},
+		{
+			name:     "known diagnostic plus an unrelated warning",
+			diags:    tfconfig.Diagnostics{knownDiag, warningDiag},
+			expected: true,
+		},
+		{
+			name:     "only warnings, no errors",
+			diags:    tfconfig.Diagnostics{warningDiag},
+			expected: false,
+		},
+		{
+			name:     "known diagnostic with no position",
+			diags:    tfconfig.Diagnostics{noPosDiag},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := allDiagnosticsAreModuleSourceInterpolation(tt.diags)
+			assert.Equal(t, tt.expected, result, "result should match expected for: %s", tt.name)
 		})
 	}
 }

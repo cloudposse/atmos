@@ -1118,7 +1118,13 @@ func processStacks(
 					// For known module-source-interpolation diagnostics (a terraform-config-inspect
 					// static-parser limitation, not a tool-specific feature gate -- see
 					// isKnownModuleSourceInterpolationDiagnostic), skip validation. Otherwise, return the error.
-					if !isKnownModuleSourceInterpolationDiagnostic(diagErr) {
+					//
+					// Check every diagnostic individually (allDiagnosticsAreModuleSourceInterpolation),
+					// not just the collapsed diagErr string: tfconfig's Diagnostics.Error() only renders
+					// diags[0]'s text, so a genuine unrelated error sorting after the known-safe one would
+					// never appear in diagErr yet would still be silently discarded if only diagErr were
+					// checked.
+					if !allDiagnosticsAreModuleSourceInterpolation(diags) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error

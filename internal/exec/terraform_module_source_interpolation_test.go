@@ -1,9 +1,12 @@
 package exec
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestTerraformModuleSourceInterpolation tests that Terraform 1.15+ `const`-variable
@@ -66,4 +69,35 @@ func TestTerraformModuleSourceInterpolation(t *testing.T) {
 		require.True(t, ok, "component_path should be a string")
 		require.Contains(t, componentPath, "test-component", "Component path should point to test-component directory")
 	})
+}
+
+// TestTerraformModuleSourceInterpolationDoesNotSwallowUnrelatedErrors guards against a genuine,
+// unrelated HCL error being silently discarded when it co-occurs, in the same module, with a
+// known-safe module-source-interpolation diagnostic that sorts before it.
+//
+// Terraform-config-inspect's Diagnostics.Error() only renders the FIRST diagnostic's text,
+// collapsing any others to "(and N other messages)" with no content. Before the fix, Atmos
+// pattern-matched that collapsed string: if the module-source diagnostic happened to be
+// diags[0], the match succeeded and the whole diagnostics set -- including any other real
+// error -- was silently discarded (component_info["validation_skipped_module_source_interpolation"]
+// = true, no error returned). The fixture's module block (source = "./mods/${var.org}", known-safe)
+// is declared before an output block with a genuinely invalid `sensitive` value (a list, not a
+// bool) -- unrelated to module source interpolation and must never be silently accepted.
+func TestTerraformModuleSourceInterpolationDoesNotSwallowUnrelatedErrors(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/terraform-module-source-interpolation-mixed-diagnostics"
+
+	t.Chdir(workDir)
+
+	_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "test-component",
+		Stack:                "test",
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
+
+	require.Error(t, err, "the genuine 'sensitive must be bool' error must not be silently swallowed by the module-source-interpolation skip")
+	require.True(t, errors.Is(err, errUtils.ErrFailedToLoadTerraformComponent),
+		"error should be the standard invalid-HCL error, not a silent success")
 }
