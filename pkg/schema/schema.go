@@ -1992,6 +1992,11 @@ type AtmosVendorSource struct {
 	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
 	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	Constraints   *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+	// BasePath is the directory of the vendor manifest that declared this source. Atmos sets it
+	// while reading manifests so that a relative local `source` stays anchored to the file that
+	// declares it, even after sources from imported manifests are merged into one flat list.
+	// Not part of the user-facing schema — it is never read from or written to YAML/JSON.
+	BasePath string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // VendorConstraints controls which upstream versions `atmos vendor update` may

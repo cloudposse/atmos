@@ -105,6 +105,10 @@ func TestProcessChdirFlag(t *testing.T) {
 				if runtime.GOOS == "windows" {
 					t.Skip("Skipping permission-based test on Windows")
 				}
+				// Root bypasses the 0o000 directory, so the chdir would succeed.
+				if os.Getuid() == 0 {
+					t.Skip("Skipping permission test when running as root")
+				}
 				tmpDir := t.TempDir()
 				noPermDir := filepath.Join(tmpDir, "noperm")
 				require.NoError(t, os.Mkdir(noPermDir, 0o000))

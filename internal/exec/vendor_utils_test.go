@@ -657,15 +657,15 @@ func TestProcessTargets_BackwardCompatible(t *testing.T) {
 	tmplData := struct{ Component, Version string }{"vpc", "1.398.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -699,15 +699,15 @@ func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
 	tmplData := struct{ Component, Version string }{"vpc", "1.398.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -744,15 +744,15 @@ func TestProcessTargets_MixedTargets(t *testing.T) {
 	resolvedURI := "github.com/cloudposse/terraform-aws-vpc.git//.?ref=2.1.0"
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  resolvedURI,
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               resolvedURI,
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -789,15 +789,15 @@ func TestProcessTargets_TargetPathTemplating(t *testing.T) {
 	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -821,15 +821,15 @@ func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
 	uri := "github.com/org/repo.git//modules/vpc?ref=v1.0.0"
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  uri,
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               uri,
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -861,15 +861,15 @@ func TestProcessTargets_LocalFileTarget(t *testing.T) {
 	tmplData := struct{ Component, Version string }{"local-mod", "1.0.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  localFile,
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeLocal,
-		SourceIsLocalFile:    true,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               localFile,
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeLocal,
+		SourceIsLocalFile: true,
 	})
 
 	require.NoError(t, err)
@@ -899,15 +899,15 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  "github.com/org/terraform-aws-vpc.git//modules/vpc?ref=1.0.0",
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               "github.com/org/terraform-aws-vpc.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
 	})
 
 	require.NoError(t, err)
@@ -1005,16 +1005,16 @@ func TestProcessTargets_PerTargetSemverRangeResolvesAndTemplatesConcreteVersion(
 	tmplData := struct{ Component, Version string }{"vpc", "v1.0.0"}
 
 	pkgs, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref=v1.0.0",
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeRemote,
-		SourceIsLocalFile:    false,
-		Lister:               lister,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref=v1.0.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
+		Lister:            lister,
 	})
 
 	require.NoError(t, err)
@@ -1051,15 +1051,15 @@ func TestProcessTargets_PerTargetSemverRangeOnNonGitSourceReturnsClearError(t *t
 	tmplData := struct{ Component, Version string }{"local-mod", "1.0.0"}
 
 	_, err := processTargets(&processTargetsParams{
-		AtmosConfig:          atmosConfig,
-		IndexSource:          0,
-		Source:               &source,
-		TemplateData:         tmplData,
-		VendorConfigFilePath: "",
-		URI:                  localFile,
-		SourceTemplate:       source.Source,
-		PkgType:              install.PkgTypeLocal,
-		SourceIsLocalFile:    true,
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    "",
+		URI:               localFile,
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeLocal,
+		SourceIsLocalFile: true,
 	})
 
 	require.Error(t, err)
@@ -1130,6 +1130,287 @@ func TestValidateSourceFields_SemverRangeWithExcludedVersionsAndNoPrereleasesIsA
 	}
 
 	require.NoError(t, validateSourceFields(s, "vendor.yaml"))
+}
+
+// Compile-time sentinels for the schema fields this test file depends on: a rename of either
+// `Vendor.BasePath` or `BasePath` must fail the build rather than silently skip the new behavior.
+var (
+	_ = schema.AtmosConfiguration{BasePath: ""}
+	_ = schema.Vendor{BasePath: ""}
+)
+
+// TestResolveVendorTargetBasePath covers which root relative `targets` are anchored to, depending on
+// whether atmos.yaml declares the vendor manifest location via `vendor.base_path`.
+func TestResolveVendorTargetBasePath(t *testing.T) {
+	tests := []struct {
+		name                 string
+		atmosConfig          *schema.AtmosConfiguration
+		vendorConfigFileName string
+		expected             string
+	}{
+		{
+			// The reported bug: with `vendor.base_path` pointing at a manifest in a config
+			// directory, relative targets must resolve against the Atmos `base_path`, not against
+			// the directory holding vendor.yaml.
+			name: "vendor.base_path configured resolves targets against the Atmos base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+				Vendor:   schema.Vendor{BasePath: filepath.Join("config", "vendor.yaml")},
+			},
+			vendorConfigFileName: filepath.Join("repo", "root", "config", "vendor.yaml"),
+			expected:             filepath.Join("repo", "root"),
+		},
+		{
+			name: "absolute vendor.base_path still resolves targets against the Atmos base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+				Vendor:   schema.Vendor{BasePath: filepath.Join("elsewhere", "vendor.yaml")},
+			},
+			vendorConfigFileName: filepath.Join("elsewhere", "vendor.yaml"),
+			expected:             filepath.Join("repo", "root"),
+		},
+		{
+			// No `vendor.base_path`: the manifest was discovered next to the working directory, so
+			// targets stay relative to the manifest itself.
+			name: "vendor.base_path not configured keeps targets relative to the manifest",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.Join("repo", "root"),
+			},
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name: "empty Atmos base path keeps targets relative to the manifest",
+			atmosConfig: &schema.AtmosConfiguration{
+				Vendor: schema.Vendor{BasePath: "vendor.yaml"},
+			},
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name:                 "nil Atmos config keeps targets relative to the manifest",
+			atmosConfig:          nil,
+			vendorConfigFileName: filepath.Join("some", "dir", "vendor.yaml"),
+			expected:             filepath.Join("some", "dir"),
+		},
+		{
+			name: "manifest alongside atmos.yaml resolves to the same directory as before",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: ".",
+				Vendor:   schema.Vendor{BasePath: "./vendor.yaml"},
+			},
+			vendorConfigFileName: "vendor.yaml",
+			expected:             ".",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveVendorTargetBasePath(tt.atmosConfig, tt.vendorConfigFileName))
+		})
+	}
+}
+
+// TestResolveVendorSourceBasePath covers which directory a relative local `source` is anchored to
+// once sources from imported manifests have been merged into one flat list.
+func TestResolveVendorSourceBasePath(t *testing.T) {
+	rootDir := filepath.Join("repo", "root")
+	importDir := filepath.Join("repo", "root", "vendor", "nested")
+
+	tests := []struct {
+		name     string
+		source   *schema.AtmosVendorSource
+		expected string
+	}{
+		{
+			// The gap CodeRabbit flagged: an imported manifest's source must anchor to that
+			// manifest, not to the root manifest that imported it.
+			name:     "source carries the declaring manifest's directory",
+			source:   &schema.AtmosVendorSource{Component: "vpc", BasePath: importDir},
+			expected: importDir,
+		},
+		{
+			name:     "source without provenance falls back to the root manifest directory",
+			source:   &schema.AtmosVendorSource{Component: "vpc"},
+			expected: rootDir,
+		},
+		{
+			name:     "nil source falls back to the root manifest directory",
+			source:   nil,
+			expected: rootDir,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveVendorSourceBasePath(tt.source, rootDir))
+		})
+	}
+}
+
+// TestMergeVendorConfigFiles_RecordsDeclaringManifest verifies that each merged source remembers the
+// manifest file it came from, which is what lets an imported source anchor to its own directory.
+func TestMergeVendorConfigFiles_RecordsDeclaringManifest(t *testing.T) {
+	tempDir := t.TempDir()
+	manifestDir := filepath.Join(tempDir, "vendor")
+	require.NoError(t, os.MkdirAll(manifestDir, 0o755))
+
+	manifest := filepath.Join(manifestDir, "imported.yaml")
+	require.NoError(t, os.WriteFile(manifest, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: imported
+spec:
+  sources:
+    - component: "vpc"
+      source: "./local-src"
+      targets:
+        - "components/terraform/vpc"
+    - component: "eks"
+      source: "./local-src"
+      file: "explicitly-declared.yaml"
+      targets:
+        - "components/terraform/eks"
+`), 0o644))
+
+	vendorConfig, err := mergeVendorConfigFiles([]string{manifest})
+	require.NoError(t, err)
+	require.Len(t, vendorConfig.Spec.Sources, 2)
+
+	assert.Equal(t, manifestDir, vendorConfig.Spec.Sources[0].BasePath)
+	assert.Equal(t, manifest, vendorConfig.Spec.Sources[0].File)
+
+	// A `file` set in the manifest is informational and must not be clobbered, but provenance is
+	// still recorded from the file actually read.
+	assert.Equal(t, manifestDir, vendorConfig.Spec.Sources[1].BasePath)
+	assert.Equal(t, "explicitly-declared.yaml", vendorConfig.Spec.Sources[1].File)
+}
+
+// TestResolveVendorTargetPath covers how a single target path is anchored to the target base path.
+func TestResolveVendorTargetPath(t *testing.T) {
+	// Derive the absolute target from t.TempDir(): a separator-rooted path like `\opt\vendored\vpc`
+	// is NOT absolute on Windows (filepath.IsAbs requires a volume name), which would silently turn
+	// this into a relative-path test there.
+	absTarget := filepath.Join(t.TempDir(), "vendored", "vpc")
+	require.True(t, filepath.IsAbs(absTarget), "the test needs a platform-absolute target path")
+
+	tests := []struct {
+		name           string
+		targetBasePath string
+		target         string
+		expected       string
+	}{
+		{
+			name:           "relative target is joined to the target base path",
+			targetBasePath: filepath.Join("repo", "root"),
+			target:         filepath.Join("components", "terraform", "vpc"),
+			expected:       filepath.Join("repo", "root", "components", "terraform", "vpc"),
+		},
+		{
+			// `targets` documents support for absolute paths; joining them to the base path would
+			// nest them under it instead.
+			name:           "absolute target is used as-is",
+			targetBasePath: filepath.Join("repo", "root"),
+			target:         absTarget,
+			expected:       absTarget,
+		},
+		{
+			name:           "empty target base path leaves the target unchanged",
+			targetBasePath: "",
+			target:         filepath.Join("components", "terraform", "vpc"),
+			expected:       filepath.Join("components", "terraform", "vpc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveVendorTargetPath(tt.targetBasePath, tt.target))
+		})
+	}
+}
+
+// TestProcessTargets_TargetBasePathOverridesVendorConfigDir verifies that relative targets resolve
+// against TargetBasePath (the Atmos `base_path`), while the vendor config directory keeps serving as
+// the anchor for resolving local sources.
+func TestProcessTargets_TargetBasePathOverridesVendorConfigDir(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/repo.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/{{.Component}}"},
+			{Path: "components/terraform/{{.Component}}/{{.Version}}", Version: "2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    filepath.Join("repo", "root", "config"),
+		TargetBasePath:    filepath.Join("repo", "root"),
+		URI:               "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	// Target paths are resolved against TargetBasePath and made absolute (processTargets calls
+	// filepath.Abs so the vendor lock's containment check compares absolute paths).
+	wantVPC, err := filepath.Abs(filepath.Join("repo", "root", "components", "terraform", "vpc"))
+	require.NoError(t, err)
+	wantVPCVersioned, err := filepath.Abs(filepath.Join("repo", "root", "components", "terraform", "vpc", "2.0.0"))
+	require.NoError(t, err)
+	assert.Equal(t, wantVPC, pkgs[0].Target())
+	assert.Equal(t, wantVPCVersioned, pkgs[1].Target())
+
+	// The vendor config directory must not leak into the target paths.
+	for _, p := range pkgs {
+		assert.NotContains(t, filepath.ToSlash(p.Target()), "config/components")
+	}
+}
+
+// TestProcessTargets_AbsoluteTargetPath verifies that absolute targets, which are documented as
+// supported, are not nested under the target base path.
+func TestProcessTargets_AbsoluteTargetPath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// t.TempDir() gives a platform-absolute path; a separator-rooted path like `\opt\vendored\vpc`
+	// fails filepath.IsAbs on Windows, so this test would assert nothing there.
+	absTarget := filepath.Join(t.TempDir(), "vendored", "vpc")
+	require.True(t, filepath.IsAbs(absTarget), "the test needs a platform-absolute target path")
+
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: absTarget},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:       atmosConfig,
+		IndexSource:       0,
+		Source:            &source,
+		TemplateData:      tmplData,
+		SourceBasePath:    filepath.Join("repo", "root", "config"),
+		TargetBasePath:    filepath.Join("repo", "root"),
+		URI:               "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:    source.Source,
+		PkgType:           install.PkgTypeRemote,
+		SourceIsLocalFile: false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	assert.Equal(t, absTarget, pkgs[0].Target())
 }
 
 func TestValidateTagsAndComponents(t *testing.T) {

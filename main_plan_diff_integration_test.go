@@ -8,9 +8,13 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestMainTerraformPlanDiffIntegration(t *testing.T) {
+	// The fixture runs `atmos terraform plan`, which shells out to terraform.
+	tests.RequireTerraform(t)
+
 	// We need to intercept calls to os.Exit so the test doesn't fail
 	oldOsExit := errUtils.OsExit
 	defer func() { errUtils.OsExit = oldOsExit }()

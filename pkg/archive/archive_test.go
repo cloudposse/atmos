@@ -757,6 +757,10 @@ func TestCollectDirEntries_PropagatesGenericWalkError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are not enforced the same way on Windows")
 	}
+	// Root bypasses the 0o000 directory below, so the walk would succeed.
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
 	blocked := filepath.Join(src, "blocked")

@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -49,15 +48,20 @@ var (
 )
 
 type processTargetsParams struct {
-	AtmosConfig          *schema.AtmosConfiguration
-	IndexSource          int
-	Source               *schema.AtmosVendorSource
-	TemplateData         struct{ Component, Version string }
-	VendorConfigFilePath string
-	URI                  string
-	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
-	PkgType              install.PkgType
-	SourceIsLocalFile    bool
+	AtmosConfig  *schema.AtmosConfiguration
+	IndexSource  int
+	Source       *schema.AtmosVendorSource
+	TemplateData struct{ Component, Version string }
+	// SourceBasePath is the directory that a relative local `source` is resolved against: the
+	// directory of the manifest that declared it. See resolveVendorSourceBasePath.
+	SourceBasePath string
+	// TargetBasePath is the directory that relative `targets` paths are resolved against.
+	// See resolveVendorTargetBasePath.
+	TargetBasePath    string
+	URI               string
+	SourceTemplate    string // Raw un-templated source URL for per-target version re-resolution.
+	PkgType           install.PkgType
+	SourceIsLocalFile bool
 	// RawVersion is the source-level declared version, populated only when it was a semver range
 	// (TemplateData.Version already carries its resolved concrete value) -- see
 	// install.VendorPackage.RawVersion.
@@ -88,6 +92,9 @@ type vendorSourceParams struct {
 	tags                 []string
 	vendorConfigFileName string
 	vendorConfigFilePath string
+	// targetBasePath is the directory that relative `targets` paths are resolved against -- see
+	// resolveVendorTargetBasePath.
+	targetBasePath string
 	// refreshLock forces fresh semver-range version resolution (bypassing any matching
 	// vendor.lock.yaml receipt) for range-declared `version:` sources -- see resolveEffectiveVersion.
 	refreshLock bool
@@ -128,27 +135,6 @@ func ReadAndProcessVendorConfigFile(
 	}
 
 	return vendorConfig, true, foundVendorConfigFile, nil
-}
-
-// Helper function to resolve the vendor config file path.
-func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) string {
-	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
-		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
-		}
-		return atmosConfig.Vendor.BasePath
-	}
-
-	// Search for the vendor config file
-	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
-	if !fileExists {
-		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
-		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
-		if !fileExists {
-			return "" // File does not exist, but this is not an error
-		}
-	}
-	return foundVendorConfigFile
 }
 
 // Helper function to get config files from a path (file or directory).
@@ -207,6 +193,14 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 				}
 				sourceMap[source.Component] = true
 			}
+			// Record which manifest declared this source before it's merged into the flat list, so a
+			// relative local `source` can be anchored to that manifest's directory. Set here rather
+			// than in processVendorImports because a single import can name a directory of
+			// manifests, and each file in it anchors its own sources.
+			source.BasePath = filepath.Dir(configFile)
+			if source.File == "" {
+				source.File = configFile
+			}
 			vendorConfig.Spec.Sources = append(vendorConfig.Spec.Sources, source)
 		}
 
@@ -227,8 +221,9 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
+	targetBasePath := resolveVendorTargetBasePath(params.atmosConfig, params.vendorConfigFileName)
 
-	logInitialMessage(params.vendorConfigFileName, params.tags)
+	logInitialMessage(params.vendorConfigFileName, params.tags, targetBasePath)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
 	}
@@ -259,6 +254,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		tags:                 params.tags,
 		vendorConfigFileName: params.vendorConfigFileName,
 		vendorConfigFilePath: vendorConfigFilePath,
+		targetBasePath:       targetBasePath,
 		refreshLock:          params.refreshLock,
 	}
 	packages, err := processAtmosVendorSource(sourceParams)
@@ -343,20 +339,25 @@ func processAtmosVendorSourceEntry(params *vendorSourceParams, indexSource int) 
 		return nil, false, err
 	}
 
+	// Anchor a relative local `source` to the manifest that declared it, which is not necessarily
+	// the root manifest: sources merged in from `spec.imports` carry their own provenance.
+	sourceBasePath := resolveVendorSourceBasePath(&params.sources[indexSource], params.vendorConfigFilePath)
+
 	// Process each target within the source.
 	pkgs, err = processTargets(&processTargetsParams{
-		AtmosConfig:          params.atmosConfig,
-		IndexSource:          indexSource,
-		Source:               &params.sources[indexSource],
-		TemplateData:         resolution.TemplateData,
-		VendorConfigFilePath: params.vendorConfigFilePath,
-		URI:                  resolution.URI,
-		SourceTemplate:       params.sources[indexSource].Source,
-		PkgType:              resolution.PkgType,
-		SourceIsLocalFile:    resolution.SourceIsLocalFile,
-		RawVersion:           resolution.RawVersion,
-		RefreshLock:          params.refreshLock,
-		Lister:               params.lister,
+		AtmosConfig:       params.atmosConfig,
+		IndexSource:       indexSource,
+		Source:            &params.sources[indexSource],
+		TemplateData:      resolution.TemplateData,
+		SourceBasePath:    sourceBasePath,
+		TargetBasePath:    params.targetBasePath,
+		URI:               resolution.URI,
+		SourceTemplate:    params.sources[indexSource].Source,
+		PkgType:           resolution.PkgType,
+		SourceIsLocalFile: resolution.SourceIsLocalFile,
+		RawVersion:        resolution.RawVersion,
+		RefreshLock:       params.refreshLock,
+		Lister:            params.lister,
 	})
 	if err != nil {
 		return nil, false, err
@@ -412,7 +413,11 @@ func resolveAtmosVendorSource(params *vendorSourceParams, indexSource int) (*atm
 	// security fixes.
 	uri = normalizeVendorURI(uri)
 
-	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+	// Anchor a relative local `source` to the manifest that declared it (imported manifests carry
+	// their own provenance), not the root manifest -- see resolveVendorSourceBasePath.
+	sourceBasePath := resolveVendorSourceBasePath(src, params.vendorConfigFilePath)
+
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, sourceBasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +485,7 @@ func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt sc
 
 	// Recompute source classification from the re-resolved URI, since per-target version
 	// overrides may produce a URI with a different scheme or locality than the source-level URI.
-	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.VendorConfigFilePath)
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.SourceBasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -533,10 +538,11 @@ func processTargets(params *processTargetsParams) ([]install.VendorPackage, erro
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(params.VendorConfigFilePath, target)
+		// Resolve the target against its base path; absolute targets are honored as-is.
+		targetPath := resolveVendorTargetPath(params.TargetBasePath, target)
 		// Resolve to absolute so the vendor lock's target-containment check (pkg/vendoring/lockfile)
-		// compares two absolute paths; a relative VendorConfigFilePath otherwise makes targetPath
-		// relative to CWD, which the lock validation cannot reliably relate back to BasePath.
+		// compares two absolute paths; a relative TargetBasePath otherwise makes targetPath relative
+		// to CWD, which the lock validation cannot reliably relate back to BasePath.
 		targetPath, err = filepath.Abs(targetPath)
 		if err != nil {
 			return nil, fmt.Errorf("resolve target path: %w", err)
@@ -600,22 +606,33 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		for i := range vendorConfig.Spec.Sources {
-			vendorConfig.Spec.Sources[i].File = imp
-		}
-
+		// Each source already records the manifest file it was read from (see
+		// mergeVendorConfigFiles), which is more precise than the import path when the import names
+		// a directory of manifests, and doesn't overwrite a `file` the source declares itself.
 		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
 	}
 
 	return append(mergedSources, sources...), allImports, nil
 }
 
-func logInitialMessage(vendorConfigFileName string, tags []string) {
+func logInitialMessage(vendorConfigFileName string, tags []string, targetBasePath string) {
 	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
 	ui.Info(logMessage)
+
+	// Say once per run where relative targets land, but only when that is not the manifest's own
+	// directory — i.e. only when `vendor.base_path` puts the manifest somewhere other than the
+	// Atmos base path. Projects upgrading into this behavior have their vendored artifacts move,
+	// and the previous tree is left in place rather than cleaned up, so without a line here the
+	// only evidence is a large unexplained diff.
+	if manifestDir := filepath.Dir(vendorConfigFileName); targetBasePath != "" && targetBasePath != manifestDir {
+		ui.Info(fmt.Sprintf(
+			"Relative targets resolve against the Atmos base path '%s', not the manifest directory '%s'",
+			targetBasePath, manifestDir,
+		))
+	}
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -646,42 +663,6 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 // Delegates to pkg/vendor for the shared implementation.
 func normalizeVendorURI(uri string) string {
 	return vendor.NormalizeURI(uri)
-}
-
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
-	// Determine if the URI is an OCI scheme, a local file, or remote
-	useLocalFileSystem := false
-	sourceIsLocalFile := false
-	useOciScheme := strings.HasPrefix(*uri, "oci://")
-	if useOciScheme {
-		*uri = strings.TrimPrefix(*uri, "oci://")
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
-	}
-
-	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
-	// if URI contain path traversal is path should be resolved
-	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
-	}
-	if err == nil {
-		uri = &absPath
-		useLocalFileSystem = true
-		sourceIsLocalFile = u.FileExists(*uri)
-	}
-
-	parsedURL, err := url.Parse(*uri)
-	if err != nil {
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
-	}
-	if parsedURL.Scheme != "" {
-		if parsedURL.Scheme == "file" {
-			trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
-			*uri = filepath.Clean(trimmedPath)
-			useLocalFileSystem = true
-		}
-	}
-
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
 // generateSkipFunction creates a function that determines whether to skip files during copying.
