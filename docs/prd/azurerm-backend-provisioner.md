@@ -33,14 +33,14 @@ and `provision.backend.enabled` silently skipped.
 ### Current Pain Points
 
 1. **Manual storage creation**: Users must create a resource group, storage account, and
-   container before running `terraform init` against an `azurerm` backend.
+  container before running `terraform init` against an `azurerm` backend.
 2. **Inconsistent security**: Hand-created storage accounts vary in TLS version, public access,
-   versioning, and auth model.
+  versioning, and auth model.
 3. **Cold-start delay**: Every new subscription needs a bootstrapped state backend before any
-   Terraform can run — a classic chicken-and-egg.
+  Terraform can run — a classic chicken-and-egg.
 4. **Feature asymmetry**: AWS users get auto-provisioning; Azure users had to build a bespoke
-   Terraform component (e.g. `Azure/avm-res-storage-storageaccount` + a cold-start migration)
-   for what is, in dev/test, a one-line convenience on AWS.
+  Terraform component (e.g. `Azure/avm-res-storage-storageaccount` + a cold-start migration)
+  for what is, in dev/test, a one-line convenience on AWS.
 
 ### Target Users
 
@@ -62,27 +62,27 @@ and `provision.backend.enabled` silently skipped.
 ### Goals
 
 1. ✅ **Automatic resource creation**: Create the resource group (if missing), storage account,
-   and container.
+  and container.
 2. ✅ **Secure defaults**: TLS 1.2 minimum, HTTPS-only, public blob access blocked, blob
-   versioning + soft delete, private container — always.
+  versioning + soft delete, private container — always.
 3. ✅ **Idempotent operations**: Safe to run repeatedly; skips when already provisioned.
 4. ✅ **Entra ID hardening when appropriate**: Disable shared-key access when the backend uses
-   `use_azuread_auth: true`.
+  `use_azuread_auth: true`.
 5. ✅ **Zero configuration** beyond `provision.backend.enabled: true`.
 6. ✅ **Backend deletion** with safety checks (`--force` required).
 7. ✅ **Registry-native**: Self-registers into the existing backend provisioner registry so the
-   auto-provision hook and `atmos terraform backend` commands work with no wiring changes.
+  auto-provision hook and `atmos terraform backend` commands work with no wiring changes.
 
 ### Non-Goals
 
 1. ❌ **State locking resource**: None is created — the `azurerm` backend locks state with
-   **native Azure Blob Storage blob leases** (the DynamoDB-lock analog is built into Blob
-   Storage). Nothing to provision.
+  **native Azure Blob Storage blob leases** (the DynamoDB-lock analog is built into Blob
+  Storage). Nothing to provision.
 2. ❌ **Customer-managed keys (CMK)**: Uses Microsoft-managed encryption (always on in Azure Storage).
 3. ❌ **Private endpoints / network ACLs**: Public network access remains enabled; Entra ID / RBAC
-   still gates data-plane access.
+  still gates data-plane access.
 4. ❌ **Geo/zone redundancy**: Uses `Standard_LRS` (single-region), the analog of a single-region
-   S3 bucket.
+  S3 bucket.
 5. ❌ **Lifecycle management, diagnostic logging, resource locks**: Out of scope; use a module.
 6. ❌ **Production features**: Not competing with a managed storage-account module.
 

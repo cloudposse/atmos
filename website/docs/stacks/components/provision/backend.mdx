@@ -189,8 +189,11 @@ blob container with hardcoded security best practices:
 - **Soft delete**: Enabled for blobs and containers (30-day retention)
 - **Transport**: TLS 1.2 minimum, HTTPS-only
 - **Public access**: Blocked (`AllowBlobPublicAccess=false`); the state container is private
-- **Entra ID hardening**: When the backend sets `use_azuread_auth: true`, the storage account is
-  created with shared-key access disabled (no account keys to leak)
+- **Entra ID hardening**: When the backend sets `use_azuread_auth: true`, a **newly created**
+  storage account gets shared-key access disabled (no account keys to leak). This applies only at
+  creation time — auto-provisioning skips backends that already exist, so an existing storage
+  account is not modified. Harden a pre-existing account separately (e.g. set
+  `allowSharedKeyAccess: false` via the module or `az storage account update`).
 - **Tags**: Automatic resource tags (`Name`, `ManagedBy=Atmos`)
 
 **Locking:** No lock resource is created. The `azurerm` backend serializes concurrent state writes

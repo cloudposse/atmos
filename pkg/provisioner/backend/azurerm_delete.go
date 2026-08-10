@@ -2,12 +2,10 @@ package backend
 
 import (
 	"context"
-	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // DeleteAzurermBackend deletes an azurerm backend by permanently deleting the storage account
@@ -17,6 +15,9 @@ import (
 // and every state blob (one per component `key`). Deleting it removes them all, exactly as
 // deleting an S3 bucket removes every state object. The resource group is intentionally left
 // in place, since it commonly holds unrelated resources.
+//
+// This runs inside a spinner (see DeleteBackendWithParams), so it emits no direct UI output —
+// the spinner reports progress and completion, and `--force` is the destructive-action gate.
 //
 // This operation is irreversible. All Terraform state stored in the account will be lost.
 func DeleteAzurermBackend(
@@ -37,9 +38,6 @@ func DeleteAzurermBackend(
 		return err
 	}
 
-	ui.Info(fmt.Sprintf("Deleting azurerm backend: storage_account=%s resource_group=%s",
-		config.storageAccountName, config.resourceGroupName))
-
 	client, err := getAzureBackendClientFactory()(config.subscriptionID, authContext)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrLoadAzureConfig).
@@ -54,8 +52,6 @@ func DeleteAzurermBackend(
 		return err
 	}
 
-	showAzureDeletionWarning(config.storageAccountName, config.containerName)
-
 	if err := client.deleteStorageAccount(ctx, config.resourceGroupName, config.storageAccountName); err != nil {
 		return errUtils.Build(errUtils.ErrDeleteStorageAccount).
 			WithCause(err).
@@ -65,7 +61,6 @@ func DeleteAzurermBackend(
 			Err()
 	}
 
-	ui.Successf("Backend deleted: storage account '%s' and all contents removed", config.storageAccountName)
 	return nil
 }
 
@@ -88,11 +83,4 @@ func validateStorageAccountExistsForDeletion(ctx context.Context, client azureBa
 			Err()
 	}
 	return nil
-}
-
-// showAzureDeletionWarning displays a warning about the pending destructive deletion.
-func showAzureDeletionWarning(account, container string) {
-	ui.Warning(fmt.Sprintf("⚠ Deleting backend will permanently remove storage account '%s' "+
-		"and all Terraform state in container '%s'", account, container))
-	ui.Warning("This action cannot be undone")
 }

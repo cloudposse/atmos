@@ -11,7 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -239,13 +239,25 @@ func AzurermBackendExists(
 
 	accountExists, err := client.storageAccountExists(ctx, config.resourceGroupName, config.storageAccountName)
 	if err != nil {
-		return false, err
+		return false, errUtils.Build(errUtils.ErrCheckStorageAccountExist).
+			WithCause(err).
+			WithContext("storage_account", config.storageAccountName).
+			WithContext("resource_group", config.resourceGroupName).
+			Err()
 	}
 	if !accountExists {
 		return false, nil
 	}
 
-	return client.containerExists(ctx, config.resourceGroupName, config.storageAccountName, config.containerName)
+	containerExists, err := client.containerExists(ctx, config.resourceGroupName, config.storageAccountName, config.containerName)
+	if err != nil {
+		return false, errUtils.Build(errUtils.ErrCheckContainerExist).
+			WithCause(err).
+			WithContext("container", config.containerName).
+			WithContext("storage_account", config.storageAccountName).
+			Err()
+	}
+	return containerExists, nil
 }
 
 // extractAzurermConfig extracts and validates the azurerm backend configuration required for
@@ -254,22 +266,30 @@ func AzurermBackendExists(
 func extractAzurermConfig(backendConfig map[string]any, authContext *schema.AuthContext) (*azurermConfig, error) {
 	storageAccount, ok := backendConfig["storage_account_name"].(string)
 	if !ok || storageAccount == "" {
-		return nil, fmt.Errorf("%w", errUtils.ErrStorageAccountRequired)
+		return nil, errUtils.Build(errUtils.ErrStorageAccountRequired).
+			WithHint("Set `backend.storage_account_name` in the component configuration").
+			Err()
 	}
 
 	container, ok := backendConfig["container_name"].(string)
 	if !ok || container == "" {
-		return nil, fmt.Errorf("%w", errUtils.ErrAzureContainerRequired)
+		return nil, errUtils.Build(errUtils.ErrAzureContainerRequired).
+			WithHint("Set `backend.container_name` in the component configuration").
+			Err()
 	}
 
 	resourceGroup, ok := backendConfig["resource_group_name"].(string)
 	if !ok || resourceGroup == "" {
-		return nil, fmt.Errorf("%w", errUtils.ErrResourceGroupRequired)
+		return nil, errUtils.Build(errUtils.ErrResourceGroupRequired).
+			WithHint("Set `backend.resource_group_name` in the component configuration").
+			Err()
 	}
 
 	subscriptionID := extractAzureSubscriptionID(backendConfig, authContext)
 	if subscriptionID == "" {
-		return nil, fmt.Errorf("%w", errUtils.ErrAzureSubscriptionRequired)
+		return nil, errUtils.Build(errUtils.ErrAzureSubscriptionRequired).
+			WithHint("Set `backend.subscription_id`, or a subscription on the active Azure identity").
+			Err()
 	}
 
 	var location string

@@ -327,6 +327,12 @@ func TestCreateAzurermBackend_FullCreate(t *testing.T) {
 	require.NotNil(t, mock.createdAccountParams)
 	assert.Equal(t, "centralus", mock.createdAccountParams.location, "account created in identity location")
 	assert.True(t, mock.createdAccountParams.disableSharedKey, "shared key disabled when use_azuread_auth is true")
+
+	// The hardcoded default tags (Name=<account>, ManagedBy=Atmos) must be applied.
+	require.NotNil(t, mock.createdAccountParams.tags["Name"])
+	require.NotNil(t, mock.createdAccountParams.tags["ManagedBy"])
+	assert.Equal(t, "stcwtfstate", *mock.createdAccountParams.tags["Name"])
+	assert.Equal(t, "Atmos", *mock.createdAccountParams.tags["ManagedBy"])
 }
 
 func TestCreateAzurermBackend_ResourceGroupExistsUsesItsLocation(t *testing.T) {
@@ -465,6 +471,7 @@ func TestAzurermBackendExists(t *testing.T) {
 		containerFunc func(context.Context, string, string, string) (bool, error)
 		want          bool
 		wantErr       bool
+		wantSentinel  error
 	}{
 		{
 			name:          "account missing",
@@ -484,9 +491,17 @@ func TestAzurermBackendExists(t *testing.T) {
 			want:          true,
 		},
 		{
-			name:       "account check error",
-			accountErr: errors.New("boom"),
-			wantErr:    true,
+			name:         "account check error",
+			accountErr:   errors.New("boom"),
+			wantErr:      true,
+			wantSentinel: errUtils.ErrCheckStorageAccountExist,
+		},
+		{
+			name:          "container check error",
+			accountExists: true,
+			containerFunc: func(context.Context, string, string, string) (bool, error) { return false, errors.New("boom") },
+			wantErr:       true,
+			wantSentinel:  errUtils.ErrCheckContainerExist,
 		},
 	}
 
@@ -503,6 +518,9 @@ func TestAzurermBackendExists(t *testing.T) {
 			got, err := AzurermBackendExists(context.Background(), nil, validAzurermBackendConfig(), nil)
 			if tt.wantErr {
 				require.Error(t, err)
+				if tt.wantSentinel != nil {
+					assert.ErrorIs(t, err, tt.wantSentinel)
+				}
 				return
 			}
 			require.NoError(t, err)
