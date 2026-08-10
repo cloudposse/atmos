@@ -1112,6 +1112,10 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "Enables structural validation of this component's manifests (default true). Set to false to opt out of both the implicit apply/deploy auto-gate and the explicit 'atmos kubernetes validate' command for this component; does not affect '--server' dry-run validation against a live cluster."
             }
           },
           "required": []
@@ -1535,6 +1539,10 @@
                   "path": {
                     "type": "string",
                     "description": "For kind 'git': destination path inside the deployment repository (supports Go templates)"
+                  },
+                  "split": {
+                    "type": "boolean",
+                    "description": "For kind 'git': true fans out one file per rendered object under 'path' (a directory); false writes 'path' as a single multi-document YAML file. When unset, inferred from whether the last segment of 'path' looks like a manifest filename (matches /\\.(ya?ml|json)$/i): a match defaults to single-file mode, otherwise the directory default is preserved."
                   },
                   "auth": {
                     "type": "object",
