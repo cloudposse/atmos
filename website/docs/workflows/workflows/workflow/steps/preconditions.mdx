@@ -20,6 +20,8 @@ steps:
       tools: ["stringer"]
 ```
 
+`go install` writes the binary to `GOBIN` (or `GOPATH/bin` if `GOBIN` is unset) — that directory must already be on `PATH` for `preconditions.tools` to find it on a later run. If it isn't, `stringer` never resolves and the step runs every time.
+
 With no explicit [`when`](/workflows/steps#conditional-execution), declaring `preconditions` alone is enough — the step implicitly means `when: "!preconditions.success"` (**note the negation**: `preconditions.success` means the tool is already there, i.e. skip; the run-signal is its negation — the opposite implicit polarity from [`inputs`](/workflows/steps/inputs)'s `checksum.changed`, where the fact itself already means "needs to run"). Run this step when `stringer` is already installed and it's skipped; run it on a machine without `stringer` and it installs it.
 
 `preconditions` is independent of `inputs`/`artifacts` and can be declared alongside them — a step with all three implicitly means `when: "checksum.changed || !preconditions.success"` (run if either signal says so).
