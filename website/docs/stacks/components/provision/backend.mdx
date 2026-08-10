@@ -14,7 +14,7 @@ import Experimental from '@site/src/components/Experimental'
 import Note from '@site/src/components/Note'
 
 <Intro>
-`provision.backend` automatically creates the Terraform state backend (S3 bucket, lockfile resource) before the first run of a component. The `backend:` block describes *where* state lives; `provision.backend.enabled` tells Atmos to *create that location* if it doesn't exist. Use this to eliminate the chicken-and-egg bootstrap problem of needing a state backend before you can deploy the component that creates it.
+`provision.backend` automatically creates the Terraform state backend (an S3 bucket, or an Azure resource group + storage account + container) before the first run of a component. The `backend:` block describes *where* state lives; `provision.backend.enabled` tells Atmos to *create that location* if it doesn't exist. Use this to eliminate the chicken-and-egg bootstrap problem of needing a state backend before you can deploy the component that creates it.
 </Intro>
 
 <Experimental />
@@ -25,7 +25,8 @@ import Note from '@site/src/components/Note'
   <dt>`provision.backend.enabled`</dt>
   <dd>
     Automatically provision the Terraform state backend before the first run.
-    Currently supports S3 backends with optional native S3 locking (Terraform 1.10+).
+    Supports S3 backends (with optional native S3 locking, Terraform 1.10+) and
+    `azurerm` backends (resource group, storage account, and blob container).
 
     - **Type:** `boolean`
     - **Default:** `false`
@@ -178,6 +179,55 @@ provision:
 </File>
 
 The provisioner will assume the specified role to create the bucket in the target account.
+
+### Azure (`azurerm`)
+
+The `azurerm` backend provisioner creates the resource group (if missing), storage account, and
+blob container with hardcoded security best practices:
+
+- **Blob versioning**: Enabled (the direct analog of S3 versioning — every state write is recoverable)
+- **Soft delete**: Enabled for blobs and containers (30-day retention)
+- **Transport**: TLS 1.2 minimum, HTTPS-only
+- **Public access**: Blocked (`AllowBlobPublicAccess=false`); the state container is private
+- **Entra ID hardening**: When the backend sets `use_azuread_auth: true`, the storage account is
+  created with shared-key access disabled (no account keys to leak)
+- **Tags**: Automatic resource tags (`Name`, `ManagedBy=Atmos`)
+
+**Locking:** No lock resource is created. The `azurerm` backend serializes concurrent state writes
+using native Azure Blob Storage **blob leases** — the equivalent of native S3 locking / DynamoDB,
+built into Blob Storage.
+
+**Required Configuration:**
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+backend_type: azurerm
+backend:
+  resource_group_name: rg-tfstate-cus     # Required
+  storage_account_name: sttfstateplatcus  # Required (globally unique, 3-24 lowercase alphanumeric)
+  container_name: tfstate                  # Required
+  key: vpc.terraform.tfstate
+  use_azuread_auth: true                   # Recommended — disables shared-key access
+
+provision:
+  backend:
+    enabled: true
+```
+</File>
+
+The Azure **location** is not a valid `azurerm` backend argument, so it is taken from the active
+Azure identity (or inherited from the resource group when it already exists) — not from the
+`backend:` block. The **subscription** comes from `backend.subscription_id` if set, otherwise from
+the active Azure identity.
+
+<Note>
+The auto-provisioned account uses secure-but-simple defaults (`Standard_LRS`, Microsoft-managed
+keys, public network access enabled with Entra ID / RBAC gating). It is intended for
+dev/test/bootstrap, not production. For production, manage state storage with a full module (e.g.
+`Azure/avm-res-storage-storageaccount`) to add customer-managed keys, private endpoints, network
+ACLs, and redundancy. The provisioner is idempotent, so you can import the resources into a module
+later and keep `provision.backend.enabled: true`.
+</Note>
 
 ## Manual Provisioning
 
