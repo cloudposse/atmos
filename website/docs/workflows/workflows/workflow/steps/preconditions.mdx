@@ -1,0 +1,59 @@
+---
+title: preconditions
+sidebar_label: preconditions
+sidebar_position: 16
+slug: /workflows/steps/preconditions
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `preconditions` field declares tools that must already be on `PATH` for a step's work to be considered already satisfied — a lighter, inline, single-step-skip variant of the [`require`](/workflows/steps/type/require) step type's hard preconditions gate, for skipping one optional step rather than failing an entire run.
+</Intro>
+
+```yaml
+steps:
+  - name: install-stringer
+    type: shell
+    command: go install golang.org/x/tools/cmd/stringer@latest
+    preconditions:
+      tools: ["stringer"]
+```
+
+With no explicit [`when`](/workflows/steps#conditional-execution), declaring `preconditions` alone is enough — the step implicitly means `when: "!preconditions.success"` (**note the negation**: `preconditions.success` means the tool is already there, i.e. skip; the run-signal is its negation — the opposite implicit polarity from [`inputs`](/workflows/steps/inputs)'s `checksum.changed`, where the fact itself already means "needs to run"). Run this step when `stringer` is already installed and it's skipped; run it on a machine without `stringer` and it installs it.
+
+`preconditions` is independent of `inputs`/`artifacts` and can be declared alongside them — a step with all three implicitly means `when: "checksum.changed || !preconditions.success"` (run if either signal says so).
+
+## Fields
+
+<dl>
+  <dt>`tools`</dt>
+  <dd>List of executable names resolved via Go's `exec.LookPath` — no shell involved, so there's no `which`-vs-`where` cross-platform mismatch to work around. `preconditions.success` is `true` iff every entry resolves without error.</dd>
+</dl>
+
+## Facts exposed to `when`
+
+<dl>
+  <dt>`preconditions.success`</dt>
+  <dd>`true` when every tool in `preconditions.tools` resolves on `PATH`. Reuses the same `success`/`failure` vocabulary the condition engine already uses for step lifecycle status, namespaced under `preconditions` — not a new, unrelated word for the same concept.</dd>
+</dl>
+
+Power users can reference it directly, including negated, to combine it with anything else `when` already supports:
+
+```yaml
+steps:
+  - name: install-stringer
+    type: shell
+    command: go install golang.org/x/tools/cmd/stringer@latest
+    preconditions:
+      tools: ["stringer"]
+    when: "!preconditions.success"
+```
+
+## Storage
+
+`preconditions.success` is always evaluated live (`exec.LookPath` at run time) — there's no persisted state, unlike `checksum.changed`.
+
+:::note Custom commands
+The same `preconditions` field works identically on [custom command](/cli/configuration/commands) steps.
+:::

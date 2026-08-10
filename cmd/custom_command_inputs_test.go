@@ -183,13 +183,13 @@ func TestCustomCommandIntegration_ExplicitFreshnessWhenRunsOnFreshState(t *testi
 	}
 }
 
-// TestCustomCommandIntegration_PreconditionSkipsWhenToolAlreadyOnPath verifies the independent
-// `precondition:` mechanism: a step with `precondition.tools` and no explicit inputs/artifacts
+// TestCustomCommandIntegration_PreconditionsSkipsWhenToolAlreadyOnPath verifies the independent
+// `preconditions:` mechanism: a step with `preconditions.tools` and no explicit inputs/artifacts
 // skips when every declared tool already resolves via exec.LookPath. Uses "go" as the tool name
 // (guaranteed present in this repo's own test environment, since these tests run under `go
 // test`) rather than a shell command like `which`/`true`, both to exercise the real
 // exec.LookPath-based mechanism end-to-end and to stay cross-platform (no Unix-only binaries).
-func TestCustomCommandIntegration_PreconditionSkipsWhenToolAlreadyOnPath(t *testing.T) {
+func TestCustomCommandIntegration_PreconditionsSkipsWhenToolAlreadyOnPath(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode")
 	}
@@ -213,12 +213,12 @@ func TestCustomCommandIntegration_PreconditionSkipsWhenToolAlreadyOnPath(t *test
 			WorkingDirectory: tmpDir,
 			Steps: schema.Tasks{
 				{
-					Type:         "shell",
-					Command:      "echo ran >> " + filepath.ToSlash(runLog),
-					Precondition: &schema.Precondition{Tools: []string{"go"}},
+					Type:          "shell",
+					Command:       "echo ran >> " + filepath.ToSlash(runLog),
+					Preconditions: &schema.Preconditions{Tools: []string{"go"}},
 					// Explicit here for clarity; this is also the implicit default for a
-					// precondition-only step with no `when:` at all.
-					When: schema.MustCondition("!cel !precondition.success"),
+					// preconditions-only step with no `when:` at all.
+					When: schema.MustCondition("!cel !preconditions.success"),
 				},
 			},
 		},
@@ -238,12 +238,12 @@ func TestCustomCommandIntegration_PreconditionSkipsWhenToolAlreadyOnPath(t *test
 
 	installCmd.Run(installCmd, []string{})
 
-	assert.NoFileExists(t, runLog, "step must be skipped when the precondition tool is already on PATH")
+	assert.NoFileExists(t, runLog, "step must be skipped when the preconditions tool is already on PATH")
 }
 
-// TestCustomCommandIntegration_PreconditionRunsWhenToolMissing is the negative-path counterpart:
-// a tool that is definitely not on PATH must leave the precondition unmet, so the step runs.
-func TestCustomCommandIntegration_PreconditionRunsWhenToolMissing(t *testing.T) {
+// TestCustomCommandIntegration_PreconditionsRunsWhenToolMissing is the negative-path counterpart:
+// a tool that is definitely not on PATH must leave the preconditions unmet, so the step runs.
+func TestCustomCommandIntegration_PreconditionsRunsWhenToolMissing(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode")
 	}
@@ -267,9 +267,9 @@ func TestCustomCommandIntegration_PreconditionRunsWhenToolMissing(t *testing.T) 
 			WorkingDirectory: tmpDir,
 			Steps: schema.Tasks{
 				{
-					Type:         "shell",
-					Command:      "echo ran >> " + filepath.ToSlash(runLog),
-					Precondition: &schema.Precondition{Tools: []string{"atmos-definitely-does-not-exist-tool"}},
+					Type:          "shell",
+					Command:       "echo ran >> " + filepath.ToSlash(runLog),
+					Preconditions: &schema.Preconditions{Tools: []string{"atmos-definitely-does-not-exist-tool"}},
 				},
 			},
 		},
@@ -289,5 +289,5 @@ func TestCustomCommandIntegration_PreconditionRunsWhenToolMissing(t *testing.T) 
 
 	installCmd.Run(installCmd, []string{})
 
-	assert.FileExists(t, runLog, "step must run when the precondition tool is not on PATH")
+	assert.FileExists(t, runLog, "step must run when the preconditions tool is not on PATH")
 }

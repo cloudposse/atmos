@@ -7908,7 +7908,7 @@
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
     },
-    "Precondition": {
+    "Preconditions": {
       "properties": {
         "tools": {
           "anyOf": [
@@ -7935,11 +7935,11 @@
               "type": "string"
             }
           ],
-          "description": "Tools lists executable names resolved via exec.LookPath (no shell, so no\nwhich-vs-where cross-platform mismatch). precondition.success is true iff every entry\nresolves without error."
+          "description": "Tools lists executable names resolved via exec.LookPath (no shell, so no\nwhich-vs-where cross-platform mismatch). preconditions.success is true iff every entry\nresolves without error."
         }
       },
       "type": "object",
-      "description": "Precondition declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs."
+      "description": "Preconditions declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/\nDependencies: the block can hold multiple check kinds (currently Tools; more may follow)."
     },
     "ProSettings": {
       "properties": {
@@ -10777,10 +10777,10 @@
           ],
           "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See the Artifacts type doc for why."
         },
-        "precondition": {
+        "preconditions": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Precondition"
+              "$ref": "#/$defs/Preconditions"
             },
             {
               "type": "null"
@@ -10789,7 +10789,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Precondition declares tools that must already be on PATH for this step to be considered\nalready satisfied, exposing precondition.success as a `when:` CEL fact. An unset `when:`\nalongside a non-nil Precondition (and no Inputs/Artifacts) implicitly means\n`when: \"!precondition.success\"` -- note the negation: success means already-satisfied,\ni.e. skip, the opposite polarity from checksum.changed. See the Precondition type doc."
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied, exposing preconditions.success as a `when:` CEL fact. An unset `when:`\nalongside a non-nil Preconditions (and no Inputs/Artifacts) implicitly means\n`when: \"!preconditions.success\"` -- note the negation: success means already-satisfied,\ni.e. skip, the opposite polarity from checksum.changed. See the Preconditions type doc."
         },
         "outputs": {
           "anyOf": [
@@ -15865,10 +15865,10 @@
           ],
           "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See pkg/schema/task.go's Artifacts type."
         },
-        "precondition": {
+        "preconditions": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Precondition"
+              "$ref": "#/$defs/Preconditions"
             },
             {
               "type": "null"
@@ -15877,7 +15877,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Precondition declares tools that must already be on PATH for this step to be considered\nalready satisfied. See pkg/schema/task.go's Precondition type."
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied. See pkg/schema/task.go's Preconditions type."
         },
         "outputs": {
           "anyOf": [

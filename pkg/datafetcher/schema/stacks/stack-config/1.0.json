@@ -2196,7 +2196,7 @@
                       },
                       "inputs": {
                         "title": "inputs",
-                        "description": "Freshness sources for this step. Declaring inputs/artifacts with no explicit 'when' implicitly means when: checksum.changed. A sibling of 'artifacts' and 'precondition', not a container for them.",
+                        "description": "Freshness sources for this step. Declaring inputs/artifacts with no explicit 'when' implicitly means when: checksum.changed. A sibling of 'artifacts' and 'preconditions', not a container for them.",
                         "type": "object",
                         "additionalProperties": false,
                         "properties": {
@@ -2220,16 +2220,16 @@
                           }
                         }
                       },
-                      "precondition": {
-                        "title": "precondition",
-                        "description": "Tools that must already be on PATH for this step to be considered already satisfied. Declaring precondition alone with no explicit 'when' implicitly means when: \"!precondition.success\" (run only when not already satisfied).",
+                      "preconditions": {
+                        "title": "preconditions",
+                        "description": "Tools that must already be on PATH for this step to be considered already satisfied. Declaring preconditions alone with no explicit 'when' implicitly means when: \"!preconditions.success\" (run only when not already satisfied).",
                         "type": "object",
                         "additionalProperties": false,
                         "properties": {
                           "tools": {
                             "type": "array",
                             "items": { "type": "string" },
-                            "description": "Executable names resolved via exec.LookPath (no shell); precondition.success is true iff every entry resolves."
+                            "description": "Executable names resolved via exec.LookPath (no shell); preconditions.success is true iff every entry resolves."
                           }
                         }
                       },

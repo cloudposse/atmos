@@ -55,14 +55,14 @@ type Context struct {
 	// Platform is OS+"/"+Arch (e.g. "linux/amd64"), for a single combined comparison.
 	Platform string
 
-	// ChecksumChanged/TimestampChanged/PreconditionSuccess/Sources/Artifacts carry the
-	// pkg/runner/freshness-computed facts for a step's `inputs:`/`artifacts:`/`precondition:`,
-	// exposed to `when:` as checksum.changed / timestamp.changed / precondition.success /
+	// ChecksumChanged/TimestampChanged/PreconditionsSuccess/Sources/Artifacts carry the
+	// pkg/runner/freshness-computed facts for a step's `inputs:`/`artifacts:`/`preconditions:`,
+	// exposed to `when:` as checksum.changed / timestamp.changed / preconditions.success /
 	// sources / artifacts. Computed lazily -- callers should only populate the fact(s) a step's
 	// `when:` actually mentions (see MentionsCELIdentifier), leaving the rest at their zero value.
-	ChecksumChanged     bool
-	TimestampChanged    bool
-	PreconditionSuccess bool
+	ChecksumChanged      bool
+	TimestampChanged     bool
+	PreconditionsSuccess bool
 	// Sources/Artifacts are structured per-file records (not bare paths) so `when:` can compare
 	// them directly, e.g. `sources.exists(s, artifacts.all(a, s.mtime > a.mtime))`, in addition
 	// to the simpler checksum.changed/timestamp.changed convenience facts computed from the same

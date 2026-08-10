@@ -96,7 +96,7 @@ entirely. Power users can reference the underlying facts directly (`checksum.cha
 ```yaml
 steps:
   - name: install-stringer
-    precondition:
+    preconditions:
       tools: ["stringer"]
     command: go install golang.org/x/tools/cmd/stringer@latest
 ```
@@ -153,7 +153,7 @@ A handful of smaller gaps closed alongside the above:
 All of this is available today in custom commands and workflows — no flags to enable, no config
 migration required. See [dependencies](/cli/configuration/commands/dependencies),
 [`inputs`](/workflows/steps/inputs), [`artifacts`](/workflows/steps/artifacts),
-[`precondition`](/workflows/steps/precondition), and [`continue`](/workflows/steps/continue) for
+[`preconditions`](/workflows/steps/preconditions), and [`continue`](/workflows/steps/continue) for
 the full field references, or the [Alternatives](/reference/alternatives) page for how Atmos
 compares to go-task more broadly.
 

@@ -494,7 +494,7 @@ func ExecuteWorkflow(
 		// even on a step's very first-ever run. Treat it as possibly-runnable instead of skipping
 		// it via `continue`, matching cmd.executeCustomCommand's identical fix for the same
 		// empty-Context short-circuit.
-		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
 		effective := freshness.EffectiveWhen(step.When, declared)
 		runs := freshness.MentionsAnyFreshnessFact(effective)
 		if !runs {
@@ -584,9 +584,9 @@ func ExecuteWorkflow(
 
 		conditionContext := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
 		conditionContext.Status = conditionStatus
-		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
 		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
-		if step.Inputs != nil || step.Artifacts != nil || step.Precondition != nil {
+		if step.Inputs != nil || step.Artifacts != nil || step.Preconditions != nil {
 			id := freshness.StepIdentity{BaseDir: stepWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: step.Name}
 			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
 			if factsErr != nil {
@@ -594,7 +594,7 @@ func ExecuteWorkflow(
 			}
 			conditionContext.ChecksumChanged = facts.ChecksumChanged
 			conditionContext.TimestampChanged = facts.TimestampChanged
-			conditionContext.PreconditionSuccess = facts.PreconditionSuccess
+			conditionContext.PreconditionsSuccess = facts.PreconditionsSuccess
 			conditionContext.Sources = facts.Sources
 			conditionContext.Artifacts = facts.Artifacts
 		}

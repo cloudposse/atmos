@@ -70,15 +70,15 @@ func sourcesRecordsCondition(t *testing.T) schema.Condition {
 // computeFor adapts Checker.Compute's grouped-struct signature (StepDeclarations/StepIdentity,
 // kept small to stay within the project's per-function argument limit) back to individual
 // arguments, so this file's many scenarios stay terse.
-func computeFor(c *Checker, when schema.Condition, inputs *schema.Inputs, artifacts *schema.Artifacts, precondition *schema.Precondition, baseDir, stateDir, scope, stepName string) (Facts, error) {
-	declared := StepDeclarations{Inputs: inputs, Artifacts: artifacts, Precondition: precondition}
+func computeFor(c *Checker, when schema.Condition, inputs *schema.Inputs, artifacts *schema.Artifacts, preconditions *schema.Preconditions, baseDir, stateDir, scope, stepName string) (Facts, error) {
+	declared := StepDeclarations{Inputs: inputs, Artifacts: artifacts, Preconditions: preconditions}
 	id := StepIdentity{BaseDir: baseDir, StateDir: stateDir, Scope: scope, StepName: stepName}
 	return c.Compute(when, declared, id)
 }
 
 // effectiveWhenFor adapts EffectiveWhen's grouped-struct signature the same way.
-func effectiveWhenFor(when schema.Condition, inputs *schema.Inputs, artifacts *schema.Artifacts, precondition *schema.Precondition) schema.Condition {
-	return EffectiveWhen(when, StepDeclarations{Inputs: inputs, Artifacts: artifacts, Precondition: precondition})
+func effectiveWhenFor(when schema.Condition, inputs *schema.Inputs, artifacts *schema.Artifacts, preconditions *schema.Preconditions) schema.Condition {
+	return EffectiveWhen(when, StepDeclarations{Inputs: inputs, Artifacts: artifacts, Preconditions: preconditions})
 }
 
 func TestChecker_ChecksumUnchangedSkips(t *testing.T) {
@@ -330,108 +330,108 @@ func TestEffectiveWhen(t *testing.T) {
 	explicit := checksumChangedCondition(t)
 	inputs := &schema.Inputs{Sources: []string{"*.go"}}
 	artifacts := &schema.Artifacts{Paths: []string{"app"}}
-	precondition := &schema.Precondition{Tools: []string{"stringer"}}
+	preconditions := &schema.Preconditions{Tools: []string{"stringer"}}
 
 	cases := []struct {
-		name                    string
-		inputs                  *schema.Inputs
-		artifacts               *schema.Artifacts
-		precondition            *schema.Precondition
-		wantChecksumMentioned   bool
-		wantPreconditionMention bool
-		wantZero                bool
+		name                     string
+		inputs                   *schema.Inputs
+		artifacts                *schema.Artifacts
+		preconditions            *schema.Preconditions
+		wantChecksumMentioned    bool
+		wantPreconditionsMention bool
+		wantZero                 bool
 	}{
 		{name: "inputs only", inputs: inputs, wantChecksumMentioned: true},
 		{name: "artifacts only", artifacts: artifacts, wantChecksumMentioned: true},
 		{name: "inputs and artifacts", inputs: inputs, artifacts: artifacts, wantChecksumMentioned: true},
-		{name: "precondition only", precondition: precondition, wantPreconditionMention: true},
-		{name: "inputs and precondition", inputs: inputs, precondition: precondition, wantChecksumMentioned: true, wantPreconditionMention: true},
-		{name: "artifacts and precondition", artifacts: artifacts, precondition: precondition, wantChecksumMentioned: true, wantPreconditionMention: true},
-		{name: "all three", inputs: inputs, artifacts: artifacts, precondition: precondition, wantChecksumMentioned: true, wantPreconditionMention: true},
+		{name: "preconditions only", preconditions: preconditions, wantPreconditionsMention: true},
+		{name: "inputs and preconditions", inputs: inputs, preconditions: preconditions, wantChecksumMentioned: true, wantPreconditionsMention: true},
+		{name: "artifacts and preconditions", artifacts: artifacts, preconditions: preconditions, wantChecksumMentioned: true, wantPreconditionsMention: true},
+		{name: "all three", inputs: inputs, artifacts: artifacts, preconditions: preconditions, wantChecksumMentioned: true, wantPreconditionsMention: true},
 		{name: "none", wantZero: true},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := effectiveWhenFor(schema.Condition{}, tc.inputs, tc.artifacts, tc.precondition)
+			result := effectiveWhenFor(schema.Condition{}, tc.inputs, tc.artifacts, tc.preconditions)
 			if tc.wantZero {
 				assert.True(t, result.IsZero())
 				return
 			}
 			assert.Equal(t, tc.wantChecksumMentioned, result.MentionsCELIdentifier("checksum"))
-			assert.Equal(t, tc.wantPreconditionMention, result.MentionsCELIdentifier("precondition"))
+			assert.Equal(t, tc.wantPreconditionsMention, result.MentionsCELIdentifier("preconditions"))
 		})
 	}
 
 	t.Run("explicit when is never overridden", func(t *testing.T) {
-		result := effectiveWhenFor(explicit, inputs, artifacts, precondition)
+		result := effectiveWhenFor(explicit, inputs, artifacts, preconditions)
 		assert.Equal(t, explicit, result)
 	})
 }
 
-// TestEffectiveWhen_PreconditionPolarityIsNegated is a targeted regression test for the bug
-// found while re-deriving this design: the implicit precondition-only default must be
-// "!precondition.success" (run when NOT already satisfied), not bare "precondition.success"
+// TestEffectiveWhen_PreconditionsPolarityIsNegated is a targeted regression test for the bug
+// found while re-deriving this design: the implicit preconditions-only default must be
+// "!preconditions.success" (run when NOT already satisfied), not bare "preconditions.success"
 // (which would run only when already satisfied -- backwards).
-func TestEffectiveWhen_PreconditionPolarityIsNegated(t *testing.T) {
-	result := effectiveWhenFor(schema.Condition{}, nil, nil, &schema.Precondition{Tools: []string{"stringer"}})
+func TestEffectiveWhen_PreconditionsPolarityIsNegated(t *testing.T) {
+	result := effectiveWhenFor(schema.Condition{}, nil, nil, &schema.Preconditions{Tools: []string{"stringer"}})
 
-	ctxAlreadyInstalled := condition.Context{PreconditionSuccess: true}
+	ctxAlreadyInstalled := condition.Context{PreconditionsSuccess: true}
 	runs, err := result.EvaluateE(ctxAlreadyInstalled)
 	require.NoError(t, err)
-	assert.False(t, runs, "must NOT run when the tool is already on PATH (precondition already satisfied)")
+	assert.False(t, runs, "must NOT run when the tool is already on PATH (preconditions already satisfied)")
 
-	ctxMissing := condition.Context{PreconditionSuccess: false}
+	ctxMissing := condition.Context{PreconditionsSuccess: false}
 	runs, err = result.EvaluateE(ctxMissing)
 	require.NoError(t, err)
-	assert.True(t, runs, "must run when the tool is NOT on PATH (precondition unmet)")
+	assert.True(t, runs, "must run when the tool is NOT on PATH (preconditions unmet)")
 }
 
-func TestChecker_PreconditionAllToolsResolveSucceeds(t *testing.T) {
+func TestChecker_PreconditionsAllToolsResolveSucceeds(t *testing.T) {
 	checker := NewChecker(WithLookupTool(func(name string) (string, error) {
 		return "/usr/bin/" + name, nil
 	}))
-	precondition := &schema.Precondition{Tools: []string{"stringer", "protoc"}}
+	preconditions := &schema.Preconditions{Tools: []string{"stringer", "protoc"}}
 
-	facts, err := computeFor(checker, schema.MustCondition("!cel !precondition.success"), nil, nil, precondition, ".", ".", "cmd:x", "step")
+	facts, err := computeFor(checker, schema.MustCondition("!cel !preconditions.success"), nil, nil, preconditions, ".", ".", "cmd:x", "step")
 	require.NoError(t, err)
-	assert.True(t, facts.PreconditionSuccess)
+	assert.True(t, facts.PreconditionsSuccess)
 }
 
-func TestChecker_PreconditionAnyMissingToolFails(t *testing.T) {
+func TestChecker_PreconditionsAnyMissingToolFails(t *testing.T) {
 	checker := NewChecker(WithLookupTool(func(name string) (string, error) {
 		if name == "stringer" {
 			return "/usr/bin/stringer", nil
 		}
 		return "", errors.New("exec: \"missing-tool\": executable file not found in $PATH")
 	}))
-	precondition := &schema.Precondition{Tools: []string{"stringer", "missing-tool"}}
+	preconditions := &schema.Preconditions{Tools: []string{"stringer", "missing-tool"}}
 
-	facts, err := computeFor(checker, schema.MustCondition("!cel !precondition.success"), nil, nil, precondition, ".", ".", "cmd:x", "step")
+	facts, err := computeFor(checker, schema.MustCondition("!cel !preconditions.success"), nil, nil, preconditions, ".", ".", "cmd:x", "step")
 	require.NoError(t, err)
-	assert.False(t, facts.PreconditionSuccess)
+	assert.False(t, facts.PreconditionsSuccess)
 }
 
-func TestChecker_PreconditionEmptyToolsIsVacuouslyTrue(t *testing.T) {
+func TestChecker_PreconditionsEmptyToolsIsVacuouslyTrue(t *testing.T) {
 	checker := NewChecker(WithLookupTool(func(string) (string, error) {
 		t.Fatal("lookup must not be called for an empty Tools list")
 		return "", nil
 	}))
-	facts, err := computeFor(checker, schema.Condition{}, nil, nil, &schema.Precondition{}, ".", ".", "cmd:x", "step")
+	facts, err := computeFor(checker, schema.Condition{}, nil, nil, &schema.Preconditions{}, ".", ".", "cmd:x", "step")
 	require.NoError(t, err)
-	assert.True(t, facts.PreconditionSuccess)
+	assert.True(t, facts.PreconditionsSuccess)
 }
 
-func TestChecker_PreconditionAlwaysComputedRegardlessOfWhenReferences(t *testing.T) {
-	// Unlike checksum/timestamp/structured records, precondition resolution is cheap
-	// (exec.LookPath, no shell, no hashing) and is always computed whenever Precondition != nil,
+func TestChecker_PreconditionsAlwaysComputedRegardlessOfWhenReferences(t *testing.T) {
+	// Unlike checksum/timestamp/structured records, preconditions resolution is cheap
+	// (exec.LookPath, no shell, no hashing) and is always computed whenever Preconditions != nil,
 	// mirroring how the pre-rename `check:` field always ran regardless of lazy gating.
 	calls := 0
 	checker := NewChecker(WithLookupTool(func(string) (string, error) {
 		calls++
 		return "/usr/bin/x", nil
 	}))
-	_, err := computeFor(checker, schema.Condition{}, nil, nil, &schema.Precondition{Tools: []string{"x"}}, ".", ".", "cmd:x", "step")
+	_, err := computeFor(checker, schema.Condition{}, nil, nil, &schema.Preconditions{Tools: []string{"x"}}, ".", ".", "cmd:x", "step")
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 }
@@ -664,7 +664,7 @@ func TestMentionsAnyFreshnessFact(t *testing.T) {
 		{name: "unrelated CEL expression mentions nothing", cond: schema.MustCondition("!cel 1 == 1"), want: false},
 		{name: "mentions checksum", cond: checksumChangedCondition(t), want: true},
 		{name: "mentions timestamp", cond: timestampChangedCondition(t), want: true},
-		{name: "mentions precondition", cond: schema.MustCondition("!cel !precondition.success"), want: true},
+		{name: "mentions preconditions", cond: schema.MustCondition("!cel !preconditions.success"), want: true},
 		{name: "mentions sources", cond: sourcesRecordsCondition(t), want: true},
 		{name: "mentions artifacts", cond: artifactsRecordsCondition(t), want: true},
 	}

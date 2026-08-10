@@ -80,16 +80,17 @@ type Artifacts struct {
 	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
 }
 
-// Precondition declares tools that must already be on PATH for this step's work to be considered
+// Preconditions declares tools that must already be on PATH for this step's work to be considered
 // already satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert
 // step's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately
 // not named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the
 // type: http step's post-hoc success criteria), and even without that collision, expect: is
 // established elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas
-// this is a pre-hoc gate checked before the step runs.
-type Precondition struct {
+// this is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/
+// Dependencies: the block can hold multiple check kinds (currently Tools; more may follow).
+type Preconditions struct {
 	// Tools lists executable names resolved via exec.LookPath (no shell, so no
-	// which-vs-where cross-platform mismatch). precondition.success is true iff every entry
+	// which-vs-where cross-platform mismatch). preconditions.success is true iff every entry
 	// resolves without error.
 	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 }
@@ -280,12 +281,12 @@ type Task struct {
 	// inside it. See the Artifacts type doc for why.
 	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
 
-	// Precondition declares tools that must already be on PATH for this step to be considered
-	// already satisfied, exposing precondition.success as a `when:` CEL fact. An unset `when:`
-	// alongside a non-nil Precondition (and no Inputs/Artifacts) implicitly means
-	// `when: "!precondition.success"` -- note the negation: success means already-satisfied,
-	// i.e. skip, the opposite polarity from checksum.changed. See the Precondition type doc.
-	Precondition *Precondition `yaml:"precondition,omitempty" json:"precondition,omitempty" mapstructure:"precondition"`
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied, exposing preconditions.success as a `when:` CEL fact. An unset `when:`
+	// alongside a non-nil Preconditions (and no Inputs/Artifacts) implicitly means
+	// `when: "!preconditions.success"` -- note the negation: success means already-satisfied,
+	// i.e. skip, the opposite polarity from checksum.changed. See the Preconditions type doc.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -551,9 +552,9 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Dirs:  task.Dirs,
 		Hint:  task.Hint,
 
-		Inputs:       task.Inputs,
-		Artifacts:    task.Artifacts,
-		Precondition: task.Precondition,
+		Inputs:        task.Inputs,
+		Artifacts:     task.Artifacts,
+		Preconditions: task.Preconditions,
 
 		Outputs: task.Outputs,
 
@@ -718,9 +719,9 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Dirs:  step.Dirs,
 		Hint:  step.Hint,
 
-		Inputs:       step.Inputs,
-		Artifacts:    step.Artifacts,
-		Precondition: step.Precondition,
+		Inputs:        step.Inputs,
+		Artifacts:     step.Artifacts,
+		Preconditions: step.Preconditions,
 
 		Outputs: step.Outputs,
 

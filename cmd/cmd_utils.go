@@ -807,12 +807,12 @@ func executeCustomCommand(
 			return
 		}
 		// A step whose effective `when:` references a freshness fact (checksum.changed,
-		// timestamp.changed, precondition.success, or the structured sources/artifacts records)
+		// timestamp.changed, preconditions.success, or the structured sources/artifacts records)
 		// can't be decided here: this cheap pre-check has no freshness.Checker yet, so those
 		// facts are all zero-value, and evaluating against them would always read as "unchanged"
 		// -- even on a step's very first-ever run. Treat it as possibly-runnable instead and defer
 		// to the real per-step loop below, which does compute and pass real freshness facts.
-		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
 		effective := freshness.EffectiveWhen(step.When, declared)
 		if freshness.MentionsAnyFreshnessFact(effective) {
 			hasRunnableStep = true
@@ -983,9 +983,9 @@ func executeCustomCommand(
 		}
 
 		conditionCtx := customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus)
-		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Precondition: step.Precondition}
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
 		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
-		if step.Inputs != nil || step.Artifacts != nil || step.Precondition != nil {
+		if step.Inputs != nil || step.Artifacts != nil || step.Preconditions != nil {
 			id := freshness.StepIdentity{BaseDir: freshnessWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: stepFreshnessName(step.Name, i)}
 			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
 			if factsErr != nil {
@@ -994,7 +994,7 @@ func executeCustomCommand(
 			}
 			conditionCtx.ChecksumChanged = facts.ChecksumChanged
 			conditionCtx.TimestampChanged = facts.TimestampChanged
-			conditionCtx.PreconditionSuccess = facts.PreconditionSuccess
+			conditionCtx.PreconditionsSuccess = facts.PreconditionsSuccess
 			conditionCtx.Sources = facts.Sources
 			conditionCtx.Artifacts = facts.Artifacts
 		}

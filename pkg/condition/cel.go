@@ -40,7 +40,7 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("platform", cel.StringType),
 			cel.Variable("checksum", cel.MapType(cel.StringType, cel.BoolType)),
 			cel.Variable("timestamp", cel.MapType(cel.StringType, cel.BoolType)),
-			cel.Variable("precondition", cel.MapType(cel.StringType, cel.BoolType)),
+			cel.Variable("preconditions", cel.MapType(cel.StringType, cel.BoolType)),
 			cel.Variable("sources", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
 			cel.Variable("artifacts", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
 		)
@@ -62,24 +62,24 @@ func (ctx Context) activation() map[string]any {
 		answers = map[string]any{}
 	}
 	return map[string]any{
-		"ci":           ctx.CI,
-		"status":       ctx.Status,
-		"stack":        ctx.Stack,
-		"component":    ctx.Component,
-		"workflow":     ctx.Workflow,
-		"step":         ctx.Step,
-		"hook":         ctx.Hook,
-		"event":        ctx.Event,
-		"env":          env,
-		"answers":      answers,
-		"os":           ctx.OS,
-		"arch":         ctx.Arch,
-		"platform":     ctx.Platform,
-		"checksum":     map[string]bool{"changed": ctx.ChecksumChanged},
-		"timestamp":    map[string]bool{"changed": ctx.TimestampChanged},
-		"precondition": map[string]bool{"success": ctx.PreconditionSuccess},
-		"sources":      fileFactsOrEmpty(ctx.Sources),
-		"artifacts":    fileFactsOrEmpty(ctx.Artifacts),
+		"ci":            ctx.CI,
+		"status":        ctx.Status,
+		"stack":         ctx.Stack,
+		"component":     ctx.Component,
+		"workflow":      ctx.Workflow,
+		"step":          ctx.Step,
+		"hook":          ctx.Hook,
+		"event":         ctx.Event,
+		"env":           env,
+		"answers":       answers,
+		"os":            ctx.OS,
+		"arch":          ctx.Arch,
+		"platform":      ctx.Platform,
+		"checksum":      map[string]bool{"changed": ctx.ChecksumChanged},
+		"timestamp":     map[string]bool{"changed": ctx.TimestampChanged},
+		"preconditions": map[string]bool{"success": ctx.PreconditionsSuccess},
+		"sources":       fileFactsOrEmpty(ctx.Sources),
+		"artifacts":     fileFactsOrEmpty(ctx.Artifacts),
 	}
 }
 
@@ -99,7 +99,7 @@ func celMentionsIdentifier(expr, ident string) bool {
 	// like "checksum.changed" tokenizes as one token, not two. Match both a bare identifier
 	// (e.g. "status") and an identifier used as the root of a field-selection chain (e.g.
 	// "checksum" in "checksum.changed"), since freshness facts are exposed as small maps
-	// (checksum.changed, timestamp.changed, precondition.success) rather than flat scalars.
+	// (checksum.changed, timestamp.changed, preconditions.success) rather than flat scalars.
 	prefix := ident + "."
 	for _, token := range strings.FieldsFunc(expr, func(r rune) bool {
 		return r != '_' &&

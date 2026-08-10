@@ -322,16 +322,16 @@ func TestConditionEvaluate_PlatformFacts(t *testing.T) {
 	assert.True(t, platform.Evaluate(ctx))
 }
 
-func TestConditionEvaluate_PreconditionFact(t *testing.T) {
-	success, err := New("!cel precondition.success")
+func TestConditionEvaluate_PreconditionsFact(t *testing.T) {
+	success, err := New("!cel preconditions.success")
 	require.NoError(t, err)
-	assert.True(t, success.Evaluate(Context{PreconditionSuccess: true}))
-	assert.False(t, success.Evaluate(Context{PreconditionSuccess: false}))
+	assert.True(t, success.Evaluate(Context{PreconditionsSuccess: true}))
+	assert.False(t, success.Evaluate(Context{PreconditionsSuccess: false}))
 
-	negated, err := New("!cel !precondition.success")
+	negated, err := New("!cel !preconditions.success")
 	require.NoError(t, err)
-	assert.False(t, negated.Evaluate(Context{PreconditionSuccess: true}))
-	assert.True(t, negated.Evaluate(Context{PreconditionSuccess: false}))
+	assert.False(t, negated.Evaluate(Context{PreconditionsSuccess: true}))
+	assert.True(t, negated.Evaluate(Context{PreconditionsSuccess: false}))
 }
 
 func TestConditionEvaluate_StructuredSourcesArtifactsFacts(t *testing.T) {
@@ -358,11 +358,11 @@ func TestConditionEvaluate_StructuredSourcesArtifactsFacts(t *testing.T) {
 }
 
 func TestConditionMentionsCELIdentifier(t *testing.T) {
-	cond, err := New("!cel checksum.changed && precondition.success")
+	cond, err := New("!cel checksum.changed && preconditions.success")
 	require.NoError(t, err)
 
 	assert.True(t, cond.MentionsCELIdentifier("checksum"))
-	assert.True(t, cond.MentionsCELIdentifier("precondition"))
+	assert.True(t, cond.MentionsCELIdentifier("preconditions"))
 	assert.False(t, cond.MentionsCELIdentifier("timestamp"))
 	assert.False(t, Condition{}.MentionsCELIdentifier("checksum"), "a zero-value condition mentions nothing")
 }

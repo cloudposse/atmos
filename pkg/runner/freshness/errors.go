@@ -1,6 +1,6 @@
-// Package freshness computes the checksum.changed/timestamp.changed/precondition.success/
+// Package freshness computes the checksum.changed/timestamp.changed/preconditions.success/
 // sources/artifacts facts consumed via the existing `when:` condition engine for a step's
-// `inputs:`/`artifacts:`/`precondition:`, and persists sources-hash state across runs for
+// `inputs:`/`artifacts:`/`preconditions:`, and persists sources-hash state across runs for
 // checksum comparison. See pkg/condition for how these facts are exposed to `when:`.
 package freshness
 

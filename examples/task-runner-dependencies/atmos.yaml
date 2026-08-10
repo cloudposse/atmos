@@ -6,7 +6,7 @@ workflows:
 # Task-runner convergence field-test fixture.
 #
 # Exercises: dependencies.commands / dependencies.workflows (DAG execution, fail modes,
-# dedup), step-level inputs/artifacts freshness checking, precondition steps, the
+# dedup), step-level inputs/artifacts freshness checking, preconditions steps, the
 # continue: step field, native command aliases/internal, and constrained flag values.
 commands:
   # --- Dependency graph: commands depending on commands, with dedup and parameterization ---
@@ -174,7 +174,7 @@ commands:
           paths: ["build/smart-output.txt"]
         when: "sources.exists(s, artifacts.all(a, s.mtime > a.mtime))"
 
-  # --- Precondition: inverted polarity vs inputs/artifacts ---
+  # --- Preconditions: inverted polarity vs inputs/artifacts ---
   - name: install-missing-tool
     description: Tool never present on PATH, so the step should run every single time.
     steps:
@@ -182,8 +182,8 @@ commands:
         type: shell
         command: |
           mkdir -p logs
-          echo "install ran $(date +%s%N)" >> logs/precondition-missing.log
-        precondition:
+          echo "install ran $(date +%s%N)" >> logs/preconditions-missing.log
+        preconditions:
           tools: ["definitely-not-a-real-tool-xyz-123"]
 
   - name: install-present-tool
@@ -193,8 +193,8 @@ commands:
         type: shell
         command: |
           mkdir -p logs
-          echo "install ran $(date +%s%N)" >> logs/precondition-present.log
-        precondition:
+          echo "install ran $(date +%s%N)" >> logs/preconditions-present.log
+        preconditions:
           tools: ["echo"]
 
   # --- continue: always forgiveness, and interaction with when: failure ---

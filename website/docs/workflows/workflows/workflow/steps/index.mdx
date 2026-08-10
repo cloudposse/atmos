@@ -60,12 +60,12 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
   <dd>Forgive this step's own failure so later steps still run and the overall workflow status is unaffected — GitHub Actions' `continue-on-error` semantics.</dd>
 
   <dt>[`inputs`](/workflows/steps/inputs)</dt>
-  <dd>Declare this step's freshness sources (`sources`) so Atmos can skip the step when nothing has changed since it last ran successfully. Pair with [`artifacts`](/workflows/steps/artifacts) (outputs) and [`precondition`](/workflows/steps/precondition) (required tools) — three separate sibling fields.</dd>
+  <dd>Declare this step's freshness sources (`sources`) so Atmos can skip the step when nothing has changed since it last ran successfully. Pair with [`artifacts`](/workflows/steps/artifacts) (outputs) and [`preconditions`](/workflows/steps/preconditions) (required tools) — three separate sibling fields.</dd>
 
   <dt>[`artifacts`](/workflows/steps/artifacts)</dt>
   <dd>Declare this step's expected output files.</dd>
 
-  <dt>[`precondition`](/workflows/steps/precondition)</dt>
+  <dt>[`preconditions`](/workflows/steps/preconditions)</dt>
   <dd>Declare tools that must already be on `PATH` for this step to be considered already satisfied.</dd>
 
   <dt>`env`</dt>
@@ -173,7 +173,7 @@ Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `wor
 Two more small fact groups are always available:
 
 - `os`, `arch`, `platform` — the equivalent of a dedicated `platforms:` field, letting a step run only on a given OS/architecture: `when: "os == 'darwin'"`, `when: "platform == 'linux/arm64'"`.
-- `checksum`, `timestamp`, `precondition`, `sources`, `artifacts` — freshness facts for a step's [`inputs`](/workflows/steps/inputs)/[`artifacts`](/workflows/steps/artifacts)/[`precondition`](/workflows/steps/precondition) (`checksum.changed`, `timestamp.changed`, `precondition.success`), computed lazily so a step only pays for the specific fact its `when` expression references. `sources`/`artifacts` resolve to structured per-file records (`path`, `mtime`, `checksum`), not bare strings — see [inputs: Advanced](/workflows/steps/inputs#advanced-structured-records).
+- `checksum`, `timestamp`, `preconditions`, `sources`, `artifacts` — freshness facts for a step's [`inputs`](/workflows/steps/inputs)/[`artifacts`](/workflows/steps/artifacts)/[`preconditions`](/workflows/steps/preconditions) (`checksum.changed`, `timestamp.changed`, `preconditions.success`), computed lazily so a step only pays for the specific fact its `when` expression references. `sources`/`artifacts` resolve to structured per-file records (`path`, `mtime`, `checksum`), not bare strings — see [inputs: Advanced](/workflows/steps/inputs#advanced-structured-records).
 
 ## Cleanup Steps
 

@@ -28,11 +28,11 @@ func StateDir(basePath string) string {
 
 // Facts carries the freshness facts computed for one step evaluation, merged into the caller's
 // schema.ConditionContext before evaluating `when:` (see pkg/condition's ChecksumChanged/
-// TimestampChanged/PreconditionSuccess/Sources/Artifacts fields).
+// TimestampChanged/PreconditionsSuccess/Sources/Artifacts fields).
 type Facts struct {
-	ChecksumChanged     bool
-	TimestampChanged    bool
-	PreconditionSuccess bool
+	ChecksumChanged      bool
+	TimestampChanged     bool
+	PreconditionsSuccess bool
 	// Sources/Artifacts are structured per-file records, populated only when a step's `when:`
 	// actually references the bare `sources`/`artifacts` identifiers (see Compute) -- building
 	// per-file mtime/checksum data is wasted work for the common case where only the
@@ -41,12 +41,12 @@ type Facts struct {
 	Artifacts []condition.FileFact
 }
 
-// LookupTool resolves one precondition.tools entry, mirroring exec.LookPath's signature.
+// LookupTool resolves one preconditions.tools entry, mirroring exec.LookPath's signature.
 // Abstracted for testability; the default is exec.LookPath directly -- no shell involved, so
 // there's no which-vs-where cross-platform mismatch to work around.
 type LookupTool func(name string) (string, error)
 
-// Checker computes freshness Facts for a step's schema.Inputs/Artifacts/Precondition and
+// Checker computes freshness Facts for a step's schema.Inputs/Artifacts/Preconditions and
 // persists checksum state across runs. Constructed via NewChecker with Options (>2-3 logical
 // dependencies), defaulting to real production implementations.
 type Checker struct {
@@ -103,25 +103,25 @@ func NewChecker(opts ...Option) *Checker {
 	return c
 }
 
-// Implicit `when:` defaults synthesized when a step declares Inputs/Artifacts/Precondition but no
+// Implicit `when:` defaults synthesized when a step declares Inputs/Artifacts/Preconditions but no
 // explicit `when:`. Checksum.changed already means "needs to run" (positive polarity), but
-// precondition.success means the opposite: the precondition already holds, i.e. skip -- so the
-// run-signal is its negation. See schema.Precondition's doc comment for why.
+// preconditions.success means the opposite: the preconditions already hold, i.e. skip -- so the
+// run-signal is its negation. See schema.Preconditions's doc comment for why.
 var (
-	implicitChecksumChanged                    = schema.MustCondition("!cel checksum.changed")
-	implicitPreconditionUnmet                  = schema.MustCondition("!cel !precondition.success")
-	implicitChecksumChangedOrPreconditionUnmet = schema.MustCondition("!cel checksum.changed || !precondition.success")
+	implicitChecksumChanged                     = schema.MustCondition("!cel checksum.changed")
+	implicitPreconditionsUnmet                  = schema.MustCondition("!cel !preconditions.success")
+	implicitChecksumChangedOrPreconditionsUnmet = schema.MustCondition("!cel checksum.changed || !preconditions.success")
 )
 
 // StepDeclarations groups a step's three freshness-related declarations (Inputs/Artifacts/
-// Precondition are deliberate siblings, not one nested inside another -- see their own doc
+// Preconditions are deliberate siblings, not one nested inside another -- see their own doc
 // comments in pkg/schema/task.go for why). Grouped into one struct so EffectiveWhen/Compute stay
 // within the project's per-function argument limit, and so callers build the group once and pass
 // it to both.
 type StepDeclarations struct {
-	Inputs       *schema.Inputs
-	Artifacts    *schema.Artifacts
-	Precondition *schema.Precondition
+	Inputs        *schema.Inputs
+	Artifacts     *schema.Artifacts
+	Preconditions *schema.Preconditions
 }
 
 // StepIdentity groups the location/identity parameters needed to compute and persist freshness
@@ -134,8 +134,8 @@ type StepIdentity struct {
 }
 
 // EffectiveWhen returns when, or an implicit condition synthesized from which of
-// declared.Inputs/Artifacts/Precondition are present, if when is unset (zero) -- so declaring
-// `inputs:`/`artifacts:`/`precondition:` alone (no explicit `when:`) is enough to skip a step
+// declared.Inputs/Artifacts/Preconditions are present, if when is unset (zero) -- so declaring
+// `inputs:`/`artifacts:`/`preconditions:` alone (no explicit `when:`) is enough to skip a step
 // whose work is already done, matching go-task's zero-boilerplate default.
 func EffectiveWhen(when schema.Condition, declared StepDeclarations) schema.Condition {
 	defer perf.Track(nil, "freshness.EffectiveWhen")()
@@ -144,23 +144,23 @@ func EffectiveWhen(when schema.Condition, declared StepDeclarations) schema.Cond
 		return when
 	}
 	hasFreshness := declared.Inputs != nil || declared.Artifacts != nil
-	hasPrecondition := declared.Precondition != nil
+	hasPreconditions := declared.Preconditions != nil
 	switch {
-	case hasFreshness && hasPrecondition:
-		return implicitChecksumChangedOrPreconditionUnmet
+	case hasFreshness && hasPreconditions:
+		return implicitChecksumChangedOrPreconditionsUnmet
 	case hasFreshness:
 		return implicitChecksumChanged
-	case hasPrecondition:
-		return implicitPreconditionUnmet
+	case hasPreconditions:
+		return implicitPreconditionsUnmet
 	default:
 		return when
 	}
 }
 
 // freshnessFactIdentifiers lists every CEL identifier a freshness Checker can populate (see
-// pkg/condition's Context.ChecksumChanged/TimestampChanged/PreconditionSuccess/Sources/Artifacts
+// pkg/condition's Context.ChecksumChanged/TimestampChanged/PreconditionsSuccess/Sources/Artifacts
 // fields and pkg/condition/cel.go's matching declarations).
-var freshnessFactIdentifiers = []string{"checksum", "timestamp", "precondition", "sources", "artifacts"}
+var freshnessFactIdentifiers = []string{"checksum", "timestamp", "preconditions", "sources", "artifacts"}
 
 // MentionsAnyFreshnessFact reports whether when references any freshness-derived CEL identifier.
 // Callers that need a cheap "might this step run" answer without a freshness.Checker on hand yet
@@ -292,8 +292,8 @@ func (c *Checker) Compute(effectiveWhen schema.Condition, declared StepDeclarati
 
 	var facts Facts
 
-	if declared.Precondition != nil {
-		facts.PreconditionSuccess = c.resolvePrecondition(declared.Precondition)
+	if declared.Preconditions != nil {
+		facts.PreconditionsSuccess = c.resolvePreconditions(declared.Preconditions)
 	}
 	if declared.Inputs == nil && declared.Artifacts == nil {
 		return facts, nil
@@ -320,7 +320,7 @@ func (c *Checker) Compute(effectiveWhen schema.Condition, declared StepDeclarati
 
 // RecordSuccess persists the current sources checksum for the next run's comparison. Call ONLY
 // after the step's own Execute() returns success -- a failed step must never mark itself falsely
-// up to date. Precondition has no persisted state (exec.LookPath is always evaluated live), so
+// up to date. Preconditions has no persisted state (exec.LookPath is always evaluated live), so
 // it has nothing to record here -- callers gate this call on inputs/artifacts being declared at
 // all, not on inputs.Sources being non-empty: an artifacts-only step (inputs == nil) still needs
 // a record of the (empty) sources hash, or checksumChanged's `!found` branch reports "changed"
@@ -344,11 +344,11 @@ func (c *Checker) RecordSuccess(inputs *schema.Inputs, baseDir, stateDir, scope,
 	return c.store.Save(stateDir, key, Record{SourcesHash: hash})
 }
 
-// resolvePrecondition reports whether every declared tool resolves on PATH. An empty Tools list
+// resolvePreconditions reports whether every declared tool resolves on PATH. An empty Tools list
 // is vacuously true (there is nothing left unsatisfied), though callers are expected to validate
-// that a Precondition block declares at least one tool.
-func (c *Checker) resolvePrecondition(precondition *schema.Precondition) bool {
-	for _, tool := range precondition.Tools {
+// that a Preconditions block declares at least one tool.
+func (c *Checker) resolvePreconditions(preconditions *schema.Preconditions) bool {
+	for _, tool := range preconditions.Tools {
 		if _, err := c.lookup(tool); err != nil {
 			return false
 		}

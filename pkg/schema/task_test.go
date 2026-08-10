@@ -408,49 +408,49 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, task.WorkingDirectory, roundTripped.WorkingDirectory)
 }
 
-// TestTask_InputsArtifactsPreconditionRoundTrip exercises every combination of the three
-// freshness sibling fields (Inputs/Artifacts/Precondition) through both conversion directions,
-// since Inputs is a general container (not narrowed to sources only) and Artifacts/Precondition
+// TestTask_InputsArtifactsPreconditionsRoundTrip exercises every combination of the three
+// freshness sibling fields (Inputs/Artifacts/Preconditions) through both conversion directions,
+// since Inputs is a general container (not narrowed to sources only) and Artifacts/Preconditions
 // are deliberately separate sibling fields, not nested inside Inputs.
-func TestTask_InputsArtifactsPreconditionRoundTrip(t *testing.T) {
+func TestTask_InputsArtifactsPreconditionsRoundTrip(t *testing.T) {
 	cases := []struct {
-		name         string
-		inputs       *Inputs
-		artifacts    *Artifacts
-		precondition *Precondition
+		name          string
+		inputs        *Inputs
+		artifacts     *Artifacts
+		preconditions *Preconditions
 	}{
 		{name: "none"},
 		{name: "inputs only", inputs: &Inputs{Sources: []string{"*.go"}}},
 		{name: "artifacts only", artifacts: &Artifacts{Paths: []string{"bin/app"}}},
-		{name: "precondition only", precondition: &Precondition{Tools: []string{"stringer"}}},
+		{name: "preconditions only", preconditions: &Preconditions{Tools: []string{"stringer"}}},
 		{
 			name:      "inputs and artifacts",
 			inputs:    &Inputs{Sources: []string{"*.go", "go.sum"}},
 			artifacts: &Artifacts{Paths: []string{"bin/app"}},
 		},
 		{
-			name:         "all three",
-			inputs:       &Inputs{Sources: []string{"*.go"}},
-			artifacts:    &Artifacts{Paths: []string{"bin/app"}},
-			precondition: &Precondition{Tools: []string{"stringer", "protoc"}},
+			name:          "all three",
+			inputs:        &Inputs{Sources: []string{"*.go"}},
+			artifacts:     &Artifacts{Paths: []string{"bin/app"}},
+			preconditions: &Preconditions{Tools: []string{"stringer", "protoc"}},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name+" Task->WorkflowStep", func(t *testing.T) {
-			task := Task{Name: "t", Inputs: tc.inputs, Artifacts: tc.artifacts, Precondition: tc.precondition}
+			task := Task{Name: "t", Inputs: tc.inputs, Artifacts: tc.artifacts, Preconditions: tc.preconditions}
 			step := task.ToWorkflowStep()
 			assert.Equal(t, tc.inputs, step.Inputs)
 			assert.Equal(t, tc.artifacts, step.Artifacts)
-			assert.Equal(t, tc.precondition, step.Precondition)
+			assert.Equal(t, tc.preconditions, step.Preconditions)
 		})
 
 		t.Run(tc.name+" WorkflowStep->Task", func(t *testing.T) {
-			step := WorkflowStep{Name: "s", Inputs: tc.inputs, Artifacts: tc.artifacts, Precondition: tc.precondition}
+			step := WorkflowStep{Name: "s", Inputs: tc.inputs, Artifacts: tc.artifacts, Preconditions: tc.preconditions}
 			task := TaskFromWorkflowStep(&step)
 			assert.Equal(t, tc.inputs, task.Inputs)
 			assert.Equal(t, tc.artifacts, task.Artifacts)
-			assert.Equal(t, tc.precondition, task.Precondition)
+			assert.Equal(t, tc.preconditions, task.Preconditions)
 		})
 	}
 }

@@ -1535,11 +1535,11 @@ func TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged(t *testing.T) {
 	assert.Equal(t, 2, countRuns(), "third run must execute since sources changed")
 }
 
-// TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath exercises the `precondition:`
-// mechanism at the workflow level: a step with `precondition.tools` and no explicit inputs/
+// TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath exercises the `preconditions:`
+// mechanism at the workflow level: a step with `preconditions.tools` and no explicit inputs/
 // artifacts is skipped when every declared tool already resolves via exec.LookPath. Uses "go"
 // (guaranteed present under `go test`) rather than a shell command, staying cross-platform.
-func TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath(t *testing.T) {
+func TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -1552,21 +1552,21 @@ func TestExecuteWorkflow_PreconditionSkipsWhenToolAlreadyOnPath(t *testing.T) {
 	runLog := filepath.Join(tmpDir, "run.txt")
 
 	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test precondition: skip-when-satisfied",
+		Description: "Test preconditions: skip-when-satisfied",
 		Steps: []schema.WorkflowStep{
 			{
 				Name:             "install",
 				Command:          "echo ran >> " + filepath.ToSlash(runLog),
 				Type:             "shell",
 				WorkingDirectory: tmpDir,
-				Precondition:     &schema.Precondition{Tools: []string{"go"}},
+				Preconditions:    &schema.Preconditions{Tools: []string{"go"}},
 			},
 		},
 	}
 
-	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-precondition-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-preconditions-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
 	_, statErr := os.Stat(runLog)
-	assert.True(t, os.IsNotExist(statErr), "step must be skipped when the precondition tool is already on PATH")
+	assert.True(t, os.IsNotExist(statErr), "step must be skipped when the preconditions tool is already on PATH")
 }
 
 // TestExecuteWorkflow_MalformedWhenCELErrorsDuringAuthPrescan verifies a step whose `when:` is

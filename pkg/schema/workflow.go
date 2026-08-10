@@ -461,9 +461,9 @@ type WorkflowStep struct {
 	// inside it. See pkg/schema/task.go's Artifacts type.
 	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
 
-	// Precondition declares tools that must already be on PATH for this step to be considered
-	// already satisfied. See pkg/schema/task.go's Precondition type.
-	Precondition *Precondition `yaml:"precondition,omitempty" json:"precondition,omitempty" mapstructure:"precondition"`
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied. See pkg/schema/task.go's Preconditions type.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`

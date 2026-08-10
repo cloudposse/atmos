@@ -129,9 +129,9 @@ CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
 current command status: `success` before any step fails and `failure` after an
 earlier step failed. Also available: `os`/`arch`/`platform` (for example
 `when: "os == 'darwin'"`) and the freshness facts `checksum`, `timestamp`,
-`precondition`, `sources`, `artifacts` — see [`inputs`](/workflows/steps/inputs),
+`preconditions`, `sources`, `artifacts` — see [`inputs`](/workflows/steps/inputs),
 [`artifacts`](/workflows/steps/artifacts), and
-[`precondition`](/workflows/steps/precondition).
+[`preconditions`](/workflows/steps/preconditions).
 
 ## Continue on error
 
@@ -173,11 +173,11 @@ commands:
           paths: ["bin/handler"]
 ```
 
-Declare `precondition.tools` instead when a step's freshness only depends on
+Declare `preconditions.tools` instead when a step's freshness only depends on
 whether a tool is already on `PATH` — without an explicit `when`, declaring
-`precondition` alone implicitly means `when: "!precondition.success"` (run only
+`preconditions` alone implicitly means `when: "!preconditions.success"` (run only
 when the tool is *not* already there). See
-[`precondition`](/workflows/steps/precondition) for the full field reference.
+[`preconditions`](/workflows/steps/preconditions) for the full field reference.
 
 ```yaml
 commands:
@@ -186,7 +186,7 @@ commands:
     steps:
       - type: shell
         command: go install golang.org/x/tools/cmd/stringer@latest
-        precondition:
+        preconditions:
           tools: ["stringer"]
 ```
 
