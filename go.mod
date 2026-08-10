@@ -69,7 +69,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/getsentry/sentry-go v0.46.2
 	github.com/getsops/sops/v3 v3.13.1
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.19.2
@@ -138,7 +138,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.44.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
 	google.golang.org/grpc v1.82.1
@@ -444,11 +444,11 @@ require (
 	gocloud.dev v0.41.0 // indirect; Pinned: gomplate/v3's s3blob code references s3blob.URLOpener.ConfigProvider, which was removed in gocloud.dev v0.42+. Bump when gomplate/v3 updates or when we migrate the gomplate/v3 usages to gomplate/v4.
 	golang.org/x/crypto v0.53.0
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.45.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260523011958-0a33c5d7ca68 // indirect
