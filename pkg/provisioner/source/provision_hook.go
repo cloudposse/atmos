@@ -121,7 +121,7 @@ func AutoProvisionSource(
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
-				writeWarning(ctx, writers, fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+				ui.WarningTof(writers.Stderr, "Failed to update workdir last accessed time: %s", err)
 			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
@@ -130,7 +130,11 @@ func AutoProvisionSource(
 
 	// Log reason for re-provisioning.
 	if reason != "" {
-		writeInfo(ctx, writers, reason)
+		if !workdir.OutputSuppressed(ctx) {
+			ui.Info(reason)
+		} else if writers.Stderr != nil {
+			ui.InfoTo(writers.Stderr, reason)
+		}
 	}
 
 	// Vendor the source to target directory.
@@ -142,7 +146,7 @@ func AutoProvisionSource(
 	if isWorkdir {
 		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
-			writeWarning(ctx, writers, fmt.Sprintf("Failed to write workdir metadata: %s", err))
+			ui.WarningTof(writers.Stderr, "Failed to write workdir metadata: %s", err)
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
@@ -230,7 +234,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		if err := VendorSource(ctx, atmosConfig, sourceSpec, target.path); err != nil {
 			if createdTarget {
 				if rmErr := os.RemoveAll(target.path); rmErr != nil {
-					writeWarning(ctx, target.writers, fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
+					ui.WarningTof(target.writers.Stderr, "Failed to clean up target directory after failed provisioning: %s", rmErr)
 				}
 			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
@@ -250,33 +254,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 			return err
 		}
 		if target.writers.Stderr != nil {
-			_, _ = fmt.Fprintln(target.writers.Stderr, completedMsg)
+			ui.SuccessTo(target.writers.Stderr, completedMsg)
 		}
 		return nil
 	}
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
-}
-
-func writeWarning(ctx context.Context, writers provisioner.OutputWriters, message string) {
-	if !workdir.OutputSuppressed(ctx) {
-		ui.Warning(message)
-		return
-	}
-	if writers.Stderr != nil {
-		_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", message)
-	} else {
-		ui.Warning(message)
-	}
-}
-
-func writeInfo(ctx context.Context, writers provisioner.OutputWriters, message string) {
-	if !workdir.OutputSuppressed(ctx) {
-		ui.Info(message)
-		return
-	}
-	if writers.Stderr != nil {
-		_, _ = fmt.Fprintln(writers.Stderr, message)
-	}
 }
 
 // wrapProvisionError wraps an error with provision context.

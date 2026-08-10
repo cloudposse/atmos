@@ -165,9 +165,9 @@ func (s *Service) Provision(
 	suppressOutput := OutputSuppressed(ctx)
 	if !suppressOutput {
 		ui.ClearLine()
-		ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
+		ui.Infof("Provisioning workdir for component '%s'", workdirComponent)
 	} else if writers.Stderr != nil {
-		_, _ = fmt.Fprintf(writers.Stderr, "Provisioning workdir for component '%s'\n", workdirComponent)
+		ui.InfoTof(writers.Stderr, "Provisioning workdir for component '%s'", workdirComponent)
 	}
 
 	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
@@ -207,16 +207,16 @@ func (s *Service) Provision(
 		componentConfig[WorkdirReprovisionedKey] = struct{}{}
 		if !suppressOutput {
 			ui.ClearLine()
-			ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+			ui.Successf("Workdir provisioned: %s", workdirPath)
 		} else if writers.Stderr != nil {
-			_, _ = fmt.Fprintf(writers.Stderr, "Workdir provisioned: %s\n", workdirPath)
+			ui.SuccessTof(writers.Stderr, "Workdir provisioned: %s", workdirPath)
 		}
 	} else {
 		if !suppressOutput {
 			ui.ClearLine()
-			ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+			ui.Successf("Workdir ready (no changes): %s", workdirPath)
 		} else if writers.Stderr != nil {
-			_, _ = fmt.Fprintf(writers.Stderr, "Workdir ready (no changes): %s\n", workdirPath)
+			ui.SuccessTof(writers.Stderr, "Workdir ready (no changes): %s", workdirPath)
 		}
 	}
 	return nil
@@ -285,7 +285,7 @@ func (s *Service) syncLocalToWorkdir(
 			ui.ClearLine()
 			ui.Info(message)
 		} else if writers.Stderr != nil {
-			_, _ = fmt.Fprintln(writers.Stderr, message)
+			ui.InfoTo(writers.Stderr, message)
 		}
 	}
 
@@ -334,11 +334,11 @@ func (s *Service) computeContentHash(ctx context.Context, workdirPath string, wr
 	if err != nil {
 		switch {
 		case !OutputSuppressed(ctx):
-			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+			ui.Warningf("Failed to compute content hash: %s", err)
 		case writers.Stderr != nil:
-			_, _ = fmt.Fprintf(writers.Stderr, "WARNING: Failed to compute content hash: %s\n", err)
+			ui.WarningTof(writers.Stderr, "Failed to compute content hash: %s", err)
 		default:
-			ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+			ui.Warningf("Failed to compute content hash: %s", err)
 		}
 		return ""
 	}

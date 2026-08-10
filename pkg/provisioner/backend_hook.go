@@ -110,7 +110,7 @@ func autoProvisionBackend(
 	}
 
 	if OutputSuppressed(ctx) && writers.Stderr != nil {
-		_, _ = fmt.Fprintln(writers.Stderr, completedMsg)
+		ui.SuccessTo(writers.Stderr, completedMsg)
 	}
 
 	// Display warnings AFTER spinner completes to avoid concurrent output issues.
@@ -119,7 +119,7 @@ func autoProvisionBackend(
 	if result != nil {
 		for _, warning := range result.Warnings {
 			if OutputSuppressed(ctx) && writers.Stderr != nil {
-				_, _ = fmt.Fprintf(writers.Stderr, "WARNING: %s\n", warning)
+				ui.WarningTo(writers.Stderr, warning)
 			} else if !OutputSuppressed(ctx) {
 				ui.Warning(warning)
 			}

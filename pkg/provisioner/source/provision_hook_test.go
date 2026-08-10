@@ -1495,38 +1495,6 @@ func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
 	assert.Contains(t, componentOutput.String(), "Auto-provisioned source to")
 }
 
-func TestWriteWarning_UsesComponentWriterWhenSuppressed(t *testing.T) {
-	var output bytes.Buffer
-	ctx := workdir.WithOutputSuppressed(t.Context())
-
-	writeWarning(ctx, provisioner.OutputWriters{Stderr: &output}, "metadata update failed")
-
-	assert.Equal(t, "WARNING: metadata update failed\n", output.String())
-}
-
-func TestWriteWarning_FallsBackToUIWithoutComponentWriter(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	ui.InitFormatter(ioCtx)
-	t.Cleanup(ui.Reset)
-	var output bytes.Buffer
-	restoreUI := iolib.PushUIWriter(&output)
-	t.Cleanup(restoreUI)
-
-	writeWarning(workdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, "metadata update failed")
-
-	assert.Contains(t, output.String(), "metadata update failed")
-}
-
-func TestWriteInfo_UsesComponentWriterWhenSuppressed(t *testing.T) {
-	var output bytes.Buffer
-	ctx := workdir.WithOutputSuppressed(t.Context())
-
-	writeInfo(ctx, provisioner.OutputWriters{Stderr: &output}, "Source version changed")
-
-	assert.Equal(t, "Source version changed\n", output.String())
-}
-
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
 // that a provisioning failure removes the target directory this attempt
 // created. A leftover directory is worse than none: an empty one misleads path

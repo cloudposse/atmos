@@ -10,8 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestProvisionWithParams_NilParams(t *testing.T) {
@@ -207,6 +209,10 @@ func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
 
 func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 	t.Cleanup(backend.ResetRegistryForTesting)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
 
 	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
 		return &backend.ProvisionResult{Warnings: []string{"bucket policy is permissive"}}, nil
@@ -214,7 +220,7 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 	var output bytes.Buffer
 	ctx := WithOutputSuppressed(t.Context())
 
-	err := autoProvisionBackend(ctx, &schema.AtmosConfiguration{}, map[string]any{
+	err = autoProvisionBackend(ctx, &schema.AtmosConfiguration{}, map[string]any{
 		"backend_type": "s3",
 		"backend":      map[string]any{},
 		"provision": map[string]any{
@@ -224,7 +230,7 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, output.String(), "Provisioned S3 backend")
-	assert.Contains(t, output.String(), "WARNING: bucket policy is permissive")
+	assert.Contains(t, output.String(), "bucket policy is permissive")
 }
 
 func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {

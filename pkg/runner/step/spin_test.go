@@ -476,7 +476,7 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
 		Name:    "run",
 		Title:   "Run",
-		Command: shellQuoteArgument(executable) + " " + shellQuoteArgument("-test.run=^$"),
+		Command: shellQuoteArgument(executable),
 	}, vars)
 
 	require.NoError(t, err)
