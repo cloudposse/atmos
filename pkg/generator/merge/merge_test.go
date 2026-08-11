@@ -294,6 +294,100 @@ func TestParseConflictStrategy(t *testing.T) {
 	}
 }
 
+func TestParseDriver(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    Driver
+		wantErr bool
+	}{
+		{name: "empty defaults to auto", input: "", want: DriverAuto},
+		{name: "auto", input: "auto", want: DriverAuto},
+		{name: "text", input: "text", want: DriverText},
+		{name: "invalid value", input: "bogus", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDriver(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestThreeWayMerger_SetDriver_ForcesTextMerger verifies DriverText bypasses
+// extension-based detection and preserves blank lines that DriverAuto's
+// YAML re-encode collapses.
+func TestThreeWayMerger_SetDriver_ForcesTextMerger(t *testing.T) {
+	base := `servers:
+- name: web
+
+settings:
+  timeout: 30
+
+tasks:
+- name: setup
+  steps:
+  - run: "install deps"
+`
+	ours := base
+	theirs := `servers:
+- name: web
+
+settings:
+  timeout: 30
+
+tasks:
+- name: setup
+  steps:
+  - run: "install deps"
+
+- name: cleanup
+  steps:
+  - run: "remove temp files"
+`
+
+	t.Run("auto driver collapses blank lines", func(t *testing.T) {
+		merger := NewThreeWayMerger(100)
+		result, err := merger.Merge(base, ours, theirs, "config.yaml")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(result.Content, "\n\n") {
+			t.Errorf("expected blank lines to be collapsed under the auto driver, got:\n%s", result.Content)
+		}
+	})
+
+	t.Run("text driver preserves blank lines and formatting", func(t *testing.T) {
+		merger := NewThreeWayMerger(100)
+		merger.SetDriver(DriverText)
+		result, err := merger.Merge(base, ours, theirs, "config.yaml")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result.Content, "\n\n") {
+			t.Errorf("expected blank lines to be preserved under the text driver, got:\n%s", result.Content)
+		}
+		if !strings.Contains(result.Content, "- name: web") || strings.Contains(result.Content, "  - name: web") {
+			t.Errorf("expected original unindented list formatting to be preserved, got:\n%s", result.Content)
+		}
+		if !strings.Contains(result.Content, "- name: cleanup") {
+			t.Errorf("expected the template's new task to still be merged in, got:\n%s", result.Content)
+		}
+	})
+}
+
 func TestThreeWayMerger_RealWorldScenarios(t *testing.T) {
 	tests := []struct {
 		name     string

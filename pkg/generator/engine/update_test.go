@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
@@ -262,6 +263,18 @@ func TestProcessorSetMaxChangesAndDirectMerge(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.HasConflicts)
 	assert.Contains(t, result.Content, "name: user")
+}
+
+func TestProcessorSetMergeDriverForcesTextMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.SetMaxChanges(100)
+	processor.SetMergeDriver(merge.DriverText)
+
+	base := "key: value\n\nother: 1\n"
+	result, err := processor.Merge(base, base, base, "config.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, result.Content, "\n\n")
 }
 
 func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
