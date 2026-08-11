@@ -43,6 +43,28 @@ func TestExpandCastTapeRejectsBothTapeAndTapeFile(t *testing.T) {
 	}
 }
 
+// TestExpandCastTapeResolvesRelativeTapeFileAgainstWorkingDirectory proves
+// tape_file: is read relative to step.WorkingDirectory, not the process CWD,
+// exactly like Source directives inside the tape already resolve relative
+// to the same base (see tapeBaseDir) -- loadTape used to pass step.TapeFile
+// to ParseTapeFile unjoined, so a relative tape_file with working_directory
+// set would look in the wrong place.
+func TestExpandCastTapeResolvesRelativeTapeFileAgainstWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	tapePath := filepath.Join(dir, "hero.tape")
+	if err := os.WriteFile(tapePath, []byte("Sleep 1ms"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	step := &schema.WorkflowStep{
+		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
+		WorkingDirectory: dir,
+		TapeFile:         "hero.tape",
+	}
+	if err := expandCastTape(step); err != nil {
+		t.Fatalf("expandCastTape error: %v", err)
+	}
+}
+
 func TestExpandCastTapeRejectsTapeWithExplicitSteps(t *testing.T) {
 	step := &schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Tape: "Sleep 1s",
@@ -111,11 +133,32 @@ Type "echo hi" Enter`,
 	if step.Env["FOO"] != "bar" {
 		t.Fatalf("expected export to be lifted into step.Env, got %+v", step.Env)
 	}
-	if v, ok := step.Env["NO_COLOR"]; !ok || v != "" {
-		t.Fatalf("expected unset to be lifted into step.Env as empty string, got %+v", step.Env)
+	if _, ok := step.Env["NO_COLOR"]; ok {
+		t.Fatalf("expected unset of a never-set variable to leave no key in step.Env, got %+v", step.Env)
 	}
 	if step.WorkingDirectory != "/tmp/demo" {
 		t.Fatalf("expected cd to be lifted into step.WorkingDirectory, got %q", step.WorkingDirectory)
+	}
+}
+
+// TestExpandCastTapeSessionModeUnsetRemovesPreviouslyExportedKey proves
+// unset actually deletes a variable this same tape already exported,
+// instead of leaving it present with an empty string (which would still
+// export it, just as "").
+func TestExpandCastTapeSessionModeUnsetRemovesPreviouslyExportedKey(t *testing.T) {
+	step := &schema.WorkflowStep{
+		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
+		Tape: `Hide
+Type "export FOO=bar" Enter
+Type "unset FOO" Enter
+Show
+Type "echo hi" Enter`,
+	}
+	if err := expandCastTape(step); err != nil {
+		t.Fatalf("expandCastTape error: %v", err)
+	}
+	if _, ok := step.Env["FOO"]; ok {
+		t.Fatalf("expected unset to remove the previously-exported key, got %+v", step.Env)
 	}
 }
 
@@ -216,6 +259,42 @@ Type "pwd" Enter`,
 	wantNested := filepath.Join("examples", "quick-start", "nested")
 	if shellChildren[1].Command != "pwd" || shellChildren[1].WorkingDirectory != wantNested {
 		t.Fatalf("unexpected second shell child (relative cd should compose with the tracked cwd): %+v", shellChildren[1])
+	}
+}
+
+// TestTapeResolveCd covers tapeResolveCd directly, including the case a
+// prior real cd previously broke: a target containing shell command
+// substitution (e.g. `$(git rev-parse --show-toplevel)`, as demo/landing/
+// hero.tape's Hide block uses) must stay a literal string -- Atmos's
+// working_directory: field doesn't evaluate `$(...)` -- even once `current`
+// is already non-empty from an earlier real cd, not just when it's "".
+func TestTapeResolveCd(t *testing.T) {
+	tests := []struct {
+		name, current, target, want string
+	}{
+		{name: "empty target keeps current", current: "demo", target: "", want: ""},
+		{name: "absolute target replaces current", current: "demo", target: "/srv/app", want: "/srv/app"},
+		{name: "relative target joins onto current", current: "demo", target: "nested", want: filepath.Join("demo", "nested")},
+		{name: "relative target with empty current is unchanged", current: "", target: "nested", want: "nested"},
+		{
+			name:    "command substitution stays literal with no prior cd",
+			current: "",
+			target:  `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
+			want:    `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
+		},
+		{
+			name:    "command substitution stays literal after a prior cd",
+			current: "demo/landing",
+			target:  `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
+			want:    `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tapeResolveCd(tt.current, tt.target); got != tt.want {
+				t.Fatalf("tapeResolveCd(%q, %q) = %q, want %q", tt.current, tt.target, got, tt.want)
+			}
+		})
 	}
 }
 
