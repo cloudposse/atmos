@@ -1,0 +1,74 @@
+---
+slug: remote-import-github-auth-and-caching
+title: "Remote Imports: Automatic GitHub Auth, Loud Failures, and Caching"
+date: 2026-08-11T12:00:00.000Z
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Teams that centralize shared configuration in a private Git repository and pull it into every project
+via a remote import run into the same three problems, no matter what tool they're using. Authenticating
+the underlying Git fetch is a different concern than authenticating your day-to-day GitHub CLI session,
+so being logged in with `gh` doesn't automatically mean private imports work. When an import breaks — a
+typo'd tag, a repo the token can't read — most tools fail quietly, leaving you debugging a mysteriously
+empty configuration instead of the real cause. And re-fetching the same import on every single command,
+even when nothing changed, turns a slow or unreachable Git host into a tax on routine work.
+
+Remote `import:` entries in `atmos.yaml` now close all three gaps: automatic GitHub CLI auth, a visible
+warning when an import fails, and opt-in caching.
+
+<!--truncate-->
+
+## The Problem
+
+- **GitHub CLI login didn't cover private Git imports.** `gh auth login` authenticates the `gh` CLI, but
+  the Git clone behind a private `git::` import is a separate operation with its own credentials. Without
+  a token exported separately, the clone was unauthenticated and failed against private repos.
+- **A broken import failed silently.** A typo'd `?ref=`, an unreachable host, or a private repo the
+  available credentials couldn't read all produced the same result: the import contributed nothing, no
+  error appeared, and the command exited successfully — indistinguishable from having no import at all.
+- **Every command re-fetched the import, every time.** Root `atmos.yaml` imports had no caching, so a
+  command as simple as checking your current identity re-cloned the remote repo over the network first.
+
+## The Fix
+
+- Private `git::` imports (along with vendoring and private Terraform module fetches) now fall back to
+  your GitHub CLI session automatically, the same way other GitHub-authenticated Atmos operations already
+  do. If `gh auth login` is already done, there's nothing else to configure.
+- A remote `import:` entry that fails to resolve now prints a warning by default — naming the import path
+  and the underlying error — instead of silently continuing with an empty or partial configuration.
+- Setting `imports: { ttl: ... }` once in `atmos.yaml` now also caches root-level `import:` entries across
+  commands, reusing the exact same caching mechanism and cache directory that stack-manifest imports
+  already relied on.
+
+## How to Use It
+
+Authenticate once, and private imports just work:
+
+```bash
+gh auth login
+```
+
+If an import does break, you'll see it immediately instead of a mysteriously empty configuration:
+
+```text
+WARN  failed to resolve import path="git::https://github.com/acme/config.git//auth.yaml?ref=v1.2.3" error="..."
+```
+
+To stop re-fetching a stable, pinned import on every command, set a cache TTL:
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+
+import:
+  - "git::https://github.com/acme/config.git//auth.yaml?ref=v1.2.3"
+```
+
+Unset (the default), behavior is unchanged — imports always refresh. Set it once, and it applies to every
+`import:` entry in the file.
+
+## Get Involved
+
+Run into another spot where a remote import fails silently, or where GitHub CLI auth doesn't reach an
+operation you expected it to cover? Open an issue with the command and what you saw.
