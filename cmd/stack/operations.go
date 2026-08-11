@@ -291,7 +291,7 @@ func warnIfSilentlyStoredAsString(value string) {
 	if !atmosyaml.LooksNonString(value) {
 		return
 	}
-	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because there's no existing value at this path to infer a type from. Pass --type to store it as bool, int, float, or yaml.", value)
+	ui.Warningf("%q looks like it could be a number, but NaN/Infinity values aren't currently writable as int or float through this command, so it's being stored as a literal string. Pass --type=string to make that explicit, or edit the manifest directly if you need a literal NaN/Infinity value.", value)
 }
 
 // warnIfSharedFile warns before a set/delete edits a manifest that isn't one

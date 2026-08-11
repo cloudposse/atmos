@@ -172,7 +172,7 @@ func warnIfSilentlyStoredAsString(value string) {
 	if !atmosyaml.LooksNonString(value) {
 		return
 	}
-	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because the path isn't recognized by the Atmos config schema and has no existing typed value to infer from. Pass --type to store it as bool, int, float, or yaml.", value)
+	ui.Warningf("%q looks like it could be a number, but NaN/Infinity values aren't currently writable as int or float through this command, so it's being stored as a literal string. Pass --type=string to make that explicit, or edit the file directly if you need a literal NaN/Infinity value.", value)
 }
 
 var configDeleteCmd = &cobra.Command{
