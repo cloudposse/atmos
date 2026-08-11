@@ -430,8 +430,8 @@ See [YAML Functions](/functions/yaml) for the complete reference.
     atmos terraform apply vpc -s prod-us-east-1
 
     # What changed since the last commit
-    atmos list affected
-    atmos describe affected
+    atmos list affected       # human-readable table/JSON/YAML/CSV/tree
+    atmos describe affected   # deep, machine-readable output for scripting/CI
 
     # Apply everything affected, in dependency order
     atmos terraform apply --affected --max-concurrency 4

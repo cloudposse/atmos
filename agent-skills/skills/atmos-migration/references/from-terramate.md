@@ -39,7 +39,7 @@ If any of these are present, this is a Terramate migration -- use this reference
 | Terramate Cloud sync flags | Atmos Pro `settings.pro` | Full (GitHub-centric today) |
 | `_bootstrap/` two-phase pattern | One-time bootstrap component/stack, run outside the dependency graph | Full (pattern) |
 | `.tmtriggers/` ignore-change records | *(none)* | **Gap** |
-| `terramate clone`/`terramate create --tags` | Copy stack YAML + abstract-component/catalog pattern | Full (manual) |
+| `terramate clone`/`terramate create --tags` | `atmos scaffold generate` (first-class templating) + catalog import for env cloning | Full |
 
 ## Recipe: `stack.tm.hcl` → Stack Manifest
 
@@ -186,10 +186,13 @@ components:
 
 **Staged generator-version rollout:** Terramate's `generators/v1` + `v2` directories, gated by
 `condition = global.generators.version == "vN"` and a second `import` line, are Atmos's version
-management problem. Two options: (a) two component directories (`vpc`, `vpc-v2`) selected
-per-stack -- use for a breaking module rewrite; (b) a per-stack `source`/version override on the
-same component -- use for a plain version bump. Prefer (a) when the module's variable contract
-changes.
+management problem. Two options: (a) versioned component folders (`vpc/v1`, `vpc/v2`, per
+[folder-based versioning](https://atmos.tools/design-patterns/version-management/folder-based-versioning))
+selected per-stack via `metadata.component: vpc/v2` -- use for a breaking module rewrite; (b) a
+per-stack `source`/version override on the same component -- use for a plain version bump. Prefer
+(a) when the module's variable contract changes; use `metadata.name: vpc` alongside it to keep the
+backend `workspace_key_prefix` stable across the version bump (see
+[Configure Component Metadata](https://atmos.tools/stacks/components/component-metadata#name)).
 
 ## Recipe: `script{}` → Three-Way Decomposition
 
@@ -394,15 +397,30 @@ The closest lever is scoping `dependencies.files`/`dependencies.folders` more pr
 but that only prevents future false positives -- it doesn't retroactively suppress a specific
 commit's diff the way a trigger record did.
 
-## Recipe: `terramate clone`/`terramate create --tags` → Manual Scaffolding
+## Recipe: `terramate clone`/`terramate create --tags` → `atmos scaffold`
 
 **Before:** `terramate clone src dst` (duplicate stack tree, new stack IDs);
 `terramate create --tags kubernetes` (scaffold a new stack).
 
-**After:** copy the stack YAML file (or catalog import), assign it a new component instance name,
-and use the abstract-component/catalog pattern from
-[atmos-components](../../atmos-components/SKILL.md) for reusable templates. No dedicated
-`atmos stack clone` command exists -- this is a filesystem-copy operation to perform directly.
+**After:** `terramate create --tags` is scaffolding a new stack from an implicit template.
+`atmos scaffold generate` is Atmos's first-class equivalent -- a governed, versioned
+templating system (`scaffold.yaml`), not a manual copy:
+
+```bash
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --set component_name=vpc --set environments=dev,staging
+```
+
+It supports validated prompts, conditional file generation, generation hooks, and
+`--update`/`--merge-strategy` to bring existing output forward when the template changes --
+capabilities Terramate's `create`/`clone` don't have. Author a `scaffold.yaml` for the team's
+stack/component shape once, then generate new instances from it instead of copy-pasting YAML.
+
+For `terramate clone`'s specific "duplicate an existing env" use case, the more idiomatic Atmos
+migration path is usually to add a new stack file that imports the same catalog/`_defaults` as the
+source stack with different `vars` (see the abstract-component/catalog pattern in
+[atmos-components](../../atmos-components/SKILL.md)) rather than cloning files at all -- reserve
+`atmos scaffold generate` for bootstrapping genuinely new component/stack shapes.
 
 ## Version Pinning: Module `source`/`version` → Component `source:` or `vendor.yaml`
 
@@ -453,3 +471,4 @@ for the full workflow.
 - [atmos-pro](../../atmos-pro/SKILL.md) -- for Terramate Cloud sync flag equivalents
 - [atmos-introspection](../../atmos-introspection/SKILL.md) -- for `atmos describe affected`/`atmos list affected` replacing `terramate list --changed`
 - [atmos-ci](../../atmos-ci/SKILL.md) -- for GitHub Actions CI pattern replacement
+- [atmos-scaffold](../../atmos-scaffold/SKILL.md) -- for authoring `scaffold.yaml` templates replacing `terramate create`/`clone`
