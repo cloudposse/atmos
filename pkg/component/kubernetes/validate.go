@@ -81,7 +81,13 @@ func structuralErrorsForObject(index int, obj *unstructured.Unstructured) []erro
 			errs = append(errs, fmt.Errorf("%s: %w", ref, errUtils.ErrKubernetesMissingMetadataName))
 		}
 	} else if msgs := apivalidation.IsDNS1123Subdomain(name); len(msgs) > 0 {
-		errs = append(errs, fmt.Errorf("%s: %w: %s", ref, errUtils.ErrKubernetesManifestInvalidName, strings.Join(msgs, "; ")))
+		// Backtick-fenced as a code span: the k8s validation message embeds an
+		// unbroken regex (no spaces to wrap on) containing '[', ']', '(', ')' --
+		// rendered as plain markdown text, the CLI's glamour renderer both
+		// mangles those characters (they collide with link syntax) and hard-wraps
+		// mid-token at terminal width. A code span renders verbatim, monospaced,
+		// and unwrapped.
+		errs = append(errs, fmt.Errorf("%s: %w: `%s`", ref, errUtils.ErrKubernetesManifestInvalidName, strings.Join(msgs, "; ")))
 	}
 
 	if obj.GroupVersionKind().Empty() {
@@ -116,11 +122,23 @@ func isKustomizeConfigObject(obj *unstructured.Unstructured) bool {
 // automatic (apply/deploy auto-gate) and explicit (`atmos kubernetes validate`)
 // structural checks; it does not affect --server, which validates against the
 // live cluster's own API rather than Atmos's offline opinion.
-func resolveComponentValidateEnabled(componentSection map[string]any) bool {
-	if v, ok := componentSection[cfg.ValidateSectionName].(bool); ok {
-		return v
+//
+// A present-but-non-bool value (e.g. a quoted `validate: "false"`) is a
+// fail-closed error rather than a silent ignore: `atmos kubernetes
+// validate/apply/deploy` resolve this section directly and never go through
+// the stricter Atmos manifest JSON Schema check that `atmos validate
+// stacks`/`describe stacks` run, so this is the only gate on this path that
+// catches the mistake.
+func resolveComponentValidateEnabled(componentSection map[string]any) (bool, error) {
+	raw, present := componentSection[cfg.ValidateSectionName]
+	if !present {
+		return true, nil
 	}
-	return true
+	v, ok := raw.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: got %T", errUtils.ErrKubernetesValidateSectionInvalid, raw)
+	}
+	return v, nil
 }
 
 // objectRef builds a human-readable identifier for an object in validation
