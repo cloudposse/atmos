@@ -1,0 +1,274 @@
+---
+title: Centralizing Developer Cloud Access
+sidebar_label: Centralized Auth Config
+sidebar_position: 13
+id: centralized-auth-config
+description: Stop passing around AWS SSO profile blocks in Slack — centralize your organization's Atmos auth configuration in one private repo and import it into every project.
+---
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+This guide shows you how to define your organization's cloud authentication configuration **once**, in
+a private central repository, and have it "just work" for every developer who clones any project repo
+that imports it — no manually copy-pasted `~/.aws/config` profile blocks, no per-developer setup docs to
+keep in sync, no risk of someone hand-typing the wrong account ID.
+
+The pattern is the same regardless of cloud — Atmos supports AWS, Azure, and GCP as first-class auth
+providers. The example below shows all three side by side.
+
+If you know Atmos as "the tool that wraps Terraform," this might look like an odd use for it. Atmos is
+really a task runner and configuration platform that happens to do infrastructure-as-code exceptionally
+well — auth is one of several things it manages natively (alongside toolchains, secrets, and workflows),
+not something bolted onto an IaC tool. Reach for it here the way you'd reach for `make` or a `Justfile` —
+a general command runner your whole team already has configured — not as a detour through your
+infrastructure tooling.
+
+## The Problem
+
+A common way teams distribute AWS SSO access today is a `[profile]` block passed around in Slack or a
+wiki page:
+
+```ini
+[profile corp-nonprod]
+sso_start_url = https://d-xxxxxxxxxx.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 111111111111
+sso_role_name = ReadOnlyAccess
+```
+
+This works, but it doesn't scale or govern well:
+
+- Every developer's `~/.aws/config` is a hand-maintained, ungoverned copy — nothing catches a
+  copy-paste mistake like a wrong account ID.
+- Rotating a role name, adding a new account, or revoking access means re-broadcasting the change and
+  hoping everyone updates their local file.
+- There's no single source of truth to audit or version-control.
+- If your organization is multi-cloud, this ad hoc pattern doesn't generalize — AWS profiles, `az login`
+  conventions, and `gcloud` configurations all look different, so you end up maintaining a separate,
+  differently-shaped solution per cloud instead of one consistent pattern.
+
+## The Solution: One Central, Private Config Repo
+
+Atmos lets you define your `auth:` configuration once in a private repository and `import:` it from the
+`atmos.yaml` of every project repo. Developers only need to clone a project and run `atmos auth login` —
+they never see or manage the SSO block themselves.
+
+### 1. Create the central config repo
+
+Create a private repository — for example `github.com/acme-corp/atmos-config` — and organize it by
+cloud, then by the group of developers (or team) the file grants access to. A simple starting layout:
+
+```
+atmos-config/
+├── aws/
+│   └── developers/
+│       └── auth.yaml
+├── azure/
+│   └── developers/
+│       └── auth.yaml
+└── gcp/
+    └── developers/
+        └── auth.yaml
+```
+
+Only the `providers:`/`identities:` block inside each `auth.yaml` differs by cloud; everything else in
+this guide (the import, the `gh auth token` fallback, the `atmos auth` workflow) is identical no matter
+which tab you're in:
+
+<Tabs>
+  <TabItem value="aws" label="AWS" default>
+
+```yaml
+# aws/developers/auth.yaml (in the private acme-corp/atmos-config repo)
+auth:
+  providers:
+    acme-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://d-xxxxxxxxxx.awsapps.com/start
+
+  identities:
+    nonprod:
+      kind: aws/permission-set
+      default: true                # makes this the default identity
+      via:
+        provider: acme-sso
+      principal:
+        name: ReadOnlyAccess        # the SSO permission set / role name
+        account:
+          id: "111111111111"        # quote it — it's a string, not a number
+```
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+```yaml
+# azure/developers/auth.yaml (in the private acme-corp/atmos-config repo)
+auth:
+  providers:
+    azure-cli:
+      kind: azure/cli
+
+  identities:
+    nonprod:
+      kind: azure/subscription
+      default: true
+      via:
+        provider: azure-cli
+      principal:
+        subscription_id: "00000000-0000-0000-0000-000000000000"
+        location: eastus
+```
+
+  </TabItem>
+  <TabItem value="gcp" label="GCP">
+
+```yaml
+# gcp/developers/auth.yaml (in the private acme-corp/atmos-config repo)
+auth:
+  providers:
+    gcp-adc:
+      kind: gcp/adc
+
+  identities:
+    nonprod:
+      kind: gcp/service-account
+      default: true
+      via:
+        provider: gcp-adc
+      principal:
+        service_account_email: terraform@acme-nonprod.iam.gserviceaccount.com
+        project_id: acme-nonprod
+```
+
+  </TabItem>
+</Tabs>
+
+Tag releases (e.g. `v1.0.0`) so downstream repos can pin to a known-good version instead of tracking a
+moving branch. A repo that needs more than one cloud isn't limited to a single provider — it can import
+multiple provider files side by side (e.g. `aws.yaml` and `azure.yaml`).
+
+### 2. Import it from every project repo
+
+In each project's own `atmos.yaml`, add a remote `import:` pointing at that file, pinned to a tag:
+
+```yaml
+# atmos.yaml (in any project repo)
+import:
+  - "git::https://github.com/acme-corp/atmos-config.git//aws/developers/auth.yaml?ref=v1.0.0"
+```
+
+That's the entire integration. Every project that adds this one line inherits the same providers and
+identities — add an account or rotate a role name once in the central repo, tag a new release, and bump
+the `ref` across projects (or leave them tracking a branch if you'd rather changes roll out immediately).
+
+#### Import only what a project needs
+
+A project doesn't have to pull in the entire org's `auth:` config just to get one identity. Extend the
+same `<cloud>/<team>/auth.yaml` layout with more teams as they need their own identities:
+
+```
+atmos-config/
+└── aws/
+    ├── developers/auth.yaml   # broad, mostly-read access — imported by most repos
+    ├── platform/auth.yaml     # platform team's more privileged identities
+    └── data/auth.yaml         # data team's identities
+```
+
+A platform-team repo then imports only its own file, not the whole org's config:
+
+```yaml
+# atmos.yaml (in a platform-team project repo)
+import:
+  - "git::https://github.com/acme-corp/atmos-config.git//aws/platform/auth.yaml?ref=v1.0.0"
+```
+
+This composes the same way whether the split is by team, by environment (`nonprod/auth.yaml`/
+`prod/auth.yaml`), or by cloud provider — you're not limited to one monolithic file imported everywhere.
+
+### 3. Private repo access — no token setup needed
+
+Because `atmos-config` is private, fetching it needs authentication. Atmos resolves a GitHub token
+automatically, in this order:
+
+1. `--github-token` flag
+2. `ATMOS_GITHUB_TOKEN` environment variable
+3. `GITHUB_TOKEN` environment variable
+4. **`gh auth token`**, if the [GitHub CLI](https://cli.github.com/) is installed and the developer has
+   already run `gh auth login`
+
+For most developers, step 4 means there's nothing to configure at all — `gh auth login` is already a
+common onboarding step at organizations that use GitHub, and Atmos silently reuses that session. Nobody
+has to mint or paste a personal access token just to pull down the shared auth config.
+
+## Developer Workflow
+
+With the import wired up, a new developer's entire setup is:
+
+```bash
+git clone git@github.com:acme-corp/some-project.git
+cd some-project
+atmos auth login          # or omit --identity, an interactive selector appears
+```
+
+Then, to actually use the credentials:
+
+```bash
+# Option A: isolated subshell, credentials auto-cleaned on exit
+atmos auth shell
+
+# Option B: run one command with credentials injected
+atmos auth exec -- aws s3 ls
+
+# Option C: make credentials ambient in the current shell
+eval $(atmos auth env)
+```
+
+`atmos auth env` is safe to add to `~/.zshrc`/`~/.bashrc` unconditionally — it only prints (and, via
+`eval`, exports) environment variables from cached credentials; it never triggers a login prompt on its
+own. A new shell starts in `$HOME`, though, not inside your project checkout, so Atmos won't find the
+`atmos.yaml` (and its import) unless you point it there explicitly with `--chdir`:
+
+```bash
+eval $(atmos auth env --chdir=/path/to/your/checkout)
+```
+
+## What's Actually Zero-Setup (and What's Optional)
+
+Install Atmos once; use it on every repo in the organization. No other setup required: clone a repo, run
+`atmos auth login`, then `atmos auth shell` or `atmos auth exec` — no profile block to copy, no account
+ID to transcribe.
+
+The one thing that isn't automatic is **ambient parity with a manually managed `[profile]` block** — a
+bare `aws s3 ls`, or an IDE extension finding credentials, with no `atmos auth` wrapper involved at all.
+Atmos deliberately doesn't write to `~/.aws/credentials`/`~/.aws/config`; credentials go to Atmos-managed
+files instead, exposed only to processes that inherit `AWS_SHARED_CREDENTIALS_FILE`/`AWS_CONFIG_FILE`/
+`AWS_PROFILE`. This is a security default, not an oversight — it avoids silently overwriting a
+developer's own credentials, and it means a tool (or an AI agent) isn't automatically signed in to AWS
+just by existing in your shell; it only gets credentials if something explicitly runs
+`atmos auth exec`/`shell` or has `eval`'d `atmos auth env`.
+
+Want that ambient parity anyway? Add `eval $(atmos auth env --chdir=...)` to your shell profile (see
+[Developer Workflow](#developer-workflow)) — optional, and most repo-scoped work doesn't need it.
+
+Either way, updates are centrally managed: add an account or rotate a role once in the central repo, tag
+a release, and every project that imports it picks it up — no re-broadcast, no per-developer drift, no
+stale access lingering after revocation.
+
+## Troubleshooting
+
+**Import fails with an authentication error** — confirm `gh auth status` shows an active session, or
+that `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set, and that the token's account has read access to the
+central config repo.
+
+**`atmos auth login` doesn't find the identity** — run `atmos auth list` to confirm the import resolved;
+a typo'd `ref` or a private repo the token can't read will silently produce an empty `auth:` section.
+
+**AWS CLI/Terraform outside of Atmos can't find credentials** — you're missing `eval $(atmos auth env)`
+in your shell profile, or the tool was launched before you ran it in that shell session.
+
+## See Also
+
+- [Imports](/cli/configuration/imports) — remote import syntax and pinning
+- [Auth Providers](/cli/configuration/auth/providers) — full provider configuration reference
+- [`atmos auth` commands](/cli/commands/auth/usage) — login, shell, exec, env, whoami
