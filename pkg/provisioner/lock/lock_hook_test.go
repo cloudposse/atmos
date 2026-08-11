@@ -46,7 +46,7 @@ func TestAutoLockProviders_RunsForPluginCache(t *testing.T) {
 	cfg := cfgWith([]string{"linux_amd64", "darwin_arm64"}, true, false)
 	cc := map[string]any{"atmos_stack": "dev", "atmos_component": "vpc"} // plain in-repo.
 
-	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(dir, &calls)))
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(dir, &calls)))
 
 	require.Len(t, calls, 1)
 	assert.Equal(t, []string{"providers", "lock", "-platform=linux_amd64", "-platform=darwin_arm64"}, calls[0])
@@ -62,7 +62,7 @@ func TestAutoLockProviders_RunsForRegistryCache(t *testing.T) {
 	cfg := cfgWith([]string{"linux_amd64", "windows_amd64"}, false, true) // plugin cache off, registry cache on.
 	cc := map[string]any{"atmos_stack": "dev", "atmos_component": "vpc"}
 
-	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(dir, &calls)))
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(dir, &calls)))
 	require.Len(t, calls, 1)
 	assert.Equal(t, []string{"providers", "lock", "-platform=linux_amd64", "-platform=windows_amd64"}, calls[0])
 }
@@ -73,7 +73,7 @@ func TestAutoLockProviders_PersistsForSourceComponent(t *testing.T) {
 	cfg := cfgWith([]string{"linux_amd64", "darwin_arm64"}, true, false)
 	cc := map[string]any{"atmos_stack": "dev", "atmos_component": "vpc", "source": map[string]any{"uri": "example.com/mod"}}
 
-	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(dir, &calls)))
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(dir, &calls)))
 	require.Len(t, calls, 1)
 
 	// Vendored component: completed canonical lock is persisted to the per-instance dotfile.
@@ -101,7 +101,7 @@ func TestAutoLockProviders_PersistsForLocalWorkdirComponent(t *testing.T) {
 		provWorkdir.WorkdirPathKey: workdirPath,
 	}
 
-	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(workdirPath, &calls)))
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(workdirPath, &calls)))
 	require.Len(t, calls, 1)
 
 	got, err := os.ReadFile(filepath.Join(sourceDir, provisioner.InstanceLockFilename(cc)))
@@ -129,7 +129,7 @@ func TestAutoLockProviders_SkipsRemoteWorkdirSource(t *testing.T) {
 		provWorkdir.WorkdirPathKey: workdirPath,
 	}
 
-	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(workdirPath, &calls)))
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(workdirPath, &calls)))
 	require.Len(t, calls, 1)
 
 	_, err := os.Stat(filepath.Join("github.com", "cloudposse", "terraform-aws-vpc", "src", provisioner.InstanceLockFilename(cc)))
@@ -153,7 +153,7 @@ func TestAutoLockProviders_Skips(t *testing.T) {
 			dir := t.TempDir()
 			var calls [][]string
 			cc := map[string]any{"atmos_stack": "dev", "atmos_component": "vpc"}
-			require.NoError(t, autoLockProviders(context.Background(), tt.cfg, cc, nil, recordingExecCtx(dir, &calls)))
+			require.NoError(t, autoLockProviders(context.Background(), tt.cfg, cc, nil, provisioner.OutputWriters{}, recordingExecCtx(dir, &calls)))
 			assert.Empty(t, calls, "providers lock must not run when gating conditions are not met")
 		})
 	}
@@ -162,5 +162,5 @@ func TestAutoLockProviders_Skips(t *testing.T) {
 func TestAutoLockProviders_SkipsNilExecContext(t *testing.T) {
 	cfg := cfgWith([]string{"linux_amd64", "darwin_arm64"}, true, false)
 	cc := map[string]any{"atmos_stack": "dev", "atmos_component": "vpc"}
-	assert.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, nil))
+	assert.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, provisioner.OutputWriters{}, nil))
 }
