@@ -539,16 +539,36 @@ func (c *azureBackendClient) createStorageAccount(ctx context.Context, params az
 }
 
 func (c *azureBackendClient) applyBlobDataProtection(ctx context.Context, resourceGroup, account string) error {
-	_, err := c.blobServices.SetServiceProperties(ctx, resourceGroup, account, armstorage.BlobServiceProperties{
+	// Read current properties first so we never REDUCE an existing, possibly longer, soft-delete
+	// retention. This matters when `provision.backend.enabled` is left on after the account is
+	// adopted into a production module that sets a longer retention: SetServiceProperties preserves
+	// omitted property groups, but it would overwrite the retention we do send, so we raise the
+	// value to at least the default floor rather than clamping it down.
+	current, err := c.blobServices.GetServiceProperties(ctx, resourceGroup, account, nil)
+	if err != nil {
+		return err
+	}
+
+	blobDays, containerDays := blobSoftDeleteRetentionDays, blobSoftDeleteRetentionDays
+	if props := current.BlobServiceProperties.BlobServiceProperties; props != nil {
+		if p := props.DeleteRetentionPolicy; p != nil && p.Days != nil && *p.Days > blobDays {
+			blobDays = *p.Days
+		}
+		if p := props.ContainerDeleteRetentionPolicy; p != nil && p.Days != nil && *p.Days > containerDays {
+			containerDays = *p.Days
+		}
+	}
+
+	_, err = c.blobServices.SetServiceProperties(ctx, resourceGroup, account, armstorage.BlobServiceProperties{
 		BlobServiceProperties: &armstorage.BlobServicePropertiesProperties{
 			IsVersioningEnabled: to.Ptr(true),
 			DeleteRetentionPolicy: &armstorage.DeleteRetentionPolicy{
 				Enabled: to.Ptr(true),
-				Days:    to.Ptr(blobSoftDeleteRetentionDays),
+				Days:    to.Ptr(blobDays),
 			},
 			ContainerDeleteRetentionPolicy: &armstorage.DeleteRetentionPolicy{
 				Enabled: to.Ptr(true),
-				Days:    to.Ptr(blobSoftDeleteRetentionDays),
+				Days:    to.Ptr(containerDays),
 			},
 		},
 	}, nil)

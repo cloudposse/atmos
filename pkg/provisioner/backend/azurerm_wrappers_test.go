@@ -236,17 +236,32 @@ func TestAzureBackendClient_CreateStorageAccount(t *testing.T) {
 
 func TestAzureBackendClient_ApplyBlobDataProtection(t *testing.T) {
 	tests := []struct {
-		name    string
-		fail    bool
-		wantErr bool
+		name        string
+		currentDays int32 // Existing soft-delete retention on both policies (0 = none configured).
+		fail        bool
+		wantErr     bool
+		wantDays    int32 // Retention expected in the SetServiceProperties payload.
 	}{
-		{name: "enables versioning + soft delete"},
+		{name: "enables versioning + soft delete on a fresh account", wantDays: blobSoftDeleteRetentionDays},
+		{name: "raises a shorter existing retention to the floor", currentDays: 7, wantDays: blobSoftDeleteRetentionDays},
+		{name: "preserves a longer existing retention", currentDays: 90, wantDays: 90},
 		{name: "error propagates", fail: true, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got armstorage.BlobServiceProperties
 			svc := armstoragefake.BlobServicesServer{
+				GetServiceProperties: func(_ context.Context, _, _ string, _ *armstorage.BlobServicesClientGetServicePropertiesOptions) (azfake.Responder[armstorage.BlobServicesClientGetServicePropertiesResponse], azfake.ErrorResponder) {
+					props := &armstorage.BlobServicePropertiesProperties{}
+					if tt.currentDays > 0 {
+						props.DeleteRetentionPolicy = &armstorage.DeleteRetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(tt.currentDays)}
+						props.ContainerDeleteRetentionPolicy = &armstorage.DeleteRetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(tt.currentDays)}
+					}
+					resp := armstorage.BlobServicesClientGetServicePropertiesResponse{
+						BlobServiceProperties: armstorage.BlobServiceProperties{BlobServiceProperties: props},
+					}
+					return mkResp(http.StatusOK, resp), azfake.ErrorResponder{}
+				},
 				SetServiceProperties: func(_ context.Context, _, _ string, params armstorage.BlobServiceProperties, _ *armstorage.BlobServicesClientSetServicePropertiesOptions) (azfake.Responder[armstorage.BlobServicesClientSetServicePropertiesResponse], azfake.ErrorResponder) {
 					got = params
 					if tt.fail {
@@ -268,10 +283,10 @@ func TestAzureBackendClient_ApplyBlobDataProtection(t *testing.T) {
 			assert.True(t, *props.IsVersioningEnabled, "blob versioning must be enabled")
 			require.NotNil(t, props.DeleteRetentionPolicy)
 			assert.True(t, *props.DeleteRetentionPolicy.Enabled, "blob soft delete must be enabled")
-			assert.Equal(t, blobSoftDeleteRetentionDays, *props.DeleteRetentionPolicy.Days)
+			assert.Equal(t, tt.wantDays, *props.DeleteRetentionPolicy.Days)
 			require.NotNil(t, props.ContainerDeleteRetentionPolicy)
 			assert.True(t, *props.ContainerDeleteRetentionPolicy.Enabled, "container soft delete must be enabled")
-			assert.Equal(t, blobSoftDeleteRetentionDays, *props.ContainerDeleteRetentionPolicy.Days)
+			assert.Equal(t, tt.wantDays, *props.ContainerDeleteRetentionPolicy.Days)
 		})
 	}
 }

@@ -112,7 +112,9 @@ When `provision.backend.enabled: true` and the backend is not fully provisioned:
 ### Blob data protection (always, idempotent)
 
 - **Blob versioning enabled** — the direct analog of S3 versioning; every state write is recoverable.
-- **Soft delete** (blob + container) with 30-day retention — a safety net for accidental deletes.
+- **Soft delete** (blob + container) with a 30-day retention **floor** — a safety net for accidental
+  deletes. Applied by reading the current properties first and only ever *raising* the retention, so
+  a longer retention already configured (e.g. by a production module) is preserved, never reduced.
 
 ### Container (if missing)
 
@@ -198,9 +200,10 @@ where state storage is module-managed) — identical to the S3 provisioner's inh
 
 ```text
 pkg/provisioner/backend/
-  ├── azurerm.go            # azurerm backend provisioner (create, exists, name, registration)
-  ├── azurerm_delete.go     # azurerm backend deletion (force-guarded)
-  ├── azurerm_test.go       # unit tests (mocked azureBackendAPI)
+  ├── azurerm.go               # azurerm backend provisioner (create, exists, name, registration)
+  ├── azurerm_delete.go        # azurerm backend deletion (force-guarded)
+  ├── azurerm_test.go          # unit tests (mocked azureBackendAPI)
+  ├── azurerm_wrappers_test.go # ARM wrapper unit tests (Azure SDK in-memory fake servers)
 ```
 
 ### Design
@@ -249,9 +252,10 @@ Table-driven, using a manual mock of `azureBackendAPI` (matching `mockS3Client`)
 - Registry wiring and offline client construction.
 
 Coverage of the provisioner logic is 84–100% per function; the thin ARM SDK passthrough wrappers
-are covered by integration testing against real Azure (Azure Resource Manager has no
-management-plane emulator, unlike gofakes3/Azurite for the data plane) — the same standard applied
-to `s3.go`'s real client construction.
+(`resourceGroupExists`, `createStorageAccount`, …) are unit-tested in `azurerm_wrappers_test.go`
+against the Azure SDK's in-memory fake server packages (`armresourcesfake`, `armstoragefake`),
+since Azure Resource Manager has no management-plane emulator like gofakes3/Azurite for the data
+plane. Package coverage is ~95%.
 
 ### Manual testing checklist
 
@@ -297,7 +301,8 @@ the resource group / storage account / container into a Terraform module (e.g.
 `Azure/avm-res-storage-storageaccount`), add production settings (CMK, private endpoints, network
 rules), and continue using the same `azurerm` backend — no state migration required, because the
 storage account keeps its name and contents. The provisioner is idempotent, so
-`provision.backend.enabled: true` can be left in place (it detects the resources exist and skips).
+`provision.backend.enabled: true` can be left in place: it detects the resources exist, re-applies
+the hardened data-protection defaults, and never reduces a longer retention the module may set.
 
 ---
 

@@ -609,9 +609,8 @@ func TestNewAzureBackendClient(t *testing.T) {
 	// Client construction is offline — DefaultAzureCredential and the ARM client
 	// constructors build structs without any network call, so this is safe to unit test.
 	// The wrapper methods themselves (resourceGroupExists, createStorageAccount, ...) are
-	// thin passthroughs to the Azure management plane and are exercised by integration tests
-	// against real Azure, not here — mirroring how s3.go's real client construction is not
-	// unit-tested (the S3 unit tests inject a fake client instead).
+	// thin passthroughs to the Azure management plane and are exercised in
+	// azurerm_wrappers_test.go against the Azure SDK's in-memory fake servers.
 	client, err := newAzureBackendClient("00000000-0000-0000-0000-000000000000", nil)
 	require.NoError(t, err)
 	require.NotNil(t, client)

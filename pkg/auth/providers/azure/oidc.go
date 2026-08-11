@@ -527,27 +527,18 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "azure.oidcProvider.PrepareEnvironment")()
 
-	// Use shared Azure environment preparation.
+	// Use shared Azure environment preparation in OIDC mode. It sets ARM_USE_OIDC (not
+	// ARM_USE_CLI) and exports the tenant — which OIDC (service-principal / federated) auth needs
+	// and which, unlike the CLI path, does not conflict with the azurerm backend's Azure CLI
+	// credential (no `az account get-access-token --subscription … --tenant …` shell-out).
 	result := azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
 		Environ:          environ,
 		SubscriptionID:   p.subscriptionID,
 		TenantID:         p.tenantID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		UseOIDC:          true,
 	})
-
-	// Override ARM_USE_CLI to use OIDC instead.
-	delete(result, "ARM_USE_CLI")
-	result["ARM_USE_OIDC"] = "true"
-
-	// Export the tenant for OIDC. The shared CLI-path env preparation deliberately omits it (it
-	// would make the azurerm backend's Azure CLI credential pass both --subscription and --tenant,
-	// which the CLI rejects). OIDC (service-principal / federated) auth needs the tenant explicitly
-	// and does not shell out to the Azure CLI, so there is no such conflict here.
-	if p.tenantID != "" {
-		result["ARM_TENANT_ID"] = p.tenantID
-		result["AZURE_TENANT_ID"] = p.tenantID
-	}
 
 	// Set client ID for Terraform providers.
 	if p.clientID != "" {

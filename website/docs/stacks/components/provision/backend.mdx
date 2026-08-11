@@ -191,8 +191,9 @@ blob container with hardcoded security best practices:
 - **Public access**: Blocked (`AllowBlobPublicAccess=false`); the state container is private
 - **Entra ID hardening**: When the backend sets `use_azuread_auth: true`, a **newly created**
   storage account gets shared-key access disabled (no account keys to leak). This applies only at
-  creation time — auto-provisioning skips backends that already exist, so an existing storage
-  account is not modified. Harden a pre-existing account separately (e.g. set
+  creation time — an existing storage account retains its shared-key setting. If its backend is
+  incomplete, Atmos can still apply blob data protection (versioning + soft delete) and create the
+  missing container. Harden a pre-existing account separately (e.g. set
   `allowSharedKeyAccess: false` via the module or `az storage account update`).
 - **Tags**: Automatic resource tags (`Name`, `ManagedBy=Atmos`)
 
