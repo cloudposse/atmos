@@ -14,6 +14,7 @@ import (
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -32,7 +33,7 @@ func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	_, exists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
 		return errors.Join(errUtils.ErrInvalidTerraformComponent, err)
