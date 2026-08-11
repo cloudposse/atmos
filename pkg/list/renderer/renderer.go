@@ -347,8 +347,11 @@ func columnIndex(headers []string, name string) int {
 }
 
 // formatJSON formats headers and rows as JSON array of objects.
+// Uses make (not a nil var) so json.MarshalIndent emits "[]" instead of
+// "null" when rows is empty - callers rely on the output staying a valid,
+// parseable JSON array regardless of row count.
 func formatJSON(headers []string, rows [][]string) (string, error) {
-	var result []map[string]string
+	result := make([]map[string]string, 0, len(rows))
 	for _, row := range rows {
 		obj := make(map[string]string)
 		for i, header := range headers {

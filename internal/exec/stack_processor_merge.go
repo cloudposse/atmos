@@ -387,6 +387,17 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
+	finalComponentValidate, err := mergeComponentAnySection(
+		mergeConfig,
+		cfg.ValidateSectionName,
+		opts.GlobalKubernetesValidate,
+		result.BaseComponentValidate,
+		result.ComponentValidate,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	var finalComponentRender map[string]any
 	if opts.ComponentType == cfg.KubernetesComponentType {
 		finalComponentRender, err = m.Merge(
@@ -613,6 +624,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 		if len(finalComponentRender) > 0 {
 			comp[cfg.RenderSectionName] = finalComponentRender
+		}
+		if finalComponentValidate != nil {
+			comp[cfg.ValidateSectionName] = finalComponentValidate
 		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
