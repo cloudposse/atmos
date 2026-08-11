@@ -69,6 +69,31 @@ Example:
 </ActionCard>
 ```
 
+## CLI Command Doc Requirements
+
+Every CLI command/flag needs a Docusaurus doc at `website/docs/cli/commands/<command>/<subcommand>.mdx`, containing:
+
+1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description.
+2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`.
+3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`.
+4. **Usage section** - shell code block with command syntax.
+5. **Arguments/Flags** - `<dl><dt>` for each argument/flag with `<dd>` description.
+6. **Examples section** - practical usage examples.
+
+**Verifying links:** find the doc file (`find website/docs/cli/commands -name "*keyword*"`), check the slug in frontmatter (`head -10 <file> | grep slug`), verify existing links (`grep -r "<url>" website/docs/`). Common mistakes: using the command name instead of the filename, not checking slug frontmatter, guessing URLs.
+
+**Always build after doc changes:** `cd website && npm run build` — verify no broken links, missing images, or MDX component rendering issues.
+
+## Regenerating Screengrabs
+
+**When:** after modifying CLI behavior/help/output, or adding commands. Not needed for doc-only changes.
+
+**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
+1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`).
+2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates a PR; builds atmos from the checkout the same way).
+
+**Notes:** recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention), and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
+
 ## Changelog Posts
 
 Changelog posts live in `website/blog/` as dated `.mdx` files (required only for non-draft PRs targeting

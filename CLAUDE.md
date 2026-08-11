@@ -59,25 +59,7 @@ atmos lint --changed         # golangci-lint on changed files
 
 ## Working with Atmos Agents (RECOMMENDED)
 
-Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
-
-**Available Agents:**
-- **`@agent-developer`** - Creating/maintaining agents, agent architecture
-- **`@tui-expert`** - Terminal UI, theme system, output formatting
-- **`@atmos-errors`** - Error handling patterns, error builder usage
-- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
-- **`@example-creator`** - Creating examples, mock components, test cases, EmbedFile docs
-
-**When to delegate:**
-- TUI/theme changes → `@tui-expert`
-- New CLI commands → `@flag-handler`
-- Error handling refactoring → `@atmos-errors`
-- Creating new agents → `@agent-developer`
-- Creating examples/demos → `@example-creator`
-
-**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
-
-See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems (each agent's own frontmatter lists what it covers and when to invoke it). **Use agents instead of inline work** for their areas of expertise. See `.claude/agents/README.md` for the full list and `docs/prd/claude-agent-architecture.md` for architecture.
 
 ## Architectural Patterns (MANDATORY)
 
@@ -276,34 +258,7 @@ git diff tests/snapshots/
 See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.md`
 
 ### Documentation (MANDATORY)
-All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
-
-**Verifying Links:** Find doc file (`find website/docs/cli/commands -name "*keyword*"`), check slug in frontmatter (`head -10 <file> | grep slug`), verify existing links (`grep -r "<url>" website/docs/`).
-
-**Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
-
-### Documentation Requirements (MANDATORY)
-CLI command docs MUST include:
-1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
-2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
-3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
-4. **Usage section** - Shell code block with command syntax
-5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
-6. **Examples section** - Practical usage examples
-
-File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-
-### Website Build (MANDATORY)
-ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
-
-### Regenerating Screengrabs (IMPORTANT)
-**When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
-
-**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
-1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`)
-2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
-
-**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention) and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
+All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. ALWAYS build after doc changes: `cd website && npm run build`. See the **`docs` skill** (`.claude/skills/docs/SKILL.md`) for the required doc sections, link-verification steps, and screengrab regeneration procedure — don't restate them here.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
@@ -380,38 +335,9 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
-Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
+Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators — Windows uses backslash (`\`), Unix uses forward slash (`/`), so hardcoded paths fail on Windows CI.
 
-**Subprocess helpers in tests (cross-platform):**
-Instead of `exec.LookPath("false")` or other Unix-only binaries, use the test binary itself.
-**Important:** If your package already has a `TestMain`, add the env-gate check **inside the existing `TestMain`** — do not add a second `TestMain` function (Go does not allow two in the same package).
-
-```go
-// In testmain_test.go — merge this check into the existing TestMain:
-func TestMain(m *testing.M) {
-    // If _ATMOS_TEST_EXIT_ONE is set, exit immediately with code 1.
-    // This lets tests use the test binary itself as a cross-platform "exit 1" command.
-    if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" { os.Exit(1) }
-    os.Exit(m.Run())
-}
-// NOTE: If your package already defines TestMain, insert the _ATMOS_TEST_EXIT_ONE
-// check at the top of the existing function rather than copying the whole snippet.
-
-// In the test itself:
-exePath, _ := os.Executable()
-info.Command = exePath
-info.ComponentEnvList = []string{"_ATMOS_TEST_EXIT_ONE=1"}
-```
-
-**Path handling in tests:**
-- **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
-- **ALWAYS use `filepath.Join()`** with separate arguments: `filepath.Join(tempDir, "components", "terraform", "vpc")`
-- **NEVER use forward slashes in `filepath.Join()`** like `filepath.Join(dir, "a/b/c")` - use `filepath.Join(dir, "a", "b", "c")`
-- **NEVER hardcode Unix paths in expected values** like `assert.Equal(t, "/project/components/vpc", path)` - build expected paths with `filepath.Join()`
-- **For path suffix checks**, use `filepath.ToSlash()` to normalize: `strings.HasSuffix(filepath.ToSlash(path), "expected/suffix")`
-- **NEVER use bash/shell commands in tests** - use Go stdlib (`os`, `filepath`, `io`) for file operations
-
-**Why:** Windows uses backslash (`\`) as path separator, Unix uses forward slash (`/`). Hardcoded paths fail on Windows CI.
+For subprocess helpers and path-handling patterns in tests specifically, see the **`cross-platform-tests` skill** (`.claude/skills/cross-platform-tests/SKILL.md`).
 
 ### Multi-Provider Registry (MANDATORY)
 Follow registry pattern: define interface, implement per provider, register implementations, generate mocks. Example: `pkg/store/`
