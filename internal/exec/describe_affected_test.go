@@ -1864,6 +1864,16 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 	// Clear CI env vars so auto-detect doesn't interfere.
 	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("CI", "")
+	// Clear GITHUB_EVENT_PATH too: this test suite may itself be running inside a
+	// real GitHub Actions job (e.g. a merge_group-triggered merge-queue run), in
+	// which case the runner sets a real event payload file. Without clearing it,
+	// the "CI auto-detect" subtest below would inherit that real ambient event and
+	// resolveMergeGroupBase would correctly prefer its real merge_group.base_sha
+	// over the subtest's simulated GITHUB_BASE_REF, returning SHA-based resolution
+	// instead of the Ref this subtest asserts on -- a failure that only reproduces
+	// when this test happens to run inside an actual merge_group event, not locally
+	// or in a regular pull_request-triggered CI run.
+	t.Setenv("GITHUB_EVENT_PATH", "")
 
 	t.Run("base with SHA populates SHA field", func(t *testing.T) {
 		flags := newDescribeAffectedFlagSet()
@@ -1900,12 +1910,14 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 		t.Setenv("GITHUB_BASE_REF", "main")
-		// Force the GITHUB_BASE_REF fallback path deterministically. Without
-		// this, resolveMergeGroupBase reads the real ambient $GITHUB_EVENT_PATH
-		// when the test suite itself happens to run inside an actual
-		// merge_group-triggered CI job -- succeeding via event.merge_group.base_sha
-		// instead of the fallback this test means to exercise, leaving
-		// describe.Ref empty and failing the assertion below.
+		// Clear the ambient GITHUB_EVENT_PATH: real GitHub Actions runners set it
+		// to the actual triggering event's payload, which takes precedence over
+		// GITHUB_BASE_REF. Under an actual merge_group-triggered job (e.g. this
+		// test running in the merge queue), that payload carries a real
+		// merge_group.base_sha, so resolution short-circuits to describe.SHA and
+		// leaves describe.Ref empty -- failing this test's assertion even though
+		// production behavior is correct. Clearing it makes the "no payload"
+		// fallback path this test targets hermetic.
 		t.Setenv("GITHUB_EVENT_PATH", "")
 
 		flags := newDescribeAffectedFlagSet()

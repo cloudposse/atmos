@@ -142,7 +142,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, workflowFile)
+		workflowPath = filepath.Join(getWorkflowsDirToUse(&atmosConfig), workflowFile)
 	}
 
 	// If the workflow file is specified without an extension, use the default extension
@@ -154,7 +154,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	if !u.FileExists(workflowPath) {
 		return errUtils.Build(errUtils.ErrWorkflowFileNotFound).
-			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
+			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(displayPath(workflowPath))).
 			WithExitCode(1).
 			Err()
 	}
@@ -175,7 +175,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	if workflowManifest.Workflows == nil {
 		return errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
-			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(workflowPath)).
+			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(displayPath(workflowPath))).
 			WithHint("Add a top-level 'workflows:' key to the manifest file").
 			WithExitCode(1).
 			Err()
