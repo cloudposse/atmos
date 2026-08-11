@@ -6,8 +6,8 @@ authors: [jorrite]
 tags: [feature]
 ---
 
-Atmos scaffolds can perform genuinely complex three-way merges of YAML templates: keys merge
-intelligently, comments survive, and local customizations aren't clobbered by an upstream update.
+Atmos scaffolds can perform genuinely complex three-way merges of YAML templates: keys can merge
+intelligently, and comments and local customizations are preserved when changes don't conflict.
 That capability comes from parsing YAML into a structured document and re-serializing it—and
 structured serialization is lossy by nature. Formatting that isn't part of the data model, like
 blank lines separating sections, doesn't survive the round trip. If your team treats that
@@ -34,7 +34,7 @@ concept:
 - **`auto`** (default, unchanged) — YAML-aware for `.yaml`/`.yml`, text otherwise.
 - **`text`** — forces every file, YAML included, through a line-oriented, diff3-style merge.
   Comments, blank lines, and other structural formatting the YAML-aware merger doesn't model
-  come through untouched.
+  are preserved in non-conflicting regions.
 
 Because it's a flag on the `--update` invocation itself, not a project-wide setting, you're not
 choosing one mode for the project's entire lifetime. Most updates can stay on the default `auto`
