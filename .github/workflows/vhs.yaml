@@ -55,7 +55,7 @@ jobs:
           if [[ "$IS_LABELED" == "true" ]]; then
             files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -path '*/testdata' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | sed 's#^\./##')
           else
-            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | grep -v '/testdata/' || true)
+            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | grep -vE '(^|/)testdata/' || true)
           fi
           # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
           # split; collapse to a single space-separated line.
@@ -67,7 +67,12 @@ jobs:
         env:
           TAPE_FILES: ${{ steps.tapes.outputs.files }}
         run: |
-          echo "matrix=$(echo -n "$TAPE_FILES" | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
+          # `"" | split(" ")` produces `[""]`, not `[]` -- filter empty
+          # entries so an all-excluded result correctly skips the vhs job
+          # below (matrix != '[]') instead of running it once with an empty
+          # matrix.file.
+          matrix=$(jq -cn --arg files "$TAPE_FILES" '$files | split(" ") | map(select(length > 0))')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}

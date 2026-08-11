@@ -3,6 +3,7 @@ package asciicast
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,8 +14,12 @@ import (
 // that must not touch real disk.
 type fakeTapeFileReader map[string]string
 
+// ReadFile normalizes path to forward slashes before lookup: real callers
+// (loadSource, ParseTapeFile) pass OS-native, filepath.Clean'd paths, which
+// are backslash-separated on Windows, while every map literal in this file
+// is written with forward slashes for readability.
 func (f fakeTapeFileReader) ReadFile(path string) ([]byte, error) {
-	content, ok := f[path]
+	content, ok := f[filepath.ToSlash(path)]
 	if !ok {
 		return nil, os.ErrNotExist
 	}
