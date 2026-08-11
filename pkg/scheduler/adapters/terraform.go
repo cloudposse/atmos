@@ -136,6 +136,10 @@ type TerraformSelection struct {
 func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	defer perf.Track(opts.AtmosConfig, "scheduler.adapters.ExecuteTerraform")()
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if opts.AtmosConfig == nil {
 		return fmt.Errorf("%w: atmos config is nil", errUtils.ErrInvalidConfig)
 	}
@@ -165,6 +169,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if maxConcurrency > 1 {
 		restoreSpinners := suppressTerraformSpinners()
 		defer restoreSpinners()
+		ctx = provWorkdir.WithOutputSuppressed(ctx)
 	}
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err

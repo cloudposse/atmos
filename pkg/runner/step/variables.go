@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -36,7 +37,9 @@ type Variables struct {
 	// updates templateEnv without changing the environment of later processes.
 	templateEnv map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
-	Flags         map[string]string
+	Flags map[string]string
+	// OutputWriters routes subprocess output through component-scoped streams.
+	OutputWriters OutputWriters
 	AtmosConfig   *schema.AtmosConfiguration
 	ToolchainPATH string
 	componentInfo ComponentInfoResolver
@@ -59,6 +62,12 @@ type Variables struct {
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
 	totalStages int
+}
+
+// OutputWriters routes step subprocess output through component-scoped streams.
+type OutputWriters struct {
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // NewVariables creates a new Variables instance with OS environment pre-populated.
