@@ -358,34 +358,43 @@ tasks:
   - run: "remove temp files"
 `
 
-	t.Run("auto driver collapses blank lines", func(t *testing.T) {
-		merger := NewThreeWayMerger(100)
-		result, err := merger.Merge(base, ours, theirs, "config.yaml")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.Contains(result.Content, "\n\n") {
-			t.Errorf("expected blank lines to be collapsed under the auto driver, got:\n%s", result.Content)
-		}
-	})
+	tests := []struct {
+		name   string
+		driver Driver
+		want   string
+	}{
+		{
+			name:   "auto driver collapses blank lines",
+			driver: DriverAuto,
+			// YAML-aware merge re-encodes the document, so blank lines between
+			// top-level blocks and the original unindented list style are lost.
+			want: "servers:\n  - name: web\nsettings:\n  timeout: 30\ntasks:\n  - name: setup\n    steps:\n" +
+				"      - run: \"install deps\"\n  - name: cleanup\n    steps:\n      - run: \"remove temp files\"\n",
+		},
+		{
+			name:   "text driver preserves blank lines and formatting",
+			driver: DriverText,
+			// The line-oriented text merger never re-encodes the document, so
+			// blank lines and the original list indentation survive untouched,
+			// and the template's new task is still merged in.
+			want: "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n  steps:\n" +
+				"  - run: \"install deps\"\n\n- name: cleanup\n  steps:\n  - run: \"remove temp files\"\n",
+		},
+	}
 
-	t.Run("text driver preserves blank lines and formatting", func(t *testing.T) {
-		merger := NewThreeWayMerger(100)
-		merger.SetDriver(DriverText)
-		result, err := merger.Merge(base, ours, theirs, "config.yaml")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(result.Content, "\n\n") {
-			t.Errorf("expected blank lines to be preserved under the text driver, got:\n%s", result.Content)
-		}
-		if !strings.Contains(result.Content, "- name: web") || strings.Contains(result.Content, "  - name: web") {
-			t.Errorf("expected original unindented list formatting to be preserved, got:\n%s", result.Content)
-		}
-		if !strings.Contains(result.Content, "- name: cleanup") {
-			t.Errorf("expected the template's new task to still be merged in, got:\n%s", result.Content)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(100)
+			merger.SetDriver(tt.driver)
+			result, err := merger.Merge(base, ours, theirs, "config.yaml")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Content != tt.want {
+				t.Errorf("driver %v: got:\n%q\nwant:\n%q", tt.driver, result.Content, tt.want)
+			}
+		})
+	}
 }
 
 func TestThreeWayMerger_RealWorldScenarios(t *testing.T) {

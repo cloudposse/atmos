@@ -32,9 +32,9 @@ to reformat those files even when nothing meaningful had changed.
 concept:
 
 - **`auto`** (default, unchanged) — YAML-aware for `.yaml`/`.yml`, text otherwise.
-- **`text`** — forces every file, YAML included, through the same line-oriented, diff3-style merge
-  that `git merge` uses on ordinary text files. Comments, blank lines, and other structural
-  formatting the YAML-aware merger doesn't model come through untouched.
+- **`text`** — forces every file, YAML included, through a line-oriented, diff3-style merge.
+  Comments, blank lines, and other structural formatting the YAML-aware merger doesn't model
+  come through untouched.
 
 This is a different axis from `--merge-strategy`, which decides how a genuine conflict resolves
 (manual, ours, or theirs) once a merge algorithm has already run. `--merge-driver` decides which

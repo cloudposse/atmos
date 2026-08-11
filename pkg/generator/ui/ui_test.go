@@ -133,11 +133,26 @@ func TestSetMergeDriver_ForcesTextMerge(t *testing.T) {
 	ui.processor.SetMaxChanges(100)
 	ui.SetMergeDriver(merge.DriverText)
 
-	base := "key: value\n\nother: 1\n"
-	result, err := ui.processor.Merge(base, base, base, "config.yaml")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Contains(t, result.Content, "\n\n")
+	t.Run("identical inputs are returned unchanged", func(t *testing.T) {
+		base := "key: value\n\nother: 1\n"
+		result, err := ui.processor.Merge(base, base, base, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, base, result.Content)
+	})
+
+	t.Run("diverging theirs merges cleanly and preserves blank lines", func(t *testing.T) {
+		base := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n"
+		ours := base
+		theirs := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n"
+
+		result, err := ui.processor.Merge(base, ours, theirs, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, theirs, result.Content, "text driver should merge cleanly and preserve blank lines")
+	})
 }
 
 func TestProcessFile_NewFile(t *testing.T) {
