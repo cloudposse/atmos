@@ -415,8 +415,6 @@ func TestSetEnvironmentVariables(t *testing.T) {
 			expectedContains: map[string]string{
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
@@ -1341,12 +1339,13 @@ func TestSetEnvironmentVariables_OIDC(t *testing.T) {
 			expectedContains: map[string]string{
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
 				"ARM_USE_OIDC", // Should NOT be set when using CLI auth.
+				// CLI auth must NOT export the tenant (conflicts with the azurerm backend's CLI credential).
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 	}
