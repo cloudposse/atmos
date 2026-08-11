@@ -1400,6 +1400,39 @@
       "type": "object",
       "description": "Ansible defines configuration for Ansible components."
     },
+    "Artifacts": {
+      "properties": {
+        "paths": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Paths lists glob patterns for this step's expected output files. Named Paths, not Files,\nsince artifacts aren't always known file-by-file (e.g. a directory glob)."
+        }
+      },
+      "type": "object",
+      "description": "Artifacts declares a step's expected output files -- a sibling of Inputs, not nested inside\nit (sources are inputs; artifacts are outputs, and the two must not be conflated under one\ncontainer). A missing Artifacts path always forces checksum.changed/timestamp.changed to true,\nregardless of Inputs.Sources. Exposed to `when:` as the resolved match list (`artifacts`)."
+    },
     "Atlantis": {
       "properties": {
         "path": {
@@ -3343,6 +3376,47 @@
               "type": "null"
             }
           ]
+        },
+        "aliases": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Aliases lists alternative names this command is also invocable under. Native, in-process\nCobra aliases (the same *cobra.Command registered under extra names) -- distinct from the\ntop-level `command_aliases:` map (CommandAliases), which redirects to a possibly-unrelated\ncommand via a subprocess re-exec."
+        },
+        "internal": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Internal hides this command from help/list output while leaving it fully invocable,\nmirroring go-task's `internal: true` (maps to Cobra's Command.Hidden)."
         }
       },
       "type": "object",
@@ -3416,6 +3490,33 @@
             }
           ],
           "description": "Type specifies the semantic type of this argument: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Values restricts this argument to a fixed set of allowed strings, validated the same way\npkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When\nRequired and missing in an interactive terminal, the user is prompted to pick one instead\nof erroring, reusing pkg/flags/interactive.go's PromptForPositionalArg machinery."
         }
       },
       "type": "object",
@@ -3587,6 +3688,33 @@
             }
           ],
           "description": "SemanticType specifies the semantic type of this flag: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Values restricts this flag to a fixed set of allowed strings, validated the same way\npkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When\nRequired and missing in an interactive terminal, the user is prompted to pick one instead\nof erroring, reusing pkg/flags/interactive.go's PromptForMissingRequired machinery."
         }
       },
       "type": "object",
@@ -4216,6 +4344,34 @@
             }
           ],
           "description": "Folders lists folder paths whose changes mark the declaring component as\naffected by `atmos describe affected`. Each entry may be a plain string\n(the folder path) or, in the future, an object with additional options."
+        },
+        "commands": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitDependencies"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Commands lists named custom commands that must complete before this command/workflow\nruns its own steps. Resolved and executed concurrently by pkg/taskgraph, sharing the\nsame generic DAG scheduler used by `parallel`/`matrix` `needs:` and Terraform's\n`dependencies.components`. Entries may be a plain name string or a structured object\n(for parameterized dependencies)."
+        },
+        "workflows": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitDependencies"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Workflows lists named workflows that must complete before this command/workflow runs\nits own steps. A plain name resolves within the current workflow file; a structured\nentry with `file:` resolves cross-file, exactly as the CLI's `atmos workflow \u003cname\u003e -f\n\u003cfile\u003e` already does."
         }
       },
       "type": "object",
@@ -5975,6 +6131,39 @@
       "type": "object",
       "description": "ImportsSettings holds global defaults applied when processing stack imports."
     },
+    "Inputs": {
+      "properties": {
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Sources lists glob patterns for files whose content determines checksum.changed /\ncontributes to timestamp.changed. Exposed to `when:` as the resolved match list (`sources`)."
+        }
+      },
+      "type": "object",
+      "description": "Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:\nwith fields that feed CEL facts consumed via the existing `when:` condition engine rather\nthan a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes\nthese facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general\ncontainer (not narrowed to just file globs) since sources are one kind of input among others\nthat may be added later."
+    },
     "Integration": {
       "properties": {
         "kind": {
@@ -7715,6 +7904,39 @@
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
     },
+    "Preconditions": {
+      "properties": {
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Tools lists executable names resolved via exec.LookPath (no shell, so no\nwhich-vs-where cross-platform mismatch). preconditions.success is true iff every entry\nresolves without error."
+        }
+      },
+      "type": "object",
+      "description": "Preconditions declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/\nDependencies: the block can hold multiple check kinds (currently Tools; more may follow)."
+    },
     "ProSettings": {
       "properties": {
         "base_url": {
@@ -9332,6 +9554,29 @@
           ],
           "description": "When controls whether the task runs."
         },
+        "continue": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Continue controls whether a failure of this task is forgiven: subsequent tasks still run\nand the overall command/workflow exit status is unaffected (like GitHub Actions'\ncontinue-on-error). Evaluated against this task's own outcome after it runs, unlike When\n(evaluated before, against the running status). Unset means no forgiveness (today's\nfail-stop behavior, unchanged)."
+        },
         "interactive": {
           "anyOf": [
             {
@@ -10549,6 +10794,48 @@
             }
           ],
           "description": "Extra remediation note appended to the failure error (supports templates)."
+        },
+        "inputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inputs"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Inputs declares this step's freshness sources, exposing checksum.changed/timestamp.changed/\nsources as `when:` CEL facts. See pkg/runner/freshness. An unset `when:` alongside a non-nil\nInputs or Artifacts implicitly means `when: checksum.changed`, mirroring the existing\nimplicit-success default for `when:`."
+        },
+        "artifacts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Artifacts"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See the Artifacts type doc for why."
+        },
+        "preconditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Preconditions"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied, exposing preconditions.success as a `when:` CEL fact. An unset `when:`\nalongside a non-nil Preconditions (and no Inputs/Artifacts) implicitly means\n`when: \"!preconditions.success\"` -- note the negation: success means already-satisfied,\ni.e. skip, the opposite polarity from checksum.changed. See the Preconditions type doc."
         },
         "outputs": {
           "anyOf": [
@@ -12280,6 +12567,114 @@
       },
       "type": "object",
       "description": "TopLevelListConfig holds command-specific list configurations.\nThis is a top-level configuration that separates settings for different list commands."
+    },
+    "UnitDependencies": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/UnitDependency"
+          },
+          {
+            "type": "string",
+            "description": "Dependency name shorthand, equivalent to {name: \u003cvalue\u003e}."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "type": "array",
+      "description": "UnitDependencies is a list of UnitDependency that supports flexible YAML/mapstructure\nunmarshaling: each element can be a plain name string (the common case) or a structured\nobject (for parameterized invocation or a cross-file workflow reference), mirroring the\nexisting polymorphic-element pattern already used by schema.Tasks."
+    },
+    "UnitDependency": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the target command or workflow name."
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "File is the workflow file to resolve Name in, for cross-file workflow references. Only\nmeaningful for Workflows entries; ignored for Commands (which resolve globally, since\natmosConfig.Commands is already flat-merged before any command runs)."
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Flags carries parameterized flag overrides for this dependency invocation. Two entries\nreferencing the same Name with the same Flags/Args collapse into a single executed\nDAG node (automatic dedup); different Flags/Args produce distinct nodes that both run."
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Args carries parameterized positional-argument overrides for this dependency invocation."
+        },
+        "fail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Fail controls failure propagation across the WHOLE dependency run (not just this entry's\nown siblings, despite the field living on a single entry): wait_all (default), fail_fast,\nor best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's\nParallelFailConfig. If any direct dependency declares best_effort, the entire run's\nfailures are forgiven, including siblings that declared no fail: at all; if any declares\nfail_fast (and none declare best_effort), the whole run cancels remaining work on the\nfirst failure. Mixing modes across sibling dependencies is legal but has this one\nrun-wide outcome — it is not resolved per entry."
+        }
+      },
+      "type": "object",
+      "description": "UnitDependency references a single named command or workflow that must complete before the\ndeclaring command/workflow runs. Supports both a plain name string\n(`commands: [build]`) and a structured object (`commands: [{name: build, flags: {env:\ndev}}]`) for parameterized invocation."
     },
     "Validate": {
       "properties": {
@@ -14216,6 +14611,29 @@
             }
           ]
         },
+        "continue": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Continue controls whether a failure of this step is forgiven: subsequent steps still run\nand the overall workflow exit status is unaffected (like GitHub Actions'\ncontinue-on-error). Evaluated against this step's own outcome after it runs, unlike When\n(evaluated before, against the running status). Unset means no forgiveness (today's\nfail-stop behavior, unchanged)."
+        },
         "interactive": {
           "anyOf": [
             {
@@ -15465,6 +15883,48 @@
             }
           ],
           "description": "Extra remediation note appended to the failure error (supports templates)."
+        },
+        "inputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inputs"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Inputs declares this step's freshness sources. See pkg/schema/task.go's Inputs type and\npkg/runner/freshness."
+        },
+        "artifacts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Artifacts"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See pkg/schema/task.go's Artifacts type."
+        },
+        "preconditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Preconditions"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied. See pkg/schema/task.go's Preconditions type."
         },
         "outputs": {
           "anyOf": [
