@@ -579,6 +579,60 @@ func TestFilterPrereleases(t *testing.T) {
 	}
 }
 
+// TestFilterDrafts tests the filterDrafts function.
+func TestFilterDrafts(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name         string
+		releases     []*github.RepositoryRelease
+		expectedTags []string
+	}{
+		{
+			name: "filters out draft releases",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.226.0"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.225.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.225.0"},
+		},
+		{
+			name:         "handles empty slice",
+			releases:     []*github.RepositoryRelease{},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles all drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v2.0.0-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.1-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles no drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.1.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.1.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDrafts(tt.releases)
+			require.Len(t, result, len(tt.expectedTags))
+
+			for i, release := range result {
+				assert.False(t, release.GetDraft(), "Should not contain draft releases")
+				assert.Equal(t, tt.expectedTags[i], release.GetTagName(), "tag at index %d should match expected order", i)
+			}
+		})
+	}
+}
+
 // TestFilterByDate tests the filterByDate function.
 func TestFilterByDate(t *testing.T) {
 	baseTime := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
