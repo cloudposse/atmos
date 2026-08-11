@@ -604,6 +604,72 @@ func TestParseGlobalFlags_SkillFlag(t *testing.T) {
 	})
 }
 
+// TestParseGlobalFlags_ConfigEnvVarCommaSplit guards against a bug found during a field-test
+// pass on cloudposse/atmos#2867/#2868: ATMOS_CONFIG/ATMOS_CONFIG_PATH with multiple
+// comma-separated files worked for commands hitting pkg/config's own os.Args/env fallback (e.g.
+// `atmos config get`), but broke every command reading these flags through this canonical
+// ParseGlobalFlags path (`atmos list stacks`, `atmos auth list`, etc.) with a "file not found:
+// 'a.yaml,b.yaml'" error -- because Viper's env-sourced GetStringSlice splits on whitespace, not
+// commas (the same quirk already fixed for --profile/ATMOS_PROFILE, just not applied here).
+func TestParseGlobalFlags_ConfigEnvVarCommaSplit(t *testing.T) {
+	t.Run("CLI flag with multiple files is unaffected", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("config", []string{"a.yaml", "b.yaml"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml", "b.yaml"}, flags.Config)
+	})
+
+	t.Run("ATMOS_CONFIG with multiple comma-separated files splits correctly", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG", "a.yaml,b.yaml")
+		_ = v.BindEnv("config", "ATMOS_CONFIG")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml", "b.yaml"}, flags.Config,
+			"ATMOS_CONFIG should split on commas like the --config CLI flag does")
+	})
+
+	t.Run("ATMOS_CONFIG_PATH with multiple comma-separated dirs splits correctly", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG_PATH", "dirA,dirB")
+		_ = v.BindEnv("config-path", "ATMOS_CONFIG_PATH")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"dirA", "dirB"}, flags.ConfigPath,
+			"ATMOS_CONFIG_PATH should split on commas like the --config-path CLI flag does")
+	})
+
+	t.Run("ATMOS_CONFIG with a single file is unaffected", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG", "a.yaml")
+		_ = v.BindEnv("config", "ATMOS_CONFIG")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml"}, flags.Config)
+	})
+}
+
 // TestParseGlobalFlags_SettingsListMergeStrategyFlag verifies that the
 // --settings-list-merge-strategy global flag is registered (so Cobra accepts it)
 // and that its value flows through Viper, env var, and the default empty state.

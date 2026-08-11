@@ -3,12 +3,15 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -272,4 +275,25 @@ func TestResolveFile(t *testing.T) {
 	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
 	require.NoError(t, err)
 	assert.Equal(t, file, resolved)
+}
+
+// TestResolveFile_MultipleConfigFilesAmbiguous guards against the same bug fixed in
+// cmd/config's resolveConfigFile (cloudposse/atmos#2867/#2868): ResolveFile silently used only
+// the FIRST --config file when multiple were given, so `mcp client add --config a,b` could
+// silently edit the wrong file.
+func TestResolveFile_MultipleConfigFilesAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	fileA := filepath.Join(dir, "a.yaml")
+	fileB := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(fileA, []byte("base_path: \"./\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(fileB, []byte("base_path: \"./\"\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", []string{fileA, fileB}, "")
+
+	_, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "a.yaml")
+	assert.Contains(t, details, "b.yaml")
 }

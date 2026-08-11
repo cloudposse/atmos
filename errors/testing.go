@@ -65,6 +65,31 @@ func HasContext(err error, key, value string) bool {
 	return false
 }
 
+// HasHint checks if an error has a hint whose text contains the given substring.
+// This is useful for testing that errors built with the error builder pattern
+// (WithHint/WithHintf) carry the actionable guidance callers rely on, without
+// coupling the test to the hint's exact wording.
+//
+// Example usage:
+//
+//	err := Build(ErrRegistryCorrupted).
+//	    WithHintf("Delete or repair the corrupted file: `rm %s`", path).
+//	    Err()
+//	assert.True(t, errUtils.HasHint(err, "Delete or repair"))
+func HasHint(err error, substring string) bool {
+	if err == nil {
+		return false
+	}
+
+	for _, hint := range errors.GetAllHints(err) {
+		if strings.Contains(hint, substring) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // GetContext retrieves the value for a given context key from an error.
 // Returns the value and true if found, empty string and false otherwise.
 //
