@@ -185,6 +185,103 @@ func TestManifestSchema_TerraformComponentMocks(t *testing.T) {
 	}
 }
 
+// TestManifestSchema_KubernetesComponentValidateField guards against the
+// validate property drifting out of sync between the schema copies again: it
+// was added to stack-config/1.0.json but omitted from atmos/manifest/1.0.json,
+// the schema that atmos describe stacks and atmos validate stacks actually
+// enforce by default, causing an additionalProperties rejection. The fixture
+// copy under tests/fixtures/schemas predates the Kubernetes component feature
+// entirely and is intentionally excluded here.
+func TestManifestSchema_KubernetesComponentValidateField(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts validate false", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithValidate(false))
+		})
+
+		t.Run(schemaName+"/accepts validate true", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithValidate(true))
+		})
+	}
+}
+
+func TestManifestSchema_KubernetesComponentProvisionTargetSplitField(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts split true", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(true))
+		})
+
+		t.Run(schemaName+"/accepts split false", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(false))
+		})
+
+		t.Run(schemaName+"/rejects non-bool split", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, kubernetesComponentManifestWithProvisionSplit("yes"))
+		})
+	}
+}
+
+func kubernetesComponentManifestWithProvisionSplit(split any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"kubernetes": map[string]any{
+				"gitops-target": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"manifests": []any{
+						map[string]any{
+							"apiVersion": "v1",
+							"kind":       "ConfigMap",
+						},
+					},
+					"provision": map[string]any{
+						"targets": map[string]any{
+							"deployment-repo": map[string]any{
+								"kind":  "git",
+								"path":  "clusters/dev/demo",
+								"split": split,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func kubernetesComponentManifestWithValidate(validate bool) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"kubernetes": map[string]any{
+				"legacy-manifests": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"validate": validate,
+					"manifests": []any{
+						map[string]any{
+							"apiVersion": "v1",
+							"kind":       "ConfigMap",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func workflowManifestWithWhen(condition any) map[string]any {
 	return workflowManifestWithStep(map[string]any{
 		"command": "echo ok",
