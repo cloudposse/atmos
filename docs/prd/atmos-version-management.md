@@ -30,10 +30,11 @@ These decisions were made during implementation and supersede earlier drafts:
 4. **`update` ≠ `lock`.** `lock` resolves desired expressions as-is (bootstrap/repair). `update` advances from the locked state within policy: strategy caps (`major`/`minor`/`patch`; `pin`/`digest` never advance and only refresh digests), cooldown windows against `released_at` (`14d`, `2w`, Go durations), `include`/`exclude` rules, and `prerelease` policy. Every held-back candidate produces a structured reason. Status is policy-aware: `update-available` means an update the policy would take; a newer version held back reports `newer-available (blocked)` with the reason and passes `verify`.
 
 5. **File managers (three tiers).** `pkg/version/managers` is a registry of pure-`Plan()` file rewriters driven by shared `Apply`/`Check` drivers, configured via `version.files` rules (`{manager, paths, options}`):
-   - `github-actions` (native): scans workflow `uses:` lines and rewrites refs from the lock by owner/repo package (subdirectory actions and reusable workflows included; `./local` and `docker://` refs never match). Line-based rewriting preserves formatting.
-   - `marker` (annotation): `<comment> atmos:version <name> [match=<regex>]` marks a line (trailing comment) or the next line (standalone comment) for in-place rewriting; comment delimiters are detected across languages (`#`, `//`, `;`, `--`, `<!--`, `/*`); pinned entries replace digest tokens. This is the Renovate regex-manager equivalent and solves round-tripping for rendered files without templates.
-   - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; covers comment-hostile formats (JSON).
-   `atmos version track apply` (alias `sync`) rewrites everything in one command; `--check` fails listing stale paths; `verify` also fails when managed files drift.
+    - `github-actions` (native): scans workflow `uses:` lines and rewrites refs from the lock by owner/repo package (subdirectory actions and reusable workflows included; `./local` and `docker://` refs never match). Line-based rewriting preserves formatting.
+    - `marker` (annotation): `<comment> atmos:version <name> [match=<regex>]` marks a line (trailing comment) or the next line (standalone comment) for in-place rewriting; comment delimiters are detected across languages (`#`, `//`, `;`, `--`, `<!--`, `/*`); pinned entries replace digest tokens. This is the Renovate regex-manager equivalent and solves round-tripping for rendered files without templates.
+    - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; covers comment-hostile formats (JSON).
+
+    `atmos version track apply` (alias `sync`) rewrites everything in one command; `--check` fails listing stale paths; `verify` also fails when managed files drift.
 
 6. **CRUD without YAML editing.** `atmos version track add|set|remove|get` edit `atmos.yaml` through the format-preserving `pkg/yaml` engine (PR #2664), preserving comments and anchors, targeting the file resolved by the same precedence as `atmos config set`. `add` infers the ecosystem from the package coordinate (`actions/*` → github/actions, registry-hosted → oci, bare tool name → toolchain, `owner/repo` → github).
 
@@ -97,21 +98,21 @@ This keeps version definitions out of individual stacks where possible, while st
 1. Manage arbitrary external versions as first-class Atmos configuration.
 2. Provide Updatecli/Renovate/Dependabot-inspired capabilities through an Atmos-native schema and command surface.
 3. Support multiple ecosystems and providers:
-   - GitHub
-   - GitLab
-   - Docker Hub
-   - ECR
-   - GHCR
-   - generic OCI registries
-   - Helm repositories
-   - Atmos toolchain registries
+    - GitHub
+    - GitLab
+    - Docker Hub
+    - ECR
+    - GHCR
+    - generic OCI registries
+    - Helm repositories
+    - Atmos toolchain registries
 4. Support deterministic runtime resolution through lock files.
 5. Support tracks such as `dev`, `staging`, and `prod`.
 6. Support grouped updates, defaults, cooldowns, schedules, labels, include/exclude filters, and prerelease policy.
 7. Support runtime usage from stack/config YAML:
-   - `!version name`
-   - `{{ .version.name }}`
-   - `dependencies.tools`
+    - `!version name`
+    - `{{ .version.name }}`
+    - `dependencies.tools`
 8. Support generated or checked GitHub Actions workflow refs with literal `uses:` output.
 9. Provide CI-native commands for status, update, apply checks, and verification.
 10. Keep all human-authored version policy in `atmos.yaml`; do not introduce a separate authored config file.
@@ -704,6 +705,8 @@ Initial values:
 
 Future values may include explicit patterns or predicates.
 
+Draft GitHub releases are always excluded from candidate resolution, regardless of the `prerelease` policy — a draft is unpublished and has no legitimate resolution target, so there is no opt-in for it.
+
 ### Ignore
 
 Ignore rules for versions or patterns.
@@ -722,27 +725,27 @@ Required CI flows:
 
 1. Check whether versions are current:
 
-   ```shell
-   atmos version track status prod --format json
-   ```
+    ```shell
+    atmos version track status prod --format json
+    ```
 
 2. Verify lock determinism:
 
-   ```shell
-   atmos version track verify prod
-   ```
+    ```shell
+    atmos version track verify prod
+    ```
 
 3. Check managed workflow files:
 
-   ```shell
-   atmos version track apply prod --check
-   ```
+    ```shell
+    atmos version track apply prod --check
+    ```
 
 4. Update a specific group:
 
-   ```shell
-   atmos version track update prod --group infrastructure
-   ```
+    ```shell
+    atmos version track update prod --group infrastructure
+    ```
 
 Future CI automation may open PRs, attach labels, and group updates, but the first responsibility is deterministic status/update/apply behavior. Atmos itself never merges: an `automerge` intent flag was considered and removed because merge behavior belongs entirely to the CI platform.
 
