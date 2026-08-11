@@ -432,11 +432,15 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				"PATH":                  "/usr/bin",
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
+			},
+			// CLI auth must NOT export the tenant (it would make the azurerm backend's Azure CLI
+			// credential pass both --subscription and --tenant, which the CLI rejects).
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -455,13 +459,13 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				"HOME":                  "/home/user",
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
 				"AZURE_CLIENT_ID",
 				"AZURE_CLIENT_SECRET",
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 	}
