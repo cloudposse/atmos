@@ -118,6 +118,10 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 		cleanup()
 		return nil, noop, err
 	}
+	// tempDir only exists to read files off disk and is removed by cleanup()
+	// once generation finishes; the recorded provenance must be the original
+	// source the caller passed in, not that ephemeral fetch destination.
+	conf.Source = src
 	return conf, cleanup, nil
 }
 
