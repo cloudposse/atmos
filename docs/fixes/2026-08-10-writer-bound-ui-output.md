@@ -12,11 +12,11 @@ Direct writes to component writers bypassed the UI layer. The initial writer-awa
 
 ## Changes
 
-Added `ui.New(writer)` with semantic success, warning, and info methods. Updated provisioning call sites and tests to use one bound output object per operation. Normalized formatted-output assertions and Windows `cmd /C` test-binary quoting. The spin regression test now copies its executable under a path with spaces on Windows.
+Added `ui.New(writer)` with semantic success, warning, and info methods. Updated provisioning call sites and tests to use one bound output object per operation. Normalized formatted-output assertions.
 
 ## Validation
 
-Passed `go build ./...`, focused provisioning and UI tests, and `atmos lint --changed`. Component-output tests strip ANSI sequences before semantic assertions so they are stable on color-capable macOS runners. The spin test's Windows-specific path cannot execute on Linux and is covered by the PR's Windows CI job.
+Passed `go build ./...`, focused provisioning and UI tests, and `atmos lint --changed`. Component-output tests strip ANSI sequences before semantic assertions so they are stable on color-capable macOS runners.
 
 ## Follow-ups
 

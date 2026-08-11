@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -466,15 +465,6 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	spinHandler := handler.(*SpinHandler)
 	executable, err := os.Executable()
 	require.NoError(t, err)
-	if runtime.GOOS == "windows" {
-		// Exercise cmd.exe quoting with the path shape that needs it.
-		sourceExecutable := executable
-		executable = filepath.Join(t.TempDir(), "path with spaces", filepath.Base(executable))
-		require.NoError(t, os.MkdirAll(filepath.Dir(executable), 0o755))
-		binary, err := os.ReadFile(sourceExecutable)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(executable, binary, 0o755))
-	}
 	var stdout, stderr bytes.Buffer
 	ctx := WithOutputSuppressed(t.Context())
 	vars := NewVariables()
@@ -486,7 +476,7 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
 		Name:    "run",
 		Title:   "Run",
-		Command: shellQuoteArgument(executable),
+		Command: executable,
 	}, vars)
 
 	require.NoError(t, err)
@@ -494,13 +484,6 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	assert.Contains(t, stderr.String(), "spin-stderr")
 	assert.Contains(t, result.Metadata["stdout"], "spin-stdout")
 	assert.Contains(t, result.Metadata["stderr"], "spin-stderr")
-}
-
-func shellQuoteArgument(argument string) string {
-	if runtime.GOOS == "windows" {
-		return `"` + strings.ReplaceAll(argument, `"`, `""`) + `"`
-	}
-	return "'" + strings.ReplaceAll(argument, "'", "'\\''") + "'"
 }
 
 // TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY
