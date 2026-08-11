@@ -152,7 +152,7 @@ is authoritative on the *how*; this constitution is authoritative on the *what*.
 2. Increment `CONSTITUTION_VERSION` per semantic versioning rules defined in this document.
 3. Update `LAST_AMENDED_DATE` to the amendment date (ISO 8601).
 4. Update any dependent templates (plan, spec, tasks) if the amendment adds or removes
-   mandatory sections or task categories.
+    mandatory sections or task categories.
 5. The amendment is ratified when merged to `main` under a PR labeled `no-release` or higher.
 
 **Versioning policy**:

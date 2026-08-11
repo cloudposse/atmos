@@ -36,13 +36,13 @@ without the user opening the CI platform.
 **Acceptance Scenarios**:
 
 1. **Given** a terraform plan produces changes, **When** `--upload-status` is set and
-   `ci.enabled` is true, **Then** the Atmos Pro dashboard shows the number of resources to
-   create, change, replace, and destroy along with any warnings.
+    `ci.enabled` is true, **Then** the Atmos Pro dashboard shows the number of resources to
+    create, change, replace, and destroy along with any warnings.
 2. **Given** a terraform plan produces no changes, **When** `--upload-status` is set and
-   `ci.enabled` is true, **Then** the dashboard shows "no changes" with zero resource counts.
+    `ci.enabled` is true, **Then** the dashboard shows "no changes" with zero resource counts.
 3. **Given** `ci.enabled` is false or `--upload-status` is absent, **When** a plan runs,
-   **Then** the upload payload is identical to the current behavior (no metadata, no
-   component_type) — fully backward compatible.
+    **Then** the upload payload is identical to the current behavior (no metadata, no
+    component_type) — fully backward compatible.
 
 ---
 
@@ -63,11 +63,11 @@ are visible.
 **Acceptance Scenarios**:
 
 1. **Given** an apply completes successfully, **When** the upload runs, **Then** the dashboard
-   shows the apply outcome and any Terraform output values.
+    shows the apply outcome and any Terraform output values.
 2. **Given** a Terraform output is marked sensitive, **When** it is uploaded, **Then** the
-   dashboard displays `<MASKED>` instead of the actual value.
+    dashboard displays `<MASKED>` instead of the actual value.
 3. **Given** an apply fails, **When** the upload runs, **Then** `has_errors: true` and the error
-   messages are visible in the dashboard.
+    messages are visible in the dashboard.
 
 ---
 
@@ -88,12 +88,12 @@ the beginning is dropped, and a truncation indicator is visible.
 **Acceptance Scenarios**:
 
 1. **Given** the command output is within size limits, **When** the upload runs, **Then** the
-   full masked output log is available in the dashboard.
+    full masked output log is available in the dashboard.
 2. **Given** the command output exceeds the server-defined size limit, **When** the upload runs,
-   **Then** the log is truncated from the beginning (tail preserved), a truncation indicator is
-   set, and the upload still succeeds.
+    **Then** the log is truncated from the beginning (tail preserved), a truncation indicator is
+    set, and the upload still succeeds.
 3. **Given** output capture fails, **When** the upload runs, **Then** the log field is omitted
-   but the rest of the upload (resource counts, errors) still succeeds.
+    but the rest of the upload (resource counts, errors) still succeeds.
 
 ---
 
@@ -112,10 +112,10 @@ upload payload contains no `component_type` or `metadata` fields.
 **Acceptance Scenarios**:
 
 1. **Given** a non-terraform component type, **When** `--upload-status` is set, **Then** the
-   upload payload has no `component_type` or `metadata` fields.
+    upload payload has no `component_type` or `metadata` fields.
 2. **Given** a terraform component type where the CI plugin does not implement the summary
-   interface, **When** the upload runs, **Then** the upload still succeeds with just the existing
-   fields.
+    interface, **When** the upload runs, **Then** the upload still succeeds with just the existing
+    fields.
 
 ---
 

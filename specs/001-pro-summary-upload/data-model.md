@@ -110,12 +110,12 @@ executeCommandPipeline (terraform_execute_helpers_exec.go)
         │        └─► base64 encode tail → data["output_log"]
         │
         └─► uploadCommandStatus(atmosConfig, info, exitCode, metadata)
-                 │
-                 └─► uploadStatus(info, exitCode, componentType, metadata, client, gitRepo)
+                │
+                └─► uploadStatus(info, exitCode, componentType, metadata, client, gitRepo)
                           │
                           └─► InstanceStatusUploadRequest{Command: originalSubCommand, ...}
-                                   │
-                                   └─► PATCH /api/v1/repos/{owner}/{repo}/instances
+                                  │
+                                  └─► PATCH /api/v1/repos/{owner}/{repo}/instances
 ```
 
 ## Gating Conditions
@@ -124,7 +124,7 @@ All four must be true for `metadata`/`component_type` to be populated:
 
 1. `uploadStatusFlag` — `--upload-status` flag present
 2. `shouldUploadStatus(info)` — `settings.pro.enabled: true` in component AND subcommand is
-   `"plan"`, `"apply"`, or `"deploy"` ← **gap: `"deploy"` currently missing from this gate**
+    `"plan"`, `"apply"`, or `"deploy"` ← **gap: `"deploy"` currently missing from this gate**
 3. `atmosConfig.CI.Enabled` — `ci.enabled: true` in atmos.yaml
 4. Component type implements `StatusDataProvider` — checked by `ci.BuildStatusData` via registry
 
