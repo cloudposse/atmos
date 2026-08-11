@@ -7,7 +7,7 @@
 With an Atmos profile active, `atmos terraform` against an `azurerm` backend failed at
 `terraform init`:
 
-```
+```text
 Error: Failed to get existing workspaces: error listing blobs:
 AzureCLICredential: ERROR: Please specify only one of subscription and tenant, not both
 ```
