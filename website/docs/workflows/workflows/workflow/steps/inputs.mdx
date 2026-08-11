@@ -1,0 +1,83 @@
+---
+title: inputs
+sidebar_label: inputs
+sidebar_position: 14
+slug: /workflows/steps/inputs
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `inputs` field declares the files that determine a step's freshness, so Atmos can skip the step when nothing has changed since it last ran successfully. Pair it with [`artifacts`](/workflows/steps/artifacts) (the step's outputs) — the two are separate, sibling fields.
+</Intro>
+
+```yaml
+steps:
+  - name: compile
+    type: shell
+    command: go build -o bin/handler ./cmd/handler
+    inputs:
+      sources: ["cmd/**/*.go", "go.sum"]
+    artifacts:
+      paths: ["bin/handler"]
+```
+
+With no explicit [`when`](/workflows/steps#conditional-execution), declaring `inputs`/`artifacts` is enough — the step implicitly means `when: checksum.changed` and runs only when the hash of the matched source files differs from the hash recorded after the last successful run. Run the same workflow twice in a row and the second run skips `compile` entirely; edit a matched source file and the next run executes it again.
+
+`inputs` stays a general-purpose container — today it only holds `sources`, but it isn't narrowed to mean "source file globs" specifically, since other kinds of input signal may be added here later.
+
+## Fields
+
+<dl>
+  <dt>`sources`</dt>
+  <dd>List of glob patterns (relative to the step's working directory) for files whose content determines freshness. Supports `**` for recursive matching and brace expansion (`{a,b}`).</dd>
+</dl>
+
+## Facts exposed to `when`
+
+`inputs` doesn't introduce a second skip mechanism — it feeds facts into the same `when`/CEL engine every other step condition already uses, computed **lazily**: Atmos only does the work (hashing file content, statting mtimes) for the specific fact your `when` expression actually references.
+
+<dl>
+  <dt>`checksum.changed`</dt>
+  <dd>`true` when the content hash of the resolved `sources` files differs from the hash recorded after the last successful run of this step. The default and recommended fact — content hashing survives a fresh `git clone`/`actions/checkout`, which resets every file's mtime and makes `timestamp.changed` unreliable right after a checkout.</dd>
+
+  <dt>`timestamp.changed`</dt>
+  <dd>`true` when the newest `sources` file is newer than the oldest `artifacts` file. Stateless — no persisted record, cheaper than hashing, but unreliable immediately after a fresh checkout since CI resets every file's mtime to checkout time.</dd>
+
+  <dt>`sources`</dt>
+  <dd>The resolved list of files matched by `inputs.sources`, as structured records (`path`, `mtime`, `checksum`) rather than bare strings — see [Advanced: structured records](#advanced-structured-records) below.</dd>
+</dl>
+
+Power users can reference these facts directly instead of relying on the implicit default, combining them with anything else `when` already supports:
+
+```yaml
+steps:
+  - name: conditional-rebuild
+    type: shell
+    command: go build -o bin/handler ./cmd/handler
+    inputs:
+      sources: ["cmd/**/*.go"]
+    artifacts:
+      paths: ["bin/handler"]
+    when: timestamp.changed
+```
+
+## Advanced: structured records
+
+`sources` (and [`artifacts`](/workflows/steps/artifacts)) resolve to lists of structured records — `path`, `mtime` (Unix seconds, content-modification time — not `ctime`/`atime`, which don't reflect content changes and aren't portable across platforms), and `checksum` — rather than bare path strings. This lets `when` express custom staleness logic directly using [CEL](https://github.com/google/cel-spec)'s built-in `exists`/`all` macros, for cases the `checksum.changed`/`timestamp.changed` convenience facts don't cover:
+
+```yaml
+when: "sources.exists(s, artifacts.all(a, s.mtime > a.mtime))"
+```
+
+This is the same comparison `timestamp.changed` already makes ("rebuild if any source is newer than the oldest artifact") — spelled out explicitly for when you need to combine it with other conditions or compare a subset of files.
+
+## Storage
+
+The recorded checksum for `checksum.changed` persists under `{base_path}/.atmos/cache/freshness/` — a project-relative directory, not a user-home cache — specifically so it composes with [CI cache](/cli/configuration/ci/cache): add `.atmos/cache/freshness` to your `ci.cache.paths` and freshness state survives across CI runs the same way a `.terraform/` directory would.
+
+`timestamp.changed` is stateless and never touches this directory. A step's recorded checksum is only updated after the step's **own** execution succeeds — a failed step never falsely marks itself up to date.
+
+:::note Custom commands
+The same `inputs` field works identically on [custom command](/cli/configuration/commands) steps.
+:::
