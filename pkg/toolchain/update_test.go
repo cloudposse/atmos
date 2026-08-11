@@ -1,7 +1,9 @@
 package toolchain
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -308,4 +310,256 @@ func TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions(
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1.11.4"}, toolVersions.Tools["hashicorp/terraform"],
 		"a real update fully replaces the line -- neither the old default (1.9.8) nor the secondary version (1.9.7) may survive as stale entries")
+}
+
+// TestRunUpdate_ToolVersionsFileLoadError verifies RunUpdate surfaces a wrapped
+// ErrToolVersionsFileOperation when the configured .tool-versions file can't be read.
+func TestRunUpdate_ToolVersionsFileLoadError(t *testing.T) {
+	setupTestIO(t)
+	missing := filepath.Join(t.TempDir(), "does-not-exist-dir", ".tool-versions")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: missing}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	err := RunUpdate(nil, UpdateOptions{MaxConcurrency: 4})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolVersionsFileOperation)
+}
+
+// TestRunUpdate_ReportsFailedCount verifies RunUpdate returns ErrToolInstall (not nil) when at
+// least one tool update fails, using a mocked GitHub API error so the failure is deterministic
+// and doesn't depend on network flakiness.
+func TestRunUpdate_ReportsFailedCount(t *testing.T) {
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	mock := NewMockGitHubAPI()
+	mock.SetError("hashicorp", "terraform", assert.AnError)
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	var err error
+	output := captureUITestOutput(t, func() {
+		err = RunUpdate(nil, UpdateOptions{MaxConcurrency: 1})
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Contains(t, output, "failed to fetch available versions")
+	assert.Contains(t, output, "1 failed")
+}
+
+// TestRenderUpdateOutcome covers every result -> (style) mapping renderUpdateOutcome makes for
+// the live-progress display, including the updateResultUpdated/updateResultUpToDate fallthrough
+// to the success style.
+func TestRenderUpdateOutcome(t *testing.T) {
+	tests := []struct {
+		name      string
+		result    updateResult
+		wantStyle batchLineStyle
+	}{
+		{"updated renders as success", updateResultUpdated, batchLineSuccess},
+		{"up to date renders as success", updateResultUpToDate, batchLineSuccess},
+		{"skipped renders as info", updateResultSkipped, batchLineInfo},
+		{"failed renders as error", updateResultFailed, batchLineError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outcome := updateOutcome{result: tt.result, message: "some message"}
+			line, style := renderUpdateOutcome(outcome)
+			assert.Equal(t, outcome.message, line)
+			assert.Equal(t, tt.wantStyle, style)
+		})
+	}
+}
+
+// TestTallyUpdateOutcomes_MixedResults covers every case branch of tallyUpdateOutcomes' tally
+// switch and the resulting summary line printUpdateSummary builds from it.
+func TestTallyUpdateOutcomes_MixedResults(t *testing.T) {
+	outcomes := []updateOutcome{
+		{result: updateResultUpdated},
+		{result: updateResultUpToDate},
+		{result: updateResultUpToDate},
+		{result: updateResultSkipped},
+		{result: updateResultFailed},
+	}
+
+	var failed int
+	output := captureUITestOutput(t, func() {
+		failed = tallyUpdateOutcomes(outcomes, false)
+	})
+
+	assert.Equal(t, 1, failed)
+	assert.Contains(t, output, "Updated 1 tool(s)")
+	assert.Contains(t, output, "2 up to date")
+	assert.Contains(t, output, "1 skipped")
+	assert.Contains(t, output, "1 failed")
+}
+
+// TestPrintUpdateSummary_NoOutcomes_NonDryRun covers printUpdateSummary's defensive
+// zero-outcomes branch for a real (non-dry-run) update.
+func TestPrintUpdateSummary_NoOutcomes_NonDryRun(t *testing.T) {
+	output := captureUITestOutput(t, func() {
+		printUpdateSummary(0, 0, 0, 0, false)
+	})
+	assert.Contains(t, output, "Updated 0 tool(s)")
+}
+
+// TestPrintUpdateSummary_NoOutcomes_DryRun covers both the dry-run verb switch ("Would update"
+// instead of "Updated") and the same zero-outcomes defensive branch for a --dry-run run.
+func TestPrintUpdateSummary_NoOutcomes_DryRun(t *testing.T) {
+	output := captureUITestOutput(t, func() {
+		printUpdateSummary(0, 0, 0, 0, true)
+	})
+	assert.Contains(t, output, "Would update 0 tool(s)")
+}
+
+// TestUpdateOneTool_ToolVersionsLoadError covers updateOneTool's own (independent) load
+// failure, distinct from RunUpdate's up-front load: updateOneTool reloads .tool-versions itself
+// on every call since it may run concurrently with writes from sibling workers.
+func TestUpdateOneTool_ToolVersionsLoadError(t *testing.T) {
+	setupTestIO(t)
+	missing := filepath.Join(t.TempDir(), "does-not-exist-dir", ".tool-versions")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: missing}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+	assert.Contains(t, outcome.message, "failed to load .tool-versions")
+}
+
+// TestUpdateOneTool_NotConfigured covers the "tool no longer present in .tool-versions" branch
+// -- e.g. a race where another process removed it between target resolution and this worker
+// running.
+func TestUpdateOneTool_NotConfigured(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	outcome := updateOneTool("owner/other-tool", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+	assert.Contains(t, outcome.message, "not configured in .tool-versions")
+}
+
+// TestUpdateOneTool_InvalidToolSpec_PropagatesParseError covers updateOneTool's ParseToolSpec
+// error branch using the same "more than one slash" malformed-key case as
+// TestResolveLockTargets_InvalidResolvedKey_PropagatesParseError (lock_test.go): a raw
+// .tool-versions key is a free-form token, not validated as owner/repo at parse time.
+func TestUpdateOneTool_InvalidToolSpec_PropagatesParseError(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "a/b/c 1.0.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	outcome := updateOneTool("a/b/c", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+	assert.Contains(t, outcome.message, "failed to resolve tool")
+}
+
+// TestUpdateOneTool_LatestPin_DryRun covers updateOneTool's current=="latest" dispatch and
+// updateLatestPinnedTool's --dry-run branch together: dry-run short-circuits before any network
+// call, so it's the cheapest way to exercise the "latest" dispatch deterministically.
+func TestUpdateOneTool_LatestPin_DryRun(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform latest\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{DryRun: true, MaxConcurrency: 1})
+	assert.Equal(t, updateResultUpToDate, outcome.result)
+	assert.Contains(t, outcome.message, "latest")
+	assert.Contains(t, outcome.message, "dry-run")
+}
+
+// TestUpdateOneTool_LatestPin_InstallFailure covers updateLatestPinnedTool's non-dry-run
+// install-failure branch: a tool that doesn't exist in any registry makes the underlying
+// RunInstall fail fast (no large download), so this stays deterministic without mocking.
+func TestUpdateOneTool_LatestPin_InstallFailure(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "nonexistent-owner-abcxyz/nonexistent-repo-abcxyz latest\n")
+
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+	}})
+
+	outcome := updateOneTool("nonexistent-owner-abcxyz/nonexistent-repo-abcxyz", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+}
+
+// TestUpdateOneTool_LatestPin_InstallSucceeds covers updateLatestPinnedTool's success branch
+// with a real (unmocked, network-dependent) install, matching this file's existing convention
+// for exercising a real install (e.g. TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged).
+func TestUpdateOneTool_LatestPin_InstallSucceeds(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform latest\n")
+
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+	}})
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
+	require.Equal(t, updateResultUpdated, outcome.result, "message: %s", outcome.message)
+	assert.Contains(t, outcome.message, "latest (re-resolved)")
+}
+
+// TestUpdateOneTool_ExactPin_NoVersionsInRegistry covers updateExactPinnedTool's
+// "len(sorted) == 0" branch: the registry API call succeeds but returns no releases at all
+// (distinct from TestRunUpdate_ReportsFailedCount's fetch-error branch).
+func TestUpdateOneTool_ExactPin_NoVersionsInRegistry(t *testing.T) {
+	setupTestIO(t)
+	filePath := createTempToolVersionsFile(t, "owner/repo-with-no-releases 1.0.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: filePath}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	// A mock with no releases registered for this owner/repo returns an empty list with a nil
+	// error, matching a real registry response for a repo with zero tagged releases.
+	mock := NewMockGitHubAPI()
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	outcome := updateOneTool("owner/repo-with-no-releases", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result)
+	assert.Contains(t, outcome.message, "no versions found in registry")
+}
+
+// TestUpdateOneTool_ExactPin_ToolVersionsWriteFailureAfterInstall covers
+// updateExactPinnedTool's final AddToolToVersionsAsDefault error branch: the real install must
+// succeed first (matching this file's existing real-install convention) for this branch to be
+// reachable at all, and only the post-install .tool-versions rewrite is made to fail.
+func TestUpdateOneTool_ExactPin_ToolVersionsWriteFailureAfterInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+	setupTestIO(t)
+
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
+
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+	}})
+
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "1.11.4"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+
+	// Made read-only AFTER creation: the install itself must succeed (it doesn't touch this
+	// file), and updateOneTool's own up-front LoadToolVersions read is unaffected by a missing
+	// write bit -- only the final rewrite via AddToolToVersionsAsDefault is blocked.
+	require.NoError(t, os.Chmod(filePath, 0o400))
+	t.Cleanup(func() { _ = os.Chmod(filePath, 0o600) })
+
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
+	assert.Equal(t, updateResultFailed, outcome.result, "message: %s", outcome.message)
+	assert.Contains(t, outcome.message, "failed to update .tool-versions")
 }

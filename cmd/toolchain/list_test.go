@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,6 +119,21 @@ func TestListCommand_RunE(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestListCommand_FormatFlagCompletion exercises the shell-completion function registered for
+// --format in cmd/toolchain/list.go's init(). This isn't boilerplate: an off-by-one or stale
+// list here would silently break `atmos toolchain list --format <TAB>` without any other test
+// catching it, since RunE's own format validation reads the same supportedListFormats slice
+// directly rather than through this registered function.
+func TestListCommand_FormatFlagCompletion(t *testing.T) {
+	completionFunc, ok := listCmd.GetFlagCompletionFunc("format")
+	require.True(t, ok, "expected a completion function to be registered for --format")
+
+	suggestions, directive := completionFunc(listCmd, []string{}, "")
+
+	assert.Equal(t, supportedListFormats, suggestions)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 func TestListCommand_Args(t *testing.T) {

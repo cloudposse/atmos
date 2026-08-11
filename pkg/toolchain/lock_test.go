@@ -161,3 +161,91 @@ func TestRunLock_ForceWritesLockFileWithoutInstalling(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr), "unexpected error reading binDir: %v", statErr)
 	}
 }
+
+// TestRunLock_ToolVersionsFileLoadError verifies RunLock surfaces a wrapped
+// ErrToolVersionsFileOperation (rather than a bare os.ReadFile error) when the configured
+// .tool-versions file can't even be read -- e.g. its parent directory doesn't exist yet.
+func TestRunLock_ToolVersionsFileLoadError(t *testing.T) {
+	setupTestIO(t)
+	missing := filepath.Join(t.TempDir(), "does-not-exist-dir", ".tool-versions")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: missing}})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	err := RunLock(nil, LockOptions{MaxConcurrency: 4})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolVersionsFileOperation)
+}
+
+// TestTallyLockOutcomes_NoOutcomes_PrintsZero covers tallyLockOutcomes' defensive default
+// branch (reached when neither "locked" nor "failed" segments end up non-empty), asserting the
+// summary line it prints and that it correctly reports zero failures.
+func TestTallyLockOutcomes_NoOutcomes_PrintsZero(t *testing.T) {
+	var failed int
+	output := captureUITestOutput(t, func() {
+		failed = tallyLockOutcomes(nil)
+	})
+	assert.Equal(t, 0, failed)
+	assert.Contains(t, output, "Locked 0 tool(s)")
+}
+
+// TestTallyLockOutcomes_MixedResults verifies both the locked and failed segments are counted
+// and printed together, and that the returned failure count matches.
+func TestTallyLockOutcomes_MixedResults(t *testing.T) {
+	outcomes := []lockOutcome{
+		{result: lockResultLocked, message: "a@1.0.0 locked"},
+		{result: lockResultLocked, message: "b@1.0.0 locked"},
+		{result: lockResultFailed, message: "c@1.0.0: boom"},
+	}
+	var failed int
+	output := captureUITestOutput(t, func() {
+		failed = tallyLockOutcomes(outcomes)
+	})
+	assert.Equal(t, 1, failed)
+	assert.Contains(t, output, "Locked 2 tool(s)")
+	assert.Contains(t, output, "1 failed")
+}
+
+// TestResolveLockTargets_InvalidResolvedKey_PropagatesParseError covers the ParseToolSpec
+// error branch: a raw .tool-versions key with more than one slash (technically possible since
+// keys are free-form tokens, not validated at parse time) resolves via LookupToolVersion's
+// exact-match path, but then fails installer.ParseToolSpec's owner/repo split.
+func TestResolveLockTargets_InvalidResolvedKey_PropagatesParseError(t *testing.T) {
+	toolVersions := &ToolVersions{Tools: map[string][]string{
+		"a/b/c": {"1.0.0"},
+	}}
+
+	_, err := resolveLockTargets(toolVersions, []string{"a/b/c"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidToolSpec)
+}
+
+// TestLockOneTool_ResolveLatestVersionError verifies a tool pinned to "latest" that resolves to
+// a registry lookup failure (owner/repo doesn't exist anywhere) is reported as a failed outcome
+// with a "failed to resolve version" message, not a panic or a misleadingly "locked" result.
+func TestLockOneTool_ResolveLatestVersionError(t *testing.T) {
+	setupTestIO(t)
+
+	outcome := lockOneTool(toolInfo{owner: "nonexistent-owner-abcxyz", repo: "nonexistent-repo-abcxyz", version: "latest"})
+
+	assert.Equal(t, lockResultFailed, outcome.result)
+	assert.Contains(t, outcome.message, "failed to resolve version")
+}
+
+// TestLockOneTool_LockToolError verifies that a real, findable tool with a version that doesn't
+// actually exist as a release (so FindTool succeeds but the download/verify step in LockTool
+// fails) is reported as a failed outcome, not treated as locked.
+func TestLockOneTool_LockToolError(t *testing.T) {
+	setupTestIO(t)
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	prevConfig := atmosConfig
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
+	}})
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+
+	outcome := lockOneTool(toolInfo{owner: "hashicorp", repo: "terraform", version: "0.0.0-nonexistent-version"})
+
+	assert.Equal(t, lockResultFailed, outcome.result)
+}

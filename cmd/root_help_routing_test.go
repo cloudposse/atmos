@@ -270,6 +270,87 @@ func TestRootHelpFunc_RealTree_UnknownSubcommandErrors(t *testing.T) {
 	}
 }
 
+// TestRootHelpFunc_ReturnsImmediatelyOnRejectedSubcommand is the direct
+// regression test for the early-return guard added to rootHelpFunc itself:
+//
+//	if rejectUnknownSubcommandForHelp(command, arguments) {
+//	    return
+//	}
+//
+// The other tests in this file always drive rejectUnknownSubcommandForHelp
+// through a panicking OsExit stub (mirroring production, where OsExit really
+// terminates the process), so they never actually reach this "return"
+// statement -- rejectUnknownSubcommandForHelp's own showUsageAndExit call
+// unwinds the stack first. This test stubs OsExit as a non-panicking no-op
+// instead, which lets rootHelpFunc's own control flow run to completion, so
+// it can verify the guard itself actually stops execution rather than
+// falling through to the downstream help-rendering pipeline (cast recording,
+// telemetry disclosure, renderRootHelp, update-check) -- which, called with a
+// command that resolved to the wrong (parent) node, would render misleading
+// help output instead of stopping after the "Unknown command" error.
+func TestRootHelpFunc_ReturnsImmediatelyOnRejectedSubcommand(t *testing.T) {
+	_ = NewTestKit(t)
+	saveRestoreAtmosConfig(t)
+	// Guarantee CheckForAtmosUpdateAndPrintMessage (called only if execution
+	// falls through the guard) can't be reached with update-checking enabled,
+	// so this test can never make a real network call even if the guard
+	// regresses.
+	atmosConfig.Version.Check.Enabled = false
+
+	root := &cobra.Command{Use: rootCommandName}
+	parent := &cobra.Command{Use: "toolchain", Args: cobra.NoArgs, DisableFlagParsing: true}
+	install := &cobra.Command{Use: "install", Run: func(*cobra.Command, []string) {}}
+	parent.AddCommand(install)
+	root.AddCommand(parent)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+	exitCalls := 0
+	errUtils.OsExit = func(code int) {
+		exitCalls++
+		assert.Equal(t, 1, code)
+	}
+	// showUsageAndExit invokes errUtils.Exit(1) twice on this path
+	// (once via CheckErrorPrintAndExit inside showErrorExampleFromMarkdown,
+	// once again unconditionally right after) -- in production the first
+	// os.Exit call actually terminates the process so the second is never
+	// reached, but stubbing OsExit as a non-panicking no-op (required to
+	// observe rootHelpFunc's own control flow past the guard) makes both
+	// calls visible. wantExitCalls documents that pre-existing count rather
+	// than asserting a single call, which this test isn't exercising.
+	const wantExitCalls = 2
+
+	oldStderr := os.Stderr
+	r, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	// "toolchain" has depth 2 ("atmos toolchain"); GetActualArgs falls back to
+	// slicing os.Args at that depth since parent.DisableFlagParsing is true.
+	os.Args = []string{"atmos", "toolchain", "versions", "--help"}
+
+	assert.NotPanics(t, func() {
+		rootHelpFunc(parent, []string{"versions", "--help"})
+	})
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+	var output bytes.Buffer
+	_, copyErr := io.Copy(&output, r)
+	require.NoError(t, copyErr)
+
+	// rootHelpFunc must return immediately once the guard rejects -- not fall
+	// through to the downstream help-rendering pipeline, which would trigger
+	// further OsExit calls (e.g. from CheckForAtmosUpdateAndPrintMessage
+	// failure paths) beyond showUsageAndExit's own pre-existing two calls.
+	assert.Equal(t, wantExitCalls, exitCalls, "rootHelpFunc must stop after the guard rejects, not proceed to render help")
+	assert.Contains(t, output.String(), "Unknown command")
+	assert.Contains(t, output.String(), "versions")
+}
+
 // TestRootHelpFunc_RealTree_ValidCasesStillRenderHelp locks in the required
 // non-regression behavior alongside the fix above: genuinely valid help
 // invocations against the real command tree -- a parent with no subcommand at

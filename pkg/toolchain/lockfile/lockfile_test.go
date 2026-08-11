@@ -228,6 +228,52 @@ func TestGetOrCreateVersion_GetExisting(t *testing.T) {
 	assert.Len(t, tool.Versions, 1)
 }
 
+// TestGetOrCreateTool_ExistingWithNilVersions covers loading a legacy v1
+// lockfile: the old flat Version/Platforms format never populated a
+// "versions" YAML key, so unmarshaling it into the v2 Tool struct leaves
+// Versions nil even though the tool entry itself exists. GetOrCreateTool must
+// heal that nil map in place rather than panicking the first time a caller
+// (e.g. AddTool locking a new version) tries to write into it.
+func TestGetOrCreateTool_ExistingWithNilVersions(t *testing.T) {
+	lf := New()
+	existing := &Tool{Versions: nil}
+	lf.Tools["hashicorp/terraform"] = existing
+
+	tool := lf.GetOrCreateTool("hashicorp/terraform")
+
+	assert.Same(t, existing, tool, "must heal the existing entry in place, not replace it")
+	assert.NotNil(t, tool.Versions)
+	assert.Empty(t, tool.Versions)
+
+	// Confirm the healed map is actually writable.
+	version := tool.GetOrCreateVersion("1.13.4")
+	assert.NotNil(t, version)
+	assert.Len(t, tool.Versions, 1)
+}
+
+// TestGetOrCreateVersion_ExistingWithNilPlatforms covers a version entry
+// that exists (e.g. read back from a hand-edited or partially-written
+// lockfile) but has no "platforms" key, leaving Platforms nil.
+// GetOrCreateVersion must heal that nil map in place rather than panicking
+// the first time a caller writes a platform entry into it.
+func TestGetOrCreateVersion_ExistingWithNilPlatforms(t *testing.T) {
+	tool := &Tool{Versions: map[string]*VersionEntry{
+		"1.13.4": {Platforms: nil, BinaryName: "terraform"},
+	}}
+	existing := tool.Versions["1.13.4"]
+
+	version := tool.GetOrCreateVersion("1.13.4")
+
+	assert.Same(t, existing, version, "must heal the existing entry in place, not replace it")
+	assert.Equal(t, "terraform", version.BinaryName, "healing Platforms must not disturb other fields")
+	assert.NotNil(t, version.Platforms)
+	assert.Empty(t, version.Platforms)
+
+	// Confirm the healed map is actually writable.
+	version.Platforms["darwin_arm64"] = &PlatformEntry{URL: "https://example.com/terraform"}
+	assert.Len(t, tool.Versions["1.13.4"].Platforms, 1)
+}
+
 func TestTool_MultipleVersions(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "multi-version.yaml")

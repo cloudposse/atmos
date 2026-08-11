@@ -567,3 +567,183 @@ func TestRunClean_DryRun_NonExistentDirs(t *testing.T) {
 
 	assert.Contains(t, output, "does not exist")
 }
+
+// overrideCleanConfirmation forces confirmClean past its TTY guard (isTTYForStdoutFunc = true)
+// and stubs the actual interactive prompt result via askCleanConfirmationFunc, restoring both
+// seams via t.Cleanup. This drives RunClean's confirmed/declined/error dispatch logic
+// deterministically without a live /dev/tty -- see askCleanConfirmationFunc's doc comment.
+func overrideCleanConfirmation(t *testing.T, confirmed bool, err error) {
+	t.Helper()
+
+	prevTTY := isTTYForStdoutFunc
+	isTTYForStdoutFunc = func() bool { return true }
+	t.Cleanup(func() { isTTYForStdoutFunc = prevTTY })
+
+	prevAsk := askCleanConfirmationFunc
+	askCleanConfirmationFunc = func() (bool, error) { return confirmed, err }
+	t.Cleanup(func() { askCleanConfirmationFunc = prevAsk })
+}
+
+// TestRunClean_Confirmed_ProceedsWithClean verifies that when the interactive prompt reports
+// "yes", RunClean actually proceeds to delete -- not just that it doesn't error.
+func TestRunClean_Confirmed_ProceedsWithClean(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	overrideCleanConfirmation(t, true, nil)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+		require.NoError(t, err)
+	})
+
+	for _, dir := range []string{toolsDir, cacheDir, tempCacheDir} {
+		_, err := os.Stat(dir)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", dir)
+	}
+}
+
+// TestRunClean_Declined_AbortsWithoutDeleting verifies that when the interactive prompt reports
+// "no", RunClean prints "Clean aborted." and returns nil without deleting anything -- the
+// opts.Force-less, non-dry-run "declined" branch of RunClean that dry-run/force tests can't
+// reach.
+func TestRunClean_Declined_AbortsWithoutDeleting(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	overrideCleanConfirmation(t, false, nil)
+
+	var output string
+	require.NotPanics(t, func() {
+		output = captureCleanTestOutput(t, func() {
+			err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+			require.NoError(t, err)
+		})
+	})
+
+	assert.Contains(t, output, "Clean aborted")
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+}
+
+// TestRunClean_ConfirmationPromptError_PropagatesError verifies a prompt failure (e.g. the huh
+// form erroring for a reason other than user-abort) is surfaced to the caller and nothing is
+// deleted, rather than being silently treated as "declined".
+func TestRunClean_ConfirmationPromptError_PropagatesError(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	promptErr := errUtils.ErrToolchainCleanConfirmation
+	overrideCleanConfirmation(t, false, promptErr)
+
+	var err error
+	captureCleanTestOutput(t, func() {
+		err = RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, promptErr)
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+}
+
+// TestPreviewClean_ToolsDirPermissionError_PropagatesError verifies previewClean surfaces a
+// real filesystem error (not just "does not exist") wrapped in ErrFileOperation, instead of
+// silently reporting "0 files".
+func TestPreviewClean_ToolsDirPermissionError_PropagatesError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	cacheDir := filepath.Join(base, "cache")
+	tempCacheDir := filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{"file1"}, []string{})
+	createCleanTestDir(t, cacheDir, []string{}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{}, []string{})
+
+	require.NoError(t, os.Chmod(toolsDir, 0o000))
+	t.Cleanup(func() { resetCleanTestPermissions(t, toolsDir) })
+
+	err := previewClean(toolsDir, cacheDir, tempCacheDir, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+// TestPreviewClean_CacheDirPermissionError_PropagatesError mirrors the tools-dir case above for
+// the cache-dir branch of previewClean, reached only after the tools-dir preview succeeds.
+func TestPreviewClean_CacheDirPermissionError_PropagatesError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	cacheDir := filepath.Join(base, "cache")
+	tempCacheDir := filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{}, []string{})
+	createCleanTestDir(t, cacheDir, []string{"cache1"}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{}, []string{})
+
+	require.NoError(t, os.Chmod(cacheDir, 0o000))
+	t.Cleanup(func() { resetCleanTestPermissions(t, cacheDir) })
+
+	err := previewClean(toolsDir, cacheDir, tempCacheDir, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+// TestCleanDir_DangerousPath_RefusesToDelete verifies cleanDir's defensive guard actually
+// refuses to touch a dangerous path (rather than only being exercised indirectly through a
+// caller that never passes one).
+func TestCleanDir_DangerousPath_RefusesToDelete(t *testing.T) {
+	count, err := cleanDir("", true)
+	assert.Equal(t, 0, count)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+	assert.Contains(t, err.Error(), "refusing to delete dangerous path")
+}
+
+// TestCleanDir_FatalRemoveAllFailure_ReturnsError covers the fatal-RemoveAll-failure branch,
+// distinct from the fatal-count-failure branch the pre-existing "PermissionError_ToolsDir" case
+// covers: the directory is readable/listable (so countFiles succeeds) but not writable, so only
+// the deletion step fails.
+func TestCleanDir_FatalRemoveAllFailure_ReturnsError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	createCleanTestDir(t, toolsDir, []string{"file1"}, []string{})
+
+	// r-x (no write): Walk can still list file1, but removing it (or toolsDir itself)
+	// requires write permission on toolsDir, which is intentionally absent here.
+	require.NoError(t, os.Chmod(toolsDir, 0o500))
+	t.Cleanup(func() { resetCleanTestPermissions(t, toolsDir) })
+
+	count, err := cleanDir(toolsDir, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+	assert.Equal(t, 1, count, "the file must still have been counted before the failed delete")
+}
+
+// TestIsDangerousPath covers every branch of isDangerousPath directly: the pure string-logic
+// checks don't depend on the host OS, so all of them (including the Windows-drive-root checks)
+// can and should be exercised on every platform this suite runs on.
+func TestIsDangerousPath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"empty path", "", true},
+		{"root", "/", true},
+		{"dot", ".", true},
+		{"normal absolute path", filepath.Join(string(filepath.Separator), "home", "user", "tools"), false},
+		{"windows drive root, no separator", "C:", true},
+		{"windows drive root, backslash", `C:\`, true},
+		{"windows non-root path", `C:\Users\test\tools`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isDangerousPath(tt.path))
+		})
+	}
+}

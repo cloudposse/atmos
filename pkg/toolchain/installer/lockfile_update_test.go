@@ -69,6 +69,27 @@ func TestResolveLockFilePath_UnsetInstallPathMatchesGetInstallPathDefault(t *tes
 		"the lock file's default location must be inside the same directory GetInstallPath() resolves for actual tool installs, not a separate hardcoded '.tools'")
 }
 
+// TestResolveDefaultInstallPath_FallsBackToCwdWhenXDGCacheDirUnavailable exercises the last
+// fallback rung of resolveDefaultInstallPath's chain: when xdg.GetXDGCacheDir itself fails
+// (e.g. the resolved cache path can't be created), the function must still return a usable,
+// deterministic path -- <cwd>/.tools -- rather than propagating the error or silently
+// returning nothing.
+func TestResolveDefaultInstallPath_FallsBackToCwdWhenXDGCacheDirUnavailable(t *testing.T) {
+	// A regular file in place of the XDG cache base directory makes os.MkdirAll fail inside
+	// xdg.GetXDGCacheDir (its parent segment "is not a directory"), forcing the error branch.
+	blockedFile := filepath.Join(t.TempDir(), "not-a-directory")
+	require.NoError(t, os.WriteFile(blockedFile, []byte("x"), 0o644))
+	t.Setenv("ATMOS_XDG_CACHE_HOME", blockedFile)
+
+	wantCwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	got := resolveDefaultInstallPath("")
+
+	assert.Equal(t, filepath.Join(wantCwd, ".tools"), got,
+		"when the XDG cache dir can't be created, resolveDefaultInstallPath must fall back to <cwd>/.tools")
+}
+
 func TestInstallerLockFileLoadSaveAndUpdate(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "locks", "toolchain.lock.yaml")
 	installer := &Installer{useLockFile: true, lockFilePath: lockPath}

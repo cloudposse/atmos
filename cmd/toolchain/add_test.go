@@ -286,6 +286,39 @@ func TestAddCommand_RunE_ErrorPaths(t *testing.T) {
 	})
 }
 
+// TestAddCommand_RunE_DefaultFlagIgnoredForMultipleTools reproduces the runAdd guard that
+// resets setAsDefault to false (and warns) when --default is combined with more than one
+// tool argument. AddVersionToTool's asDefault=true path *replaces* a tool's whole version
+// list with just the new version, while asDefault=false *appends* alongside any existing
+// entry. Pre-seeding an existing "hashicorp/terraform 1.0.0" entry and then running
+// `add --default hashicorp/terraform@1.5.0 kubernetes/kubectl@1.28.0` makes the two
+// behaviors observably different: if the guard didn't fire, the pre-existing 1.0.0 entry
+// would be wiped; since it fires, 1.5.0 is appended and 1.0.0 survives.
+func TestAddCommand_RunE_DefaultFlagIgnoredForMultipleTools(t *testing.T) {
+	cleanup, tempDir := setupTestEnvironment(t)
+	defer cleanup()
+
+	tvPath := filepath.Join(tempDir, ".tool-versions")
+	require.NoError(t, os.WriteFile(tvPath, []byte("hashicorp/terraform 1.0.0\n"), 0o644))
+
+	t.Cleanup(func() {
+		require.NoError(t, addCmd.Flags().Set("default", "false"))
+	})
+	require.NoError(t, addCmd.Flags().Set("default", "true"))
+
+	err := addCmd.RunE(addCmd, []string{"hashicorp/terraform@1.5.0", "kubernetes/kubectl@1.28.0"})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(tvPath)
+	require.NoError(t, readErr)
+
+	// If --default had NOT been ignored, this line would read only "hashicorp/terraform
+	// 1.5.0" (the 1.0.0 entry replaced). Since multi-tool --default is ignored, both
+	// versions must be present, appended.
+	assert.Contains(t, string(content), "1.0.0")
+	assert.Contains(t, string(content), "1.5.0")
+}
+
 // TestAddCommandProvider_AllMethods tests all CommandProvider interface methods.
 func TestAddCommandProvider_AllMethods(t *testing.T) {
 	provider := &AddCommandProvider{}

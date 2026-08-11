@@ -1,6 +1,7 @@
 package extensions
 
 import (
+	"bufio"
 	"bytes"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -599,6 +601,15 @@ func TestStrictLinkifyExtension(t *testing.T) {
 			mustContain:    "mikefarah/yq@4.45.1",
 			mustNotContain: "mailto:",
 		},
+		{
+			// No "/" here, so this exercises the numeric-TLD branch of StrictEmailRegexp
+			// directly (the "/" check on the line above short-circuits for every other
+			// case in this table), unlike "foo/bar@1.0.0"-style cases above.
+			name:           "bare tool@version without a slash",
+			input:          "Upgrade to terraform@1.5.0 now",
+			mustContain:    "terraform@1.5.0",
+			mustNotContain: "mailto:",
+		},
 	}
 
 	for _, tt := range tests {
@@ -648,4 +659,137 @@ func TestStrictLinkifyExtension_PreservesSourcePosition(t *testing.T) {
 	assert.NotEqual(t, -1, positions[0], "first occurrence must have a real source position, not ast.String's -1")
 	assert.NotEqual(t, -1, positions[1], "second occurrence must have a real source position, not ast.String's -1")
 	assert.Less(t, positions[0], positions[1], "repeated labels must resolve to increasing positions in document order")
+}
+
+// TestStrictLinkifyExtension_LeavesURLAutolinksAlone verifies that packageRefTransformer
+// only touches email-type autolinks (see the AutoLinkType != ast.AutoLinkEmail guard) and
+// leaves URL-type autolinks, like <https://example.com>, linked exactly as GFM's Linkify
+// extension produced them. Package references can never parse as URL autolinks, so this
+// guard exists purely to avoid mangling real links -- this test asserts that real links
+// still render as links, not just that the guard's line executes.
+func TestStrictLinkifyExtension_LeavesURLAutolinksAlone(t *testing.T) {
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM, NewStrictLinkifyExtension()))
+
+	var buf bytes.Buffer
+	err := md.Convert([]byte("See <https://example.com> for details"), &buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, `href="https://example.com"`, "URL autolinks must stay linked")
+	assert.Contains(t, output, "https://example.com", "URL autolink text must still render")
+}
+
+// TestReplacementTextNode covers replacementTextNode directly, including the fallback
+// branch that AutoLink.Label(source) never actually exercises in practice (Label always
+// returns verbatim source bytes) but which the function must still handle defensively:
+// when the label cannot be located in source (e.g. searchFrom has already advanced past
+// its only occurrence), the function must fall back to an ast.String node -- carrying the
+// original content forward, just without a real Pos() -- rather than losing the text or
+// panicking.
+func TestReplacementTextNode(t *testing.T) {
+	t.Run("label found advances searchFrom to a real ast.Text node", func(t *testing.T) {
+		source := []byte("Use foo/bar@1.0.0 now")
+		searchFrom := 0
+
+		node := replacementTextNode(source, []byte("foo/bar@1.0.0"), &searchFrom)
+
+		textNode, ok := node.(*ast.Text)
+		require.True(t, ok, "expected an *ast.Text node when the label is found in source")
+		assert.Equal(t, "foo/bar@1.0.0", string(textNode.Segment.Value(source)))
+		assert.NotEqual(t, -1, textNode.Pos(), "found label must carry a real source position")
+		assert.Equal(t, len("Use foo/bar@1.0.0"), searchFrom, "searchFrom must advance past the match")
+	})
+
+	t.Run("label not found in remaining source falls back to ast.String", func(t *testing.T) {
+		source := []byte("Use foo/bar@1.0.0 now")
+		// Start the search past the only occurrence of the label, forcing a miss.
+		searchFrom := len(source)
+
+		node := replacementTextNode(source, []byte("foo/bar@1.0.0"), &searchFrom)
+
+		strNode, ok := node.(*ast.String)
+		require.True(t, ok, "expected a fallback *ast.String node when the label cannot be located")
+		assert.Equal(t, "foo/bar@1.0.0", string(strNode.Value))
+		assert.Equal(t, len(source), searchFrom, "searchFrom must be left unchanged on a miss")
+	})
+}
+
+// TestStringNodeRenderer_RenderString covers the ast.KindString renderer that
+// packageRefTransformer's fallback path depends on. Without this renderer, glamour's ANSI
+// renderer has no built-in handling for ast.String and silently drops the node's content
+// (see the type-level doc comment on stringNodeRenderer for the exact bug this fixes).
+func TestStringNodeRenderer_RenderString(t *testing.T) {
+	r := &stringNodeRenderer{}
+
+	t.Run("entering writes the raw node value", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		node := ast.NewString([]byte("foo/bar@1.0.0"))
+
+		status, err := r.renderString(w, nil, node, true)
+		require.NoError(t, err)
+		assert.Equal(t, ast.WalkContinue, status)
+		require.NoError(t, w.Flush())
+		assert.Equal(t, "foo/bar@1.0.0", buf.String(), "must write the node's raw value unescaped")
+	})
+
+	t.Run("exiting writes nothing, preventing a duplicate write", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		node := ast.NewString([]byte("foo/bar@1.0.0"))
+
+		status, err := r.renderString(w, nil, node, false)
+		require.NoError(t, err)
+		assert.Equal(t, ast.WalkContinue, status)
+		require.NoError(t, w.Flush())
+		assert.Empty(t, buf.String(), "the exiting call must not write the value a second time")
+	})
+
+	t.Run("non-String node is a defensive no-op", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		// This renderer is only ever registered for ast.KindString, so goldmark's own
+		// dispatch guarantees n is always an *ast.String; the type assertion is a
+		// defensive guard. Call it with a mismatched node type to prove that guard
+		// degrades safely (no panic, no output) instead of assuming the assertion.
+		node := ast.NewTextSegment(text.NewSegment(0, 0))
+
+		status, err := r.renderString(w, nil, node, true)
+		require.NoError(t, err)
+		assert.Equal(t, ast.WalkContinue, status)
+		require.NoError(t, w.Flush())
+		assert.Empty(t, buf.String(), "a non-*ast.String node must not produce output")
+	})
+}
+
+// TestStringNodeRenderer_RegisterFuncs verifies RegisterFuncs wires ast.KindString to
+// renderString, since glamour's ANSI renderer relies on this registration -- without it,
+// glamour has no handler at all for ast.String and drops the content instead of erroring.
+func TestStringNodeRenderer_RegisterFuncs(t *testing.T) {
+	r := &stringNodeRenderer{}
+	registered := map[ast.NodeKind]renderer.NodeRendererFunc{}
+	registerer := rendererFuncRegistererFunc(func(kind ast.NodeKind, fn renderer.NodeRendererFunc) {
+		registered[kind] = fn
+	})
+
+	r.RegisterFuncs(registerer)
+
+	fn, ok := registered[ast.KindString]
+	require.True(t, ok, "expected RegisterFuncs to register a handler for ast.KindString")
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	_, err := fn(w, nil, ast.NewString([]byte("hashicorp/terraform@1.5.0")), true)
+	require.NoError(t, err)
+	require.NoError(t, w.Flush())
+	assert.Equal(t, "hashicorp/terraform@1.5.0", buf.String(), "the registered func must behave the same as calling renderString directly")
+}
+
+// rendererFuncRegistererFunc adapts a plain function to renderer.NodeRendererFuncRegisterer
+// so RegisterFuncs' wiring can be verified without spinning up a full goldmark renderer.
+type rendererFuncRegistererFunc func(ast.NodeKind, renderer.NodeRendererFunc)
+
+// Register implements renderer.NodeRendererFuncRegisterer.
+func (f rendererFuncRegistererFunc) Register(kind ast.NodeKind, fn renderer.NodeRendererFunc) {
+	f(kind, fn)
 }

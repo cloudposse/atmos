@@ -26,6 +26,35 @@ const deletedFilesFromCacheFormat = "Deleted **%d** files from %s cache"
 // requires a real /dev/tty.
 var isTTYForStdoutFunc = term.IsTTYSupportForStdout
 
+// askCleanConfirmationFunc is a function variable for running the interactive Yes/No
+// confirmation prompt. Like isTTYForStdoutFunc above, this is a seam so tests can drive
+// the post-TTY-check dispatch logic in confirmClean (confirmed, declined, or prompt error)
+// deterministically, without needing a live /dev/tty to exercise huh's real Bubble Tea prompt
+// loop.
+var askCleanConfirmationFunc = askCleanConfirmation
+
+// askCleanConfirmation runs the real interactive Yes/No confirmation prompt and returns
+// whether the user confirmed. A huh.ErrUserAborted (Ctrl+C) is treated as "declined", not an
+// error; any other prompt failure is wrapped in ErrToolchainCleanConfirmation.
+func askCleanConfirmation() (bool, error) {
+	var confirmed bool
+	confirmPrompt := uiutils.NewAtmosConfirm().
+		Title("Are you sure you want to continue?").
+		Affirmative("Yes, delete").
+		Negative("No, cancel").
+		Value(&confirmed).
+		WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := confirmPrompt.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%w: %w", errUtils.ErrToolchainCleanConfirmation, err)
+	}
+
+	return confirmed, nil
+}
+
 // CleanOptions configures optional behavior for RunClean.
 type CleanOptions struct {
 	// DryRun previews what would be deleted without deleting anything.
@@ -127,22 +156,7 @@ func confirmClean(toolsDir, cacheDir, tempCacheDir string, cacheOnly bool) (bool
 		return false, errUtils.ErrToolchainCleanRequiresConfirmation
 	}
 
-	var confirmed bool
-	confirmPrompt := uiutils.NewAtmosConfirm().
-		Title("Are you sure you want to continue?").
-		Affirmative("Yes, delete").
-		Negative("No, cancel").
-		Value(&confirmed).
-		WithTheme(uiutils.NewAtmosHuhTheme())
-
-	if err := confirmPrompt.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return false, nil
-		}
-		return false, fmt.Errorf("%w: %w", errUtils.ErrToolchainCleanConfirmation, err)
-	}
-
-	return confirmed, nil
+	return askCleanConfirmationFunc()
 }
 
 // previewClean walks the target directories and reports what would be deleted, without
