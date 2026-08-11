@@ -4,6 +4,7 @@ description: "Atmos cast recording and rendering: atmos cast play/render, output
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 ---
 
 # Atmos Cast

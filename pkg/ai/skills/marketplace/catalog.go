@@ -29,6 +29,7 @@ type AvailableSkill struct {
 	Description string
 	Version     string
 	Source      string
+	Category    string
 }
 
 // Catalog returns the official skills bundled into the binary, sorted by name.
@@ -99,6 +100,7 @@ func LookupBundledSkill(name string) (AvailableSkill, bool) {
 		Description: metadata.Description,
 		Version:     metadata.GetVersion(),
 		Source:      fmt.Sprintf(bundledSourceFmt, name),
+		Category:    metadata.GetCategory(),
 	}, true
 }
 

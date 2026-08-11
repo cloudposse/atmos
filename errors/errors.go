@@ -125,8 +125,6 @@ var (
 	ErrVersionEntryExists            = errors.New("version entry already exists")
 	ErrVersionEntryNotFound          = errors.New("version entry not found")
 	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
-	ErrVersionRenderFileRequired     = errors.New("--file is required")
-	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
 	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
@@ -296,6 +294,7 @@ var (
 	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
+	ErrGitTargetSplitInvalid       = errors.New("git target 'split' must be a boolean")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
 	ErrUnsafeForkCheckout          = errors.New("refusing to clone untrusted fork content in an elevated CI event")
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
@@ -1529,6 +1528,7 @@ var (
 	ErrKubernetesValidationFailed           = errors.New("kubernetes manifest validation failed")
 	ErrKubernetesManifestInvalidName        = errors.New("object metadata.name is not a valid DNS-1123 subdomain")
 	ErrKubernetesValidate                   = errors.New("failed to validate kubernetes object")
+	ErrKubernetesValidateSectionInvalid     = errors.New("component 'validate' must be a boolean")
 
 	// Helm-native component errors.
 	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
