@@ -1,12 +1,29 @@
 package toolchain
 
 import (
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// ansiEscapeRE matches SGR escape codes, the same pattern used elsewhere in the repo (see
+// cmd/secret/handler_helpers_test.go). The ui.Success/Info/Error helpers style a completed
+// line's segments independently -- the label and the trailing message get separate color runs
+// -- so a multi-word phrase like "tool-a done" is not necessarily contiguous in the raw, styled
+// output; whether that happens depends on the ambient color profile, which differs between a
+// local terminal and CI (observed: assertions here passed locally with color disabled but
+// failed in CI with it enabled). Stripping ANSI before asserting makes the check robust to that
+// difference while still verifying the real, visible text.
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// stripANSI removes SGR styling so tests can assert on visible terminal text regardless of the
+// ambient color profile.
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
 
 // TestRunConcurrentBatchWithLiveProgress_ResultsPreserveItemOrder confirms the one guarantee
 // that survives the move to live, completion-order printing (matching `atmos toolchain
@@ -87,7 +104,7 @@ func TestLiveBatchRenderer_StartTickCompleteRenderAndClear(t *testing.T) {
 	completeOutput := captureUITestOutput(t, func() {
 		renderer.complete("tool-a", "tool-a done", batchLineSuccess)
 	})
-	assert.Contains(t, completeOutput, "tool-a done")
+	assert.Contains(t, stripANSI(completeOutput), "tool-a done")
 	assert.Equal(t, []string{"tool-b"}, renderer.active, "completing tool-a must remove only tool-a from active")
 	assert.Equal(t, 1, renderer.completed)
 
@@ -128,7 +145,7 @@ func TestLiveBatchDisplay_WithRenderer_DelegatesEveryMethod(t *testing.T) {
 		display.clear()
 	})
 
-	assert.Contains(t, output, "tool done")
+	assert.Contains(t, stripANSI(output), "tool done")
 	assert.Equal(t, 1, renderer.completed)
 	assert.Empty(t, renderer.active)
 	assert.Equal(t, 0, renderer.renderedLines)
