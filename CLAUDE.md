@@ -448,5 +448,5 @@ NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/001-pact-consumer-contracts/plan.md`
+at `specs/002-pro-exec-metadata/plan.md`
 <!-- SPECKIT END -->
