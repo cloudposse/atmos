@@ -182,14 +182,15 @@ jobs:
           - { os: "macos-15", target: macos }
     # Linux is the tightest target: its timed steps alone (registry cache test 25m +
     # coverage-enabled acceptance tests 60m + coverage upload 5m) already sum to 90m,
-    # before checkout, Go/Atmos setup, and toolchain installs. windows-latest and
-    # macos-15 sum to 85m (registry cache test 25m + acceptance tests 60m) for the
-    # same reason - a run that hit exactly 75.0 minutes was force-cancelled by the
-    # previous ceiling with every step, including the full go test suite, already
-    # completed successfully in the logs. Same variance documented on the
-    # "Acceptance tests" step's own timeout below; give the job-level ceiling real
-    # headroom above the step-budget sum, not just equal to it.
-    timeout-minutes: 120
+    # before checkout, Go/Atmos setup, and toolchain installs. windows-latest sums to
+    # 105m (registry cache test 25m + acceptance tests 80m, see the "Acceptance tests"
+    # step's own timeout below for why windows gets the wider budget) and macos-15
+    # sums to 85m (registry cache test 25m + acceptance tests 60m) for the same
+    # reason - a run that hit exactly 75.0 minutes was force-cancelled by an earlier,
+    # tighter ceiling with every step, including the full go test suite, already
+    # completed successfully in the logs. Give the job-level ceiling real headroom
+    # above the step-budget sum, not just equal to it.
+    timeout-minutes: 140
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -320,13 +321,16 @@ jobs:
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): runs of this step have been
-        # observed between 37m43s and 45m06s (the latter timed out at the
-        # old 45m budget) — 7-8 minutes of CI-to-CI variance on a budget with
-        # almost no headroom, force-cancelling the step with no real test
-        # failure in the logs. 60m matches Linux's coverage-enabled step
-        # budget and gives real slack; macOS finishes this step in ~35m
-        # today so the extra headroom is a no-op for it.
-        timeout-minutes: 60
+        # observed between 37m43s and 60m17s (the latter timed out at the
+        # previous 60m budget with the full go test suite already completed
+        # successfully in the logs — every package printed `ok`, the step
+        # was force-cancelled ~17s after `go test` itself finished). That's
+        # 20+ minutes of CI-to-CI variance on a budget with almost no
+        # headroom. Give Windows real slack; macOS finishes this step in
+        # ~35m today so its budget stays at 60m (still matching Linux's
+        # coverage-enabled step budget) — the extra headroom is a no-op for
+        # it.
+        timeout-minutes: ${{ matrix.flavor.target == 'windows' && 80 || 60 }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
