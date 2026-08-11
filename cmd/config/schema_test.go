@@ -16,27 +16,27 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
-// configSchemaTestStreams is a minimal io.Streams implementation for capturing
+// configTestStreams is a minimal io.Streams implementation for capturing
 // data output in tests, mirroring cmd/stack's stackConfigTestStreams.
-type configSchemaTestStreams struct {
+type configTestStreams struct {
 	stdin  stdio.Reader
 	stdout *bytes.Buffer
 	stderr *bytes.Buffer
 }
 
-func (ts *configSchemaTestStreams) Input() stdio.Reader     { return ts.stdin }
-func (ts *configSchemaTestStreams) Output() stdio.Writer    { return ts.stdout }
-func (ts *configSchemaTestStreams) Error() stdio.Writer     { return ts.stderr }
-func (ts *configSchemaTestStreams) RawOutput() stdio.Writer { return ts.stdout }
-func (ts *configSchemaTestStreams) RawError() stdio.Writer  { return ts.stderr }
+func (ts *configTestStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *configTestStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *configTestStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *configTestStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *configTestStreams) RawError() stdio.Writer  { return ts.stderr }
 
-// initConfigSchemaTestWriter wires a fresh data writer that captures stdout,
+// initConfigTestWriter wires a fresh data writer that captures stdout,
 // cleaning up afterward. Needed because runConfigSchema writes through
 // data.Write, which panics unless data.InitWriter was called.
-func initConfigSchemaTestWriter(t *testing.T) *bytes.Buffer {
+func initConfigTestWriter(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
-	streams := &configSchemaTestStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+	streams := &configTestStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
 	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
@@ -56,7 +56,7 @@ func TestConfigSchemaCmd_RegisteredUnderConfig(t *testing.T) {
 }
 
 func TestRunConfigSchema_Stdout(t *testing.T) {
-	stdout := initConfigSchemaTestWriter(t)
+	stdout := initConfigTestWriter(t)
 
 	require.NoError(t, runConfigSchema(nil))
 
@@ -66,7 +66,7 @@ func TestRunConfigSchema_Stdout(t *testing.T) {
 }
 
 func TestConfigSchemaCmd_RunE_Stdout(t *testing.T) {
-	stdout := initConfigSchemaTestWriter(t)
+	stdout := initConfigTestWriter(t)
 
 	require.NoError(t, configSchemaCmd.RunE(configSchemaCmd, nil))
 
