@@ -61,6 +61,9 @@ atmos hello -n world
 
   <dt>`semantic_type`</dt>
   <dd>Optional `component` or `stack`. See [Semantic Types](#semantic-types).</dd>
+
+  <dt>`values`</dt>
+  <dd>Optional list of allowed string values. See [Restricting Values](#restricting-values).</dd>
 </dl>
 
 ## Boolean Flags
@@ -219,3 +222,37 @@ commands:
 ```
 
 See [`component`](/cli/configuration/commands/component) for the full custom component type workflow.
+
+## Restricting Values
+
+Set `values` to a fixed list of allowed strings so Atmos rejects anything else immediately, with the same validation and error format built-in commands' `valid_values:` already use:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to an environment
+    flags:
+      - name: environment
+        required: true
+        values: [dev, staging, prod]
+    steps:
+      - type: atmos
+        command: terraform apply infra -s {{ .Flags.environment }}
+```
+
+```shell
+$ atmos deploy --environment=typo
+Error: invalid value for flag: invalid value "typo" for flag --environment (valid values: dev, staging, prod)
+```
+
+If the flag is also `required` and left unset in an interactive terminal, Atmos prompts with a picker built from `values` instead of erroring — the same behavior built-in commands already use for a missing required flag:
+
+```shell
+$ atmos deploy
+? Choose environment
+  dev
+  staging
+> prod
+```
+
+In a non-interactive environment (CI, no TTY, or `--interactive` disabled), a missing required flag still falls through to the normal "required flag not set" error — the picker never blocks an unattended run.
