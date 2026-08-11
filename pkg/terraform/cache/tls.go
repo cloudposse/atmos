@@ -63,6 +63,16 @@ var systemCertFileCandidates = []string{
 // system roots — otherwise the subprocess loses trust for state backends and other
 // TLS. When no system bundle is found, trust env is skipped rather than risk dropping
 // the system roots.
+//
+// TODO: consolidate with cacerts.BuildBundle. This duplicates "read the system CA bundle, append
+// an extra PEM, write a combined bundle" (as does pkg/emulator/azure_trust.go's
+// buildAzureTrustBundle), but was not switched over: this writes to a path derived from certPath
+// (next to the proxy cert, asserted verbatim by TestBuildTrustBundle) rather than
+// cacerts.BuildBundle's stable content-hash-keyed XDG cache path, and — unlike
+// cacerts.BuildBundle — deliberately skips writing anything when no system bundle is found
+// (TestBuildTrustBundle_NoSystemBundleSkipsTrustEnv), since a self-signed proxy cert alone would
+// otherwise silently drop trust for the system roots. Reconciling these path/fallback semantics is
+// left as a follow-up.
 func buildTrustBundle(certPath string) ([]string, error) {
 	defer perf.Track(nil, "tfcache.buildTrustBundle")()
 

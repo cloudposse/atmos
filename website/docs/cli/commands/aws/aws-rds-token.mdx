@@ -1,0 +1,120 @@
+---
+title: atmos aws rds token
+sidebar_label: rds token
+sidebar_class_name: command
+sidebar_position: 7
+id: rds-token
+description: Generate an RDS IAM database authentication token using Atmos identities.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate a short-lived RDS IAM database authentication token using an Atmos identity. The token is used as the database password over a TLS connection and is valid for approximately 15 minutes — no AWS CLI and no static database password required.
+</Intro>
+
+## Usage
+
+```shell
+atmos aws rds token --host <endpoint> --port <port> --username <user> [--region <region>] [flags]
+```
+
+The token is written to `stdout` so it can be captured directly as a database password. Status
+information (such as the token expiry) is written to `stderr`, keeping `stdout` clean for scripting.
+
+## Examples
+
+```shell
+# PostgreSQL / Aurora PostgreSQL (port 5432)
+PGPASSWORD="$(atmos aws rds token \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 5432 \
+  --username app --region us-east-2 --identity dev-admin)" \
+  psql "host=mydb.abc123.us-east-2.rds.amazonaws.com sslmode=require dbname=app user=app"
+```
+
+```shell
+# MySQL / MariaDB / Aurora MySQL (port 3306)
+atmos aws rds token \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 3306 \
+  --username app --region us-east-2 --identity dev-admin
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--host` <em>(required)</em></dt>
+  <dd>
+    The RDS/Aurora endpoint hostname (or an RDS Proxy endpoint). Must be the endpoint AWS generated —
+    a custom CNAME will not work.
+  </dd>
+
+  <dt>`--port` <em>(required)</em></dt>
+  <dd>
+    The database port (for example `5432` for PostgreSQL or `3306` for MySQL/MariaDB). Required and
+    engine-agnostic, mirroring the AWS CLI `aws rds generate-db-auth-token`.
+  </dd>
+
+  <dt>`--username` <em>(alias `-u`, required)</em></dt>
+  <dd>
+    The database account name. It is case-sensitive and must match both the database user and the
+    `dbuser` name in the IAM `rds-db:connect` resource ARN.
+  </dd>
+
+  <dt>`--region` <em>(optional)</em></dt>
+  <dd>
+    The AWS region of the database endpoint. Optional — when omitted, the signing region is resolved
+    from the authenticated identity's AWS credentials. An error occurs only when neither `--region`
+    nor the identity's credentials provide a region.
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The Atmos identity to authenticate with. If omitted, Atmos uses the `ATMOS_IDENTITY` environment
+    variable, or the default identity when exactly one is configured.
+  </dd>
+</dl>
+
+## How It Works
+
+This command mints an RDS IAM authentication token using the same mechanism as
+`aws rds generate-db-auth-token`, but without requiring the AWS CLI:
+
+1. Atmos authenticates the specified identity to obtain AWS credentials.
+2. It builds a SigV4-presigned RDS "connect" URL for `host:port` and the database user, signed with
+   those credentials for the given region. The token is generated locally — no AWS API call is made.
+3. The token is written to `stdout` for use as the database password.
+
+The token is emitted unmasked so it can be used verbatim as a password. Treat it as a secret: it
+grants database access for its lifetime.
+
+### Prerequisites
+
+RDS IAM authentication must already be enabled for the target database, independent of this command:
+
+- IAM database authentication is enabled on the instance or cluster (`EnableIAMDatabaseAuthentication`).
+- The calling identity has an `rds-db:connect` IAM permission on the `dbuser` resource ARN
+  (`arn:aws:rds-db:<region>:<account>:dbuser:<DbiResourceId>/<db-user>`).
+- The database account is mapped to IAM authentication (PostgreSQL `GRANT rds_iam TO <user>`;
+  MySQL/MariaDB `IDENTIFIED WITH AWSAuthenticationPlugin`).
+- The client connects over TLS/SSL.
+
+## Notes
+
+- Tokens expire after approximately 15 minutes (AWS-enforced). Within that window the token authenticates each new connection (it is not single-use); once a connection is established, the session stays open independent of the token's expiry.
+- The token is a live credential. Do not record this command with `--cast`/`ATMOS_CAST`: the token is written to `stdout` unmasked and would be captured verbatim into the recording.
+- IAM database authentication is supported for RDS for PostgreSQL, MySQL, and MariaDB, and the
+  Aurora PostgreSQL- and MySQL-compatible editions.
+- The token is generated offline; the command makes no RDS API calls.
+
+## See Also
+
+- [AWS EKS Token](/cli/commands/aws/eks-token) — the analogous short-lived token command for EKS
+- [Auth Login Command](/cli/commands/auth/login) — authenticate with identities
+- [Auth Configuration](/cli/configuration/auth) — configure providers, identities, and integrations
+- [IAM database authentication for RDS and Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html)

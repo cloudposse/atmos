@@ -90,3 +90,102 @@ func TestEnv_VarNamesAreCanonical(t *testing.T) {
 	assert.Equal(t, "SSL_CERT_FILE", EnvSSLCertFile)
 	assert.Equal(t, "REQUESTS_CA_BUNDLE", EnvRequestsCABundle)
 }
+
+// isolateXDGCache points ATMOS_XDG_CACHE_HOME at a fresh temp dir for the duration of the test, so
+// BuildBundle tests never read or write the real user cache.
+func isolateXDGCache(t *testing.T) {
+	t.Helper()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+}
+
+func TestBuildBundle_CombinesSystemAndExtra(t *testing.T) {
+	isolateXDGCache(t)
+
+	// Stub a deterministic "system bundle" the same way TestEnv_WithBundle does.
+	dir := t.TempDir()
+	sysPEM := filepath.Join(dir, "system.pem")
+	require.NoError(t, os.WriteFile(sysPEM, []byte("SYSTEM_ROOT_MARKER\n"), 0o644))
+	savedPath, savedOnce := cachedPath, findOnce
+	cachedPath = sysPEM
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() { cachedPath, findOnce = savedPath, savedOnce })
+
+	extra := []byte("EXTRA_CA_MARKER\n")
+	path, err := BuildBundle(extra)
+	require.NoError(t, err)
+	require.NotEmpty(t, path)
+
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "SYSTEM_ROOT_MARKER", "the combined bundle must keep the system roots")
+	assert.Contains(t, string(contents), "EXTRA_CA_MARKER", "the combined bundle must append the extra CA")
+}
+
+func TestBuildBundle_NoSystemBundleUsesExtraOnly(t *testing.T) {
+	isolateXDGCache(t)
+
+	// Stub "no system bundle found".
+	savedPath, savedOnce := cachedPath, findOnce
+	cachedPath = ""
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() { cachedPath, findOnce = savedPath, savedOnce })
+
+	extra := []byte("ONLY_EXTRA_MARKER\n")
+	path, err := BuildBundle(extra)
+	require.NoError(t, err)
+	require.NotEmpty(t, path, "extra alone is enough to produce a bundle even with no system store")
+
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, extra, contents)
+}
+
+func TestBuildBundle_NothingToWriteReturnsEmpty(t *testing.T) {
+	isolateXDGCache(t)
+
+	savedPath, savedOnce := cachedPath, findOnce
+	cachedPath = ""
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() { cachedPath, findOnce = savedPath, savedOnce })
+
+	path, err := BuildBundle(nil)
+	require.NoError(t, err)
+	assert.Empty(t, path, "no system bundle and no extra means nothing to write")
+}
+
+func TestBuildBundle_StableContentHashedPathIsReused(t *testing.T) {
+	isolateXDGCache(t)
+
+	savedPath, savedOnce := cachedPath, findOnce
+	cachedPath = ""
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() { cachedPath, findOnce = savedPath, savedOnce })
+
+	extra := []byte("REUSE_MARKER\n")
+	first, err := BuildBundle(extra)
+	require.NoError(t, err)
+	require.NotEmpty(t, first)
+
+	// Prove reuse, not just path equality: the content-hash filename alone would already guarantee
+	// two calls return the same PATH regardless of whether writeBundle's os.Stat short-circuit
+	// actually skips the rewrite. Write a sentinel marker onto the materialized file, call
+	// BuildBundle again with the SAME extra, and confirm the marker survives. If the os.Stat check
+	// were removed, writeBundle would call fs.WriteFileAtomic unconditionally, which overwrites the
+	// file with `extra`'s content and would wipe the marker out.
+	const sentinel = "SENTINEL-DO-NOT-OVERWRITE"
+	require.NoError(t, os.WriteFile(first, []byte(sentinel), 0o644))
+
+	second, err := BuildBundle(extra)
+	require.NoError(t, err)
+	// Same content must resolve to the SAME stable path across calls (content-hash-keyed), so a
+	// --print-command-printed path stays valid instead of pointing at a one-shot temp file.
+	assert.Equal(t, first, second)
+
+	contents, err := os.ReadFile(second)
+	require.NoError(t, err)
+	assert.Equal(t, sentinel, string(contents), "BuildBundle must NOT rewrite an already-materialized bundle for the same content hash")
+}
