@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
@@ -215,7 +217,14 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 		contextName = clusterID
 	}
 
+	// The username includes the subscription ID (see kube.ClusterInfo.AccountID)
+	// so same-named clusters in different subscriptions get distinct kubeconfig
+	// users. Parse it from the resolved ARM resource ID rather than
+	// a.cluster.SubscriptionID, which is an optional override and may be unset.
 	userName := "atmos-aks-" + a.cluster.Name + "-" + a.cluster.ResourceGroup
+	if resourceID, err := arm.ParseResourceID(clusterID); err == nil && resourceID.SubscriptionID != "" {
+		userName += "-" + resourceID.SubscriptionID
+	}
 
 	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
@@ -286,11 +295,41 @@ func (a *AKSIntegration) findClusterID(mgr *kube.KubeconfigManager) (string, err
 
 	// Include the resource group so same-named clusters cannot collide.
 	suffix := "/resourceGroups/" + a.cluster.ResourceGroup + "/providers/Microsoft.ContainerService/managedClusters/" + a.cluster.Name
+
+	// With a configured subscription, match the complete ARM resource ID: two
+	// subscriptions can otherwise contain a cluster with the same name and
+	// resource group, and a suffix match alone cannot tell them apart.
+	if a.cluster.SubscriptionID != "" {
+		fullID := "/subscriptions/" + a.cluster.SubscriptionID + suffix
+		for _, id := range clusters {
+			if strings.EqualFold(id, fullID) {
+				return id, nil
+			}
+		}
+		return "", fmt.Errorf("%w: no cluster resource ID found matching %s", errUtils.ErrAKSClusterNotFound, a.cluster.Name)
+	}
+
+	// Without a configured subscription we cannot disambiguate by subscription,
+	// so a suffix match against more than one entry is ambiguous rather than a
+	// pick-the-first guess that risks removing the wrong cluster's config.
+	var match string
+	matchCount := 0
 	for _, id := range clusters {
 		if strings.HasSuffix(strings.ToLower(id), strings.ToLower(suffix)) {
-			return id, nil
+			match = id
+			matchCount++
 		}
 	}
 
-	return "", fmt.Errorf("%w: no cluster resource ID found matching %s", errUtils.ErrAKSClusterNotFound, a.cluster.Name)
+	switch matchCount {
+	case 0:
+		return "", fmt.Errorf("%w: no cluster resource ID found matching %s", errUtils.ErrAKSClusterNotFound, a.cluster.Name)
+	case 1:
+		return match, nil
+	default:
+		return "", fmt.Errorf(
+			"%w: %d cluster resource IDs found matching %s across different subscriptions; set subscription_id to disambiguate",
+			errUtils.ErrAKSClusterAmbiguous, matchCount, a.cluster.Name,
+		)
+	}
 }

@@ -31,13 +31,14 @@ The command executes in two ways:
 See https://atmos.tools/cli/commands/azure/aks/update-kubeconfig for more information.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "aks.updateKubeconfig.RunE")()
 
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()
 		if err := updateKubeconfigParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
+			return fmt.Errorf("%w: bind update-kubeconfig flags: %w", errUtils.ErrAKSIntegrationFailed, err)
 		}
 
 		flags := cmd.Flags()

@@ -1265,6 +1265,7 @@ var (
 	// AKS server errors.
 	ErrAKSDescribeCluster      = errors.New("failed to describe AKS cluster")
 	ErrAKSClusterNotFound      = errors.New("AKS cluster not found")
+	ErrAKSClusterAmbiguous     = errors.New("AKS cluster resource ID is ambiguous")
 	ErrAKSClusterNotAADEnabled = errors.New("AKS cluster is not AAD-enabled")
 	ErrAKSIntegrationFailed    = errors.New("AKS integration failed")
 	ErrAKSTokenGeneration      = errors.New("failed to generate AKS token")

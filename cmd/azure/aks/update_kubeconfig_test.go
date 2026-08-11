@@ -69,6 +69,18 @@ func TestUpdateKubeconfigCmd_FParseErrWhitelist(t *testing.T) {
 	assert.False(t, updateKubeconfigCmd.FParseErrWhitelist.UnknownFlags)
 }
 
+func TestUpdateKubeconfigCmd_Args_RejectsPositionalArgs(t *testing.T) {
+	require.NotNil(t, updateKubeconfigCmd.Args, "command should reject positional arguments")
+	err := updateKubeconfigCmd.Args(updateKubeconfigCmd, []string{"unexpected"})
+	assert.Error(t, err)
+}
+
+func TestUpdateKubeconfigCmd_Args_AllowsNoArgs(t *testing.T) {
+	require.NotNil(t, updateKubeconfigCmd.Args)
+	err := updateKubeconfigCmd.Args(updateKubeconfigCmd, []string{})
+	assert.NoError(t, err)
+}
+
 func TestUpdateKubeconfigCmd_ParentIsAksCmd(t *testing.T) {
 	assert.NotNil(t, updateKubeconfigCmd.Parent())
 	if updateKubeconfigCmd.Parent() != nil {
