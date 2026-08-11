@@ -1,7 +1,7 @@
 ---
 name: field-test
-description: "Hands-on manual DX test pass of a feature or CLI command: read the real implementation and tests, hypothesize plausible user misunderstandings and misuse automated tests don't cover, build durable fixtures, execute for real against real state, and report ranked findings. Investigation only — never fixes anything found. Invoke on explicit requests like 'field test X' / 'do a DX test pass on X' / 'find vibe-coded slop in X'."
-argument-hint: "Feature or command to test, e.g. 'atmos vendor pull'"
+description: "Hands-on manual DX test pass of a feature or CLI command: read the real implementation and tests, hypothesize plausible user misunderstandings and misuse automated tests don't cover, build durable fixtures, execute for real against real state, and report ranked findings. Investigation only — never fixes anything found. Defaults to testing whatever the current branch changed vs its base branch when no explicit target is given. Invoke on explicit requests like 'field test X' / 'do a DX test pass on X' / 'find vibe-coded slop in X' / 'field test this branch'."
+argument-hint: "Feature or command to test, e.g. 'atmos vendor pull' (omit to default to this branch's change)"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -10,8 +10,44 @@ metadata:
 # Field Test
 
 Hands-on, adversarial test pass of **`$ARGUMENTS`** (the feature/command named when this skill
-was invoked, e.g. `atmos vendor pull`). If no target was given, ask which feature/command to test
-before starting.
+was invoked, e.g. `atmos vendor pull`).
+
+**If no target was given, default to the change introduced on the current branch** rather than
+asking. Resolve the actual pull-request base branch when one is available
+(`gh pr view --json baseRefName -q .baseRefName` for the current branch), falling back to the
+repository's default branch (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`)
+when no PR exists yet. Do NOT use the upstream tracking branch (`@{u}`) as the base — for a normal
+feature branch that tracks `origin/<same-branch-name>`, diffing against its own upstream produces
+an empty or near-empty diff, not the PR's actual changes, once the branch has been pushed.
+
+A branch NAME from `gh` (e.g. `develop`) is not guaranteed to be a usable git ref in THIS checkout
+— shallow clones, detached HEADs, and worktrees with a narrow fetch refspec can have the name
+without the commits. Before running any diff, verify the base actually resolves here
+(`git rev-parse --verify --quiet <candidate>^{commit}`), trying in order: `origin/<resolved-name>`,
+`<resolved-name>` — take the first that verifies. **Do not fall back to `origin/main`/`main` when
+`resolved-name` came from an actual PR base other than the default branch** (e.g. a PR targeting
+`develop`) — diffing against `main` instead of the PR's real base compares against the wrong
+history and can silently miss real changes or include unrelated ones. `origin/main`/`main` are
+legitimate fallback candidates only in the no-PR case (`gh pr view` returned nothing, so
+`resolved-name` already IS the repository's default branch) or when `gh` itself isn't available at
+all. If a known, non-default PR base doesn't resolve as either `origin/<resolved-name>` or
+`<resolved-name>`, stop and ask the user which base to diff against — do not run `git diff
+<base>...` against an unverified ref and let it fail with a confusing git error, and do not
+silently substitute a different branch for a known PR base. Once a real base is confirmed, inspect
+the FULL set of
+changes relative to that base — content, not just a file-list summary: `git diff <base>...HEAD`
+(the full patch, not `--stat`, since `--stat` only shows file names and line counts, not what
+those lines actually do) for committed history; `git diff HEAD` for any staged/unstaged changes
+to tracked files not yet committed; and `git ls-files --others --exclude-standard` to enumerate
+untracked files — `git status --porcelain` lists their paths too but never their content, and
+neither `git diff HEAD` nor a `--stat` summary includes untracked files at all, so a brand-new
+implementation file can otherwise go completely unread. Read the actual content of every
+untracked file this turns up, the same as any diff hunk. Derive the test target from all of
+that — the CLI command(s), flag(s), config option(s), or subsystem the changed files implement —
+and state explicitly what you inferred and why before proceeding to Phase 1. Only fall back to
+asking the user if no candidate base ref resolves at all, there's truly nothing changed (clean
+worktree, base equals HEAD, no untracked files), or the changes span multiple unrelated features
+with no coherent single target (ask which one to focus on, don't silently pick one).
 
 Goal: catch "vibe-coded slop" — behavior that looks fine in code review but breaks or misleads a
 real user — not to re-run what automated tests already cover. Anticipate plausible user
@@ -42,10 +78,23 @@ The goal is a map of "documented or plausible usage" minus "already tested" = wh
 verification. This phase is broad, read-only research — delegate it to `Agent subagent_type:
 "Explore"` (1-3 agents in parallel, one per bullet below) rather than doing it all serially inline.
 
-- **Implementation** — the actual code, not just its docs or the skill describing it. Per this
-  repo's conventions, business logic lives in narrow `pkg/` packages, not `internal/exec/` (being
-  phased out) — check both `cmd/<command>/` (thin call site) and the `pkg/` package(s) it
-  delegates to for the real logic and error paths.
+When defaulting to the current branch (no explicit target given), scope every bullet below to the
+target inferred from the branch diff — don't research the whole surrounding subsystem when the
+branch only touched one corner of it. If the branch's changed files span more than one command or
+package, treat each as a separate target to cover in Phase 2-4, prioritized by how much of the
+diff each accounts for.
+
+- **Implementation** — the actual code, not just its docs or the skill describing it. Inspect
+  every changed production package identified by the diff — new business logic belongs in narrow
+  `pkg/` packages per this repo's conventions, but `internal/exec/` is still where a large amount
+  of existing logic lives during its ongoing migration, so a branch touching files there must
+  still be read, not skipped. Check both `cmd/<command>/` (thin call site) and whichever
+  `pkg/`/`internal/exec/` package(s) it delegates to for the real logic and error paths. When
+  defaulting from a branch diff, read the full diff content itself first (not just the post-change
+  files, and not just a `--stat` summary) — the diff shows what changed *from*, which is where a
+  regression or half-finished edge case would show up. Include untracked files
+  (`git ls-files --others --exclude-standard`) in this reading pass too — they never appear in any
+  diff at all.
 - **Docs and skills** — every relevant page under `website/docs/cli/commands/`, the matching
   `.claude/skills/atmos-*` skill(s) for the subsystem, and any README describing the feature. Note
   anything phrased with confidence you haven't independently confirmed against the code — docs and
