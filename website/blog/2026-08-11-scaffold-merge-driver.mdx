@@ -1,0 +1,60 @@
+---
+slug: scaffold-merge-driver
+title: "Keep your formatting through atmos scaffold --update"
+date: 2026-08-11T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+Updating a scaffolded project with `atmos scaffold generate --update` (or `atmos init --update`)
+now supports `--merge-driver=text`, so your CI pipeline's blank-line formatting survives an
+update instead of getting silently flattened.
+
+<!--truncate-->
+
+## The Problem
+
+`--update` re-runs a template against an existing project and 3-way merges the result. Scaffold
+picks its merge algorithm by file extension: YAML-aware for `.yaml`/`.yml`, line-oriented text for
+everything else. The YAML-aware path preserves comments and merges keys intelligently, which is
+usually what you want — but it re-encodes the whole document through a YAML parser and
+serializer. Blank lines between top-level blocks simply aren't part of what a YAML parser models,
+so the re-encode drops them unconditionally, on every update, whether or not the file actually
+changed.
+
+That's a real cost for files where formatting *is* a convention — many CI pipeline definitions use
+blank lines to visually separate jobs, stages, and other top-level blocks. Every `--update` used
+to reformat those files even when nothing meaningful had changed.
+
+## The Fix
+
+`--merge-driver` lets you choose which merge algorithm runs, named after git's own merge driver
+concept:
+
+- **`auto`** (default, unchanged) — YAML-aware for `.yaml`/`.yml`, text otherwise.
+- **`text`** — forces every file, YAML included, through the same line-oriented, diff3-style merge
+  that `git merge` uses on ordinary text files. Comments, blank lines, and other structural
+  formatting the YAML-aware merger doesn't model come through untouched.
+
+This is a different axis from `--merge-strategy`, which decides how a genuine conflict resolves
+(manual, ours, or theirs) once a merge algorithm has already run. `--merge-driver` decides which
+algorithm runs in the first place.
+
+## How to Use It
+
+```shell
+atmos scaffold generate my-template ./my-project --update --merge-driver=text
+atmos init --update --merge-driver=text
+```
+
+Reach for `--merge-driver=text` when a template's YAML (or YAML-like) files rely on formatting
+conventions — blank-line grouping, specific list styles — that matter to your team as much as the
+keys and values do. Stick with the default `auto` everywhere else; you'll still get intelligent
+key-level merging and comment preservation for ordinary config.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) and
+[`atmos init`](/cli/commands/init) docs for the full flag reference. Have feedback on this
+feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in
+the [Cloud Posse community Slack](https://cloudposse.com/slack).
