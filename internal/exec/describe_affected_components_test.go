@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -252,6 +253,49 @@ func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+
+	t.Run("validate absent locally and absent remotely is not affected", func(t *testing.T) {
+		componentSection := map[string]any{}
+		remoteStacks := k8sRemoteStacksWith(map[string]any{})
+
+		var affected []schema.Affected
+		err := addKubernetesSectionAffected(
+			&affected, k8sAtmosConfig(), componentName, stackName,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestAddKubernetesSectionAffected_ValidateRemoval proves that removing a component-level
+// validate: false locally, while the remote stack still has it explicitly set, is detected
+// as affected. This differs from the other Kubernetes-specific sections
+// (manifests/paths/provider/render), where local absence is silently skipped (see
+// NoFalsePositives above), because removing validate reverts the component from
+// "validation disabled" to the enabled default -- a real behavior change.
+func TestAddKubernetesSectionAffected_ValidateRemoval(t *testing.T) {
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	componentSection := map[string]any{}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{cfg.ValidateSectionName: false})
+
+	var affected []schema.Affected
+	err := addKubernetesSectionAffected(
+		&affected, k8sAtmosConfig(), componentName, stackName,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, componentName, affected[0].Component)
+	assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+	assert.Equal(t, fmt.Sprintf("stack.%s", cfg.ValidateSectionName), affected[0].Affected)
 }
 
 // TestProcessKubernetesComponentsIndexed exercises the full kubernetes affected-detection

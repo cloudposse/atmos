@@ -4,6 +4,7 @@ description: "Migrating to Atmos from existing IaC: techniques, tactics, and des
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md

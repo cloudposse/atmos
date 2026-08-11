@@ -429,6 +429,43 @@ func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
 	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
 }
 
+// TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute verifies the value-classification rule
+// for a non-empty working_directory: a BARE value ("foo", "foo/bar") has no anchor of its own, so
+// it's resolved relative to the component directory (same anchor as the empty-value default) --
+// previously it fell through unchanged to exec.Cmd.Dir's CWD-relative default, silently behaving
+// identically to a dot-prefixed value. A dot-prefixed value ("./foo") and an absolute value are
+// left untouched, since exec.Cmd.Dir already resolves those correctly (CWD-relative and
+// passthrough respectively).
+func TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "app")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+	}
+
+	bareStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "modules/sub"}
+	setDefaultStepWorkingDirectory(ctx, bareStep)
+	assert.Equal(t, filepath.Join(componentDir, "modules", "sub"), bareStep.WorkingDirectory,
+		"a bare (non-dot-prefixed) working_directory must anchor to the component directory")
+
+	dotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "./modules/sub"}
+	setDefaultStepWorkingDirectory(ctx, dotStep)
+	assert.Equal(t, "./modules/sub", dotStep.WorkingDirectory,
+		"a dot-prefixed working_directory is left as-is -- exec.Cmd.Dir already resolves it "+
+			"relative to CWD, matching the runtime-source convention")
+
+	dotDotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: ".."}
+	setDefaultStepWorkingDirectory(ctx, dotDotStep)
+	assert.Equal(t, "..", dotDotStep.WorkingDirectory, "bare \"..\" is dot-prefixed, left as-is")
+
+	absDir := t.TempDir()
+	absStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}
+	setDefaultStepWorkingDirectory(ctx, absStep)
+	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
+}
+
 func TestStepsSummary(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1029,6 +1066,245 @@ func TestStepEngineRunsArchiveType(t *testing.T) {
 	defer r.Close()
 	require.Len(t, r.File, 1)
 	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestStepEngineRunsArchiveTypeWithRelativeWorkingDirectory reproduces the
+// originally-reported regression: a `type: archive` hook step with relative
+// source/destination must resolve them against step.WorkingDirectory (either
+// explicitly set here, or defaulted by setDefaultStepWorkingDirectory to the
+// resolved component path), not against the Atmos process's own cwd.
+func TestStepEngineRunsArchiveTypeWithRelativeWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	// Process cwd differs from working_directory — this is the crux of the bug.
+	t.Chdir(t.TempDir())
+
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "archive",
+		With: map[string]any{
+			"source":            "src",
+			"destination":       "out/handler.zip",
+			"working_directory": workDir,
+		},
+	}
+
+	out, err := stepEngine{}.Run(stepExecContext(hook))
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	wantDest := filepath.Join(workDir, "out", "handler.zip")
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectory proves a
+// bare-relative (no dot prefix) explicit working_directory on a step hook
+// anchors to the component's effective working directory (ComponentPath),
+// not the Atmos process's own cwd.
+func TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectory(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	workDir := filepath.Join(componentDir, "sub")
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	// Process cwd differs from both componentDir and workDir — the crux.
+	t.Chdir(t.TempDir())
+
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+		Hook: &Hook{
+			Kind: stepKindName,
+			Type: "archive",
+			With: map[string]any{
+				"source":            "src",
+				"destination":       "out/handler.zip",
+				"working_directory": "sub", // bare relative, no dot prefix
+			},
+		},
+	}
+
+	out, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	wantDest := filepath.Join(workDir, "out", "handler.zip")
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestStepEngineRunsArchiveTypeWithDotPrefixedWorkingDirectoryStaysCWDRelative
+// proves that a dot-prefixed working_directory on a step hook still resolves
+// against the process cwd even when a component anchor is available — dot
+// always wins over the component anchor. Unlike the bare-relative case above,
+// this already passes pre-fix (everything is CWD-relative today); it exists
+// as a forward-looking regression guard, not a red/green TDD case.
+func TestStepEngineRunsArchiveTypeWithDotPrefixedWorkingDirectoryStaysCWDRelative(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "sub", "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "sub", "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+		Hook: &Hook{
+			Kind: stepKindName,
+			Type: "archive",
+			With: map[string]any{
+				"source":            "src",
+				"destination":       "out/handler.zip",
+				"working_directory": "./sub",
+			},
+		},
+	}
+
+	out, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	wantDest := filepath.Join(cwd, "sub", "out", "handler.zip")
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectoryUsesProvisionedWorkdir
+// proves compatibility with ComponentPath's provisioned-workdir tier: when a
+// provisioned workdir exists on disk, a bare-relative working_directory
+// anchors there, not to the in-repo component source path — with no new
+// logic, because it is the same ComponentPath(ctx) call the unset-default
+// case already uses. Mirrors TestComponentPathFor_Fallbacks's "prefers an
+// actually provisioned workdir over the in-repo fallback" case in
+// command_engine_test.go.
+func TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectoryUsesProvisionedWorkdir(t *testing.T) {
+	wd := t.TempDir()
+	t.Chdir(wd)
+	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
+
+	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(filepath.Join(provisionedWorkdirPath, "artifacts", "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(provisionedWorkdirPath, "artifacts", "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
+
+	// Also populate the in-repo source path with a different file so a
+	// wrong (non-provisioned) anchor would silently succeed against the
+	// wrong directory instead of failing loudly.
+	inRepoDir := filepath.Join(terraformBasePath, "vpc", "artifacts", "src")
+	require.NoError(t, os.MkdirAll(inRepoDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(inRepoDir, "handler.js"), []byte("wrong-copy"), 0o644))
+
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{BasePath: wd, TerraformDirAbsolutePath: terraformBasePath},
+		Info: &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: schema.AtmosSectionMapType{},
+		},
+		Hook: &Hook{
+			Kind: stepKindName,
+			Type: "archive",
+			With: map[string]any{
+				"source":            "src",
+				"destination":       "out/handler.zip",
+				"working_directory": "artifacts", // bare relative
+			},
+		},
+	}
+
+	out, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	wantDest := filepath.Join(provisionedWorkdirPath, "artifacts", "out", "handler.zip")
+	r, err := zip.OpenReader(wantDest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestStepEngineRunsWorkdirTypeWithBareRelativeWorkingDirectoryAnchorsSource
+// proves that a workdir step's relative `source` anchors to the component
+// working directory the same way `path` does, for a bare-relative
+// working_directory hook. Before the fix, `source` always resolved against
+// the process cwd regardless of working_directory (bare or dot-prefixed),
+// while `path` correctly anchored to the component dir — a same-step
+// inconsistency found via manual field testing, not covered by any prior
+// test.
+func TestStepEngineRunsWorkdirTypeWithBareRelativeWorkingDirectoryAnchorsSource(t *testing.T) {
+	terraformDir := t.TempDir()
+	componentDir := filepath.Join(terraformDir, "catalog", "shared-module")
+	workDir := filepath.Join(componentDir, "sub")
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "srcdir", "marker.txt"), []byte("from-component-dir"), 0o644))
+
+	// Process cwd differs from componentDir/workDir, and also has a
+	// same-named "srcdir" — a wrong (cwd-anchored) source resolution would
+	// silently succeed against the wrong directory instead of failing loudly.
+	cwd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "srcdir", "marker.txt"), []byte("from-cwd"), 0o644))
+	t.Chdir(cwd)
+
+	ctx := &ExecContext{
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:      "stack-facing-alias",
+			ComponentFolderPrefix: "catalog",
+			FinalComponent:        "shared-module",
+		},
+		Hook: &Hook{
+			Kind: stepKindName,
+			Type: "workdir",
+			With: map[string]any{
+				"source":            "srcdir",
+				"path":              "out",
+				"working_directory": "sub", // bare relative, no dot prefix
+			},
+		},
+	}
+
+	out, err := stepEngine{}.Run(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+
+	content, err := os.ReadFile(filepath.Join(workDir, "out", "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-component-dir", string(content))
 }
 
 func TestVerifyStepsHookTypes(t *testing.T) {

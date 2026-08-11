@@ -4,6 +4,7 @@ description: "Helmfile orchestration: sync/apply/destroy/diff, Kubernetes deploy
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Helmfile Orchestration
@@ -17,12 +18,12 @@ resolves the full configuration from stack manifests and handles all of these co
 When you run any `atmos helmfile` command, Atmos performs the following sequence:
 
 1. **Resolves stack configuration** -- Reads and deep-merges all stack manifests to produce the fully resolved
-   configuration for the target component in the target stack.
+    configuration for the target component in the target stack.
 2. **Generates variable file** -- Writes a varfile containing all `vars` defined for the component in the stack.
 3. **Configures EKS authentication** -- If `use_eks: true`, runs `aws eks update-kubeconfig` to generate
-   kubeconfig from the EKS cluster and set up authentication.
+    kubeconfig from the EKS cluster and set up authentication.
 4. **Executes the requested command** -- Runs `helmfile diff`, `apply`, `sync`, `destroy`, etc. with the
-   generated varfile and any additional flags.
+    generated varfile and any additional flags.
 
 This means a single command like `atmos helmfile apply nginx-ingress -s ue2-dev` replaces what would normally
 require multiple manual steps: configuring kubeconfig, writing variable files, and then running helmfile.
@@ -454,24 +455,24 @@ components:
 ## Best Practices
 
 1. **Use diff before apply.** Run `helmfile diff` first, review the output, then run `helmfile apply`
-   to ensure exactly the reviewed changes are applied.
+    to ensure exactly the reviewed changes are applied.
 
 2. **Use deploy for combined operations.** The `deploy` command runs diff and apply in a single step.
 
 3. **Store kubeconfig in `/dev/shm`.** When using EKS integration, use shared memory for security
-   since files are not persisted to disk.
+    since files are not persisted to disk.
 
 4. **Use `cluster_name_template` instead of `cluster_name_pattern`.** The Go template syntax is
-   more powerful and the token replacement pattern is deprecated.
+    more powerful and the token replacement pattern is deprecated.
 
 5. **Use source-based version pinning for multi-environment setups.** Override the `source.version`
-   per environment to control which version is deployed to each stack.
+    per environment to control which version is deployed to each stack.
 
 6. **Use `atmos describe component`** to debug configuration resolution issues. It shows the fully
-   merged result of all stack manifest inheritance.
+    merged result of all stack manifest inheritance.
 
 7. **Leverage component inheritance** to share common configuration across Helmfile components
-   and reduce duplication in stack manifests.
+    and reduce duplication in stack manifests.
 
 ## Additional Resources
 
