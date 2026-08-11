@@ -1,0 +1,45 @@
+---
+title: artifacts
+sidebar_label: artifacts
+sidebar_position: 15
+slug: /workflows/steps/artifacts
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `artifacts` field declares the files a step is expected to produce. Pair it with [`inputs`](/workflows/steps/inputs) (the step's sources) — the two are separate, sibling fields, not one nested inside the other.
+</Intro>
+
+```yaml
+steps:
+  - name: compile
+    type: shell
+    command: go build -o bin/handler ./cmd/handler
+    inputs:
+      sources: ["cmd/**/*.go", "go.sum"]
+    artifacts:
+      paths: ["bin/handler"]
+```
+
+If any `artifacts.paths` pattern matches nothing, the step always reruns — regardless of whether `checksum.changed`/`timestamp.changed` say "unchanged" — because a missing output is never "up to date." See [`inputs`](/workflows/steps/inputs) for how `artifacts` combines with `sources` to compute freshness, and the implicit `when: checksum.changed` default.
+
+## Fields
+
+<dl>
+  <dt>`paths`</dt>
+  <dd>List of glob patterns (relative to the step's working directory) for this step's expected output files. Named `paths`, not `files`, since artifacts aren't always known file-by-file (e.g. a directory glob).</dd>
+</dl>
+
+## Facts exposed to `when`
+
+<dl>
+  <dt>`artifacts`</dt>
+  <dd>The resolved list of files matched by `artifacts.paths`, as structured records (`path`, `mtime`, `checksum`) — see [inputs: Advanced: structured records](/workflows/steps/inputs#advanced-structured-records).</dd>
+</dl>
+
+`artifacts` can also be used on its own, with no `inputs`, if a step's freshness only depends on whether its output already exists — though most steps declare both.
+
+:::note Custom commands
+The same `artifacts` field works identically on [custom command](/cli/configuration/commands) steps.
+:::
