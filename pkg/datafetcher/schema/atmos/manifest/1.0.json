@@ -2079,7 +2079,8 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "http"
           ]
         }
       ]
@@ -2107,7 +2108,8 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "http"
           ]
         }
       ]
@@ -2214,6 +2216,18 @@
               ]
             },
             "cloud": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "http": {
               "oneOf": [
                 {
                   "type": "string",

@@ -272,6 +272,47 @@ For development or single-user scenarios:
   </TabItem>
 </Tabs>
 
+### HTTP Backend
+
+For state stored behind a generic HTTP endpoint, such as [GitLab-managed Terraform state](https://docs.gitlab.com/user/infrastructure/iac/terraform_state/):
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: http
+      backend:
+        http:
+          address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc"
+          lock_address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock"
+          unlock_address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock"
+          lock_method: POST
+          unlock_method: DELETE
+          username: gitlab-ci-token
+          password: "{{ .env.CI_JOB_TOKEN }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "http": {
+            "address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc",
+            "lock_address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock",
+            "unlock_address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock",
+            "lock_method": "POST",
+            "unlock_method": "DELETE",
+            "username": "gitlab-ci-token",
+            "password": "glcbt-..."
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
 ## Remote State Backend
 
 The `remote_state_backend` configuration is separate from `backend` and controls how other components can read this component's state:

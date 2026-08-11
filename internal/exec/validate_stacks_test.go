@@ -236,6 +236,39 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
 }
 
+// TestValidateStacksAllowsHttpBackendType guards against a regression of the schema gap
+// where `backend_type: http` (OpenTofu/Terraform's generic HTTP backend, used e.g. for
+// GitLab-managed Terraform state) failed schema validation even though backend generation
+// itself (generateComponentBackendConfig) has always handled it as a plain passthrough,
+// the same as any backend type other than "cloud".
+func TestValidateStacksAllowsHttpBackendType(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+
+	atmosYAML := "base_path: \".\"\n" +
+		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+		"logs:\n  level: \"Warning\"\n"
+	manifest := "vars:\n  stage: dev\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n" +
+		"      backend_type: http\n" +
+		"      backend:\n" +
+		"        http:\n" +
+		"          address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc\"\n" +
+		"          lock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
+		"          unlock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
+		"          lock_method: POST\n" +
+		"          unlock_method: DELETE\n"
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+	t.Chdir(dir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	require.NoError(t, ValidateStacks(&atmosConfig), "backend_type: http must pass schema validation")
+}
+
 func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
