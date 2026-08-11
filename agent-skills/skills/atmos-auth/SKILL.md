@@ -430,9 +430,10 @@ auth:
 
 Integration failures are non-blocking during `atmos auth login`; retry with
 `atmos aws ecr login` / `atmos azure acr login` / `atmos aws eks update-kubeconfig` /
-`atmos azure aks update-kubeconfig`. See [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md),
-[atmos-azure-acr](../atmos-azure-acr/SKILL.md), [atmos-aws-eks](../atmos-aws-eks/SKILL.md), and
-[atmos-azure-aks](../atmos-azure-aks/SKILL.md) for command details.
+`atmos azure aks update-kubeconfig`. See [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md) and
+[atmos-aws-eks](../atmos-aws-eks/SKILL.md) for the AWS commands, and
+[references/azure-acr-integration.md](references/azure-acr-integration.md) /
+[references/azure-aks-integration.md](references/azure-aks-integration.md) for the Azure commands.
 
 ## GitHub STS Integration
 
@@ -498,3 +499,5 @@ Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
 
 - [references/providers-and-identities.md](references/providers-and-identities.md) -- Detailed provider and identity configuration patterns
 - [references/commands-reference.md](references/commands-reference.md) -- Complete command reference for all auth subcommands
+- [references/azure-aks-integration.md](references/azure-aks-integration.md) -- `azure/aks` integration: `atmos azure aks update-kubeconfig` / `token` (kubeconfig without `az`/`kubelogin`)
+- [references/azure-acr-integration.md](references/azure-acr-integration.md) -- `azure/acr` integration: `atmos azure acr login` (Docker login without `az`)

@@ -1,17 +1,9 @@
----
-name: atmos-azure-acr
-description: "Azure ACR commands in Atmos: atmos azure acr login, ACR auth integrations, Docker credential writes, registry login via identity or explicit registry"
-metadata:
-  copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
----
+# Azure ACR Integration (`azure/acr`)
 
-# Atmos Azure ACR
+Atmos logs Docker clients into Azure Container Registry via the `azure/acr` integration and the
+`atmos azure acr login` command.
 
-Use this skill for logging Docker clients into Azure Container Registry through Atmos.
-It owns `atmos azure acr login`.
-
-## Command Model
+## Command
 
 `atmos azure acr login` supports three modes:
 
@@ -26,14 +18,15 @@ atmos azure acr login --identity azure-dev
 atmos azure acr login --registry myregistry.azurecr.io
 ```
 
-Named integration and identity modes use Atmos Auth. Explicit `--registry` mode uses ambient Azure
+Named-integration and identity modes use Atmos Auth. Explicit `--registry` mode uses ambient Azure
 credentials (the Azure SDK default credential chain: environment variables, managed identity,
 workload identity, Azure CLI).
 
 ## Configuration
 
-Configure ACR integrations under `auth.integrations` with `kind: azure/acr`. Route provider,
-identity, device-code, OIDC, and Azure CLI details to `atmos-auth`.
+Configure ACR integrations under `auth.integrations` with `kind: azure/acr`. Providers and
+identities are the standard Azure Auth building blocks (see the main skill and
+[providers-and-identities.md](providers-and-identities.md)):
 
 ```yaml
 auth:
@@ -62,16 +55,16 @@ auth:
           name: myregistry
 ```
 
-`spec.registry` is the same struct used by `aws/ecr` integrations (`account_id`, `region` for
-AWS; `name`, `tenant_id` for Azure) — only the fields relevant to the integration's `kind` matter.
+`spec.registry` is the same struct used by `aws/ecr` integrations (`account_id`, `region` for AWS;
+`name`, `tenant_id` for Azure) — only the fields relevant to the integration's `kind` matter.
 Login server = `{name}.azurecr.io`.
 
-## Agent Guidance
+## Guidance
 
 - Prefer named integrations for stable registries; they make the registry name and identity
   explicit in `atmos.yaml`.
 - Use `--identity` when the intent is "log in to every ACR registry attached to this identity."
-- Use `--registry` for one-off registry login servers or when a script intentionally uses ambient
+- Use `--registry` for one-off registry login servers, or when a script intentionally uses ambient
   Azure credentials instead of Atmos Auth.
 - ACR credentials are written to Docker's config location, respecting `DOCKER_CONFIG` when set.
   Set `DOCKER_CONFIG` first when the workflow needs isolated credentials.
@@ -79,12 +72,5 @@ Login server = `{name}.azurecr.io`.
   registries that should only be logged in explicitly.
 - There is no ACR equivalent to ECR Public — every registry is private and requires an identity or
   ambient credentials with `AcrPull`/`AcrPush` access.
-- If Docker or other tools must be installed for a CI job, route installation to `atmos-toolchain`.
-
-## Routing
-
-| Need | Skill |
-|------|-------|
-| Azure identity/provider setup, device-code, OIDC, Azure CLI | `atmos-auth` |
-| Installing Docker or related tools | `atmos-toolchain` |
-| OCI component sources or vendored artifacts stored in registries | `atmos-components`, `atmos-vendoring` |
+- Installing Docker or related tools for a CI job is out of scope here — route tool installation to
+  the `atmos-toolchain` skill.

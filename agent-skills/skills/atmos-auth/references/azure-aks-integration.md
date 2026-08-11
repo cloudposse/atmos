@@ -1,21 +1,13 @@
----
-name: atmos-azure-aks
-description: "Azure AKS commands in Atmos: atmos azure aks update-kubeconfig, atmos azure aks token, kubeconfig generation, kubectl exec credentials, AKS auth integrations"
-metadata:
-  copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
----
+# Azure AKS Integration (`azure/aks`)
 
-# Atmos Azure AKS
+Atmos connects Azure AKS clusters to local Kubernetes tooling via the `azure/aks` integration and
+two commands: `atmos azure aks update-kubeconfig` and `atmos azure aks token`. Unlike
+`az aks get-credentials`, neither shells out to `az` nor requires the `kubelogin` binary.
 
-Use this skill for Atmos commands that connect Azure AKS clusters to local Kubernetes tooling.
-It owns `atmos azure aks update-kubeconfig` and `atmos azure aks token`.
+## Commands
 
-## Command Model
-
-`atmos azure aks update-kubeconfig` writes kubeconfig entries for an AKS cluster. It can run from
-a named `auth.integrations` entry, or an Atmos identity with explicit cluster details. Unlike
-`az aks get-credentials`, it never shells out to `az` or requires the `kubelogin` binary.
+`atmos azure aks update-kubeconfig` writes kubeconfig entries for an AKS cluster — from a named
+`auth.integrations` entry, or from an Atmos identity with explicit cluster details:
 
 ```shell
 atmos azure aks update-kubeconfig --integration dev/aks
@@ -23,7 +15,7 @@ atmos azure aks update-kubeconfig --cluster-name dev-cluster --resource-group de
 ```
 
 `atmos azure aks token` generates a Kubernetes `ExecCredential` token for kubectl. It is normally
-called by kubectl from generated kubeconfig rather than run by humans.
+invoked by kubectl from the generated kubeconfig, not run by humans:
 
 ```shell
 atmos azure aks token --cluster-name dev-cluster --resource-group dev-rg --identity azure-dev
@@ -31,8 +23,9 @@ atmos azure aks token --cluster-name dev-cluster --resource-group dev-rg --ident
 
 ## Configuration
 
-For integration mode, configure an `azure/aks` integration in `auth.integrations`. Route provider,
-identity, device-code, OIDC, and Azure CLI details to `atmos-auth`.
+Configure an `azure/aks` integration under `auth.integrations`. Providers and identities are the
+standard Azure Auth building blocks (see the main skill and
+[providers-and-identities.md](providers-and-identities.md)):
 
 ```yaml
 auth:
@@ -66,7 +59,7 @@ auth:
 `name`, `resource_group`, `subscription_id` for Azure) — only the fields relevant to the
 integration's `kind` matter.
 
-## Agent Guidance
+## Guidance
 
 - Prefer `--integration` when a named AKS integration exists; it centralizes cluster name,
   resource group, alias, and identity selection.
@@ -77,14 +70,7 @@ integration's `kind` matter.
   certificate-based auth.
 - `subscription_id` is optional on `spec.cluster`; it defaults to the authenticated identity's
   subscription. Set it explicitly only when the cluster's subscription differs from the identity's.
-- Do not hard-code kubeconfig paths unless the repo already has a convention; the default is the
-  XDG-compliant path (`~/.config/atmos/kube/config`).
-- If `kubectl` must be installed for a scripted job, route tool installation to `atmos-toolchain`.
-
-## Routing
-
-| Need | Skill |
-|------|-------|
-| Azure identity/provider setup, device-code, OIDC, Azure CLI | `atmos-auth` |
-| Installing `kubectl` or other command-line tools | `atmos-toolchain` |
-| Component/stack lookup for cluster settings | `atmos-components`, `atmos-stacks` |
+- The default kubeconfig path is the XDG-compliant `~/.config/atmos/kube/config`; do not hard-code
+  paths unless the repo already has a convention.
+- Installing `kubectl` for a scripted job is out of scope here — route tool installation to the
+  `atmos-toolchain` skill.
