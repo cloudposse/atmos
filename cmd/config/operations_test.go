@@ -3,9 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -122,41 +125,35 @@ func TestResolveConfigFile_OverrideFlag(t *testing.T) {
 	assert.Equal(t, file, got)
 }
 
-// TestResolveConfigFile_MultipleOverrides_TargetsOnlyFirst covers a real
-// inconsistency: --config normally merges every listed file (all other Atmos
-// commands), but edit commands can only ever write to one physical file, so
-// only the first entry is targeted -- the rest are silently unused. This
-// asserts the functional behavior (only the first file is resolved/touched);
-// the accompanying warning's wording is covered by live verification, per
-// this file's established convention of not unit-testing ui.* message text
-// (see TestConfigSetCommand_CreatedVsUpdated).
-func TestResolveConfigFile_MultipleOverrides_TargetsOnlyFirst(t *testing.T) {
-	dir := t.TempDir()
-	first := filepath.Join(dir, "a.yaml")
-	second := filepath.Join(dir, "b.yaml")
-	require.NoError(t, os.WriteFile(first, []byte("settings:\n  enabled: true\n"), 0o644))
-	require.NoError(t, os.WriteFile(second, []byte("settings:\n  enabled: false\n"), 0o644))
-
-	cmd := &cobra.Command{}
-	cmd.Flags().StringSlice("config", []string{first, second}, "")
-
-	got, err := resolveConfigFile(cmd)
-	require.NoError(t, err)
-	assert.Equal(t, first, got)
-
-	// The second file must remain untouched by any subsequent edit.
-	require.NoError(t, atmosyaml.SetFile(got, "settings.enabled", "changed"))
-	untouched, err := os.ReadFile(second)
-	require.NoError(t, err)
-	assert.Contains(t, string(untouched), "enabled: false")
-}
-
 func TestResolveConfigFile_Error(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().StringSlice("config", []string{filepath.Join(t.TempDir(), "missing.yaml")}, "")
 
 	_, err := resolveConfigFile(cmd)
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestResolveConfigFile_MultipleConfigFilesAmbiguous guards against a bug found during a
+// field-test pass on cloudposse/atmos#2867/#2868: resolveConfigFile silently used only the
+// FIRST --config file (cfgFiles[0]) when multiple were given, so `config set --config a,b
+// logs.level X` reported success editing a.yaml while the actual effective value (what `config
+// get` reports, and what every other atmos command uses) stayed unchanged whenever b.yaml also
+// set that key -- a false success, not just a stale-value bug.
+func TestResolveConfigFile_MultipleConfigFilesAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	fileA := filepath.Join(dir, "a.yaml")
+	fileB := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(fileA, []byte("settings:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(fileB, []byte("settings:\n  enabled: false\n"), 0o644))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", []string{fileA, fileB}, "")
+
+	_, err := resolveConfigFile(cmd)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "a.yaml")
+	assert.Contains(t, details, "b.yaml")
 }
 
 func TestConfigGetCommand_MissingValue(t *testing.T) {
@@ -173,6 +170,68 @@ func TestConfigGetCommand_MissingValue(t *testing.T) {
 
 	err = configGetCmd.RunE(configGetCmd, []string{"settings.does_not_exist"})
 	require.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+// TestConfigGetCommand_ReportsEffectiveMergedValue reproduces the "stale value" half of
+// cloudposse/atmos#2867: `atmos config get` used to read only the FIRST --config file
+// directly off disk (resolveConfigFile picked cfgFiles[0]), so a second --config file's
+// override was invisible to `get` even though the rest of atmos (stack discovery, etc.)
+// correctly used the merged value. `get` must report the same effective value everything
+// else uses.
+func TestConfigGetCommand_ReportsEffectiveMergedValue(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "main.yaml")
+	fragmentFile := filepath.Join(dir, "fragment.yaml")
+
+	require.NoError(t, os.WriteFile(mainFile, []byte(`
+base_path: "."
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+`), 0o644))
+	require.NoError(t, os.WriteFile(fragmentFile, []byte(`
+stacks:
+  included_paths:
+    - "deploy/**/*"
+    - "other/**/*"
+`), 0o644))
+
+	stdout := initConfigTestWriter(t)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--config", mainFile + "," + fragmentFile, "config", "get", "stacks.included_paths"}
+
+	require.NoError(t, configGetCmd.RunE(configGetCmd, []string{"stacks.included_paths"}))
+
+	output := stdout.String()
+	assert.True(t, strings.Contains(output, "deploy/**/*"), "output should contain the first file's value: %s", output)
+	assert.True(t, strings.Contains(output, "other/**/*"),
+		"output must reflect the SECOND --config file's override, not just the first file's stale value: %s", output)
+}
+
+// TestConfigGetCommand_InitCliConfigError proves configGetCmd.RunE surfaces a genuine
+// InitCliConfig failure (a malformed --config file here) instead of panicking or masking it,
+// since `get` now reloads the full effective config on every invocation rather than reading a
+// single already-validated file (cloudposse/atmos#2867/#2868).
+func TestConfigGetCommand_InitCliConfigError(t *testing.T) {
+	dir := t.TempDir()
+	badFile := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(badFile, []byte("settings:\n  enabled: [true\n"), 0o644)) // unterminated flow sequence
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--config", badFile, "config", "get", "settings.enabled"}
+
+	err := configGetCmd.RunE(configGetCmd, []string{"settings.enabled"})
+	require.Error(t, err)
 }
 
 func TestConfigSetCommand_TypeVariants(t *testing.T) {
