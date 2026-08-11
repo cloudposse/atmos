@@ -336,8 +336,22 @@ func appendToolchain(graph *Graph, config *schema.AtmosConfiguration) error {
 		return err
 	}
 	for name, tool := range lock.Tools {
+		// toolchainlock.Load does not validate nested entries (only Verify does), so a
+		// hand-edited or corrupted toolchain.lock.yaml can parse successfully with a nil
+		// tool/version/platform entry (e.g. a YAML key with an explicit null value). Skip
+		// malformed entries rather than panicking on a nil dereference -- SBOM generation is
+		// already best-effort here (see the "incomplete" Coverage cases above).
+		if tool == nil {
+			continue
+		}
 		for version, versionEntry := range tool.Versions {
+			if versionEntry == nil {
+				continue
+			}
 			for platform, entry := range versionEntry.Platforms {
+				if entry == nil {
+					continue
+				}
 				graph.Components = append(graph.Components, Component{ID: "toolchain:" + name + ":" + version + ":" + platform, Name: name, Version: version, Type: "application", Source: entry.URL, SHA256: trimSHA256(entry.Checksum), Properties: map[string]string{"atmos:domain": "toolchain", "atmos:lock-file": repositoryPath(config, path), "atmos:platform": platform}})
 			}
 		}

@@ -46,12 +46,13 @@ func TestLockCommand_CommandStructure(t *testing.T) {
 // real repo state, letting us assert the cmd layer propagates that error unwrapped.
 func TestLockCommand_RunE(t *testing.T) {
 	tempDir := t.TempDir()
+	prevConfig := toolchain.GetAtmosConfig()
 	toolchain.SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: filepath.Join(tempDir, "tool-versions-does-not-exist"),
 		},
 	})
-	t.Cleanup(func() { toolchain.SetAtmosConfig(nil) })
+	t.Cleanup(func() { toolchain.SetAtmosConfig(prevConfig) })
 
 	tests := []struct {
 		name           string

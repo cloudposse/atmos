@@ -180,6 +180,65 @@ metadata:
 	assert.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
+// TestLoad_MigratesLegacyV1ToolShape reproduces a real-world upgrade bug: every released
+// version through v1.226.0-rc.4 wrote toolchain.lock.yaml with "version"/"platforms" directly
+// on the tool (lock_file_version: 1). Unmarshaling that shape into the current (v2) Tool struct
+// -- which nests that data under a "versions" map, to support locking more than one version of
+// the same tool -- silently leaves Versions nil for every tool, since the v1 keys don't match
+// any v2 field. That would make Verify report every tool as missing its version and force
+// install to silently re-lock everything, defeating the supply-chain guarantee use_lock_file
+// exists to provide. Load must recover the v1 data instead of dropping it.
+func TestLoad_MigratesLegacyV1ToolShape(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "v1.lock.yaml")
+
+	// The exact v1 on-disk shape (verified against the real v1.226.0-rc.4 release).
+	content := `version: 1
+tools:
+  hashicorp/terraform:
+    version: "1.11.4"
+    source: https://github.com/aquaproj/aqua-registry
+    binary_name: terraform
+    installed_at: "2025-01-01T00:00:00Z"
+    platforms:
+      darwin_arm64:
+        url: https://example.com/terraform.zip
+        checksum: sha256:deadbeef
+        checksum_algorithm: sha256
+        size: 12345
+metadata:
+  generated_at: "2025-01-01T00:00:00Z"
+  atmos_version: "1.200.0"
+  platform: darwin_arm64
+  lock_file_version: 1
+`
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
+
+	loaded, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	tool := loaded.Tools["hashicorp/terraform"]
+	require.NotNil(t, tool, "expected the legacy tool entry to survive migration")
+	require.Contains(t, tool.Versions, "1.11.4", "the v1 version must be recovered, not dropped")
+
+	entry := tool.Versions["1.11.4"]
+	assert.Equal(t, "https://github.com/aquaproj/aqua-registry", entry.Source)
+	assert.Equal(t, "terraform", entry.BinaryName)
+	assert.Equal(t, "2025-01-01T00:00:00Z", entry.InstalledAt)
+	require.Contains(t, entry.Platforms, "darwin_arm64")
+	assert.Equal(t, "sha256:deadbeef", entry.Platforms["darwin_arm64"].Checksum)
+	assert.Equal(t, "sha256", entry.Platforms["darwin_arm64"].ChecksumAlgorithm)
+	assert.Equal(t, int64(12345), entry.Platforms["darwin_arm64"].Size)
+
+	assert.Equal(t, currentLockFileVersion, loaded.Metadata.LockFileVersion,
+		"a migrated file must be stamped with the current version so re-saving it persists v2 shape")
+
+	// Verify must succeed post-migration -- this is the actual user-facing contract broken by
+	// the bug: a stale lockFileVersion previously meant Verify (and thus install's
+	// checksum-mismatch guard) treated every tool as missing its version.
+	require.NoError(t, Verify(tmpFile))
+}
+
 func TestGetOrCreateTool_CreateNew(t *testing.T) {
 	lf := New()
 

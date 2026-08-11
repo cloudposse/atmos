@@ -641,13 +641,28 @@ func TestRunClean_ConfirmationPromptError_PropagatesError(t *testing.T) {
 	assertDirUnchanged(t, toolsDir, []string{"terraform"})
 }
 
+// skipIfPermissionChecksAreIneffective skips a test when the process can bypass permission
+// bits, which happens on Windows and when running as root (common for CI container images):
+// os.Geteuid() returns -1 on Windows, so it's safe to call unconditionally on every platform,
+// and a chmod-based test would otherwise pass "successfully" for the wrong reason -- the
+// filesystem operation the test means to force-fail actually succeeds, require.Error fails,
+// and the failure looks like a real regression instead of an environment mismatch.
+func skipIfPermissionChecksAreIneffective(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits are not enforced")
+	}
+}
+
 // TestPreviewClean_ToolsDirPermissionError_PropagatesError verifies previewClean surfaces a
 // real filesystem error (not just "does not exist") wrapped in ErrFileOperation, instead of
 // silently reporting "0 files".
 func TestPreviewClean_ToolsDirPermissionError_PropagatesError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission bits behave differently on Windows")
-	}
+	skipIfPermissionChecksAreIneffective(t)
 
 	base := t.TempDir()
 	toolsDir := filepath.Join(base, "tools")
@@ -668,9 +683,7 @@ func TestPreviewClean_ToolsDirPermissionError_PropagatesError(t *testing.T) {
 // TestPreviewClean_CacheDirPermissionError_PropagatesError mirrors the tools-dir case above for
 // the cache-dir branch of previewClean, reached only after the tools-dir preview succeeds.
 func TestPreviewClean_CacheDirPermissionError_PropagatesError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission bits behave differently on Windows")
-	}
+	skipIfPermissionChecksAreIneffective(t)
 
 	base := t.TempDir()
 	toolsDir := filepath.Join(base, "tools")
@@ -704,9 +717,7 @@ func TestCleanDir_DangerousPath_RefusesToDelete(t *testing.T) {
 // covers: the directory is readable/listable (so countFiles succeeds) but not writable, so only
 // the deletion step fails.
 func TestCleanDir_FatalRemoveAllFailure_ReturnsError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission bits behave differently on Windows")
-	}
+	skipIfPermissionChecksAreIneffective(t)
 
 	base := t.TempDir()
 	toolsDir := filepath.Join(base, "tools")

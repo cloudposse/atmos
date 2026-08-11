@@ -122,9 +122,18 @@ plausibly do:
   both "print a checkmark," but only the semantic function is themed/colored. **This class of bug
   is easy to miss when every command in this pass has been run through the Bash tool** — captured
   output can look fine in the transcript even when the real behavior (silent hang, unstyled text)
-  would be obvious to a human watching a real terminal. Verify directly: run with `--force-color`
-  and pipe through `cat -v` (or grep for the raw `\x1b[` / `^[[` escape sequence) to confirm color
-  codes are actually present around each status line, not just plain text with a Unicode glyph.
+  would be obvious to a human watching a real terminal. This needs two *separate* checks, not one
+  piped command doing double duty — piping through `cat -v` makes the command non-TTY, which
+  exercises the non-live fallback renderer instead of the real live-progress path, and
+  `--force-color` does not restore TTY behavior:
+  - **Live progress**: run the command in a real pseudo-TTY, unpiped (e.g.
+    `script -q /dev/null build/atmos toolchain update --force-tty --force-color`), and watch it —
+    does a spinner/progress bar actually redraw in place, or does it silently buffer and dump
+    everything at once?
+  - **ANSI styling**: separately, pipe a `--force-color` run through `cat -v` (or grep for the raw
+    `\x1b[` / `^[[` escape sequence) to confirm color codes are actually present around each status
+    line, not just plain text with a Unicode glyph. Piping is fine here since this check only cares
+    about styling, not live-rendering behavior.
 - Any "N -> M" / diff-style report line — construct a case where N and M are the *same value in
   different string forms* (e.g. `v1.2.3` vs `1.2.3`, differing casing, trailing metadata). A raw
   string-equality comparison will misreport a no-op as a change, which also tends to corrupt

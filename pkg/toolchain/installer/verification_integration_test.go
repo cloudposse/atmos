@@ -95,9 +95,10 @@ func TestInstallFromTool_DetectsTamperedLockFileChecksum(t *testing.T) {
 	}
 	require.NoError(t, saveInstallerLockFile(lockFilePath, lf))
 
+	binDir := t.TempDir()
 	installer := &Installer{
 		cacheDir:           t.TempDir(),
-		binDir:             t.TempDir(),
+		binDir:             binDir,
 		useLockFile:        true,
 		verifyAgainstLock:  true, // The config-driven install path, not lock's own force-write path.
 		lockFilePath:       lockFilePath,
@@ -116,6 +117,17 @@ func TestInstallFromTool_DetectsTamperedLockFileChecksum(t *testing.T) {
 	}, "1.0.0")
 
 	require.Error(t, err, "install must fail when the freshly downloaded checksum doesn't match the one already recorded in toolchain.lock.yaml -- silently overwriting a tampered lock entry defeats the point of use_lock_file")
+
+	// The mismatch must be caught BEFORE extraction, not just eventually surfaced as an
+	// error: a check that only runs after the binary is already placed in binDir would let a
+	// tampered/unexpectedly-changed artifact reach the install tree before the error returns,
+	// defeating the supply-chain guarantee use_lock_file exists to provide.
+	entries, statErr := os.ReadDir(binDir)
+	if statErr == nil {
+		assert.Empty(t, entries, "a lock file checksum mismatch must be rejected before extraction -- no binary may reach binDir")
+	} else {
+		assert.True(t, os.IsNotExist(statErr), "unexpected error reading binDir: %v", statErr)
+	}
 }
 
 func TestInstallFromTool_DoesNotUpdateLockFileWhenExtractionFails(t *testing.T) {

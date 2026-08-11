@@ -65,6 +65,15 @@ func (m *LockFileManager) AddTool(ctx context.Context, tool, version string, opt
 		opt(cfg)
 	}
 
+	if version == "" {
+		return errUtils.Build(errUtils.ErrLockfileEmptyVersion).
+			WithExplanationf("Cannot add tool `%s` without a version", tool).
+			WithHint("Specify an explicit version to lock").
+			WithContext("tool", tool).
+			WithContext("lockfile", m.filePath).
+			Err()
+	}
+
 	return m.withExclusiveLock(ctx, func() error {
 		lock, err := lockfile.Load(m.filePath)
 		if err != nil {
@@ -114,6 +123,7 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 			for v := range existingTool.Versions {
 				lockedVersions = append(lockedVersions, v)
 			}
+			sort.Strings(lockedVersions)
 			return errUtils.Build(errUtils.ErrLockfileVersionMismatch).
 				WithExplanationf("Cannot remove tool `%s`: lockfile version does not match requested version", tool).
 				WithHint("Update the lockfile or specify the correct version").

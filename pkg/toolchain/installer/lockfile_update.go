@@ -49,6 +49,68 @@ func resolveDefaultInstallPath(installPath string) string {
 	return ".tools"
 }
 
+// checkLockFileChecksumMismatch compares a freshly downloaded, verified artifact's checksum
+// against any existing toolchain.lock.yaml entry for the same tool/version/platform. It is
+// read-only -- unlike updateLockFile, it never creates or mutates lock file entries, so a
+// lookup miss (no lock file yet, or no matching tool/version/platform entry) is not an error,
+// just "nothing to compare against yet."
+//
+// Callers that extract/install the downloaded artifact onto disk (installFromTool) MUST call
+// this before extraction, not just rely on updateLockFile's (now removed) mismatch check after
+// the fact: updateLockFile runs after extractAndInstall/os.Chmod, so a mismatch caught only
+// there means the compromised or unexpectedly-changed binary was already placed in the install
+// tree by the time the error is returned -- exactly the supply-chain guarantee use_lock_file
+// exists to provide. See docs/fixes for the incident this closes.
+func (i *Installer) checkLockFileChecksumMismatch(tool *registry.Tool, version string, result *verification.Result) error {
+	if !i.verifyAgainstLock || i.lockFilePath == "" || result == nil || result.Checksum == "" {
+		return nil
+	}
+	lf, err := loadInstallerLockFile(i.lockFilePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("load installer lockfile: %w", err)
+	}
+	toolName := tool.RepoOwner + "/" + tool.RepoName
+	platform := runtime.GOOS + "_" + runtime.GOARCH
+	existingChecksum := lookupLockedChecksum(lf, toolName, version, platform)
+	if existingChecksum == "" || existingChecksum == result.Checksum {
+		return nil
+	}
+	return errUtils.Build(ErrLockfileChecksumMismatch).
+		WithExplanationf("the freshly downloaded checksum for %s@%s/%s doesn't match the one recorded in toolchain.lock.yaml", toolName, version, platform).
+		WithHint("if this version legitimately changed upstream, run `atmos toolchain lock` to refresh the recorded checksum").
+		WithHint("otherwise, this may indicate the download was tampered with or corrupted").
+		WithContext("tool", toolName).
+		WithContext("version", version).
+		WithContext("platform", platform).
+		Err()
+}
+
+// lookupLockedChecksum returns the checksum recorded for tool/version/platform in an
+// already-loaded lock file, or "" if no matching entry exists at any level (unknown tool,
+// unknown version, or unknown platform).
+func lookupLockedChecksum(lf *installerLockFile, toolName, version, platform string) string {
+	tool := lf.Tools[toolName]
+	if tool == nil {
+		return ""
+	}
+	versionEntry := tool.Versions[version]
+	if versionEntry == nil {
+		return ""
+	}
+	entry := versionEntry.Platforms[platform]
+	if entry == nil {
+		return ""
+	}
+	return entry.Checksum
+}
+
+// updateLockFile persists a successful, already-verified install's checksum into
+// toolchain.lock.yaml. It no longer performs the mismatch check itself -- callers that extract
+// an artifact onto disk must call checkLockFileChecksumMismatch beforehand (see its doc
+// comment); this function assumes that check, if applicable, already passed.
 func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string, result *verification.Result) error {
 	if !i.useLockFile || i.lockFilePath == "" || result == nil || result.Checksum == "" {
 		return nil
@@ -68,18 +130,6 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 		toolName := tool.RepoOwner + "/" + tool.RepoName
 		versionEntry := getOrCreateInstallerToolVersion(lf, toolName, version)
 		platform := runtime.GOOS + "_" + runtime.GOARCH
-		if i.verifyAgainstLock {
-			if existing := versionEntry.Platforms[platform]; existing != nil && existing.Checksum != result.Checksum {
-				return errUtils.Build(ErrLockfileChecksumMismatch).
-					WithExplanationf("the freshly downloaded checksum for %s@%s/%s doesn't match the one recorded in toolchain.lock.yaml", toolName, version, platform).
-					WithHint("if this version legitimately changed upstream, run `atmos toolchain lock` to refresh the recorded checksum").
-					WithHint("otherwise, this may indicate the download was tampered with or corrupted").
-					WithContext("tool", toolName).
-					WithContext("version", version).
-					WithContext("platform", platform).
-					Err()
-			}
-		}
 		versionEntry.Source = tool.Registry
 		versionEntry.BinaryName = tool.BinaryName
 		versionEntry.Platforms[platform] = &toolchainlock.PlatformEntry{

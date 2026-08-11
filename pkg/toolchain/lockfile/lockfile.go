@@ -132,7 +132,75 @@ func Load(filePath string) (*LockFile, error) {
 		return nil, fmt.Errorf("%w: missing version", ErrInvalidLockFile)
 	}
 
+	// A pre-v2 lock file (every release through v1.226.0-rc.4) stores "version"/"platforms"
+	// directly on the tool, not nested under a "versions" map -- unmarshaling that shape into
+	// the current Tool struct silently leaves Versions nil for every tool, dropping every
+	// recorded checksum. Recover it from the raw bytes rather than losing it; see Tool's doc
+	// comment for why the shape changed.
+	//
+	// Keyed off exactly 1 (the only real prior schema version), not "< currentLockFileVersion":
+	// a file with metadata version 0 is missing/invalid, not legacy-shaped, and must still fail
+	// Verify's own explicit check for that below rather than being silently "fixed" here.
+	if lockFile.Metadata.LockFileVersion == 1 {
+		if err := migrateLegacyTools(data, &lockFile); err != nil {
+			return nil, fmt.Errorf("failed to migrate legacy lock file: %w", err)
+		}
+	}
+
 	return &lockFile, nil
+}
+
+// legacyTool is the pre-v2, flat (single-version) on-disk shape of a locked tool -- see Tool's
+// doc comment for why this changed to a nested Versions map. Used only to recover a v1
+// toolchain.lock.yaml's data during the migration Load performs.
+type legacyTool struct {
+	Version     string                    `yaml:"version"`
+	Source      string                    `yaml:"source,omitempty"`
+	Platforms   map[string]*PlatformEntry `yaml:"platforms"`
+	BinaryName  string                    `yaml:"binary_name,omitempty"`
+	InstalledAt string                    `yaml:"installed_at"`
+}
+
+// migrateLegacyTools re-parses the raw lock file bytes in the pre-v2 flat shape and folds any
+// tool that came back with no Versions data (from the initial, v2-shaped unmarshal in Load)
+// into a single-entry Versions map, preserving its recorded checksum data. Tools that already
+// have Versions data (e.g. a file re-saved after a partial upgrade) are left untouched.
+func migrateLegacyTools(raw []byte, lockFile *LockFile) error {
+	var legacy struct {
+		Tools map[string]*legacyTool `yaml:"tools"`
+	}
+	if err := yaml.Unmarshal(raw, &legacy); err != nil {
+		return err
+	}
+
+	if lockFile.Tools == nil {
+		lockFile.Tools = make(map[string]*Tool)
+	}
+
+	for name, old := range legacy.Tools {
+		if old == nil || old.Version == "" {
+			continue
+		}
+		tool := lockFile.Tools[name]
+		if tool == nil {
+			tool = &Tool{}
+			lockFile.Tools[name] = tool
+		}
+		if len(tool.Versions) > 0 {
+			continue
+		}
+		tool.Versions = map[string]*VersionEntry{
+			old.Version: {
+				Source:      old.Source,
+				Platforms:   old.Platforms,
+				BinaryName:  old.BinaryName,
+				InstalledAt: old.InstalledAt,
+			},
+		}
+	}
+
+	lockFile.Metadata.LockFileVersion = currentLockFileVersion
+	return nil
 }
 
 // Save writes the lock file to disk, updating metadata fields and creating parent directories if needed.

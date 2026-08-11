@@ -469,6 +469,52 @@ func TestAppendToolchainPropagatesCorruptLockError(t *testing.T) {
 	require.ErrorContains(t, err, "failed to parse lock file")
 }
 
+// TestAppendToolchainSkipsNilLockEntriesInsteadOfPanicking reproduces a panic risk:
+// toolchainlock.Load (unlike Verify) does not validate nested entries, so a hand-edited or
+// corrupted toolchain.lock.yaml can parse successfully with a nil tool/version/platform value
+// (an explicit YAML null). The old appendToolchain ranged straight into tool.Versions /
+// versionEntry.Platforms without a nil check, which panics on a nil pointer dereference the
+// moment any of the three levels is nil. This lock file has one nil entry at each level plus
+// one fully valid tool, so a single test exercises all three guards and confirms the valid
+// entry still makes it into the graph.
+func TestAppendToolchainSkipsNilLockEntriesInsteadOfPanicking(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Toolchain.LockFile = "toolchain.lock.yaml"
+
+	content := `version: 1
+tools:
+  nil/tool:
+  owner/nil-version:
+    versions:
+      1.0.0:
+  owner/nil-platform:
+    versions:
+      1.0.0:
+        platforms:
+          darwin_arm64:
+  hashicorp/terraform:
+    versions:
+      1.11.4:
+        platforms:
+          darwin_arm64:
+            url: https://example.com/terraform.zip
+            checksum: sha256:deadbeef
+metadata:
+  lock_file_version: 2
+`
+	require.NoError(t, os.WriteFile(filepath.Join(base, config.Toolchain.LockFile), []byte(content), 0o644))
+
+	graph := &Graph{}
+	require.NotPanics(t, func() {
+		require.NoError(t, appendToolchain(graph, config))
+	})
+
+	require.Len(t, graph.Components, 1, "only the fully valid tool entry should produce a component")
+	require.Equal(t, "toolchain:hashicorp/terraform:1.11.4:darwin_arm64", graph.Components[0].ID)
+}
+
 func TestAppendVersionsPropagatesCorruptLockError(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()

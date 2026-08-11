@@ -111,7 +111,7 @@ an oversight; see the updated tests below for the narrower guarantee that replac
   lines above the redrawn region, the `peteretelej/tree v1.3.0` case is correctly reported "up to
   date" with an accurate suppressed-zero summary (`Updated 3 tool(s), 1 up to date, 3 skipped`),
   and `atmos toolchain lock jq yq` shows the same live UI.
-- `gofmt -l` — clean on every touched Go file.
+- `gofumpt -l` — clean on every touched Go file.
 - `./custom-gcl run --new-from-rev=origin/main` — 0 issues (fixed one cyclomatic-complexity
   finding in `RunUpdate` by extracting `renderUpdateOutcome`, and two `godot` comment-wording
   findings in `batch_progress.go`, during the pass).

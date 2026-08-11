@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 
@@ -254,21 +255,24 @@ func countFilesAndSize(root string) (int, int64, error) {
 }
 
 // isDangerousPath checks if a path is dangerous to delete (empty, root, or drive root).
+// This is intentionally OS-independent -- both Unix-root ("/") and Windows-drive-root ("C:",
+// "C:\") shapes are rejected no matter which OS actually runs the check, matching the
+// defense-in-depth intent of guarding a delete operation.
 func isDangerousPath(path string) bool {
-	// Clean the path first to normalize it (handles //, /./, /../, etc.).
+	// Clean the path first to normalize it (handles //, /./, /../, etc.). Note that
+	// filepath.Clean is OS-native: on Windows, Clean("/") returns "\" (not "/"), so both
+	// slash forms must be checked directly rather than assuming one native separator.
 	cleaned := filepath.Clean(path)
 
-	if cleaned == "" || cleaned == "." || cleaned == "/" {
+	if cleaned == "" || cleaned == "." || cleaned == "/" || cleaned == `\` {
 		return true
 	}
 
-	// Check for drive roots on Windows (C:, D:, etc.).
-	if len(cleaned) == 2 && cleaned[1] == ':' {
-		return true
-	}
-
-	// Also check for drive roots with slash (C:\, D:\).
-	if len(cleaned) == 3 && cleaned[1] == ':' && (cleaned[2] == '\\' || cleaned[2] == '/') {
+	// Check for a bare Windows drive root (C:, C:\, C:/, D:, etc.) on the raw, un-Clean'd
+	// input -- Windows's own filepath.Clean("C:") normalizes a bare volume name to "C:."
+	// rather than leaving it as a 2-character string, so this can't key off `cleaned`.
+	trimmed := strings.TrimRight(path, `\/`)
+	if len(trimmed) == 2 && trimmed[1] == ':' {
 		return true
 	}
 

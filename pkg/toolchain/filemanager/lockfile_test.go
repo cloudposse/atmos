@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	cockroachdberrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -379,6 +381,80 @@ func TestLockFileManager_RemoveTool_VersionMismatch(t *testing.T) {
 	err = mgr.RemoveTool(ctx, "hashicorp/terraform", "1.10.0")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrLockfileVersionMismatch)
+}
+
+// TestLockFileManager_RemoveTool_VersionMismatchListsVersionsSorted verifies the
+// version-mismatch error's lockfile_versions context is sorted, not raw Go map iteration
+// order. Map iteration order is randomized, so an unsorted join meant the exact same failure
+// (removing a version that isn't locked) could render different error text on different runs
+// -- GetTools already calls sort.Strings for this same reason.
+func TestLockFileManager_RemoveTool_VersionMismatchListsVersionsSorted(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	for _, v := range []string{"1.13.4", "1.9.8", "1.11.0"} {
+		require.NoError(t, mgr.AddTool(ctx, "hashicorp/terraform", v))
+	}
+
+	err := mgr.RemoveTool(ctx, "hashicorp/terraform", "9.9.9")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLockfileVersionMismatch)
+
+	// errUtils.GetContext/HasContext parse safe details as space-separated "key=value" pairs,
+	// so they can't recover a value that itself contains spaces (like a ", "-joined list) --
+	// check the raw safe-detail text directly instead.
+	found := false
+	for _, payload := range cockroachdberrors.GetAllSafeDetails(err) {
+		for _, detail := range payload.SafeDetails {
+			if strings.Contains(detail, "lockfile_versions=1.11.0, 1.13.4, 1.9.8") {
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "expected the error's safe details to contain the sorted version list")
+}
+
+// TestLockFileManager_AddTool_RejectsEmptyVersion verifies AddTool rejects an empty version
+// instead of silently creating a lock entry keyed by "". RemoveTool gives an empty version a
+// specific meaning (remove every locked version); AddTool previously gave the same input no
+// meaning at all, so it wrote a bogus "" key that could only ever be removed by wiping the
+// whole tool. SetDefault forwards straight through to AddTool, so this guard covers it too.
+func TestLockFileManager_AddTool_RejectsEmptyVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	err := mgr.AddTool(ctx, "hashicorp/terraform", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLockfileEmptyVersion)
+
+	// No lock file should have been written at all -- the guard must fire before any load/save.
+	_, statErr := os.Stat(tmpFile)
+	assert.True(t, os.IsNotExist(statErr), "AddTool must not write a lock file when rejecting an empty version")
+
+	// SetDefault forwards to AddTool, so it must reject the same input the same way.
+	err = mgr.SetDefault(ctx, "hashicorp/terraform", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLockfileEmptyVersion)
 }
 
 func TestLockFileManager_RemoveTool_EmptyVersion(t *testing.T) {

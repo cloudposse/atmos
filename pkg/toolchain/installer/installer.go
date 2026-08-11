@@ -430,6 +430,13 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 		_ = os.Remove(downloadResult.assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
 		return "", err
 	}
+	// Reject a lock file checksum mismatch before extraction, not after: this must run before
+	// extractAndInstall places the binary in the install tree, or a tampered/unexpectedly
+	// changed artifact would already be installed by the time the error is returned.
+	if err := i.checkLockFileChecksumMismatch(tool, version, verificationResult); err != nil {
+		_ = os.Remove(downloadResult.assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
+		return "", err
+	}
 	binaryPath, err := i.extractAndInstall(tool, downloadResult.assetPath, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)

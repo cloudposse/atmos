@@ -67,12 +67,13 @@ func TestUpdateCommand_HelpTextDoesNotClaimRefPinsAreImmutable(t *testing.T) {
 // propagates that error unwrapped.
 func TestUpdateCommand_RunE(t *testing.T) {
 	tempDir := t.TempDir()
+	prevConfig := toolchain.GetAtmosConfig()
 	toolchain.SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: filepath.Join(tempDir, "tool-versions-does-not-exist"),
 		},
 	})
-	t.Cleanup(func() { toolchain.SetAtmosConfig(nil) })
+	t.Cleanup(func() { toolchain.SetAtmosConfig(prevConfig) })
 
 	tests := []struct {
 		name           string

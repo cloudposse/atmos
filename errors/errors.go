@@ -366,6 +366,7 @@ var (
 	ErrBinaryNotExecutable                = errors.New("binary not executable")
 	ErrBinaryNotFound                     = errors.New("binary not found")
 	ErrLockfileVersionMismatch            = errors.New("lockfile version mismatch")
+	ErrLockfileEmptyVersion               = errors.New("lockfile tool version cannot be empty")
 	ErrNoAssetTemplate                    = errors.New("no asset template defined")
 	ErrAssetTemplateInvalid               = errors.New("asset template invalid")
 	ErrToolVersionsFileOperation          = errors.New("tool-versions file operation failed")
