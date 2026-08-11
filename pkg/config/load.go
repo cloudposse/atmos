@@ -2305,6 +2305,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 		schema.ConditionDecodeHook(),
 		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
+		schema.UnitDependencyDecodeHook(),
 	)
 }
 

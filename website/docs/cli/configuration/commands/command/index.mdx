@@ -85,4 +85,23 @@ atmos deploy vpc -s plat-ue2-prod
 
   <dt>`verbose`</dt>
   <dd>Set to `true` to print verbose execution output for the command. Defaults to `false`.</dd>
+
+  <dt>`aliases`</dt>
+  <dd>Alternative names this command is also invocable under, registered natively and in-process (the same underlying command object, just with extra names) — distinct from the top-level [`aliases`](/cli/configuration/aliases) config, which redirects to a possibly-unrelated command via a subprocess. See [Aliases](#aliases).</dd>
+
+  <dt>`internal`</dt>
+  <dd>Set to `true` to hide this command from `atmos help` and `atmos list` output while leaving it fully invocable — useful for a command meant to be called only as a [dependency](/cli/configuration/commands/dependencies) of another command, not run directly. Defaults to `false`.</dd>
 </dl>
+
+## Aliases
+
+```yaml
+commands:
+  - name: deploy
+    aliases: [dep, d]
+    description: Deploy a component to a stack
+    steps:
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }} -auto-approve
+```
+
+`atmos dep vpc -s plat-ue2-prod` and `atmos d vpc -s plat-ue2-prod` both run the same command as `atmos deploy vpc -s plat-ue2-prod`. Aliases appear in `atmos --help` and in `atmos list aliases` (categorized `custom`, distinct from Atmos's own built-in command aliases and the top-level [`aliases`](/cli/configuration/aliases) config).
