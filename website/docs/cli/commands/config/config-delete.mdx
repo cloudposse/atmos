@@ -40,6 +40,6 @@ atmos config del logs.file
 ## Flags
 
 <dl>
-  <dt>`--config` (string, inherited)</dt>
-  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
+  <dt>`--config` (string slice, inherited)</dt>
+  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root. Must name exactly one file: `config delete` edits a single concrete file on disk, so passing more than one `--config` value is rejected as ambiguous.</dd>
 </dl>

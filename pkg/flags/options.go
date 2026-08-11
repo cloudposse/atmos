@@ -312,20 +312,28 @@ func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
 	}
 }
 
-// WithValidValues sets the list of valid values for a string flag.
-// During parsing, the flag value will be validated against this list.
+// WithValidValues sets the list of valid values for a string or string-slice flag.
+// During parsing, the flag value (or, for a string-slice flag, every element of it)
+// will be validated against this list.
 //
 // Example:
 //
 //	WithStringFlag("format", "f", "yaml", "Output format"),
 //	WithValidValues("format", "json", "yaml", "table"),
+//
+//	WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+//	WithValidValues("client", "claude-code", "vscode", "gemini"),
 func WithValidValues(flagName string, validValues ...string) Option {
 	defer perf.Track(nil, "flags.WithValidValues")()
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
-		if strFlag, ok := flag.(*StringFlag); ok {
-			strFlag.ValidValues = validValues
+		switch f := flag.(type) {
+		case *StringFlag:
+			f.ValidValues = validValues
+			// Note: No need to re-register - we're just updating the field in place.
+		case *StringSliceFlag:
+			f.ValidValues = validValues
 			// Note: No need to re-register - we're just updating the field in place.
 		}
 	}

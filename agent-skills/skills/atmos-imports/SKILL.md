@@ -4,6 +4,7 @@ description: "Atmos imports: local and remote stack imports, go-getter schemes, 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Imports

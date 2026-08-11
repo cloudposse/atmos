@@ -1,6 +1,10 @@
 package source
 
 import (
+	"archive/zip"
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
@@ -71,6 +75,7 @@ func TestResolve_LocalPath(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "local template files must be loaded")
+	assert.Equal(t, dir, cfg.Source, "local sources must record the original path")
 }
 
 func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
@@ -152,6 +157,7 @@ func TestHydrate_LocalStub(t *testing.T) {
 	require.NoError(t, err)
 	defer cleanup()
 	assert.True(t, hasSampleFile(stub.Files), "local stub must be hydrated from its source")
+	assert.Equal(t, dir, stub.Source, "hydrate's *stub = *resolved copy must preserve the original source")
 }
 
 func TestHydrate_LocalStubError(t *testing.T) {
@@ -231,6 +237,61 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// zipArchive builds an in-memory ZIP archive containing the given files.
+// go-getter's HTTP getter unpacks a recognized archive extension (.zip
+// included) directly, so serving one over httptest.Server exercises a real
+// remote (ClientModeDir) fetch through resolveRemote without needing git or
+// any other external binary.
+func zipArchive(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// TestResolve_RemoteRecordsOriginalSource pins the bug where a remote
+// (git::/https://) scaffold source ended up with Configuration.Source (and
+// therefore the persisted spec.source in .atmos/scaffold.yaml) set to the
+// ephemeral os.MkdirTemp download directory instead of the original source
+// string. That tempdir is removed by cleanup() as soon as the command
+// finishes, leaving spec.source pointing at nothing.
+//
+// Serves a ZIP archive from a local httptest.Server rather than using a git
+// fixture: the ".zip" extension is enough for go-getter's HTTP getter to
+// unpack it into the temp dir on its own, so this test never shells out to
+// git (or any other external binary) and stays hermetic/cross-platform.
+func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
+	archive := zipArchive(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	src := server.URL + "/template.zip"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+
+	assert.True(t, hasSampleFile(cfg.Files), "remote archive template files must be loaded")
+	assert.Equal(t, src, cfg.Source, "remote sources must record the original source string, not the ephemeral fetch tempdir")
 }
 
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
