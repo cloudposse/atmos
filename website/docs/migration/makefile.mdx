@@ -38,7 +38,7 @@ See [AI Agent Skills](/ai/skills) for details.
 |--------------------------------------------------|------------------------------------------------------------|
 | `.PHONY` target, no dependencies                  | [Custom command](/cli/configuration/commands)               |
 | `VAR ?= default`, `$(VAR)`                        | Command `flags:` with a `default:`                          |
-| `target: dep1 dep2` (dependency order)            | Steps in order, or a `parallel` step with `needs:`           |
+| `target: dep1 dep2` (dependency order)            | Steps in order for a single chain, or command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies) when the same prerequisite is shared by more than one target |
 | Recipe shell lines (`@`-silenced, tab-indented)    | Steps (`type: shell`, `output: none`)                        |
 | `ifeq (...)` conditional                          | Go template `{{ if }}` in a command, or `when:` in a workflow |
 | `$(MAKE) -j`, `$(MAKE) -C dir`                    | `parallel` / `matrix` steps                                  |
@@ -80,9 +80,9 @@ See [AI Agent Skills](/ai/skills) for details.
 
       - name: test
         description: Run unit tests
+        dependencies:
+          commands: [build]
         steps:
-          - type: shell
-            command: atmos build
           - type: shell
             command: go test ./...
 
@@ -105,11 +105,9 @@ See [AI Agent Skills](/ai/skills) for details.
           - name: env
             shorthand: e
             default: "dev"
+        dependencies:
+          commands: [build, test]
         steps:
-          - type: shell
-            command: atmos build
-          - type: shell
-            command: atmos test
           - type: atmos
             command: terraform apply infra -s {{ .Flags.env }}
     ```
@@ -154,6 +152,38 @@ from another command or workflow step, prefer `type: atmos` with `command: build
 `type: shell` with `command: atmos build`: `type: atmos` auto-applies `-s <stack>` from the
 step's `stack:` field and renders through Atmos's structured step output.
 
+For a simple, single-caller chain such as `deploy: build test`, steps calling each prerequisite in
+order are enough. But `make` itself only builds a shared prerequisite once per invocation, even
+when more than one target depends on it — plain steps lose that property, since each caller's
+`type: atmos`/`type: shell` step runs it again. Command-level
+[`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies)
+is the direct match for that case: it resolves through the same DAG scheduler as
+[`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:`,
+runs concurrently by default, and dedups a dependency shared by more than one command to a single
+run — the same guarantee `make` gives you for free:
+
+```yaml
+commands:
+  - name: build
+    steps:
+      - type: shell
+        command: go build ./...
+
+  - name: test
+    dependencies:
+      commands: [build]
+    steps:
+      - type: shell
+        command: go test ./...
+
+  - name: deploy
+    dependencies:
+      commands: [build, test]
+    steps:
+      - type: atmos
+        command: terraform apply infra -s dev
+```
+
 If the Makefile's `deploy` target also selects a Terraform environment, for example through
 `-var-file=envs/$(ENV).tfvars`, that part is a Terraform migration step, not a Make migration
 step. See [Migrating from Native Terraform](/migration/native-terraform) for how the Terraform
@@ -182,6 +212,35 @@ commands:
 ```
 </File>
 
+## File-Timestamp Targets Become `inputs`/`artifacts`
+
+Make skips a target's recipe when every prerequisite (the target's own `inputs`) is older than
+the target file it already produced (the target's own `artifacts`) — comparing mtimes. The
+step-level [`inputs.sources`](/workflows/steps/inputs) and
+[`artifacts.paths`](/workflows/steps/artifacts) fields are the direct match:
+
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+        inputs:
+          sources: ["cmd/**/*.go"]
+        artifacts:
+          paths: ["bin/handler"]
+```
+
+With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough — it implicitly means
+`when: checksum.changed`, and the step is skipped when the hash of the matched source files
+matches the hash recorded after the last successful run. That default is a deliberate upgrade
+over Make's own mtime comparison: a fresh `git clone`/CI checkout resets every file's mtime,
+which makes Make (and the mtime-based `timestamp.changed` fact) think everything changed even
+when it didn't. Use `when: timestamp.changed` instead if you want Make's exact mtime semantics.
+See [inputs](/workflows/steps/inputs) for the full field reference. It does not carry over on its
+own — add `inputs`/`artifacts` to the migrated step yourself.
+
 ## What Stays the Same
 
 - **Your Terraform code, scripts, and CLIs.** Atmos wraps them. It does not replace them.
@@ -189,10 +248,6 @@ commands:
 - **The Makefile itself, for a while.** Keep it as a thin wrapper around `atmos` commands until
   your team is ready. Then remove it, once each leaf target and chain has become a command or a
   workflow.
-
-One gap to state directly: a target that skips work based on file timestamps has no match in
-Atmos. Atmos steps always run. If this caching matters to your build, plan for it. Do not assume
-it carries over on its own.
 
 ## What You Gain
 
@@ -218,11 +273,11 @@ it carries over on its own.
 - [ ] List every Makefile target. Mark each one as independent, or part of a chain
 - [ ] Turn independent targets into custom commands in `atmos.yaml`
 - [ ] Turn `VAR ?= default` variables into command `flags:` with defaults
-- [ ] Turn dependency chains into steps in order, or into a workflow
+- [ ] Turn dependency chains into steps in order, or `dependencies.commands` when a prerequisite is shared by more than one target
 - [ ] Replace `$(MAKE) -j`/`-C` with `parallel`/`matrix` steps
 - [ ] Delete any hand-written `help` target. `atmos help` replaces it
 - [ ] Keep the Makefile as a thin wrapper during the transition, if you want one
-- [ ] Confirm no target depends on file-timestamp caching before you remove it
+- [ ] Turn file-timestamp targets into step `inputs.sources`/`artifacts.paths`
 </TaskList>
 
 ## Common Questions
@@ -234,14 +289,18 @@ workflow. There is no fixed deadline for this.
 </FAQItem>
 
 <FAQItem question="What happens to targets that skip work based on file timestamps?">
-There is no direct match in Atmos. Atmos steps always run. If a target relies on file timestamps
-to skip slow work, plan for that change directly. Do not assume the behavior stays the same.
+Turn them into step `inputs.sources`/`artifacts.paths` -- with no explicit `when:`, that
+implicitly skips the step when nothing has changed since its last successful run. It does not
+carry over automatically; you add it to the migrated step yourself. See
+[File-Timestamp Targets Become inputs/artifacts](#file-timestamp-targets-become-inputsartifacts).
 </FAQItem>
 
 <FAQItem question="Can one custom command call another?">
 Yes, through either step type: `type: atmos` with `command: <other-command-name>`, or
 `type: shell` with `command: atmos <other-command-name>`. Prefer `type: atmos` — it auto-applies
-`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not.
+`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not. If the same
+prerequisite is shared by more than one target, prefer `dependencies.commands` instead — it dedups
+a shared dependency to a single run, the way `make` already does.
 </FAQItem>
 
 <FAQItem question="What if I use Just or Task instead of Make?">

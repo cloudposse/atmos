@@ -102,18 +102,19 @@ deploy: build test ## Plan and apply the given ENV (default: dev)
 **Steps:**
 
 1. Turn `ENV ?= dev` into a command `flags:` entry with `default: "dev"`.
-2. Turn the target order (`deploy: build test`) into steps that run in the same order. In this
-    example, the steps call the Shape A commands, one after the other.
-3. Check if the prerequisites are truly independent. In this example, `build` must finish before
-    `test` runs, but nothing else depends on their order relative to each other. When two
-    prerequisites do not depend on each other, use a `parallel` step with `needs:` instead of
-    listing them one after the other. See [Shape C](#shape-c-recursive-or-parallel-make) for the
-    general `parallel`/`matrix` pattern.
-4. Move the Terraform-specific line, `terraform apply -var-file=envs/$(ENV).tfvars`, to
+2. Turn the target list (`deploy: build test`) into command-level `dependencies.commands: [build,
+    test]`. This is the direct match, not a workaround: it resolves through the same DAG scheduler
+    as `parallel`/`matrix` `needs:`, runs concurrently by default -- `make` itself does not
+    guarantee prerequisite order without `-j` either -- and dedups a dependency shared by more
+    than one target to a single run, the same guarantee `make` already gives for free. Do not turn
+    this into plain sequential steps unless one prerequisite genuinely must finish before another
+    starts; if so, declare that dependency directly on the later one's own `dependencies.commands`
+    instead of ordering a flat list.
+3. Move the Terraform-specific line, `terraform apply -var-file=envs/$(ENV).tfvars`, to
     [from-native-terraform.md Shape B](from-native-terraform.md#shape-b-single-dir-with--var-file-from-a-makefile).
     That guide shows how the Terraform side maps to stacks. Here, the line becomes a single
     `type: atmos` step, because `terraform apply` is a native Atmos verb.
-5. Turn `ifeq ($(ENV),prod)` conditionals into a Go template conditional inside a custom command:
+4. Turn `ifeq ($(ENV),prod)` conditionals into a Go template conditional inside a custom command:
     `{{ if eq .Flags.env "prod" }}...{{ end }}`. This is the same pattern used for `--verbose` and
     other boolean flags. Inside a workflow, use `when: !cel 'stack == "prod"'` on the step
     instead.
@@ -126,11 +127,9 @@ commands:
       - name: env
         shorthand: e
         default: "dev"
+    dependencies:
+      commands: [build, test]
     steps:
-      - type: shell
-        command: atmos build
-      - type: shell
-        command: atmos test
       - type: atmos
         command: terraform apply infra -s {{ .Flags.env }}
 ```
@@ -182,10 +181,15 @@ commands:
 
 Atmos steps have no tab requirement. Do not confuse `.PHONY` with a caching feature. If a
 Makefile target is not `.PHONY` and uses file timestamps to skip work when inputs have not
-changed, that caching behavior has no equivalent in Atmos. Atmos steps always run. Tell the user
-this directly. Do not imply that the behavior carries over. Task's `sources:`/`generates:`
-feature has the same problem. See
-[from-taskfile.md](from-taskfile.md#the-sourcesgenerates-gap) for more detail.
+changed, turn it into step `inputs.sources`/`artifacts.paths` -- with no explicit `when:`, that
+implicitly means `when: checksum.changed`, and the step is skipped when nothing has changed since
+its last successful run. It does not carry over automatically; tell the user to add
+`inputs`/`artifacts` to the migrated step themselves. Content hashing (the default) is a
+deliberate upgrade over Make's own mtime comparison -- a fresh `git clone`/CI checkout resets
+every file's mtime, which makes Make think everything changed even when it didn't; use
+`when: timestamp.changed` instead for Make's exact mtime semantics. Task's `sources:`/`generates:`
+feature maps to the same fields. See
+[from-taskfile.md](from-taskfile.md#sourcesgenerates-becomes-inputsartifacts) for more detail.
 
 ### Silent recipes and command echo
 
@@ -210,16 +214,20 @@ language.
 
 ## What Not To Do
 
-- Do not build file-timestamp or `.PHONY` caching as an Atmos feature. It does not exist. State
-  this directly instead of dropping the behavior without comment.
+- Do not confuse `.PHONY` with a caching feature -- it is not one. Do not drop file-timestamp
+  caching without adding the matching `inputs`/`artifacts` fields to the migrated step; it is a
+  direct match, not a gap, but it does not carry over on its own.
+- Do not turn `target: dep1 dep2` into plain sequential steps, or into a hand-built `parallel`
+  step, without first considering command-level `dependencies.commands` -- it runs concurrently
+  by default and dedups a dependency shared by more than one target, the way `make` already does.
 - Do not turn every private or helper target into its own discoverable command by default. If the
   helper is called from only one recipe, put its logic in a step inside the command or workflow
   that needs it. If it needs to be called from more than one recipe, or invoked directly for
   debugging, make it a custom command with `internal: true` instead -- it stays runnable but is
   excluded from `atmos --help` listings and completion suggestions.
 - Do not treat "wrap `atmos` commands in the Makefile" as the final state. It is a valid bridge
-  during early migration, as shown in Shape B, step 4. Leaf targets should become custom
-  commands. Target chains should become workflows.
+  during early migration. Leaf targets should become custom commands. Target chains should become
+  workflows.
 - Do not invent `when:` conditions that check flag values on workflow steps. The `when:` field
   checks CEL context values, such as `stack`, `ci`, and `local`. Flag-based conditionals belong
   in the custom command's own Go templates.

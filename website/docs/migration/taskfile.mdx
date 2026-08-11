@@ -17,8 +17,8 @@ import TabItem from '@theme/TabItem'
 A Taskfile gives your team an ad-hoc way to run build, test, and deploy tasks, defined in YAML.
 Atmos gives you the same capability as a native, documented feature: custom commands and
 workflows. Task and Atmos both use declarative YAML, so most of the mapping from one field to
-another is direct. Two real differences in behavior still need attention first, covered below.
-Your Terraform code and scripts do not need to change.
+another is direct. Two Task features map to a dedicated field rather than plain steps, covered
+below. Your Terraform code and scripts do not need to change.
 </Intro>
 
 :::tip Using an AI Coding Assistant?
@@ -38,19 +38,21 @@ See [AI Agent Skills](/ai/skills) for details.
 |--------------------------------------------------|------------------------------------------------------------------|
 | `desc:`                                           | Command `description:`                                            |
 | `cmds:` (list of shell commands)                  | `steps:` (`type: shell`, or `type: atmos` for any atmos command)  |
-| `deps:` (runs at the same time by default)        | A `parallel` step. Plain steps in order change the default        |
+| `deps:` (runs at the same time by default)        | Command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies), concurrent by default |
 | `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
-| `sources:` / `generates:` (freshness check)       | No direct match. Steps always run                                 |
+| `sources:` / `generates:` (freshness check)       | Step [`inputs.sources`](/workflows/steps/inputs) / [`artifacts.paths`](/workflows/steps/artifacts) |
 | `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
 | `internal: true` task                             | Command `internal: true`                                            |
 
-## The Parallel-by-Default Difference
+## `deps:` Becomes `dependencies.commands`
 
-This is the most important behavior change in this migration. Task runs `deps:` at the same time
-by default. This is the opposite of Atmos, where custom-command and workflow steps run one after
-another by default. If you turn `deps: [test, lint]` into two plain steps in order, the migrated
-command becomes slower. The failure behavior also changes. To keep Task's default, put the
-dependency tasks inside a [`parallel`](/workflows/steps/type/parallel) step:
+Task runs `deps:` at the same time by default. Atmos custom-command and workflow steps, in
+contrast, run one after another by default — so a `deps:` entry is not a step and never becomes
+one. It maps to the command-level
+[`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies)
+field, which resolves through the same DAG scheduler as
+[`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:` and
+runs concurrently by default — matching Task's `deps:` behavior directly, not working around it:
 
 <Tabs>
   <TabItem value="before" label="Before (Taskfile.yml)">
@@ -68,18 +70,9 @@ dependency tasks inside a [`parallel`](/workflows/steps/type/parallel) step:
     commands:
       - name: deploy
         description: Plan and apply the given environment
+        dependencies:
+          commands: [test, lint]
         steps:
-          - name: checks
-            type: parallel
-            fail:
-              mode: wait_all
-            steps:
-              - name: test
-                type: shell
-                command: atmos test
-              - name: lint
-                type: shell
-                command: atmos lint
           - type: atmos
             command: terraform apply infra -s dev
     ```
@@ -91,24 +84,48 @@ dependency tasks inside a [`parallel`](/workflows/steps/type/parallel) step:
 `components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
 actually name the component.
 
-If a Taskfile's `deps:` list needs an order between its own entries, add `needs:` to the steps
-inside the `parallel` block. Do not default to sequential steps just because that is Atmos's own
-default outside a `parallel` or `matrix` block.
+`dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
+step does not: if two commands both depend on the same one — for example both `test` and `lint`
+depending on `build` — Atmos runs `build` exactly once and dedups it, the same as Task's own
+`deps:` graph. A `parallel` step calling `atmos build` from two different places would run it
+twice. If one dependency itself depends on another (`lint` depends on `build`, and `deploy`
+depends on `test` and `lint`), declare that directly on `lint`'s own `dependencies.commands` — the
+scheduler resolves the whole transitive graph itself, still deduping `build` to a single run.
 
-## The `sources`/`generates` Gap
+Reach for a `parallel` step instead of `dependencies.commands` only for concurrency inside a
+single command's own steps, not between named commands — for example, running several shell
+commands side by side that were never their own Task tasks to begin with.
 
-Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs, through a
-file-hash check. Atmos steps always run. There is no built-in match for this.
-[`require`/`assert`](/workflows/steps/type/require) does not replace it. That step type only
-checks that a file, tool, or directory exists. It does not check freshness.
+## `sources:`/`generates:` Becomes `inputs`/`artifacts`
 
-If you rely on `sources:`/`generates:` for caching, for example to skip a slow codegen step,
-plan for this directly. It is a real gap, not something Atmos preserves on its own. Two honest
-choices:
+Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs, checked by
+default with a content hash (Task also supports `method: timestamp` for an mtime-based check).
+The step-level [`inputs.sources`](/workflows/steps/inputs) and
+[`artifacts.paths`](/workflows/steps/artifacts) fields are the direct match, with the same
+checksum-by-default/timestamp-as-an-option choice:
 
-1. Accept that the step always runs. This is correct for most fast build steps.
-2. Add a hash or timestamp check inside the shell step itself. This is a script you write and
-   maintain, not a built-in Atmos feature.
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+        inputs:
+          sources: ["cmd/**/*.go"]
+        artifacts:
+          paths: ["bin/handler"]
+```
+
+With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough — it implicitly means
+`when: checksum.changed`, and the step is skipped when the hash of the matched source files
+matches the hash recorded after the last successful run. Run the same command twice in a row and
+the second run skips `build` entirely; edit a matched source file and the next run executes it
+again. See [inputs](/workflows/steps/inputs) for the full field reference, including the
+`timestamp.changed` fact for an mtime-based check matching Task's `method: timestamp` mode.
+[`require`/`assert`](/workflows/steps/type/require) is a different, older step type — it only
+checks that a file, tool, or directory exists, not whether it is fresh, so it does not replace
+`inputs`/`artifacts`.
 
 ## `internal: true` Tasks
 
@@ -158,12 +175,16 @@ single-caller and has no reason to be invoked on its own.
         steps:
           - type: shell
             command: go build -o bin/handler ./cmd/handler
+            inputs:
+              sources: ["cmd/**/*.go"]
+            artifacts:
+              paths: ["bin/handler"]
 
       - name: test
         description: Run unit tests
+        dependencies:
+          commands: [build]
         steps:
-          - type: shell
-            command: atmos build
           - type: shell
             command: go test ./...
 
@@ -229,9 +250,9 @@ Choose the one that fits what you are splitting:
 <TaskList>
 - [ ] List every task. Mark each one as independent, or part of a `deps:` chain
 - [ ] Turn `desc:`/`cmds:` into command `description:`/`steps:`
-- [ ] Put any `deps:` chain in a `parallel` step, to keep Task's default behavior
+- [ ] Turn any `deps:` chain into `dependencies.commands`, to keep Task's concurrent-by-default behavior
 - [ ] Turn `vars:`/`env:` into command `flags:` (with defaults) and `env:` maps
-- [ ] Decide how to handle `sources:`/`generates:` freshness checks. Do not assume parity
+- [ ] Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
 - [ ] Split `includes:` into auto-discovered `atmos.d/*.yaml` files, separate workflow files, or both
 - [ ] Mark `internal: true` tasks as `internal: true` custom commands
 </TaskList>
@@ -239,15 +260,18 @@ Choose the one that fits what you are splitting:
 ## Common Questions
 
 <FAQItem question="Will my sources:/generates: caching still work?">
-No. Atmos steps always run. There is no built-in file-hash freshness check.
-`require`/`assert` only checks that something exists, not whether it is fresh. If this caching
-matters to you, plan for it directly. See [The sources/generates Gap](#the-sourcesgenerates-gap).
+Yes, once you migrate it. Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
+— with no explicit `when:`, that implicitly skips the step when nothing has changed since its last
+successful run, the same as Task's own check. It does not carry over automatically; you add it to
+the migrated step yourself. See
+[sources:/generates: Becomes inputs/artifacts](#sourcesgenerates-becomes-inputsartifacts).
 </FAQItem>
 
 <FAQItem question="What replaces deps: concurrency?">
-A `parallel` step. Task runs `deps:` at the same time by default. Atmos steps run one after
-another by default. Put the dependency tasks in a `parallel` step to keep the original behavior,
-instead of running them one after another without meaning to.
+Command-level `dependencies.commands`. It resolves through the same DAG scheduler as `parallel`/
+`matrix` `needs:` and runs concurrently by default, matching Task's `deps:` behavior directly —
+including deduping a dependency shared by more than one command to a single run. Reach for a
+`parallel` step only for concurrency inside one command's own steps, not between named commands.
 </FAQItem>
 
 <FAQItem question="Can one custom command call another?">

@@ -18,6 +18,11 @@ Terraform-specific steps.
 | `vars:`/`env:` and `sources:`/`generates:`                  | [Shape C](#shape-c-variables-and-up-to-date-checks) |
 | `includes:` (multi-file composition)                        | see [Common Problems](#includes-multi-file-composition) |
 
+`deps:` maps to command-level `dependencies.commands` (concurrent by default, deduped -- the
+direct match). `sources:`/`generates:` maps to step-level `inputs.sources`/`artifacts.paths`
+(implicit `when: checksum.changed` -- the direct match). Neither is a gap; both need the user to
+add the matching field during migration, since neither carries over automatically.
+
 ## Shape A: Simple Tasks
 
 **Before:**
@@ -82,28 +87,19 @@ tasks:
       - terraform -chdir=terraform apply -var-file=envs/dev.tfvars
 ```
 
-This is the most important problem in this migration. Task runs `deps:` at the same time by
-default. Atmos custom-command and workflow steps run one after another by default. This is the
-opposite default. If you turn `deps: [test, lint]` into two plain steps that run one after
-another, the command becomes slower. It also changes what happens when one task fails. To keep
-Task's default behavior, put the dependency tasks inside a `parallel` step:
+Task runs `deps:` at the same time by default. Atmos custom-command and workflow steps run one
+after another by default -- so a `deps:` entry is not a step and never becomes one. It maps to
+the command-level `dependencies.commands` field, which resolves through the same DAG scheduler as
+`parallel`/`matrix` `needs:` and runs concurrently by default -- matching Task's `deps:` behavior
+directly, not working around it with a hand-built `parallel` step:
 
 ```yaml
 commands:
   - name: deploy
     description: Plan and apply the given environment
+    dependencies:
+      commands: [test, lint]
     steps:
-      - name: checks
-        type: parallel
-        fail:
-          mode: wait_all
-        steps:
-          - name: test
-            type: shell
-            command: atmos test
-          - name: lint
-            type: shell
-            command: atmos lint
       - type: atmos
         command: terraform apply infra -s dev
 ```
@@ -113,9 +109,17 @@ task's Terraform code to `components/terraform/infra/` (the default
 `components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
 user actually names the component.
 
-If the Taskfile's `deps:` list needs its own internal order, add `needs:` to the steps inside the
-`parallel` block. Do not assume the tasks should run one after another just because that is
-Atmos's default for steps outside a `parallel` or `matrix` block.
+`dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
+step does not: if two commands both depend on the same one -- for example both `test` and `lint`
+depending on `build` -- Atmos runs `build` exactly once and dedups it, the same as Task's own
+`deps:` graph. A `parallel` step calling `atmos build` from two different places would run it
+twice. If one dependency itself depends on another (`lint` depends on `build`, and `deploy`
+depends on `test` and `lint`), declare that directly on `lint`'s own `dependencies.commands` --
+the scheduler resolves the whole transitive graph itself, still deduping `build` to a single run.
+
+Reach for a `parallel` step instead of `dependencies.commands` only for concurrency inside a
+single command's own steps, not between named commands -- for example, running several shell
+commands side by side that were never their own Task tasks to begin with.
 
 ## Shape C: Variables and Up-to-Date Checks
 
@@ -141,19 +145,33 @@ tasks:
   `default: "dev"`. Task's Sprig `default` filter becomes the plain `default:` field.
 - Turn `env:` into an `env:` map. The two are almost identical.
 
-### The `sources`/`generates` gap
+### `sources:`/`generates:` becomes `inputs`/`artifacts`
 
-Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs. It checks
-this with a file hash. Atmos steps always run. There is no built-in check for whether a file is
-up to date. The `require`/`assert` step type does not fix this. It only checks that a file, tool,
-or directory exists. It does not compare hashes or timestamps.
+Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs, checked by
+default with a content hash (Task also supports `method: timestamp` for an mtime-based check).
+The step-level `inputs.sources` and `artifacts.paths` fields are the direct match, with the same
+checksum-by-default/timestamp-as-an-option choice:
 
-If the user depends on `sources:`/`generates:` to skip a slow step, such as code generation, tell
-them plainly that this behavior does not carry over. Then offer two honest choices:
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+        inputs:
+          sources: ["cmd/**/*.go"]
+        artifacts:
+          paths: ["bin/handler"]
+```
 
-1. Accept that the step always runs. This is correct for most fast build steps.
-2. Add a hash or timestamp check inside the shell step itself. This is a script the user
-    maintains. It is not a built-in Atmos feature.
+With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough -- it implicitly
+means `when: checksum.changed`, and the step is skipped when the hash of the matched source files
+matches the hash recorded after the last successful run. This does not carry over on its own --
+add `inputs`/`artifacts` to the migrated step yourself, matching the Taskfile's own
+`sources:`/`generates:` lists. The `require`/`assert` step type is a different, older step type --
+it only checks that a file, tool, or directory exists, not whether it is fresh, so it does not
+replace `inputs`/`artifacts`.
 
 ## Common Problems
 
@@ -173,17 +191,20 @@ Pick the one that fits the content being split:
   "stacks/workflows"`) the first time the user's migration reaches a workflow, or `atmos
   workflow <name>` fails with `'workflows.base_path' must be configured in 'atmos.yaml'`.
 
-### `sources`/`generates` has no built-in match
+### `sources`/`generates` maps to a different field than `steps`
 
-See [Shape C](#the-sourcesgenerates-gap) above. This is the largest real gap in this migration.
-State it directly. Do not gloss over it.
+See [Shape C](#sourcesgenerates-becomes-inputsartifacts) above. It does not carry over
+automatically -- the user must add `inputs`/`artifacts` to the migrated step themselves. State
+that directly. Do not gloss over it, and do not claim it "just works" without the field.
 
 ## What Not To Do
 
-- Do not drop `sources:`/`generates:` caching without comment. State the change directly. Let
-  the user decide how, or whether, to replace it.
-- Do not turn `deps:` into plain sequential steps without warning the user about the change in
-  default concurrency.
+- Do not drop `sources:`/`generates:` without adding the matching `inputs`/`artifacts` fields to
+  the migrated step. It is a direct match, not a gap, but it does not carry over on its own.
+- Do not turn `deps:` into plain sequential steps, or into a hand-built `parallel` step, without
+  first considering command-level `dependencies.commands` -- it is the direct match: concurrent
+  by default, and it dedups a dependency shared by more than one command the same way Task's own
+  `deps:` graph does.
 - Do not describe `require`/`assert` as a freshness or caching check. It only checks that
   something exists.
 - Do not turn every `internal: true` task into its own discoverable command by default. If it is

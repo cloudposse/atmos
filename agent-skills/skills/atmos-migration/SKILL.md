@@ -101,13 +101,19 @@ These behaviors apply to every task runner. Check them before you open a referen
 
 - **The default order can change.** Task runs `deps:` at the same time by default. Make and Just
   run dependencies one after another, unless the user adds a flag such as `make -j`. Atmos steps
-  always run one after another, unless you put them inside a `parallel` or `matrix` step. Check
-  the source tool's real default. Do not assume the step order stays the same when you move it to
-  Atmos.
-- **Atmos has no file-freshness cache.** Task's `sources:`/`generates:` fields and non-`.PHONY`
-  Make targets both skip work when a file has not changed. Atmos steps always run. The
-  `require`/`assert` step type does not replace this. It only checks that a file exists. It does
-  not check if the file is new. Tell the user this directly.
+  always run one after another, unless you put them inside a `parallel` or `matrix` step. A named
+  task/target/recipe dependency (Task's `deps:`, Make's `target: dep1 dep2`) maps to command-level
+  `dependencies.commands`/`dependencies.workflows`, not to plain steps or a hand-built `parallel`
+  step -- it runs concurrently by default and dedups a dependency shared by more than one caller
+  to a single run, matching Task's/Make's own behavior. Check the source tool's real default. Do
+  not assume the step order stays the same when you move it to Atmos.
+- **Freshness checks map to `inputs`/`artifacts`, not to plain steps.** Task's `sources:`/
+  `generates:` fields and non-`.PHONY` Make targets both skip work when a file has not changed.
+  Atmos's step-level `inputs.sources`/`artifacts.paths` fields are the direct match: with no
+  explicit `when:`, declaring them implicitly means `when: checksum.changed`, and the step is
+  skipped when nothing has changed since its last successful run. This does not carry over on its
+  own -- add `inputs`/`artifacts` to the migrated step yourself. The `require`/`assert` step type
+  does not replace this. It only checks that a file exists, not whether it is fresh.
 - **`workflows.base_path` needs to be set explicitly once the user has their own `atmos.yaml`.**
   A target chain becomes an Atmos workflow (Principle 7), but `atmos workflow <name>` fails with
   `'workflows.base_path' must be configured in 'atmos.yaml'` until you add it (for example,
