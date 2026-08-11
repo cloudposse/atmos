@@ -56,6 +56,9 @@ atmos greet
 
   <dt>`type`</dt>
   <dd>Optional semantic type: `component` or `stack`. See [Typed Arguments](#typed-arguments).</dd>
+
+  <dt>`values`</dt>
+  <dd>Optional list of allowed string values. Works exactly like [`values` on flags](/cli/configuration/commands/flags#restricting-values) — a value outside the list is rejected, and a missing `required` argument with `values` set prompts with a picker in an interactive terminal.</dd>
 </dl>
 
 ## Trailing Arguments
