@@ -2,6 +2,7 @@ package freshness
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -43,7 +44,7 @@ func (defaultGlobber) Glob(baseDir, pattern string) ([]string, error) {
 		if errors.Is(err, errUtils.ErrFailedToFindImport) {
 			return []string{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: pattern %q in %q: %w", ErrGlobInvalid, pattern, baseDir, err)
 	}
 	return matches, nil
 }

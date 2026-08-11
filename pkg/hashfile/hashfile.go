@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"sort"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -39,27 +41,32 @@ func HashFiles(paths []string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// errWrapFormat wraps a sentinel and the underlying cause around the file path they concern.
+const errWrapFormat = "%w: %s: %w"
+
 // hashFileContent streams p's content into h as one length-prefixed record, without loading the
 // whole file into memory -- large task-runner inputs would otherwise cause a memory spike.
 func hashFileContent(h io.Writer, p string) error {
 	f, err := os.Open(p)
 	if err != nil {
-		return err
+		return fmt.Errorf(errWrapFormat, errUtils.ErrOpenFile, p, err)
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return err
+		return fmt.Errorf(errWrapFormat, errUtils.ErrStatFile, p, err)
 	}
 
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(info.Size())) //nolint:gosec // file size is never negative.
 	if _, err := h.Write(size[:]); err != nil {
-		return err
+		return fmt.Errorf(errWrapFormat, errUtils.ErrCopyFile, p, err)
 	}
-	_, err = io.Copy(h, f)
-	return err
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrCopyFile, p, err)
+	}
+	return nil
 }
 
 // writeRecord writes data into h prefixed with its own length (a fixed 8-byte big-endian

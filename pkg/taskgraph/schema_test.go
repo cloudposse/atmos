@@ -8,6 +8,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestRefsFromDependencies covers RefsFromDependencies' conversion of schema.Dependencies'
+// Commands/Workflows entries into taskgraph.Ref values, across empty, single, and mixed inputs.
 func TestRefsFromDependencies(t *testing.T) {
 	tests := []struct {
 		name string

@@ -23,4 +23,9 @@ var (
 	// CommandDependencyLookup/WorkflowDependencyLookup configured for a Kind actually
 	// present in the dependency graph.
 	ErrMissingLookup = errors.New("no dependency lookup configured for dependency kind")
+	// ErrMissingRefMetadata is returned when the scheduler dispatches a graph node whose
+	// Metadata["ref"] is missing or not a Ref -- an internal invariant violation (every node
+	// is seeded with its own Ref in graphVisitor.visit), not an unknown Kind, so it gets its
+	// own sentinel rather than reusing ErrUnknownDependencyKind.
+	ErrMissingRefMetadata = errors.New("dependency graph node has no ref metadata")
 )

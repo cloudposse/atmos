@@ -419,7 +419,7 @@ func TestNewDispatcher_DefensiveChecks(t *testing.T) {
 		node := &dependency.Node{ID: "x", Metadata: map[string]any{}}
 		_, err := dispatcher.Dispatch(context.Background(), node)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnknownDependencyKind)
+		assert.ErrorIs(t, err, ErrMissingRefMetadata)
 	})
 
 	t.Run("unknown kind", func(t *testing.T) {

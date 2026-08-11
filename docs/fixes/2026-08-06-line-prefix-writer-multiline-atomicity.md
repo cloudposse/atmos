@@ -16,7 +16,7 @@ contiguous burst from a single node. Caught by CI: `TestExecuteTerraformConcurre
 ## Context
 
 CI failure log (`Acceptance Tests (macos)`, job 92499338324) showed exactly one real failure:
-```
+```text
 --- FAIL: TestExecuteTerraformConcurrentHooksUseNodeWriters (0.00s)
     Error: "[dev/app] hook progress\n[dev/db] hook progress\n[dev/db] hook complete\n[dev/app] hook complete\n"
       does not contain "[dev/app] hook progress\n[dev/app] hook complete\n"

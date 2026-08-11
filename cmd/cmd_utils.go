@@ -967,6 +967,47 @@ func executeCustomCommand(
 	freshnessStateDir := freshness.StateDir(atmosConfig.BasePath)
 	freshnessScope := "command:" + commandConfig.Name
 
+	// Prepare template data for arguments and flags once, before the step loop -- these values
+	// don't vary per-step, and building them (and running the semantic/constrained-value prompts
+	// below) inside the loop made a required interactive prompt repeat once per step instead of
+	// once per command invocation.
+	argumentsData := map[string]string{}
+	for ix, arg := range commandConfig.Arguments {
+		argumentsData[arg.Name] = finalArgs[ix]
+	}
+
+	flagsData := map[string]any{}
+	for i := range commandConfig.Flags {
+		fl := &commandConfig.Flags[i]
+		flag := cmd.Flag(fl.Name)
+		if flag == nil {
+			exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+			return
+		}
+		switch fl.Type {
+		case "", "string":
+			flagsData[fl.Name] = flag.Value.String()
+		case "bool":
+			boolFlag, err := strconv.ParseBool(flag.Value.String())
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
+			flagsData[fl.Name] = boolFlag
+		}
+	}
+
+	// Prompt for missing semantic-typed values if interactive mode is enabled.
+	// This enables interactive selection for custom commands with component/stack arguments.
+	promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
+
+	// Validate (and, if missing+required+interactive, prompt for) values:-constrained
+	// flags/arguments -- independent of the semantic component/stack prompting above.
+	if err := pkgFlags.ValidateConstrainedFields(cmd, commandConfig, argumentsData, flagsData); err != nil {
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
+	}
+
 	// Execute custom command's steps
 	var commandErr error
 	conditionStatus := schema.ConditionPredicateSuccess
@@ -1006,43 +1047,6 @@ func executeCustomCommand(
 		if !runs {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i)
 			continue
-		}
-
-		// Prepare template data for arguments
-		argumentsData := map[string]string{}
-		for ix, arg := range commandConfig.Arguments {
-			argumentsData[arg.Name] = finalArgs[ix]
-		}
-
-		// Prepare template data for flags
-		flagsData := map[string]any{}
-		for _, fl := range commandConfig.Flags {
-			flag := cmd.Flag(fl.Name)
-			if flag == nil {
-				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
-				return
-			}
-			if fl.Type == "" || fl.Type == "string" {
-				flagsData[fl.Name] = flag.Value.String()
-			} else if fl.Type == "bool" {
-				boolFlag, err := strconv.ParseBool(flag.Value.String())
-				if err != nil {
-					exitOrRecordDependencyErr(cmd, err, "", "")
-					return
-				}
-				flagsData[fl.Name] = boolFlag
-			}
-		}
-
-		// Prompt for missing semantic-typed values if interactive mode is enabled.
-		// This enables interactive selection for custom commands with component/stack arguments.
-		promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
-
-		// Validate (and, if missing+required+interactive, prompt for) values:-constrained
-		// flags/arguments -- independent of the semantic component/stack prompting above.
-		if err := pkgFlags.ValidateConstrainedFields(cmd, commandConfig, argumentsData, flagsData); err != nil {
-			exitOrRecordDependencyErr(cmd, err, "", "")
-			return
 		}
 
 		// Prepare template data

@@ -2,9 +2,12 @@ package freshness
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -49,12 +52,15 @@ func (fileStateStore) Load(stateDir, key string) (Record, bool, error) {
 		return Record{}, false, nil
 	}
 
-	path := recordPath(stateDir, key)
+	path, err := recordPath(stateDir, key)
+	if err != nil {
+		return Record{}, false, err
+	}
 	lock := cache.NewFileLock(path)
 
 	var record Record
 	found := false
-	err := lock.WithRLock(func() error {
+	err = lock.WithRLock(func() error {
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			if os.IsNotExist(readErr) {
@@ -83,7 +89,10 @@ func (fileStateStore) Save(stateDir, key string, r Record) error {
 	if err := os.MkdirAll(stateDir, stateDirMode); err != nil {
 		return err
 	}
-	path := recordPath(stateDir, key)
+	path, err := recordPath(stateDir, key)
+	if err != nil {
+		return err
+	}
 	lock := cache.NewFileLock(path)
 
 	return lock.WithLock(func() error {
@@ -91,6 +100,13 @@ func (fileStateStore) Save(stateDir, key string, r Record) error {
 		if err != nil {
 			return err
 		}
+		// Remove any *.tmp leftover from a previous Save that was interrupted (e.g. a killed
+		// process) before it could rename its temp file into place -- otherwise these accumulate
+		// forever in stateDir. Safe to do here, inside this key's own lock: a temp file matching
+		// this pattern can only be a stale leftover, never one a concurrent Save for the SAME key
+		// is actively writing (that call would be blocked on this same lock). Best-effort --
+		// removal failures never block the actual save.
+		removeStaleTempFiles(stateDir, key)
 		// A uniquely-named temp file (rather than a fixed "<path>.tmp") means concurrent
 		// writers never collide on the temp file itself -- required on Windows, where
 		// pkg/cache.FileLock provides no real mutual exclusion (see the StateStore doc
@@ -118,6 +134,32 @@ func (fileStateStore) Save(stateDir, key string, r Record) error {
 	})
 }
 
-func recordPath(stateDir, key string) string {
-	return filepath.Join(stateDir, key+".json")
+// recordPath joins stateDir and key into the record's JSON path, rejecting a key that could
+// escape stateDir (absolute, containing a path separator, or a "." /".." traversal component) --
+// Save also uses key as an os.CreateTemp pattern, where the same characters would be equally
+// unsafe.
+func recordPath(stateDir, key string) (string, error) {
+	switch {
+	case key == "":
+		return "", fmt.Errorf("%w: state key must not be empty", errUtils.ErrPathTraversal)
+	case filepath.IsAbs(key):
+		return "", fmt.Errorf("%w: state key %q must not be an absolute path", errUtils.ErrPathTraversal, key)
+	case strings.ContainsAny(key, `/\`):
+		return "", fmt.Errorf("%w: state key %q must not contain a path separator", errUtils.ErrPathTraversal, key)
+	case key == ".." || key == ".":
+		return "", fmt.Errorf("%w: state key %q must not be a traversal component", errUtils.ErrPathTraversal, key)
+	}
+	return filepath.Join(stateDir, key+".json"), nil
+}
+
+// removeStaleTempFiles best-effort removes every leftover Save temp file for key in stateDir.
+// Glob/Remove errors are ignored: this is opportunistic cleanup, never a save-blocking operation.
+func removeStaleTempFiles(stateDir, key string) {
+	matches, err := filepath.Glob(filepath.Join(stateDir, key+".*.tmp"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		_ = os.Remove(m)
+	}
 }

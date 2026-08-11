@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -51,7 +52,7 @@ func validateConstrainedArguments(arguments []schema.CommandArgument, argumentsD
 			argumentsData[arg.Name] = selected
 			continue
 		}
-		if err := ValidateValue(arg.Name, current, arg.Values); err != nil {
+		if err := ValidateValue(arg.Name, current, arg.Values, ValueKindArgument); err != nil {
 			return err
 		}
 	}
@@ -71,7 +72,7 @@ func validateConstrainedFlags(cmd *cobra.Command, flags []schema.CommandFlag, fl
 			}
 			continue
 		}
-		if err := ValidateValue(fl.Name, current, fl.Values); err != nil {
+		if err := ValidateValue(fl.Name, current, fl.Values, ValueKindFlag); err != nil {
 			return err
 		}
 	}
@@ -92,7 +93,7 @@ func promptForMissingConstrainedFlag(cmd *cobra.Command, fl *schema.CommandFlag,
 	}
 	flagsData[fl.Name] = selected
 	if setErr := cmd.PersistentFlags().Set(fl.Name, selected); setErr != nil {
-		return fmt.Errorf("failed to set flag %q after prompting: %w", fl.Name, setErr)
+		return fmt.Errorf("%w: %q after prompting: %w", errUtils.ErrSetFlag, fl.Name, setErr)
 	}
 	return nil
 }

@@ -783,6 +783,7 @@ var (
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrResolveExecutablePath         = errors.New("failed to resolve the running atmos executable's own path")
 	ErrUnknownStepType               = errors.New("unknown step type")
 	ErrStepOptionsRequired           = errors.New("options is required for step")
 	ErrStepContentOrOptionsRequired  = errors.New("either content or options is required for step")

@@ -909,7 +909,7 @@ func TestValidateValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateValue("format", tt.value, tt.validValues)
+			err := ValidateValue("format", tt.value, tt.validValues, ValueKindFlag)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -921,12 +921,23 @@ func TestValidateValue(t *testing.T) {
 
 // TestValidateValue_ErrorMessage tests the default error message format.
 func TestValidateValue_ErrorMessage(t *testing.T) {
-	err := ValidateValue("format", "xml", []string{"json", "yaml"})
+	err := ValidateValue("format", "xml", []string{"json", "yaml"}, ValueKindFlag)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid value")
 	assert.Contains(t, err.Error(), "xml")
 	assert.Contains(t, err.Error(), "format")
 	assert.Contains(t, err.Error(), "json, yaml")
+	assert.Contains(t, err.Error(), "--format", "a ValueKindFlag error must name it as a flag")
+}
+
+// TestValidateValue_ArgumentErrorMessage verifies a ValueKindArgument error names the invalid
+// value as an "argument", not a "--flag" -- constrained.go's CommandArgument.Values path uses
+// this kind, and a positional argument reported as a flag would be a confusing error message.
+func TestValidateValue_ArgumentErrorMessage(t *testing.T) {
+	err := ValidateValue("env", "xml", []string{"dev", "prod"}, ValueKindArgument)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "argument env")
+	assert.NotContains(t, err.Error(), "--env", "a ValueKindArgument error must not be worded as a flag")
 }
 
 // TestStandardFlagParser_ValidateFlagValues tests flag value validation.

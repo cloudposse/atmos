@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -211,8 +212,7 @@ func TestValidateConstrainedFields_MissingRequiredFlagSetFailurePropagates(t *te
 	}
 
 	err := ValidateConstrainedFields(cmd, commandConfig, map[string]string{}, map[string]any{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to set flag")
+	require.ErrorIs(t, err, errUtils.ErrSetFlag)
 }
 
 func TestValidateConstrainedFields_ArgumentsAndFlagsBothChecked(t *testing.T) {

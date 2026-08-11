@@ -236,7 +236,7 @@ func newDispatcher(options *Options) scheduler.Dispatcher {
 	return scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		ref, ok := node.Metadata["ref"].(Ref)
 		if !ok {
-			return scheduler.Result{}, fmt.Errorf("%w: node %q has no ref metadata", ErrUnknownDependencyKind, node.ID)
+			return scheduler.Result{}, fmt.Errorf("%w: node %q", ErrMissingRefMetadata, node.ID)
 		}
 		_, runner, err := lookupAndRunnerFor(ref.Kind, options)
 		if err != nil {

@@ -55,9 +55,6 @@ var (
 	ErrTaskUnexpectedNodeKind = errors.New("unexpected task node kind")
 )
 
-// Task represents a unit of work that can be executed.
-// This type unifies workflow steps and custom command steps,
-// supporting both simple string syntax and structured syntax.
 // Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:
 // with fields that feed CEL facts consumed via the existing `when:` condition engine rather
 // than a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes
@@ -95,6 +92,9 @@ type Preconditions struct {
 	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 }
 
+// Task represents a unit of work that can be executed.
+// This type unifies workflow steps and custom command steps,
+// supporting both simple string syntax and structured syntax.
 type Task struct {
 	// Core fields.
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`

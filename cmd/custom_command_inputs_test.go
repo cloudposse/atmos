@@ -52,7 +52,7 @@ func TestCustomCommandIntegration_InputsSkipsWhenSourcesUnchanged(t *testing.T) 
 			Steps: schema.Tasks{
 				{
 					Type:      "shell",
-					Command:   "echo ran >> " + filepath.ToSlash(runLog),
+					Command:   customCommandAppendHelperCommand(t, runLog, "ran"),
 					Inputs:    &schema.Inputs{Sources: []string{"main.go"}},
 					Artifacts: &schema.Artifacts{Paths: []string{"bin/app"}},
 				},
@@ -155,7 +155,7 @@ func TestCustomCommandIntegration_ExplicitFreshnessWhenRunsOnFreshState(t *testi
 					Steps: schema.Tasks{
 						{
 							Type:      "shell",
-							Command:   "echo ran >> " + filepath.ToSlash(runLog),
+							Command:   customCommandWriteHelperCommand(t, runLog, "ran"),
 							Inputs:    &schema.Inputs{Sources: []string{"main.go"}},
 							Artifacts: &schema.Artifacts{Paths: []string{"bin/app"}},
 							When:      schema.MustCondition(tc.when),
@@ -214,7 +214,7 @@ func TestCustomCommandIntegration_PreconditionsSkipsWhenToolAlreadyOnPath(t *tes
 			Steps: schema.Tasks{
 				{
 					Type:          "shell",
-					Command:       "echo ran >> " + filepath.ToSlash(runLog),
+					Command:       customCommandWriteHelperCommand(t, runLog, "ran"),
 					Preconditions: &schema.Preconditions{Tools: []string{"go"}},
 					// Explicit here for clarity; this is also the implicit default for a
 					// preconditions-only step with no `when:` at all.
@@ -268,7 +268,7 @@ func TestCustomCommandIntegration_PreconditionsRunsWhenToolMissing(t *testing.T)
 			Steps: schema.Tasks{
 				{
 					Type:          "shell",
-					Command:       "echo ran >> " + filepath.ToSlash(runLog),
+					Command:       customCommandWriteHelperCommand(t, runLog, "ran"),
 					Preconditions: &schema.Preconditions{Tools: []string{"atmos-definitely-does-not-exist-tool"}},
 				},
 			},

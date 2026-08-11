@@ -102,7 +102,7 @@ func CommandLookup(atmosConfig *schema.AtmosConfiguration) taskgraph.Lookup {
 func resolveAtmosBinary() (string, error) {
 	atmosBin, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("failed to determine atmos executable path: %w", err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrResolveExecutablePath, err)
 	}
 	return atmosBin, nil
 }

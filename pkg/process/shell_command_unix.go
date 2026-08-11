@@ -10,7 +10,9 @@ import (
 )
 
 // NewShellCommand builds the system-shell invocation for a session command
-// string: `sh -c <command>`.
+// string: `sh -c <command>`. Callers must pass only command strings authored in
+// trusted configuration (e.g. atmos.yaml) -- command is interpolated into a real
+// shell invocation with no escaping of its own.
 func NewShellCommand(ctx context.Context, command string) *exec.Cmd {
 	defer perf.Track(nil, "process.NewShellCommand")()
 

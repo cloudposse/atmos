@@ -725,6 +725,8 @@ func TestChecksumChanged_StateStoreLoadErrorPropagates(t *testing.T) {
 	assert.Contains(t, err.Error(), "state load failed")
 }
 
+// TestDefaultGlobber_InvalidPatternPropagatesUnderlyingError verifies a malformed glob pattern
+// propagates as a real, wrapped ErrGlobInvalid error, not the missing-base-directory sentinel.
 func TestDefaultGlobber_InvalidPatternPropagatesUnderlyingError(t *testing.T) {
 	// A malformed glob pattern (unmatched bracket) is a real doublestar error, distinct from the
 	// "base directory doesn't exist yet" case that Glob deliberately treats as "no matches."
@@ -734,8 +736,12 @@ func TestDefaultGlobber_InvalidPatternPropagatesUnderlyingError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, errUtils.ErrFailedToFindImport),
 		"a malformed pattern must propagate as a real error, not the missing-base-dir sentinel")
+	assert.ErrorIs(t, err, ErrGlobInvalid)
 }
 
+// TestFileStateStore_LoadMissingKeyInExistingStateDirIsAMissNotAnError verifies Load reports a
+// clean cache miss (found=false, no error) for a key that was never saved, when stateDir itself
+// already exists.
 func TestFileStateStore_LoadMissingKeyInExistingStateDirIsAMissNotAnError(t *testing.T) {
 	// Distinct from TestFileStateStore_LoadOnNonexistentStateDirIsAMissNotAnError: here stateDir
 	// itself already exists (e.g. another step already recorded state there), but no record has
@@ -750,6 +756,9 @@ func TestFileStateStore_LoadMissingKeyInExistingStateDirIsAMissNotAnError(t *tes
 	assert.Equal(t, Record{}, record)
 }
 
+// TestFileStateStore_LoadNonNotExistReadErrorPropagates verifies Load propagates a real
+// os.ReadFile error (a directory in place of the expected record file) instead of treating it
+// as a cache miss.
 func TestFileStateStore_LoadNonNotExistReadErrorPropagates(t *testing.T) {
 	// Replace the record file with a directory of the same name: os.ReadFile on a directory
 	// fails with a real (non-ENOENT) error on every supported platform, exercising Load's
@@ -764,6 +773,8 @@ func TestFileStateStore_LoadNonNotExistReadErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestFileStateStore_SaveMkdirAllErrorPropagates verifies Save propagates an os.MkdirAll
+// failure (stateDir's parent path component is a regular file) instead of swallowing it.
 func TestFileStateStore_SaveMkdirAllErrorPropagates(t *testing.T) {
 	// stateDir's parent path component is a regular file, not a directory -- os.MkdirAll must
 	// fail, and Save must propagate that failure rather than silently swallowing it.
@@ -777,6 +788,9 @@ func TestFileStateStore_SaveMkdirAllErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestFileStateStore_SaveRenameErrorPropagates verifies Save propagates an os.Rename failure
+// (the final record path is pre-occupied by a non-empty directory) instead of reporting a false
+// success while leaving a stale temp file behind.
 func TestFileStateStore_SaveRenameErrorPropagates(t *testing.T) {
 	// Pre-create the final record path as a non-empty directory: the closing os.Rename(tmp,
 	// path) must fail (a file can never atomically replace a non-empty directory), and Save must

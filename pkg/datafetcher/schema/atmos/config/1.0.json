@@ -6166,7 +6166,7 @@
         }
       },
       "type": "object",
-      "description": "Task represents a unit of work that can be executed.\nThis type unifies workflow steps and custom command steps,\nsupporting both simple string syntax and structured syntax.\nInputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:\nwith fields that feed CEL facts consumed via the existing `when:` condition engine rather\nthan a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes\nthese facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general\ncontainer (not narrowed to just file globs) since sources are one kind of input among others\nthat may be added later."
+      "description": "Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:\nwith fields that feed CEL facts consumed via the existing `when:` condition engine rather\nthan a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes\nthese facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general\ncontainer (not narrowed to just file globs) since sources are one kind of input among others\nthat may be added later."
     },
     "Integration": {
       "properties": {
@@ -10922,7 +10922,8 @@
           ]
         }
       },
-      "type": "object"
+      "type": "object",
+      "description": "Task represents a unit of work that can be executed.\nThis type unifies workflow steps and custom command steps,\nsupporting both simple string syntax and structured syntax."
     },
     "Tasks": {
       "items": {

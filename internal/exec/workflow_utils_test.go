@@ -1441,6 +1441,15 @@ func TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath(t *testing.T) {
 	atmosConfig.BasePath = tmpDir
 	runLog := filepath.Join(tmpDir, "run.txt")
 
+	// Use the running test binary's own absolute path as the precondition tool: exec.LookPath
+	// special-cases a name containing a path separator to check that exact file directly (no PATH
+	// search), so this is guaranteed present and resolvable without depending on any particular
+	// binary (e.g. "go") happening to be on PATH in whatever environment runs this test.
+	testExe, err := os.Executable()
+	require.NoError(t, err)
+	_, lookErr := exec.LookPath(testExe)
+	require.NoError(t, lookErr, "the running test binary's own path must resolve via exec.LookPath")
+
 	workflowDef := &schema.WorkflowDefinition{
 		Description: "Test preconditions: skip-when-satisfied",
 		Steps: []schema.WorkflowStep{
@@ -1449,7 +1458,7 @@ func TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath(t *testing.T) {
 				Command:          "echo ran >> " + filepath.ToSlash(runLog),
 				Type:             "shell",
 				WorkingDirectory: tmpDir,
-				Preconditions:    &schema.Preconditions{Tools: []string{"go"}},
+				Preconditions:    &schema.Preconditions{Tools: []string{testExe}},
 			},
 		},
 	}

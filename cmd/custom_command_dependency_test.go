@@ -43,30 +43,25 @@ func TestCustomCommandIntegration_DependenciesCommandsDiamondDedup(t *testing.T)
 	buildLog := filepath.Join(tmpDir, "build.txt")
 	releaseLog := filepath.Join(tmpDir, "release.txt")
 
-	// filepath.ToSlash: see the comment on the parallel-needs test in
-	// custom_command_control_test.go — an unquoted Windows backslash path reaching mvdan/sh
-	// would have its backslashes consumed as shell escapes.
-	buildLogArg := filepath.ToSlash(buildLog)
-	releaseLogArg := filepath.ToSlash(releaseLog)
 	atmosConfig.Commands = []schema.Command{
 		{
 			Name:  "dd-build",
-			Steps: schema.Tasks{{Type: "shell", Command: "echo build >> " + buildLogArg}},
+			Steps: schema.Tasks{{Type: "shell", Command: customCommandAppendHelperCommand(t, buildLog, "build")}},
 		},
 		{
 			Name:         "dd-test",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-build"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo test >> " + buildLogArg}},
+			Steps:        schema.Tasks{{Type: "shell", Command: customCommandAppendHelperCommand(t, buildLog, "test")}},
 		},
 		{
 			Name:         "dd-lint",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-build"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo lint >> " + buildLogArg}},
+			Steps:        schema.Tasks{{Type: "shell", Command: customCommandAppendHelperCommand(t, buildLog, "lint")}},
 		},
 		{
 			Name:         "dd-release",
 			Dependencies: &schema.Dependencies{Commands: schema.UnitDependencies{{Name: "dd-test"}, {Name: "dd-lint"}}},
-			Steps:        schema.Tasks{{Type: "shell", Command: "echo release >> " + releaseLogArg}},
+			Steps:        schema.Tasks{{Type: "shell", Command: customCommandAppendHelperCommand(t, releaseLog, "release")}},
 		},
 	}
 

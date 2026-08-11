@@ -132,7 +132,8 @@ func TestHashFiles_EmptyInput(t *testing.T) {
 }
 
 func TestHashFiles_MissingFileErrors(t *testing.T) {
-	_, err := HashFiles([]string{"/no/such/file"})
+	missing := filepath.Join(t.TempDir(), "no", "such", "file")
+	_, err := HashFiles([]string{missing})
 	require.Error(t, err)
 }
 

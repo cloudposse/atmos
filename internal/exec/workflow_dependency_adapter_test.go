@@ -31,8 +31,10 @@ func TestExecuteWorkflow_DependenciesWorkflowsSameFile(t *testing.T) {
 	atmosConfig.BasePath = tmpDir
 	atmosConfig.Workflows.BasePath = ""
 
-	buildLog := filepath.Join(tmpDir, "build.txt")
-	deployLog := filepath.Join(tmpDir, "deploy.txt")
+	// Both steps append to the SAME log (rather than separate build/deploy logs) so the test can
+	// assert relative ORDER, not just that both ran -- the doc comment's "runs before" claim is
+	// otherwise unverified.
+	sharedLog := filepath.Join(tmpDir, "shared.txt")
 
 	// Forward slashes when embedding a path into this raw YAML manifest string: a Windows
 	// backslash path (e.g. C:\Users\...) parsed through a YAML double-quoted scalar would be
@@ -45,14 +47,14 @@ func TestExecuteWorkflow_DependenciesWorkflowsSameFile(t *testing.T) {
 workflows:
   build:
     steps:
-      - command: "echo build >> ` + filepath.ToSlash(buildLog) + `"
+      - command: "echo build >> ` + filepath.ToSlash(sharedLog) + `"
         type: shell
   deploy:
     dependencies:
       workflows:
         - build
     steps:
-      - command: "echo deploy >> ` + filepath.ToSlash(deployLog) + `"
+      - command: "echo deploy >> ` + filepath.ToSlash(sharedLog) + `"
         type: shell
 `
 	workflowPath := filepath.Join(tmpDir, "same-file.yaml")
@@ -65,8 +67,10 @@ workflows:
 	err = ExecuteWorkflow(atmosConfig, "deploy", workflowPath, &deployDef, false, "", "", "")
 	require.NoError(t, err)
 
-	assert.FileExists(t, buildLog, "same-file dependency 'build' must run")
-	assert.FileExists(t, deployLog, "deploy's own step must still run after its dependency completes")
+	content, readErr := os.ReadFile(sharedLog)
+	require.NoError(t, readErr)
+	lines := splitNonEmptyTrimmedLines(string(content))
+	require.Equal(t, []string{"build", "deploy"}, lines, "same-file dependency 'build' must run, and complete before deploy's own step")
 }
 
 // TestExecuteWorkflow_DependenciesWorkflowsCrossFile verifies a dependencies.workflows entry
@@ -89,8 +93,9 @@ func TestExecuteWorkflow_DependenciesWorkflowsCrossFile(t *testing.T) {
 	// resolution below still looks in the stale stacksPath directory instead of tmpDir.
 	atmosConfig.WorkflowsDirAbsolutePath = tmpDir
 
-	buildLog := filepath.Join(tmpDir, "build.txt")
-	deployLog := filepath.Join(tmpDir, "deploy.txt")
+	// Both steps append to the SAME log (rather than separate build/deploy logs) so the test can
+	// assert relative ORDER, not just that both ran.
+	sharedLog := filepath.Join(tmpDir, "shared.txt")
 
 	// See the same-file test's comment: forward slashes avoid both a YAML double-quoted-scalar
 	// hex-escape misparse and mvdan/sh consuming backslashes as shell escapes on Windows.
@@ -98,7 +103,7 @@ func TestExecuteWorkflow_DependenciesWorkflowsCrossFile(t *testing.T) {
 workflows:
   build:
     steps:
-      - command: "echo build >> ` + filepath.ToSlash(buildLog) + `"
+      - command: "echo build >> ` + filepath.ToSlash(sharedLog) + `"
         type: shell
 `
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.yaml"), []byte(buildManifest), 0o644))
@@ -111,7 +116,7 @@ workflows:
         - name: build
           file: build.yaml
     steps:
-      - command: "echo deploy >> ` + filepath.ToSlash(deployLog) + `"
+      - command: "echo deploy >> ` + filepath.ToSlash(sharedLog) + `"
         type: shell
 `
 	deployPath := filepath.Join(tmpDir, "deploy.yaml")
@@ -124,8 +129,11 @@ workflows:
 	err = ExecuteWorkflow(atmosConfig, "deploy", deployPath, &deployDef, false, "", "", "")
 	require.NoError(t, err)
 
-	assert.FileExists(t, buildLog, "cross-file dependency 'build' (resolved via file: build.yaml) must run")
-	assert.FileExists(t, deployLog, "deploy's own step must still run after its cross-file dependency completes")
+	content, readErr := os.ReadFile(sharedLog)
+	require.NoError(t, readErr)
+	lines := splitNonEmptyTrimmedLines(string(content))
+	require.Equal(t, []string{"build", "deploy"}, lines,
+		"cross-file dependency 'build' (resolved via file: build.yaml) must run, and complete before deploy's own step")
 }
 
 // TestExecuteWorkflow_DependenciesWorkflowsDiamondDedup verifies a diamond-shaped

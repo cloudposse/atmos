@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -205,12 +206,12 @@ func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
 
 	fileContent, err := os.ReadFile(workflowPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadFile, filepath.ToSlash(displayPath(workflowPath)), err)
 	}
 
 	workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrInvalidWorkflowManifest, filepath.ToSlash(displayPath(workflowPath)), err)
 	}
 
 	if workflowManifest.Workflows == nil {
