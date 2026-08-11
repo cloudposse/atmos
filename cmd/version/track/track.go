@@ -35,14 +35,8 @@ func GetTrackCommand() *cobra.Command {
 	return trackCmd
 }
 
-var (
-	// ErrRenderFileRequired is returned when render is invoked without --file.
-	ErrRenderFileRequired = errUtils.ErrVersionRenderFileRequired
-	// ErrRenderDrift is returned when rendered output differs from the committed file.
-	ErrRenderDrift = errUtils.ErrVersionRenderDrift
-	// ErrUnsupportedFormat is returned for unknown --format values.
-	ErrUnsupportedFormat = errUtils.ErrUnsupportedVersionTrackFormat
-)
+// ErrUnsupportedFormat is returned for unknown --format values.
+var ErrUnsupportedFormat = errUtils.ErrUnsupportedVersionTrackFormat
 
 // formatFlagName is the shared --format flag name used by all track verbs.
 const formatFlagName = "format"
