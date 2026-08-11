@@ -70,7 +70,12 @@ integration's `kind` matter.
   certificate-based auth.
 - `subscription_id` is optional on `spec.cluster`; it defaults to the authenticated identity's
   subscription. Set it explicitly only when the cluster's subscription differs from the identity's.
-- The default kubeconfig path is the XDG-compliant `~/.config/atmos/kube/config`; do not hard-code
-  paths unless the repo already has a convention.
+- The default kubeconfig path is XDG-based: `~/.config/atmos/kube/config` on Linux and macOS (macOS
+  is overridden to `~/.config`, not `~/Library/Application Support`), and
+  `%LOCALAPPDATA%\atmos\kube\config` on Windows. `ATMOS_XDG_CONFIG_HOME` (then `XDG_CONFIG_HOME`)
+  relocates the base directory.
+- Override the target per invocation with `--kubeconfig`, or the `ATMOS_KUBECONFIG` / `KUBECONFIG`
+  environment variables (the flag takes precedence over the env vars). Do not hard-code paths unless
+  the repo already has a convention.
 - Installing `kubectl` for a scripted job is out of scope here — route tool installation to the
   `atmos-toolchain` skill.

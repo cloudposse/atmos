@@ -70,7 +70,10 @@ Login server = `{name}.azurecr.io`.
   Set `DOCKER_CONFIG` first when the workflow needs isolated credentials.
 - `spec.auto_provision: true` triggers ACR login during `atmos auth login`; set it to `false` for
   registries that should only be logged in explicitly.
-- There is no ACR equivalent to ECR Public — every registry is private and requires an identity or
-  ambient credentials with `AcrPull`/`AcrPush` access.
+- `atmos azure acr login` has no `--public` mode (no ECR-Public equivalent) — it always
+  authenticates. ACR registries are private by default; grant the principal the built-in
+  `AcrPull`/`AcrPush` roles, or the repository-scoped roles when ABAC repository permissions are
+  enabled (those supersede the built-in `Acr*` roles). Standard/Premium registries can separately
+  enable anonymous pull, which needs no login.
 - Installing Docker or related tools for a CI job is out of scope here — route tool installation to
   the `atmos-toolchain` skill.

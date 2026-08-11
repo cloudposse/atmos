@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -101,12 +102,17 @@ func TestExecuteAKSUpdateKubeconfigDirect_Errors(t *testing.T) {
 		mgrErr  error
 		whoami  *types.WhoamiInfo
 		authErr error
-		wantErr bool
+		// wantErrIs lists every error the result must wrap (checked with errors.Is): the category
+		// sentinel that classifies the failure, plus the injected cause where one is injected.
+		wantErrIs []error
 	}{
-		{name: "config init fails", initErr: errBoom, wantErr: true},
-		{name: "manager create fails", mgrErr: errBoom, wantErr: true},
-		{name: "authenticate fails", authErr: errBoom, wantErr: true},
-		{name: "nil credentials", whoami: &types.WhoamiInfo{Credentials: nil}, wantErr: true},
+		{name: "config init fails", initErr: errBoom, wantErrIs: []error{errUtils.ErrFailedToInitConfig, errBoom}},
+		{name: "manager create fails", mgrErr: errBoom, wantErrIs: []error{errUtils.ErrFailedToInitializeAuthManager, errBoom}},
+		{name: "authenticate fails", authErr: errBoom, wantErrIs: []error{errUtils.ErrIdentityAuthFailed, errBoom}},
+		// nil credentials injects no cause — the failure is the guard, wrapping ErrIdentityAuthFailed.
+		{name: "nil credentials", whoami: &types.WhoamiInfo{Credentials: nil}, wantErrIs: []error{errUtils.ErrIdentityAuthFailed}},
+		// nil whoami (Authenticate returns (nil, nil)) must be handled without a panic.
+		{name: "nil whoami result", whoami: nil, wantErrIs: []error{errUtils.ErrIdentityAuthFailed}},
 	}
 
 	for _, tt := range tests {
@@ -126,6 +132,9 @@ func TestExecuteAKSUpdateKubeconfigDirect_Errors(t *testing.T) {
 				identityName:  "dev",
 			})
 			require.Error(t, err)
+			for _, target := range tt.wantErrIs {
+				assert.ErrorIs(t, err, target)
+			}
 		})
 	}
 }
