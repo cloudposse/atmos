@@ -318,9 +318,11 @@ cast step.
   something exotic work with zero rewrite.
 - Use `atmos cast record <tape> --output=<path>` as a fast smoke test for "does this tape even
   work under the interpreter" before wiring it into a `type: cast` step inside a workflow.
-- Keep a tape's `Hide` block to `export`/`unset`/`cd`/`clear` only if you want it to stay portable
-  across both `mode: steps` and `mode: session` -- anything else (typing a partial command,
-  toggling settings mid-`Hide`) locks the tape into `mode: session`.
+- Keep a tape's `Hide` block to `export`/`unset`/`cd`/`clear` only if you want the interpreter's
+  automatic lift to native `env:`/`working_directory:` config under `mode: session` -- `Hide`/`Show`
+  is a hard parse-time error under `mode: steps` regardless of what's inside it, so getting the
+  steps-mode equivalent always means hand-migrating those lines out of the block (see the
+  "Hand-migrated to `mode: steps`" worked example above).
 - Delete or rewrite any `Copy`/`Paste`/`Env` line before pointing the interpreter at a tape
   authored for the real `vhs` binary -- they always error, on purpose, rather than silently
   producing a subtly broken demo.

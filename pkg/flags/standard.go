@@ -40,7 +40,7 @@ type StandardFlagParser struct {
 	cmd                  *cobra.Command // Command for manual flag parsing
 	viper                *viper.Viper   // Viper instance for precedence handling
 	viperPrefix          string
-	viperKeyOverrides    map[string]string            // Flag name -> explicit Viper key; see WithViperKey
+	viperKeyOverrides    map[string]string            // Flag name -> explicit Viper key; see WithViperKey.
 	validValues          map[string][]string          // Valid values for flags (flag name -> valid values)
 	validationMsgs       map[string]string            // Custom validation error messages (flag name -> message)
 	parsedFlags          *pflag.FlagSet               // Combined FlagSet used in last Parse() call (for Changed checks)

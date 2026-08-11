@@ -22,7 +22,7 @@ type Option func(*parserConfig)
 type parserConfig struct {
 	registry          *FlagRegistry
 	viperPrefix       string            // Prefix for Viper keys (optional)
-	viperKeyOverrides map[string]string // Flag name -> explicit Viper key, bypassing viperPrefix
+	viperKeyOverrides map[string]string // Flag name -> explicit Viper key, bypassing viperPrefix.
 
 	// Interactive prompt configuration.
 	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags

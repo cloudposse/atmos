@@ -51,7 +51,7 @@ var recordCmd = &cobra.Command{
 func newRecordParser() *flags.StandardParser {
 	return flags.NewStandardParser(
 		flags.WithViperPrefix(recordViperPrefix),
-		flags.WithStringFlag(recordFlagOutput, "o", "", "Write the recording (or rendered artifact) to this path"),
+		flags.WithStringFlag(recordFlagOutput, "o", "", "Required. Write the recording (or rendered artifact) to this path"),
 		flags.WithEnvVars(recordFlagOutput, "ATMOS_CAST_RECORD_OUTPUT"),
 		flags.WithStringFlag(recordFlagFormat, "f", "", "Output format (cast, gif, mp4, html, ascii, png, jpg, jpeg)"),
 		flags.WithEnvVars(recordFlagFormat, "ATMOS_CAST_RECORD_FORMAT"),
@@ -60,7 +60,7 @@ func newRecordParser() *flags.StandardParser {
 		// CLI is almost always meant to replay as an actual VHS-style
 		// session (which commonly includes raw keypresses), so defaulting to
 		// steps would make the common case error immediately.
-		flags.WithStringFlag(recordFlagMode, "", recordModeSession, "Cast mode: session or steps (default: session)"),
+		flags.WithStringFlag(recordFlagMode, "", recordModeSession, "Cast mode: session or steps"),
 		flags.WithValidValues(recordFlagMode, recordModeSession, recordModeSteps),
 	)
 }

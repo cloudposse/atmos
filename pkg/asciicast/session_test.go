@@ -429,6 +429,57 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 	}
 }
 
+// TestRecordOutputChunkDoesNotStallRecordingBehindWriterLock reproduces the
+// scenario a synchronous, lock-guarded query-answer call inside
+// recordOutputChunk would stall on: a scripted "write"/"key" action (see
+// runWriteAction/runKeyAction) can hold the syncWriter lock for its entire
+// paced, possibly multi-second duration. If recordOutputChunk answered
+// queries synchronously under that same lock, recording every output chunk
+// -- and reading the next one -- would block for as long as the action
+// holds it. Answering must be dispatched in the background instead, so
+// recording proceeds immediately regardless of writer-lock contention.
+func TestRecordOutputChunkDoesNotStallRecordingBehindWriterLock(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	input := &syncWriter{w: io.Discard}
+
+	// Simulate a paced write/key action mid-flight: hold the writer's lock
+	// indefinitely, exactly like runWriteAction/runKeyAction do across their
+	// whole action.
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go input.Locked(func(io.Writer) {
+		close(held)
+		<-release
+	})
+	<-held
+	defer close(release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := newSessionState(ctx, reader, input, reader.Close)
+
+	if _, err := writer.WriteString("output while writer is locked"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("output recording stalled behind the writer lock")
+	}
+	if !outputMatches(state, "output while writer is locked", nil) {
+		t.Fatal("output was not recorded")
+	}
+}
+
 func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)

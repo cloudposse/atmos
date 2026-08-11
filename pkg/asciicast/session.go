@@ -357,10 +357,28 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 	// The whole query-response burst (background color, cursor position,
 	// etc. -- answerTerminalQueries can issue several Write calls for one
 	// chunk) must land as one atomic unit, or a concurrent scripted action
-	// could interleave between two of its individual writes. input is nil
-	// in tests that only care about output capture, not query-answering.
+	// could interleave between two of its individual writes -- so answering
+	// still goes through the writer's lock (see syncWriter). But a paced
+	// "write"/"key" action can hold that same lock for its entire
+	// multi-character duration (see runWriteAction/runKeyAction), and this
+	// function runs synchronously on the sole output-reading goroutine:
+	// blocking here would stall recording of every later chunk (and the
+	// next PTY Read) until that action finishes, bunching recorded
+	// timestamps at the end of the action and starving `wait` of output it
+	// should have already seen. Recognizing and answering a query is
+	// independent of recording output below, so it's dispatched in the
+	// background instead of blocking this goroutine on it. Each of the
+	// three known responses (background/foreground color, cursor position)
+	// is a fixed, self-contained reply with no ordering dependency on any
+	// other query's answer, so answering two queries from different chunks
+	// slightly out of arrival order -- the only thing an unordered
+	// goroutine risks -- is harmless; answerTerminalQueries is also a no-op
+	// unless scan actually contains a recognized query, so this goroutine
+	// is nearly always cheap. input is nil in tests that only care about
+	// output capture, not query-answering.
 	if s.input != nil {
-		s.input.Locked(func(w io.Writer) { answerTerminalQueries(scan, w) })
+		input := s.input
+		go input.Locked(func(w io.Writer) { answerTerminalQueries(scan, w) })
 	}
 	s.pendingQueryTail = terminalQueryTail(scan)
 	s.mu.Lock()

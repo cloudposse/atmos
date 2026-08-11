@@ -267,6 +267,46 @@ func TestStandardFlagParser_WithViperKeyAvoidsShadowing(t *testing.T) {
 		"the overridden flag must still resolve its own explicitly-set value")
 }
 
+// TestStandardFlagParser_InheritedPersistentFlagBindsToViper exercises the
+// cmd.InheritedFlags() path in BindFlagsToViper directly: the two shadowing
+// tests above bind independent commands, so neither ever runs a real
+// parent-child hierarchy through this path. Here recordCmd is a genuine
+// child of rootCmd (via AddCommand), mirroring how every subcommand inherits
+// the root command's persistent --cast flag; only BindFlagsToViper's
+// InheritedFlags().VisitAll loop -- not recordParser's own registry, which
+// never registers "cast" at all -- can bind that inherited flag to Viper.
+func TestStandardFlagParser_InheritedPersistentFlagBindsToViper(t *testing.T) {
+	v := viper.New()
+
+	rootParser := NewStandardFlagParser(
+		WithStringFlag("cast", "", "", "root flag"),
+		WithViperKey("cast", "cast.target"),
+	)
+	rootCmd := &cobra.Command{Use: "root"}
+	rootParser.RegisterPersistentFlags(rootCmd)
+	require.NoError(t, rootParser.BindToViper(v))
+	require.NoError(t, rootParser.BindFlagsToViper(rootCmd, v))
+
+	recordParser := NewStandardFlagParser(
+		WithViperPrefix("cast.record"),
+		WithStringFlag("mode", "", "session", "cast mode"),
+	)
+	recordCmd := &cobra.Command{Use: "record"}
+	recordParser.RegisterFlags(recordCmd)
+	require.NoError(t, recordParser.BindToViper(v))
+
+	rootCmd.AddCommand(recordCmd)
+
+	require.NoError(t, recordParser.BindFlagsToViper(recordCmd, v))
+
+	require.NoError(t, recordCmd.InheritedFlags().Set("cast", "demo.gif"))
+
+	assert.Equal(t, "demo.gif", v.GetString("cast.target"),
+		"the inherited --cast flag must bind through cmd.InheritedFlags() and resolve at its WithViperKey-pinned key")
+	assert.Equal(t, "session", v.GetString("cast.record.mode"),
+		"the inherited bare-key flag must not shadow the child command's own nested default")
+}
+
 func TestStandardFlagParser_RequiredFlags(t *testing.T) {
 	parser := NewStandardFlagParser(
 		WithRequiredStringFlag("component", "c", "Component name (required)"),

@@ -64,6 +64,28 @@ func TestRenderMarkerScreenshotsWritesOnePNGPerMarker(t *testing.T) {
 	}
 }
 
+func TestRenderMarkerScreenshotsCreatesMissingParentDirectory(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "nested", "deep", "hero.png")
+	path := writeMarkerTestCast(t, 20, 5, [][3]any{
+		{0.1, "o", "one\n"},
+		{0.2, "m", target},
+	})
+
+	if err := RenderMarkerScreenshots(path); err != nil {
+		t.Fatalf("RenderMarkerScreenshots error: %v", err)
+	}
+
+	file, err := os.Open(target)
+	if err != nil {
+		t.Fatalf("expected %s to exist: %v", target, err)
+	}
+	defer func() { _ = file.Close() }()
+	if _, err := png.Decode(file); err != nil {
+		t.Fatalf("expected %s to be a valid PNG: %v", target, err)
+	}
+}
+
 func TestRenderMarkerScreenshotsReturnsErrorOnMissingInput(t *testing.T) {
 	err := RenderMarkerScreenshots(filepath.Join(t.TempDir(), "missing.cast"))
 	if err == nil {

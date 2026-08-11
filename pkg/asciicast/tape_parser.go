@@ -104,6 +104,10 @@ func tapeCtrlKey(word string) (string, bool) {
 	if !strings.HasPrefix(word, prefix) || len(word) != len(prefix)+1 {
 		return "", false
 	}
+	suffix := word[len(prefix)]
+	if (suffix < 'A' || suffix > 'Z') && (suffix < 'a' || suffix > 'z') {
+		return "", false
+	}
 	return "ctrl+" + strings.ToLower(word[len(prefix):]), true
 }
 
