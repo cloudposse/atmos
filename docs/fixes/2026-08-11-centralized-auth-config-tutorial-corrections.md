@@ -22,33 +22,33 @@ syntax, and ran live commands against it, cross-checked with two parallel code-t
 Findings, most severe first:
 
 1. **`gh auth token` fallback claim was wrong for this import path.** The guide's "Private repo access
-   — no token setup needed" section claimed Atmos resolves a GitHub token in order
-   `--github-token` flag → `ATMOS_GITHUB_TOKEN` → `GITHUB_TOKEN` → `gh auth token` CLI fallback, and
-   that `gh auth login` alone was therefore sufficient. Reading `pkg/downloader/custom_git_detector.go`
-   (`CustomGitDetector.resolveToken`, the code that actually authenticates the `git clone` behind a
-   `git::` import) shows it only checks `ATMOS_PRO_GITHUB_TOKEN` → `ATMOS_GITHUB_TOKEN` →
-   `GITHUB_TOKEN` — no `--github-token` flag, no `gh auth token` fallback at all. That fallback chain is
-   real, but it belongs to a different code path (`github.GetGitHubToken()`, used for plain HTTPS/API
-   fetches and toolchain installs), not the `git::` clone this tutorial's import syntax triggers.
+    — no token setup needed" section claimed Atmos resolves a GitHub token in order
+    `--github-token` flag → `ATMOS_GITHUB_TOKEN` → `GITHUB_TOKEN` → `gh auth token` CLI fallback, and
+    that `gh auth login` alone was therefore sufficient. Reading `pkg/downloader/custom_git_detector.go`
+    (`CustomGitDetector.resolveToken`, the code that actually authenticates the `git clone` behind a
+    `git::` import) shows it only checks `ATMOS_PRO_GITHUB_TOKEN` → `ATMOS_GITHUB_TOKEN` →
+    `GITHUB_TOKEN` — no `--github-token` flag, no `gh auth token` fallback at all. That fallback chain is
+    real, but it belongs to a different code path (`github.GetGitHubToken()`, used for plain HTTPS/API
+    fetches and toolchain installs), not the `git::` clone this tutorial's import syntax triggers.
 
 2. **A broken import fails completely silently.** Live-verified: pointing the import at a nonexistent
-   `ref` produces `atmos auth list` → `"No providers or identities configured."` with **exit code 0**,
-   no error. The real error (`fatal: couldn't find remote ref ...`) is generated correctly several
-   layers down but discarded at `pkg/config/imports.go` (`log.Debug(...); continue`), one layer above
-   where it's returned — and the default log level is `Warning`, so it's invisible without
-   `ATMOS_LOGS_LEVEL=Debug`. This compounds directly with finding 1: a developer with only `gh auth
-   login` done (no token env var) would have their import silently no-op, with zero indication why.
+    `ref` produces `atmos auth list` → `"No providers or identities configured."` with **exit code 0**,
+    no error. The real error (`fatal: couldn't find remote ref ...`) is generated correctly several
+    layers down but discarded at `pkg/config/imports.go` (`log.Debug(...); continue`), one layer above
+    where it's returned — and the default log level is `Warning`, so it's invisible without
+    `ATMOS_LOGS_LEVEL=Debug`. This compounds directly with finding 1: a developer with only `gh auth
+    login` done (no token env var) would have their import silently no-op, with zero indication why.
 
 3. **The "interactive selector" claim was misleading given the tutorial's own example.** The Developer
-   Workflow section said omitting `--identity` shows a selector. Every example identity in the guide's
-   AWS/Azure/GCP tabs sets `default: true`, and `pkg/auth/manager.go` (`GetDefaultIdentity`) auto-selects
-   silently in that case — no selector appears. A selector only appears with a bare `--identity` (no
-   value) or when zero/multiple identities are marked default.
+    Workflow section said omitting `--identity` shows a selector. Every example identity in the guide's
+    AWS/Azure/GCP tabs sets `default: true`, and `pkg/auth/manager.go` (`GetDefaultIdentity`) auto-selects
+    silently in that case — no selector appears. A selector only appears with a bare `--identity` (no
+    value) or when zero/multiple identities are marked default.
 
 4. **No mention that this import form has no cache.** `git::...//subpath?ref=...` imports at the root
-   `atmos.yaml` level have no cross-run TTL/cache (unlike stack-level imports), so every `atmos` command
-   in a project using this pattern re-clones the central repo — an undocumented network dependency for
-   every command, not just auth ones.
+    `atmos.yaml` level have no cross-run TTL/cache (unlike stack-level imports), so every `atmos` command
+    in a project using this pattern re-clones the central repo — an undocumented network dependency for
+    every command, not just auth ones.
 
 Two other claims from the same tutorial were checked and found accurate, so left unchanged: the
 "quote `account.id` as a string" advice (an unquoted YAML integer really does fail a Go type assertion
