@@ -85,6 +85,33 @@ atmos azure aks update-kubeconfig --cluster-name dev-cluster --resource-group de
 atmos azure acr login --identity azure-dev
 ```
 
+### Running kubectl
+
+Run standalone, `update-kubeconfig` writes to Atmos's own kubeconfig
+(`~/.config/atmos/kube/config` by default). A command can't set environment variables in your
+shell, so point `kubectl` at that file — or let Atmos launch `kubectl` with `KUBECONFIG` already
+set for you:
+
+```bash
+# Option A — use the Atmos kubeconfig directly
+atmos azure aks update-kubeconfig --integration dev/aks
+export KUBECONFIG=~/.config/atmos/kube/config
+kubectl get nodes
+
+# Option B — let Atmos inject KUBECONFIG into the command it runs
+atmos auth exec --identity azure-dev -- kubectl get nodes
+```
+
+```console
+NAME                             STATUS   ROLES    AGE   VERSION
+aks-system-64934532-vmss000000   Ready    <none>   2h    v1.35.6
+aks-system-64934532-vmss000001   Ready    <none>   2h    v1.35.6
+```
+
+Either way, every `kubectl` call mints its token through `atmos azure aks token` against the
+Atmos-managed identity — no `az` CLI and no `kubelogin`. Prefer to merge into your standard
+kubeconfig instead? Pass `--kubeconfig ~/.kube/config` and skip the `export`.
+
 See the [Azure AKS](/cli/commands/azure/aks/update-kubeconfig) and
 [Azure ACR](/cli/commands/azure/acr-login) command docs for the full set of flags and
 configuration options.
