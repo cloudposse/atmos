@@ -410,8 +410,7 @@ from the cluster (here the well-known AKS AAD server app):
 
 ```console
 $ kubectl config view --raw -o jsonpath='{.users[0].user.exec.command} {.users[0].user.exec.args}'
-atmos [azure aks token --cluster-name aks-dev --resource-group rg-aks-cus
-       --server-id 6dae42f8-4368-4678-94ff-3960e28e3630 --subscription-id <redacted> --identity=dev]
+atmos [azure aks token --cluster-name aks-dev --resource-group rg-aks-cus --server-id 6dae42f8-4368-4678-94ff-3960e28e3630 --subscription-id <redacted> --identity=dev]
 ```
 
 **3. `auth exec` mode** — Atmos injects `KUBECONFIG` into the child process from the integration's
