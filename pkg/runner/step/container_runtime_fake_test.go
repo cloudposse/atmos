@@ -108,9 +108,12 @@ func TestContainerHandlerExecuteBuildPassesBuildxDriverAndCacheToDocker(t *testi
 	}, vars)
 	require.NoError(t, err)
 
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
 	args := fakeRuntimeArgs(t, argsPath)
 	assert.Contains(t, args, "buildx\tcreate\t--name\tatmos-test-builder\t--driver\tdocker-container\t--driver-opt\timage=mirror.gcr.io/moby/buildkit:buildx-stable-1")
-	assert.Contains(t, args, "buildx\tbuild\t--builder\tatmos-test-builder\t--cache-from\tref=registry.example.com/app:buildcache,type=registry\t--cache-to\tmode=max,ref=registry.example.com/app:buildcache,type=registry\t-t\tapp:local\t-f\tDockerfile\t.")
+	assert.Contains(t, args, "buildx\tbuild\t--builder\tatmos-test-builder\t--cache-from\tref=registry.example.com/app:buildcache,type=registry\t--cache-to\tmode=max,ref=registry.example.com/app:buildcache,type=registry\t-t\tapp:local\t-f\t"+filepath.Join(cwd, "Dockerfile")+"\t"+cwd)
 }
 
 func TestContainerHandlerExecutePushPassesResolvedTagsAndRuntimeEnvToDocker(t *testing.T) {

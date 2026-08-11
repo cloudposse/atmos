@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -1447,7 +1448,7 @@ func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
 		KeyVaultExpiration: now.Add(3 * time.Hour).Format(time.RFC3339),
 	}
 
-	updateMSALCacheFromCreds(tmpDir, azureCreds, "user-oid-gov", "gov-tenant", cloudEnv)
+	updateMSALCacheFromCreds(&msalCredsContext{Home: tmpDir, UserOID: "user-oid-gov", TenantID: "gov-tenant"}, azureCreds, cloudEnv)
 
 	// Verify MSAL cache was created with sovereign cloud scopes.
 	msalCachePath := filepath.Join(tmpDir, ".azure", "msal_token_cache.json")
@@ -1469,8 +1470,11 @@ func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
 			continue
 		}
 		target, _ := tokenEntry["target"].(string)
-		if target == cloudEnv.ManagementScope {
+		if strings.Contains(target, cloudEnv.ManagementScope) {
 			foundGovScope = true
+			// The target now also carries the legacy ARM audience forms for
+			// az/azidentity cache-lookup coverage.
+			assert.Contains(t, target, "https://management.core.usgovcloudapi.net/.default")
 			// Verify the environment/realm uses the government login endpoint.
 			realm, _ := tokenEntry["realm"].(string)
 			assert.Equal(t, "gov-tenant", realm)
@@ -1539,7 +1543,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 
 	t.Run("non-Azure credentials returns nil", func(t *testing.T) {
 		// Pass a non-Azure credential type.
-		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "")
+		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "", "")
 		assert.NoError(t, err)
 	})
 
@@ -1547,7 +1551,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 		creds := &types.AzureCredentials{
 			AccessToken: "not-a-jwt",
 		}
-		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "")
+		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "", "")
 		assert.NoError(t, err, "Invalid token should return nil (non-fatal)")
 	})
 
@@ -1565,7 +1569,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			SubscriptionID: "sub-def",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
+		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "", "")
 		assert.NoError(t, err)
 
 		// Verify files were created in the isolated temp home directory.
@@ -1591,7 +1595,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			SubscriptionID: "gov-sub",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment")
+		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment", "")
 		assert.NoError(t, err)
 	})
 
@@ -1612,7 +1616,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			FederatedToken:     "federated-token-value",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
+		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "", "")
 		assert.NoError(t, err)
 	})
 
@@ -1638,7 +1642,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			AuthMethod:     types.AzureAuthMethodCLI,
 		}
 
-		err := UpdateAzureCLIFiles(creds, "cli-tenant", "cli-sub", "")
+		err := UpdateAzureCLIFiles(creds, "cli-tenant", "cli-sub", "", "")
 		assert.NoError(t, err)
 
 		_, msalErr := os.Stat(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
@@ -1669,7 +1673,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			HomeAccountID:  "home-oid.home-tenant",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "target-tenant", "target-sub", "")
+		err := UpdateAzureCLIFiles(creds, "target-tenant", "target-sub", "", "")
 		assert.NoError(t, err)
 
 		data, readErr := os.ReadFile(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
@@ -1780,7 +1784,7 @@ func TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal(t *testing.T) {
 	cloudEnv := GetCloudEnvironment("")
 
 	require.NotPanics(t, func() {
-		updateMSALCacheFromCreds(tmpDir, azureCreds, "user-oid-123", "tenant-123", cloudEnv)
+		updateMSALCacheFromCreds(&msalCredsContext{Home: tmpDir, UserOID: "user-oid-123", TenantID: "tenant-123"}, azureCreds, cloudEnv)
 	})
 
 	_, err := os.ReadFile(msalCachePath)
@@ -1926,7 +1930,7 @@ func TestUpdateAzureCLIFiles_ProfileWriteFailureIsNonFatal(t *testing.T) {
 		Expiration:  now.Add(1 * time.Hour).Format(time.RFC3339),
 	}
 
-	err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
+	err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "", "")
 	require.NoError(t, err, "profile write failure must be non-fatal")
 
 	_, statErr := os.Stat(profilePath)
@@ -1965,7 +1969,7 @@ func TestUpdateAzureCLIFiles_ServicePrincipalEntriesWriteFailureIsNonFatal(t *te
 		FederatedToken:     "federated-token-value",
 	}
 
-	err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
+	err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "", "")
 	require.NoError(t, err, "service principal entries write failure must be non-fatal")
 
 	_, statErr := os.Stat(entriesPath)
