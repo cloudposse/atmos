@@ -2,6 +2,7 @@ package flags
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -474,6 +475,26 @@ func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
 	}
 }
 
+// TestStandardFlagParser_ValidateSingleFlag_CustomMessageOverridesDefault verifies that when a
+// flag has a custom validation message registered (p.validationMsgs), an invalid value produces
+// that custom message instead of ValidateValue's default "invalid value, valid values" text,
+// while still wrapping the shared errUtils.ErrInvalidFlagValue sentinel.
+func TestStandardFlagParser_ValidateSingleFlag_CustomMessageOverridesDefault(t *testing.T) {
+	validValues := []string{"json", "yaml", "table"}
+	parser := NewStandardFlagParser(
+		WithStringFlag("format", "f", "json", "Output format"),
+		WithValidValues("format", validValues...),
+	)
+	parser.validationMsgs["format"] = "format must be one of: json, yaml, table"
+
+	err := parser.validateSingleFlag("format", validValues, map[string]interface{}{"format": "xml"}, nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidFlagValue))
+	assert.Contains(t, err.Error(), "format must be one of: json, yaml, table")
+	assert.NotContains(t, err.Error(), "invalid value \"xml\"", "the custom message must replace, not append to, the default text")
+}
+
 // TestStandardFlagParser_ValidateSingleFlag_StringSlice covers the []string branch
 // added to validateSingleFlag so a repeatable flag (e.g. --client) validates every
 // element, not just a single scalar value.
@@ -845,64 +866,78 @@ func TestStandardFlagParser_IsFlagExplicitlyChanged(t *testing.T) {
 	})
 }
 
-// TestStandardFlagParser_IsValueValid tests the isValueValid method.
-func TestStandardFlagParser_IsValueValid(t *testing.T) {
-	parser := NewStandardFlagParser()
-
+// TestValidateValue tests the shared ValidateValue function (used by both
+// StandardFlagParser's built-in-command validation and custom commands' `values:`).
+func TestValidateValue(t *testing.T) {
 	tests := []struct {
 		name        string
 		value       string
 		validValues []string
-		expected    bool
+		wantErr     bool
 	}{
 		{
 			name:        "value in list",
 			value:       "json",
 			validValues: []string{"json", "yaml", "table"},
-			expected:    true,
+			wantErr:     false,
 		},
 		{
 			name:        "value not in list",
 			value:       "xml",
 			validValues: []string{"json", "yaml", "table"},
-			expected:    false,
+			wantErr:     true,
 		},
 		{
 			name:        "empty list",
 			value:       "json",
 			validValues: []string{},
-			expected:    false,
+			wantErr:     false,
 		},
 		{
-			name:        "case sensitive match",
+			name:        "case sensitive mismatch",
 			value:       "JSON",
 			validValues: []string{"json", "yaml"},
-			expected:    false,
+			wantErr:     true,
+		},
+		{
+			name:        "empty value always passes",
+			value:       "",
+			validValues: []string{"json", "yaml"},
+			wantErr:     false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parser.isValueValid(tt.value, tt.validValues)
-			assert.Equal(t, tt.expected, result)
+			err := ValidateValue("format", tt.value, tt.validValues, ValueKindFlag)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
 
-// TestStandardFlagParser_CreateValidationError tests error message generation.
-func TestStandardFlagParser_CreateValidationError(t *testing.T) {
-	t.Run("uses default message", func(t *testing.T) {
-		parser := NewStandardFlagParser(
-			WithStringFlag("format", "f", "json", "Output format"),
-			WithValidValues("format", "json", "yaml"),
-		)
+// TestValidateValue_ErrorMessage tests the default error message format.
+func TestValidateValue_ErrorMessage(t *testing.T) {
+	err := ValidateValue("format", "xml", []string{"json", "yaml"}, ValueKindFlag)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid value")
+	assert.Contains(t, err.Error(), "xml")
+	assert.Contains(t, err.Error(), "format")
+	assert.Contains(t, err.Error(), "json, yaml")
+	assert.Contains(t, err.Error(), "--format", "a ValueKindFlag error must name it as a flag")
+}
 
-		err := parser.createValidationError("format", "xml", []string{"json", "yaml"})
-		assert.Contains(t, err.Error(), "invalid value")
-		assert.Contains(t, err.Error(), "xml")
-		assert.Contains(t, err.Error(), "format")
-		assert.Contains(t, err.Error(), "json, yaml")
-	})
+// TestValidateValue_ArgumentErrorMessage verifies a ValueKindArgument error names the invalid
+// value as an "argument", not a "--flag" -- constrained.go's CommandArgument.Values path uses
+// this kind, and a positional argument reported as a flag would be a confusing error message.
+func TestValidateValue_ArgumentErrorMessage(t *testing.T) {
+	err := ValidateValue("env", "xml", []string{"dev", "prod"}, ValueKindArgument)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "argument env")
+	assert.NotContains(t, err.Error(), "--env", "a ValueKindArgument error must not be worded as a flag")
 }
 
 // TestStandardFlagParser_ValidateFlagValues tests flag value validation.
