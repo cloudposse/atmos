@@ -479,6 +479,8 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.2.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/minamijoyo/hcledit v0.2.18
