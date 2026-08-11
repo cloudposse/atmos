@@ -58,6 +58,9 @@ const (
 	ADAPTER importTypes = 2
 )
 
+// keyFilePath is the structured-log field name for a resolved import's file path.
+const keyFilePath = "file_path"
+
 var defaultFileSystem filesystem.FileSystem = filesystem.NewOSFileSystem()
 
 // ResolvedPaths represents a resolved import path with its file location and type.
@@ -121,15 +124,16 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
-		log.Trace("attempting to merge import", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath)
+		log.Trace("attempting to merge import", "import", sanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
 		err := mergeConfigFile(resolvedPath.FilePath, dst)
 		if err != nil {
-			log.Trace("error loading config file", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath, "error", err)
+			log.Warn("error loading config file", "import", sanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", err)
 			continue
 		}
-		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.ImportPaths), "file_path", resolvedPath.FilePath)
+		log.Trace("successfully merged config from import", "import", sanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
 		content, readErr := fs.ReadFile(resolvedPath.FilePath)
 		if readErr != nil {
+			log.Warn("error re-reading resolved import for base_path detection", "import", sanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", readErr)
 			continue
 		}
 		declaresBasePath, _, parseErr := importBasePathDeclaration(content)
@@ -182,7 +186,7 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
 
 		if resolveErr != nil {
-			log.Debug("failed to resolve import", "path", importPath, "error", resolveErr)
+			log.Warn("failed to resolve import", "path", importPath, "error", resolveErr)
 			continue
 		}
 		resolvedPaths = append(resolvedPaths, paths...)

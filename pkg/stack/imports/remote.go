@@ -173,12 +173,18 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 
 // Resolve fetches a remote import and returns all local stack files it resolves to.
 //
-// The cached source clone is refreshed on every invocation (no cross-run reuse); use
-// ResolveRemoteImportNested with a TTL when cross-run cache reuse is desired.
+// Honors the global atmosConfig.Imports.TTL default (the same setting stack-manifest imports
+// fall back to via ResolveRemoteImportNested) for cross-run reuse of the cloned source repo; an
+// unset TTL refreshes the clone once per invocation, as before.
 func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Resolve")()
 
-	return r.resolve(uri, "")
+	ttl := ""
+	if r.atmosConfig != nil {
+		ttl = r.atmosConfig.Imports.TTL
+	}
+
+	return r.resolve(uri, ttl)
 }
 
 // resolve fetches a remote import and returns all local stack files it resolves to.

@@ -165,7 +165,7 @@ func TestGetGitHubTokenFromCLI(t *testing.T) {
 			Return(fakeCLICmd("ghp_from_cli\n", 0))
 		withCommander(t, mock)
 
-		assert.Equal(t, "ghp_from_cli", getGitHubTokenFromCLI())
+		assert.Equal(t, "ghp_from_cli", GetGitHubTokenFromCLI())
 	})
 
 	t.Run("uses the configured binary name", func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestGetGitHubTokenFromCLI(t *testing.T) {
 			Return(fakeCLICmd("ghp_custom\n", 0))
 		withCommander(t, mock)
 
-		assert.Equal(t, "ghp_custom", getGitHubTokenFromCLI())
+		assert.Equal(t, "ghp_custom", GetGitHubTokenFromCLI())
 	})
 
 	t.Run("returns empty when the CLI exits non-zero", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestGetGitHubTokenFromCLI(t *testing.T) {
 			Return(fakeCLICmd("", 1))
 		withCommander(t, mock)
 
-		assert.Empty(t, getGitHubTokenFromCLI())
+		assert.Empty(t, GetGitHubTokenFromCLI())
 	})
 
 	t.Run("empty ATMOS_GITHUB_CLI disables the fallback without invoking the commander", func(t *testing.T) {
@@ -199,13 +199,13 @@ func TestGetGitHubTokenFromCLI(t *testing.T) {
 		mock := execpkg.NewMockCommandExecutor(ctrl)
 		withCommander(t, mock)
 
-		assert.Empty(t, getGitHubTokenFromCLI())
+		assert.Empty(t, GetGitHubTokenFromCLI())
 	})
 
 	t.Run("nonexistent binary forces the anonymous path (real commander)", func(t *testing.T) {
 		t.Setenv("ATMOS_GITHUB_CLI", "atmos-nonexistent-gh-binary-xyz")
 		// Uses the real default commander; the binary does not exist, so Output errors.
-		assert.Empty(t, getGitHubTokenFromCLI())
+		assert.Empty(t, GetGitHubTokenFromCLI())
 	})
 }
 

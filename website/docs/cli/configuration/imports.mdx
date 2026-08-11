@@ -118,6 +118,22 @@ import:
   - "https://raw.githubusercontent.com/cloudposse/atmos/abc123def456/atmos.yaml"
 ```
 
+### Caching Remote Imports
+
+By default, a remote `import:` source is re-cloned on every `atmos` invocation, so mutable refs (e.g.
+`?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI
+cache — set the same `imports.ttl` default used by [remote stack imports](/stacks/imports#caching-remote-imports):
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+```
+
+This is a single global default; root `import:` entries are plain strings and don't support a per-import
+`ttl` override the way stack manifest imports do. `ttl` accepts durations like `0s` (always re-fetch),
+`5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer
+`ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh.
+
 ## Limitations
 
 - Templated imports of Atmos configuration are not supported (unlike stacks)

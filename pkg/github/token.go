@@ -48,7 +48,7 @@ func GetGitHubToken() string {
 	}
 
 	// Fall back to GitHub CLI if installed.
-	if token := getGitHubTokenFromCLI(); token != "" {
+	if token := GetGitHubTokenFromCLI(); token != "" {
 		log.Debug("Using GitHub token from gh CLI")
 		return token
 	}
@@ -70,14 +70,17 @@ func GetGitHubTokenOrError() (string, error) {
 	return token, nil
 }
 
-// getGitHubTokenFromCLI attempts to get a token from the GitHub CLI.
+// GetGitHubTokenFromCLI attempts to get a token from the GitHub CLI.
 // Returns empty string if the CLI is not installed, not authenticated, or disabled.
 //
 // The CLI binary is configurable via the ATMOS_GITHUB_CLI environment variable
 // (defaults to "gh"). Setting it to an empty value disables the fallback, and
 // setting it to a nonexistent binary forces the unauthenticated/anonymous path
 // (useful for exercising public access).
-func getGitHubTokenFromCLI() string {
+//
+// Exported so other packages needing GitHub CLI token resolution (e.g. the git-clone
+// token injection in pkg/downloader) can call the same fallback without duplicating it.
+func GetGitHubTokenFromCLI() string {
 	defer perf.Track(nil, "github.getGitHubTokenFromCLI")()
 
 	cli := gitHubCLIBinary()
@@ -103,6 +106,18 @@ func getGitHubTokenFromCLI() string {
 	}
 
 	return token
+}
+
+// SetCommanderForTesting overrides the package-level GitHub CLI command executor, for tests
+// in other packages that exercise GetGitHubTokenFromCLI indirectly (e.g.
+// pkg/downloader's git-clone token injection). Returns a restore func the caller must invoke
+// (typically via t.Cleanup) to put the original commander back.
+func SetCommanderForTesting(c execpkg.CommandExecutor) (restore func()) {
+	defer perf.Track(nil, "github.SetCommanderForTesting")()
+
+	orig := commander
+	commander = c
+	return func() { commander = orig }
 }
 
 // gitHubCLIBinary returns the GitHub CLI binary name to use for token lookups.
