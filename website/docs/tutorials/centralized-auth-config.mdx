@@ -71,9 +71,9 @@ atmos-config/
         └── auth.yaml
 ```
 
-Only the `providers:`/`identities:` block inside each `auth.yaml` differs by cloud; everything else in
-this guide (the import, private-repo access, the `atmos auth` workflow) is identical no matter which tab
-you're in:
+The import syntax, private-repo access, and `atmos auth` workflow are identical across tabs — only the
+path (`aws/`, `azure/`, or `gcp/`) and the `providers:`/`identities:` block inside `auth.yaml` change.
+Use the path and block for the cloud you're setting up:
 
 <Tabs>
   <TabItem value="aws" label="AWS" default>
@@ -280,9 +280,11 @@ resolved anything. If it's empty, re-run with `ATMOS_LOGS_LEVEL=Debug` and look 
 `failed to resolve import` line — that's the only place the real reason (bad ref, 403, DNS failure, etc.)
 shows up.
 
-**That debug line shows an authentication error** — confirm `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set,
-or that `gh auth setup-git` has been run (`gh auth status` alone is not enough — see
-[step 3](#3-private-repo-access--one-token-set-once)), and that the token's account has read access to
+**That debug line shows an authentication error** — confirm `ATMOS_PRO_GITHUB_TOKEN` is set if you use
+Atmos Pro's GitHub integration (it's set automatically in that case), otherwise that
+`ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set, or that `gh auth setup-git` has been run (`gh auth status`
+alone is not enough — see [step 3](#3-private-repo-access--one-token-set-once)), and that the token's
+account has read access to
 the central config repo.
 
 **AWS CLI/Terraform outside of Atmos can't find credentials** — you're missing `eval $(atmos auth env)`
