@@ -1,0 +1,21 @@
+name: Task Runner Field Test
+description: Workflow-side dependency fixtures (workflow depends on command via subprocess).
+
+workflows:
+  smoke:
+    description: Simple workflow target used as a dependency (from the deploy command).
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "smoke workflow ran $(date +%s%N)" >> logs/order.log
+
+  release:
+    description: Depends on the 'compile' custom command -- exercises the subprocess dependency path.
+    dependencies:
+      commands: [compile]
+    steps:
+      - type: shell
+        command: |
+          mkdir -p logs
+          echo "release workflow ran after compile command" >> logs/order.log
