@@ -43,7 +43,7 @@ _clean:
     command `flags:` entry with a matching `default:` value. Inside a step, read the value as
     `{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. See
     [Common Problems](#--interpolation-looks-like-atmos-templates-but-is-not) below.
-3. Set `hidden: true` on a command created from a `[private]` recipe. It runs normally
+3. Set `internal: true` on a command created from a `[private]` recipe. It runs normally
     (`atmos <name> ...`, as a `default:` target, or from another command's steps) but is excluded
     from `atmos --help` listings and completion suggestions. Only inline the recipe's body into a
     caller's step when it is genuinely single-caller logic with no reason to be invoked on its own.
@@ -151,23 +151,23 @@ run in different tools at different times. Do not copy Just interpolation syntax
 YAML. Change each reference to the matching `{{ .Flags.<name> }}` or
 `{{ .Arguments.<name> }}` form.
 
-### `[private]` recipes map to `hidden: true`
+### `[private]` recipes map to `internal: true`
 
-The custom command schema has a `hidden: true` field. It excludes the command from `atmos --help`
+The custom command schema has an `internal: true` field. It excludes the command from `atmos --help`
 listings and completion suggestions while leaving it fully runnable -- directly, as a `default:`
 target, or from another command's steps. This is the direct equivalent of a `[private]` recipe,
 and it covers cases plain step-inlining cannot: a helper called from more than one recipe, or one
 a user invokes by name for manual debugging.
 
 Only inline a `[private]` recipe's logic into a caller's step when it is genuinely single-caller
-and has no reason to be invoked on its own -- in that case a separate `hidden` command is just
+and has no reason to be invoked on its own -- in that case a separate `internal` command is just
 unnecessary indirection.
 
 If a `[private]` recipe is never called by any public recipe (an orphaned helper, not a
-dependency), `hidden: true` no longer forces the same discovery you'd get from step-inlining --
+dependency), `internal: true` no longer forces the same discovery you'd get from step-inlining --
 it would just as quietly hide dead code as reachable helper code. Confirm with the user whether
 the recipe is still needed at all before migrating it; if it is, ask whether it should become a
-`hidden` command, a step inside whichever command ends up needing it, or a short script the user
+`internal` command, a step inside whichever command ends up needing it, or a short script the user
 maintains separately.
 
 ### Command echo differs between `just` and Atmos
@@ -190,6 +190,6 @@ it.
 ## What Not To Do
 
 - Do not assume `{{ }}` means the same thing after you move it into Atmos YAML.
-- Do not invent a visibility value beyond the documented `hidden: true` boolean (no "public"/"private" enum, no partial visibility).
+- Do not invent a visibility value beyond the documented `internal: true` boolean (no "public"/"private" enum, no partial visibility).
 - Do not drop `set shell` behavior without telling the user; `dotenv-load` maps directly to
   `env: !include .env`, so it does not need the same case-by-case confirmation.

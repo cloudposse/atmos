@@ -14,7 +14,7 @@ The v1 topic set is intentionally small:
 - `--help=usage` shows only usage and embedded usage examples.
 - `--help=flags` shows command-specific flags, excluding inherited/global flags.
 - `--help=all` shows the full help page, including inherited/global flags.
-- `--help=hidden` shows only the command's hidden subcommands (custom commands with `hidden: true`, or a hidden built-in) -- the commands every other topic, including `--help=all`, omits.
+- `--help=hidden` shows only the command's hidden subcommands (custom commands with `internal: true`, or a hidden built-in) -- the commands every other topic, including `--help=all`, omits.
 
 ## Motivation
 
@@ -85,7 +85,7 @@ Hidden subcommands:
 atmos wrapper --help=hidden
 ```
 
-Shows only the command's directly hidden subcommands (custom commands with `hidden: true`, plus any
+Shows only the command's directly hidden subcommands (custom commands with `internal: true`, plus any
 hidden built-ins), formatted the same as an ordinary command listing. Shows a one-line "has no hidden
 subcommands" message instead of an empty section when there are none. Default help includes a hint for
 `--help=hidden` only on commands that actually have a hidden subcommand, so the hint doesn't clutter

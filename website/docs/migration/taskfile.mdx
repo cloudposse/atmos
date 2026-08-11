@@ -42,7 +42,7 @@ See [AI Agent Skills](/ai/skills) for details.
 | `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
 | `sources:` / `generates:` (freshness check)       | No direct match. Steps always run                                 |
 | `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
-| `internal: true` task                             | Command `hidden: true`                                            |
+| `internal: true` task                             | Command `internal: true`                                            |
 
 ## The Parallel-by-Default Difference
 
@@ -112,7 +112,7 @@ choices:
 
 ## `internal: true` Tasks
 
-Set `hidden: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
+Set `internal: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
 `default:` target, or from another command's steps), but it's excluded from `atmos --help`
 listings and completion suggestions — matching an `internal: true` task's behavior in
 `task --list`. Reserve inlining the logic into a caller's step for a helper that's genuinely
@@ -233,7 +233,7 @@ Choose the one that fits what you are splitting:
 - [ ] Turn `vars:`/`env:` into command `flags:` (with defaults) and `env:` maps
 - [ ] Decide how to handle `sources:`/`generates:` freshness checks. Do not assume parity
 - [ ] Split `includes:` into auto-discovered `atmos.d/*.yaml` files, separate workflow files, or both
-- [ ] Mark `internal: true` tasks as `hidden: true` custom commands
+- [ ] Mark `internal: true` tasks as `internal: true` custom commands
 </TaskList>
 
 ## Common Questions
@@ -257,7 +257,7 @@ Yes, through either step type: `type: atmos` with `command: <other-command-name>
 </FAQItem>
 
 <FAQItem question="What replaces internal: true tasks?">
-Set `hidden: true` on the custom command. It stays fully runnable, including as a `default:`
+Set `internal: true` on the custom command. It stays fully runnable, including as a `default:`
 target or from another command's steps, but disappears from `atmos --help` listings and
 completion suggestions.
 </FAQItem>

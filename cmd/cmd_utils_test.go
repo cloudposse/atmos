@@ -2406,7 +2406,7 @@ func TestCreateCustomCommandHidden(t *testing.T) {
 		hiddenCmd, err := createCustomCommand(atmosConfig, &schema.Command{
 			Name:        "helper",
 			Description: "hidden helper",
-			Hidden:      true,
+			Internal:    true,
 		}, parentCmd)
 		require.NoError(t, err)
 		assert.True(t, hiddenCmd.Hidden)
@@ -2437,7 +2437,7 @@ func TestHiddenCommandStillExecutesDirectly(t *testing.T) {
 	commands := []schema.Command{{
 		Name:             "hidden-helper",
 		Description:      "a hidden helper command",
-		Hidden:           true,
+		Internal:         true,
 		WorkingDirectory: workDir,
 		// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
 		// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
@@ -2472,7 +2472,7 @@ func TestNestedCommandVisibilityIsIndependentOfParent(t *testing.T) {
 		{
 			Name:        "hidden-parent",
 			Description: "hidden parent with a visible child",
-			Hidden:      true,
+			Internal:    true,
 			Commands: []schema.Command{
 				{Name: "visible-child", Description: "visible child of a hidden parent"},
 			},
@@ -2481,7 +2481,7 @@ func TestNestedCommandVisibilityIsIndependentOfParent(t *testing.T) {
 			Name:        "visible-parent",
 			Description: "visible parent with a hidden child",
 			Commands: []schema.Command{
-				{Name: "hidden-child", Description: "hidden child of a visible parent", Hidden: true},
+				{Name: "hidden-child", Description: "hidden child of a visible parent", Internal: true},
 			},
 		},
 	}
@@ -2520,7 +2520,7 @@ func TestDefaultDispatchToHiddenChildStillExecutes(t *testing.T) {
 			{
 				Name:             "helper",
 				Description:      "hidden implementation",
-				Hidden:           true,
+				Internal:         true,
 				WorkingDirectory: workDir,
 				// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
 				// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
@@ -2930,4 +2930,37 @@ func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
 		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
 	})
+}
+
+// TestStepFreshnessName covers both branches of stepFreshnessName: a named step must return its
+// own name unchanged (so freshness state keys stay human-readable), while an unnamed step must
+// fall back to the same positional "step-%d" scheme customCommandConditionContext already uses,
+// so a step with no name: still gets a stable, unique freshness state key across runs.
+func TestStepFreshnessName(t *testing.T) {
+	tests := []struct {
+		name     string
+		stepName string
+		index    int
+		expected string
+	}{
+		{
+			name:     "named step returns its own name",
+			stepName: "build",
+			index:    3,
+			expected: "build",
+		},
+		{
+			name:     "unnamed step falls back to positional name",
+			stepName: "",
+			index:    2,
+			expected: "step-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stepFreshnessName(tt.stepName, tt.index)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

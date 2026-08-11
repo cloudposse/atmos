@@ -44,7 +44,7 @@ tasks:
     reserved for native Atmos verbs only. If the line calls another custom command (for example
     `atmos build`), keep it as a `type: shell` step with `command: atmos build` -- do not use
     `type: atmos` for that.
-3. Set `hidden: true` on a command created from an `internal: true` task. It runs normally
+3. Set `internal: true` on a command created from an `internal: true` task. It runs normally
     (`atmos <name> ...`, as a `default:` target, or from another command's steps) but is excluded
     from `atmos --help` listings and completion suggestions. Only inline the task's body into a
     caller's step when it is genuinely single-caller logic with no reason to be invoked on its own.
@@ -188,4 +188,4 @@ State it directly. Do not gloss over it.
   something exists.
 - Do not turn every `internal: true` task into its own discoverable command by default. If it is
   called from only one task, inline it into that caller's step. If it needs to be called from
-  more than one task, or invoked directly for debugging, make it a `hidden: true` custom command.
+  more than one task, or invoked directly for debugging, make it an `internal: true` custom command.

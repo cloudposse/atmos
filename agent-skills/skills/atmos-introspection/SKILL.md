@@ -312,7 +312,7 @@ atmos terraform plan --help=usage      # ONLY the usage line + embedded usage ex
                                         # the fastest way to see real invocation examples
 atmos terraform plan --help=flags      # Command-specific flags only, excludes inherited/global flags
 atmos terraform plan --help=all        # Full reference: everything, including inherited/global flags
-atmos wrapper --help=hidden            # ONLY wrapper's hidden subcommands (hidden: true custom
+atmos wrapper --help=hidden            # ONLY wrapper's hidden subcommands (internal: true custom
                                         # commands, or hidden built-ins) -- omitted from every other topic
 ```
 
@@ -320,7 +320,7 @@ Prefer `--help=usage` over the default `--help` when you just need to confirm ho
 it skips straight to worked examples instead of the full flag listing. Reach for `--help=all` only when you
 need the complete inherited-flag surface (e.g. global `--stack`/`--format`/logging flags shared across
 commands). Reach for `--help=hidden` when a command's default action or steps reference a subcommand name
-that never shows up in `--help` -- it is almost certainly a `hidden: true` custom command, not a typo.
+that never shows up in `--help` -- it is almost certainly an `internal: true` custom command, not a typo.
 
 ## Introspection Workflow for AI Agents
 

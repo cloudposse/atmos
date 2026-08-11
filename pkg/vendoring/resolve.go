@@ -160,9 +160,12 @@ func VendorFilePresent(override string) (string, bool) {
 	}
 
 	if atmosConfig.Vendor.BasePath != "" {
+		// Use the precomputed absolute path (AtmosConfigAbsolutePaths) rather than re-joining
+		// the raw, possibly still-relative atmosConfig.BasePath here -- same bug shape
+		// cloudposse/atmos#2864 fixed for the top-level base_path itself.
 		vendorPath := atmosConfig.Vendor.BasePath
 		if !filepath.IsAbs(vendorPath) {
-			vendorPath = filepath.Join(atmosConfig.BasePath, vendorPath)
+			vendorPath = atmosConfig.VendorDirAbsolutePath
 		}
 		if _, statErr := os.Stat(vendorPath); statErr == nil {
 			return vendorPath, true
@@ -173,7 +176,7 @@ func VendorFilePresent(override string) (string, bool) {
 	if found, ok := u.SearchConfigFile(DefaultVendorFile); ok {
 		return found, true
 	}
-	if found, ok := u.SearchConfigFile(filepath.Join(atmosConfig.BasePath, DefaultVendorFile)); ok {
+	if found, ok := u.SearchConfigFile(filepath.Join(atmosConfig.BasePathAbsolute, DefaultVendorFile)); ok {
 		return found, true
 	}
 	return "", false
