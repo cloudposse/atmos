@@ -60,6 +60,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1814,6 +1815,7 @@ func Execute() error {
 	workdir.SetAtmosConfig(&atmosConfig)
 	terraformcache.SetAtmosConfig(&atmosConfig)
 	sbomcmd.SetAtmosConfig(&atmosConfig)
+	proexec.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1903,6 +1905,11 @@ func Execute() error {
 	})
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Best-effort, asynchronous Atmos Pro command-execution metadata upload
+	// (no-ops unless CI is detected AND Atmos Pro is configured). Placed
+	// immediately after the telemetry hook it mirrors — see pkg/proexec.
+	proexec.CaptureAsync(cmd, err)
 
 	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
 	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {

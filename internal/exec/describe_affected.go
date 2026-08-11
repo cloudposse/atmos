@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -353,8 +354,30 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 		"source", resolution.Source)
 }
 
-// Execute executes `describe affected` command.
+// Execute executes `describe affected` command. It reports an execution
+// record to Atmos Pro synchronously (warn-and-continue on failure) before
+// returning, per the synchronous allowlist (terraform plan/apply, describe
+// affected). Data is passed as nil — describe affected has no defined
+// structured-data extension (data-model.md's Delivery Classification table).
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
+	err := d.executeInner(a)
+
+	// describe affected has no numeric "exit code" the way a shell command
+	// does; 0/1 mirrors the success/failure convention used elsewhere in this
+	// feature (e.g. internal/exec/terraform.go's captureExecMetadataSync).
+	exitCode := 0
+	if err != nil {
+		exitCode = 1
+	}
+	if syncErr := proexec.CaptureSync(a.CLIConfig, "describe affected", exitCode, nil); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
+	}
+
+	return err
+}
+
+// executeInner contains the original `describe affected` execution logic.
+func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 	defer perf.Track(nil, "exec.Execute")()
 
 	var affected []schema.Affected

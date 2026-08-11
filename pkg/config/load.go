@@ -705,6 +705,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.pro.endpoint", AtmosProEndpointEnvVarName)
 	bindEnv(v, "settings.pro.token", AtmosProTokenEnvVarName)
 	bindEnv(v, "settings.pro.workspace_id", AtmosProWorkspaceIDEnvVarName)
+	bindEnv(v, "settings.pro.exec.sync_timeout_seconds", AtmosProExecSyncTimeoutSecondsEnvVarName)
 	bindEnv(v, "settings.pro.github_run_id", "GITHUB_RUN_ID")
 	bindEnv(v, "settings.pro.atmos_pro_run_id", AtmosProRunIDEnvVarName)
 

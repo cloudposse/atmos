@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
@@ -187,7 +188,48 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		// any preflight snapshot so a dependent graph node reads the current outputs.
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
+
+	captureExecMetadataSync(&atmosConfig, &info, err)
+
 	return err
+}
+
+// captureExecMetadataSync reports an execution record to Atmos Pro for the
+// synchronous allowlist (terraform plan/apply), blocking briefly per
+// proexec.CaptureSync's own configurable timeout. No-op for every other
+// terraform subcommand.
+//
+// NOTE (scoping judgment call): the structured plugin.TerraformOutputData
+// enrichment described for User Story 3 is NOT wired in here. That type
+// lives under pkg/ci/internal/plugin — a Go "internal" package only
+// importable from within the pkg/ci tree — so internal/exec cannot reference
+// it directly, and it is only actually populated when Native CI hooks
+// (atmosConfig.CI.Enabled) run via pkg/hooks.RunCIHooks -> pkg/ci.Execute,
+// which is a narrower, independently-gated feature. Reusing it here would
+// require exposing the terraform CI plugin's parser as a standalone,
+// non-internal function. Data is passed as nil for now; the base envelope
+// (US1/US2) still reports normally regardless of whether Native CI is
+// enabled.
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmdErr error) {
+	if !isExecMetadataSyncSubcommand(info.SubCommand) {
+		return
+	}
+
+	exitCode := 0
+	if cmdErr != nil {
+		exitCode = 1
+	}
+
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+info.SubCommand, exitCode, nil); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
+	}
+}
+
+// isExecMetadataSyncSubcommand reports whether the given terraform subcommand
+// is part of the synchronous exec-metadata-upload allowlist (FR-007):
+// plan and apply only — not validate, output, workspace, version, etc.
+func isExecMetadataSyncSubcommand(subCommand string) bool {
+	return subCommand == "plan" || subCommand == subcommandApply
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.

@@ -344,6 +344,259 @@
       }
     },
     {
+      "description": "a request to upload command-execution metadata",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "atmos terraform plan",
+          "data": {
+            "created_resources": [
+              "aws_s3_bucket.example"
+            ],
+            "resource_counts": {
+              "change": 1,
+              "create": 2,
+              "destroy": 0,
+              "replace": 0
+            },
+            "updated_resources": [
+              "aws_iam_role.example"
+            ],
+            "warnings": [
+              "deprecated argument used"
+            ]
+          },
+          "exit_code": 0,
+          "git_sha": "abc123def456",
+          "metrics": {
+            "in_block_ops": 4,
+            "invol_ctx_switches": 5,
+            "major_page_faults": 0,
+            "max_rss_bytes": 52428800,
+            "minor_page_faults": 120,
+            "out_block_ops": 2,
+            "system_cpu_time_ms": 150,
+            "user_cpu_time_ms": 800,
+            "vol_ctx_switches": 30,
+            "wall_time_ms": 1234
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.created_resources": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.resource_counts.change": {
+            "match": "type"
+          },
+          "$.body.data.resource_counts.create": {
+            "match": "type"
+          },
+          "$.body.data.resource_counts.destroy": {
+            "match": "type"
+          },
+          "$.body.data.resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.updated_resources": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.warnings": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.in_block_ops": {
+            "match": "type"
+          },
+          "$.body.metrics.invol_ctx_switches": {
+            "match": "type"
+          },
+          "$.body.metrics.major_page_faults": {
+            "match": "type"
+          },
+          "$.body.metrics.max_rss_bytes": {
+            "match": "type"
+          },
+          "$.body.metrics.minor_page_faults": {
+            "match": "type"
+          },
+          "$.body.metrics.out_block_ops": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.vol_ctx_switches": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload command-execution metadata with no structured data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "atmos list components",
+          "exit_code": 0,
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 5,
+            "user_cpu_time_ms": 20,
+            "wall_time_ms": 45
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to upload drift detection instances",
       "providerState": "workspace exists and accepts drift detection instances",
       "request": {

@@ -3,6 +3,7 @@
 package pro
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -362,6 +363,173 @@ func TestPact_GetGitHubOIDCToken(t *testing.T) {
 			}
 			assert.NotEmpty(t, token)
 			return nil
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata verifies the consumer contract for
+// POST /api/v1/atmos/exec with a populated `data` field (terraform plan
+// shape), per specs/002-pro-exec-metadata/contracts/interactions.md.
+func TestPact_UploadExecMetadata(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload command-execution metadata").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("atmos terraform plan"),
+					"args":             []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(1234),
+						"user_cpu_time_ms":   matchers.Like(800),
+						"system_cpu_time_ms": matchers.Like(150),
+						"max_rss_bytes":      matchers.Like(52428800),
+						"minor_page_faults":  matchers.Like(120),
+						"major_page_faults":  matchers.Like(0),
+						"in_block_ops":       matchers.Like(4),
+						"out_block_ops":      matchers.Like(2),
+						"vol_ctx_switches":   matchers.Like(30),
+						"invol_ctx_switches": matchers.Like(5),
+					},
+					"data": body{
+						"resource_counts": body{
+							"create":  matchers.Like(2),
+							"change":  matchers.Like(1),
+							"replace": matchers.Like(0),
+							"destroy": matchers.Like(0),
+						},
+						"created_resources": matchers.EachLike("aws_s3_bucket.example", 1),
+						"updated_resources": matchers.EachLike("aws_iam_role.example", 1),
+						"warnings":          matchers.EachLike("deprecated argument used", 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"resource_counts": map[string]any{
+					"create":  2,
+					"change":  1,
+					"replace": 0,
+					"destroy": 0,
+				},
+				"created_resources": []string{"aws_s3_bucket.example"},
+				"updated_resources": []string{"aws_iam_role.example"},
+				"warnings":          []string{"deprecated argument used"},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "atmos terraform plan",
+				Args:          []string{},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:       1234,
+					UserCPUTimeMS:    800,
+					SystemCPUTimeMS:  150,
+					MaxRSSBytes:      52428800,
+					MinorPageFaults:  120,
+					MajorPageFaults:  1,
+					InBlockOps:       4,
+					OutBlockOps:      2,
+					VolCtxSwitches:   30,
+					InvolCtxSwitches: 5,
+				},
+				Data: data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_NoData verifies the consumer contract for
+// POST /api/v1/atmos/exec when the invoking command has no structured-data
+// extension (e.g. a non-terraform command) — `data` is absent entirely,
+// per spec Acceptance Scenario US3.4.
+func TestPact_UploadExecMetadata_NoData(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload command-execution metadata with no structured data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("atmos list components"),
+					"args":             []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(45),
+						"user_cpu_time_ms":   matchers.Like(20),
+						"system_cpu_time_ms": matchers.Like(5),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "atmos list components",
+				Args:          []string{},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      45,
+					UserCPUTimeMS:   20,
+					SystemCPUTimeMS: 5,
+				},
+			})
 		})
 	require.NoError(t, err)
 }

@@ -157,6 +157,7 @@ type AtmosProAPIClientInterface interface {
 	UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error
 	LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error)
 	UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error)
+	UploadExecMetadata(dto *dtos.ExecUploadRequest) error
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.
