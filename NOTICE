@@ -65,30 +65,6 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/cue-lang/cue/blob/v0.16.1/LICENSE
 
-  - github.com/Azure/go-autorest/autorest/to
-    License: Apache-2.0
-    URL: https://github.com/Azure/go-autorest/blob/autorest/to/v0.4.1/autorest/to/LICENSE
-
-  - github.com/CycloneDX/cyclonedx-go
-    License: Apache-2.0
-    URL: https://github.com/CycloneDX/cyclonedx-go/blob/v0.11.0/LICENSE
-
-  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp
-    License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.32.0/detectors/gcp/LICENSE
-
-  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric
-    License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/exporter/metric/v0.56.0/exporter/metric/LICENSE
-
-  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping
-    License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/internal/resourcemapping/v0.56.0/internal/resourcemapping/LICENSE
-
-  - github.com/Masterminds/goutils
-    License: Apache-2.0
-    URL: https://github.com/Masterminds/goutils/blob/v1.1.1/LICENSE.txt
-
   - github.com/agext/levenshtein
     License: Apache-2.0
     URL: https://github.com/agext/levenshtein/blob/v1.2.3/LICENSE
@@ -100,10 +76,6 @@ APACHE 2.0 LICENSED DEPENDENCIES
   - github.com/arsham/rainbow/rainbow
     License: Apache-2.0
     URL: https://github.com/arsham/rainbow/blob/v1.2.1/LICENSE
-
-  - github.com/aws/aws-sdk-go
-    License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go/blob/v1.55.8/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2
     License: Apache-2.0
@@ -221,9 +193,17 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sts/v1.42.1/service/sts/LICENSE.txt
 
+  - github.com/aws/aws-sdk-go
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go/blob/v1.55.8/LICENSE.txt
+
   - github.com/aws/smithy-go
     License: Apache-2.0
     URL: https://github.com/aws/smithy-go/blob/v1.27.3/LICENSE
+
+  - github.com/Azure/go-autorest/autorest/to
+    License: Apache-2.0
+    URL: https://github.com/Azure/go-autorest/blob/autorest/to/v0.4.1/autorest/to/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -272,6 +252,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
   - github.com/containerd/typeurl/v2
     License: Apache-2.0
     URL: https://github.com/containerd/typeurl/blob/v2.2.3/LICENSE
+
+  - github.com/CycloneDX/cyclonedx-go
+    License: Apache-2.0
+    URL: https://github.com/CycloneDX/cyclonedx-go/blob/v0.11.0/LICENSE
 
   - github.com/databus23/helm-diff/v3
     License: Apache-2.0
@@ -433,6 +417,18 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.16/LICENSE
 
+  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp
+    License: Apache-2.0
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.32.0/detectors/gcp/LICENSE
+
+  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric
+    License: Apache-2.0
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/exporter/metric/v0.56.0/exporter/metric/LICENSE
+
+  - github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping
+    License: Apache-2.0
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/internal/resourcemapping/v0.56.0/internal/resourcemapping/LICENSE
+
   - github.com/gosimple/unidecode
     License: Apache-2.0
     URL: https://github.com/gosimple/unidecode/blob/v1.0.1/LICENSE
@@ -468,6 +464,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
   - github.com/kylelemons/godebug
     License: Apache-2.0
     URL: https://github.com/kylelemons/godebug/blob/v1.1.0/LICENSE
+
+  - github.com/Masterminds/goutils
+    License: Apache-2.0
+    URL: https://github.com/Masterminds/goutils/blob/v1.1.1/LICENSE.txt
 
   - github.com/minio/sha256-simd
     License: Apache-2.0
@@ -834,14 +834,6 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/FiloSottile/hpke/blob/v0.4.0/LICENSE
 
-  - github.com/ProtonMail/go-crypto
-    License: BSD-3-Clause
-    URL: https://github.com/ProtonMail/go-crypto/blob/v1.4.1/LICENSE
-
-  - github.com/PuerkitoBio/goquery
-    License: BSD-3-Clause
-    URL: https://github.com/PuerkitoBio/goquery/blob/v1.12.0/LICENSE
-
   - github.com/andybalholm/brotli/flate
     License: BSD-3-Clause
     URL: https://github.com/andybalholm/brotli/blob/v1.2.1/flate/LICENSE
@@ -1033,6 +1025,14 @@ BSD LICENSED DEPENDENCIES
   - github.com/pmezard/go-difflib/difflib
     License: BSD-3-Clause
     URL: https://github.com/pmezard/go-difflib/blob/5d4384ee4fb2/LICENSE
+
+  - github.com/ProtonMail/go-crypto
+    License: BSD-3-Clause
+    URL: https://github.com/ProtonMail/go-crypto/blob/v1.4.1/LICENSE
+
+  - github.com/PuerkitoBio/goquery
+    License: BSD-3-Clause
+    URL: https://github.com/PuerkitoBio/goquery/blob/v1.12.0/LICENSE
 
   - github.com/rcrowley/go-metrics
     License: BSD-2-Clause-FreeBSD
@@ -1297,7 +1297,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/terraform-config-inspect/tfconfig
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-config-inspect/blob/813a97530220/LICENSE
+    URL: https://github.com/hashicorp/terraform-config-inspect/blob/2fb54c236733/LICENSE
 
   - github.com/hashicorp/terraform-exec
     License: MPL-2.0
@@ -1348,90 +1348,6 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/99designs/keyring/blob/v1.2.2/LICENSE
 
-  - github.com/AlecAivazis/survey/v2
-    License: MIT
-    URL: https://github.com/AlecAivazis/survey/blob/v2.3.7/LICENSE
-
-  - github.com/AlecAivazis/survey/v2/terminal
-    License: MIT
-    URL: https://github.com/AlecAivazis/survey/blob/v2.3.7/terminal/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/azcore
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.21.1/sdk/azcore/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/azidentity
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azidentity/v1.13.1/sdk/azidentity/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/internal
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armresources/v1.2.0/sdk/resourcemanager/resources/armresources/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/storage/armstorage/v4.1.0/sdk/resourcemanager/storage/armstorage/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/azkeys/v1.4.0/sdk/security/keyvault/azkeys/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/azsecrets/v1.4.0/sdk/security/keyvault/azsecrets/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/internal/v1.2.0/sdk/security/keyvault/internal/LICENSE.txt
-
-  - github.com/Azure/azure-sdk-for-go/sdk/storage/azblob
-    License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/storage/azblob/v1.7.0/sdk/storage/azblob/LICENSE.txt
-
-  - github.com/Azure/go-ntlmssp
-    License: MIT
-    URL: https://github.com/Azure/go-ntlmssp/blob/v0.1.1/LICENSE
-
-  - github.com/AzureAD/microsoft-authentication-library-for-go/apps
-    License: MIT
-    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.2/LICENSE
-
-  - github.com/BurntSushi/toml
-    License: MIT
-    URL: https://github.com/BurntSushi/toml/blob/v1.6.0/COPYING
-
-  - github.com/HdrHistogram/hdrhistogram-go
-    License: MIT
-    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.2.0/LICENSE
-
-  - github.com/MakeNowJust/heredoc
-    License: MIT
-    URL: https://github.com/MakeNowJust/heredoc/blob/v1.0.0/LICENSE
-
-  - github.com/Masterminds/semver/v3
-    License: MIT
-    URL: https://github.com/Masterminds/semver/blob/v3.5.0/LICENSE.txt
-
-  - github.com/Masterminds/sprig/v3
-    License: MIT
-    URL: https://github.com/Masterminds/sprig/blob/v3.3.0/LICENSE.txt
-
-  - github.com/Masterminds/squirrel
-    License: MIT
-    URL: https://github.com/Masterminds/squirrel/blob/v1.5.4/LICENSE
-
-  - github.com/Shopify/ejson
-    License: MIT
-    URL: https://github.com/Shopify/ejson/blob/v1.5.4/LICENSE.txt
-
   - github.com/a8m/envsubst/parse
     License: MIT
     URL: https://github.com/a8m/envsubst/blob/v1.4.3/LICENSE
@@ -1443,6 +1359,14 @@ MIT LICENSED DEPENDENCIES
   - github.com/agnivade/levenshtein
     License: MIT
     URL: https://github.com/agnivade/levenshtein/blob/v1.2.1/License.txt
+
+  - github.com/AlecAivazis/survey/v2
+    License: MIT
+    URL: https://github.com/AlecAivazis/survey/blob/v2.3.7/LICENSE
+
+  - github.com/AlecAivazis/survey/v2/terminal
+    License: MIT
+    URL: https://github.com/AlecAivazis/survey/blob/v2.3.7/terminal/LICENSE.txt
 
   - github.com/alecthomas/chroma/v2
     License: MIT
@@ -1492,6 +1416,54 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/aymerick/douceur/blob/v0.2.0/LICENSE
 
+  - github.com/Azure/azure-sdk-for-go/sdk/azcore
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.21.1/sdk/azcore/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/azidentity
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azidentity/v1.13.1/sdk/azidentity/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/internal
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armresources/v1.2.0/sdk/resourcemanager/resources/armresources/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/storage/armstorage/v4.1.0/sdk/resourcemanager/storage/armstorage/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/azkeys/v1.4.0/sdk/security/keyvault/azkeys/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/azsecrets/v1.4.0/sdk/security/keyvault/azsecrets/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/internal/v1.2.0/sdk/security/keyvault/internal/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/storage/azblob
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/storage/azblob/v1.7.0/sdk/storage/azblob/LICENSE.txt
+
+  - github.com/Azure/go-ntlmssp
+    License: MIT
+    URL: https://github.com/Azure/go-ntlmssp/blob/v0.1.1/LICENSE
+
+  - github.com/AzureAD/microsoft-authentication-library-for-go/apps
+    License: MIT
+    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.2/LICENSE
+
   - github.com/beorn7/perks/quantile
     License: MIT
     URL: https://github.com/beorn7/perks/blob/v1.0.1/LICENSE
@@ -1515,6 +1487,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/buger/jsonparser
     License: MIT
     URL: https://github.com/buger/jsonparser/blob/v1.2.0/LICENSE
+
+  - github.com/BurntSushi/toml
+    License: MIT
+    URL: https://github.com/BurntSushi/toml/blob/v1.6.0/COPYING
 
   - github.com/catppuccin/go
     License: MIT
@@ -1808,6 +1784,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/hashicorp/go-metrics/blob/v0.5.4/LICENSE
 
+  - github.com/HdrHistogram/hdrhistogram-go
+    License: MIT
+    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.2.0/LICENSE
+
   - github.com/homeport/dyff/pkg/dyff
     License: MIT
     URL: https://github.com/homeport/dyff/blob/v1.12.0/LICENSE
@@ -1952,9 +1932,25 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/mailru/easyjson/blob/v0.9.2/LICENSE
 
+  - github.com/MakeNowJust/heredoc
+    License: MIT
+    URL: https://github.com/MakeNowJust/heredoc/blob/v1.0.0/LICENSE
+
   - github.com/marshallbrekka/go-u2fhost
     License: MIT
     URL: https://github.com/marshallbrekka/go-u2fhost/blob/3ccdec8c8105/LICENSE
+
+  - github.com/Masterminds/semver/v3
+    License: MIT
+    URL: https://github.com/Masterminds/semver/blob/v3.5.0/LICENSE.txt
+
+  - github.com/Masterminds/sprig/v3
+    License: MIT
+    URL: https://github.com/Masterminds/sprig/blob/v3.3.0/LICENSE.txt
+
+  - github.com/Masterminds/squirrel
+    License: MIT
+    URL: https://github.com/Masterminds/squirrel/blob/v1.5.4/LICENSE
 
   - github.com/mattn/go-ciede2000
     License: MIT
@@ -2112,6 +2108,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/sergi/go-diff/blob/v1.4.0/LICENSE
 
+  - github.com/Shopify/ejson
+    License: MIT
+    URL: https://github.com/Shopify/ejson/blob/v1.5.4/LICENSE.txt
+
   - github.com/shopspring/decimal
     License: MIT
     URL: https://github.com/shopspring/decimal/blob/v1.4.0/LICENSE
@@ -2212,13 +2212,13 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/xo/terminfo/blob/abceb7e1c41e/LICENSE
 
-  - github.com/yuin/goldmark
-    License: MIT
-    URL: https://github.com/yuin/goldmark/blob/v1.8.2/LICENSE
-
   - github.com/yuin/goldmark-emoji
     License: MIT
     URL: https://github.com/yuin/goldmark-emoji/blob/v1.0.6/LICENSE
+
+  - github.com/yuin/goldmark
+    License: MIT
+    URL: https://github.com/yuin/goldmark/blob/v1.8.2/LICENSE
 
   - github.com/yuin/gopher-lua
     License: MIT
