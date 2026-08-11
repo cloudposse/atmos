@@ -540,6 +540,15 @@ func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[strin
 	delete(result, "ARM_USE_CLI")
 	result["ARM_USE_OIDC"] = "true"
 
+	// Export the tenant for OIDC. The shared CLI-path env preparation deliberately omits it (it
+	// would make the azurerm backend's Azure CLI credential pass both --subscription and --tenant,
+	// which the CLI rejects). OIDC (service-principal / federated) auth needs the tenant explicitly
+	// and does not shell out to the Azure CLI, so there is no such conflict here.
+	if p.tenantID != "" {
+		result["ARM_TENANT_ID"] = p.tenantID
+		result["AZURE_TENANT_ID"] = p.tenantID
+	}
+
 	// Set client ID for Terraform providers.
 	if p.clientID != "" {
 		result["ARM_CLIENT_ID"] = p.clientID

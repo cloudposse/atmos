@@ -67,7 +67,7 @@ func TestAzureBackendClient_ResourceGroupExists(t *testing.T) {
 	tests := []struct {
 		name       string
 		status     int
-		code       string // non-empty → error response
+		code       string // non-empty → error response.
 		location   string
 		wantExists bool
 		wantLoc    string
@@ -185,7 +185,7 @@ func TestAzureBackendClient_CreateStorageAccount(t *testing.T) {
 		disableSharedKey bool
 		fail             bool
 		wantErr          bool
-		wantSharedKeyNil bool // expect AllowSharedKeyAccess left unset (Azure default)
+		wantSharedKeyNil bool // expect AllowSharedKeyAccess left unset (Azure default).
 	}{
 		{name: "hardened (use_azuread_auth) disables shared key", disableSharedKey: true, wantSharedKeyNil: false},
 		{name: "default leaves shared key unset", disableSharedKey: false, wantSharedKeyNil: true},
