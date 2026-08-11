@@ -41,10 +41,18 @@ jobs:
         run: |
           # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
           # not here — exclude them so they never enter this matrix.
+          #
+          # `find .` output is prefixed with "./" and needs that stripped to get a
+          # repo-root-relative path; `git diff --name-only` output is already
+          # repo-root-relative with no such prefix. A single `cut -d/ -f2-` applied
+          # to both (as this used to do) works for `find`'s "./pkg/..." but silently
+          # chops the real leading directory off `git diff`'s "pkg/..." instead,
+          # producing a nonexistent path like "asciicast/..." for vhs-action to fail
+          # on — so each branch gets its own, correct stripping.
           if [[ "$IS_LABELED" == "true" ]]; then
-            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
+            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | sed 's#^\./##')
           else
-            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
+            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' || true)
           fi
           # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
           # split; collapse to a single space-separated line.
