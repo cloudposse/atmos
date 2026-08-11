@@ -127,6 +127,12 @@ again. See [inputs](/workflows/steps/inputs) for the full field reference, inclu
 checks that a file, tool, or directory exists, not whether it is fresh, so it does not replace
 `inputs`/`artifacts`.
 
+The scope is different, too: Task's `sources:`/`generates:` gates the task's *entire* `cmds:`
+list, but `inputs`/`artifacts` are declared per step — skipping one step does not stop later
+steps in the same command from running. If a task has more than one `cmds:` entry and the
+freshness decision must gate all of them together, combine them into a single `shell`/`script`
+step rather than spreading `inputs`/`artifacts` across several migrated steps.
+
 ## `internal: true` Tasks
 
 Set `internal: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
@@ -243,7 +249,7 @@ Choose the one that fits what you are splitting:
   [Toolchain Configuration](/cli/configuration/toolchain). Task has no built-in match for this.
 - **One interface across every command.** `task --list` shows task names and descriptions.
   Atmos adds `atmos <command> --help` with the same flag and argument format for every command,
-  in addition to the CLI-wide `atmos help`.
+  in addition to the CLI-wide `atmos --help`.
 
 ## Migration Checklist
 
@@ -252,7 +258,7 @@ Choose the one that fits what you are splitting:
 - [ ] Turn `desc:`/`cmds:` into command `description:`/`steps:`
 - [ ] Turn any `deps:` chain into `dependencies.commands`, to keep Task's concurrent-by-default behavior
 - [ ] Turn `vars:`/`env:` into command `flags:` (with defaults) and `env:` maps
-- [ ] Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
+- [ ] Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths` -- combine multiple `cmds:` entries into one step if the freshness decision must gate all of them together
 - [ ] Split `includes:` into auto-discovered `atmos.d/*.yaml` files, separate workflow files, or both
 - [ ] Mark `internal: true` tasks as `internal: true` custom commands
 </TaskList>
@@ -262,8 +268,10 @@ Choose the one that fits what you are splitting:
 <FAQItem question="Will my sources:/generates: caching still work?">
 Yes, once you migrate it. Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
 — with no explicit `when:`, that implicitly skips the step when nothing has changed since its last
-successful run, the same as Task's own check. It does not carry over automatically; you add it to
-the migrated step yourself. See
+successful run. Unlike Task's own check, the scope is per step, not per task — if the task has
+more than one `cmds:` entry, combine them into a single step so the freshness decision still gates
+all of them together. It does not carry over automatically; you add it to the migrated step
+yourself. See
 [sources:/generates: Becomes inputs/artifacts](#sourcesgenerates-becomes-inputsartifacts).
 </FAQItem>
 

@@ -16,9 +16,10 @@ import TabItem from '@theme/TabItem'
 <Intro>
 A Makefile gives your team an ad-hoc way to run build, test, and deploy tasks. Atmos gives you
 the same capability as a native, documented feature: custom commands and workflows. Your
-Terraform code, scripts, and other tools do not need to change. Atmos replaces only the
-Makefile's targets and recipes. You can keep the Makefile as a thin wrapper around `atmos`
-commands while you migrate.
+Terraform code, scripts, and other tools do not need to change, and neither does your Makefile.
+Atmos is the front door either way: if you want, a custom command can simply call `make <target>`
+as its one step, making Atmos a thin wrapper around the Makefile you already have, not the other
+way around. Moving a target's own recipe logic into native `steps:` is worthwhile, but optional.
 </Intro>
 
 :::tip Using an AI Coding Assistant?
@@ -38,11 +39,11 @@ See [AI Agent Skills](/ai/skills) for details.
 |--------------------------------------------------|------------------------------------------------------------|
 | `.PHONY` target, no dependencies                  | [Custom command](/cli/configuration/commands)               |
 | `VAR ?= default`, `$(VAR)`                        | Command `flags:` with a `default:`                          |
-| `target: dep1 dep2` (dependency order)            | Steps in order for a single chain, or command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies) when the same prerequisite is shared by more than one target |
+| `target: dep1 dep2` (dependency order)            | Steps in order (`make`'s own default is sequential); command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies) only when a prerequisite is shared by more than one target, or the source used `-j` |
 | Recipe shell lines (`@`-silenced, tab-indented)    | Steps (`type: shell`, `output: none`)                        |
 | `ifeq (...)` conditional                          | Go template `{{ if }}` in a command, or `when:` in a workflow |
 | `$(MAKE) -j`, `$(MAKE) -C dir`                    | `parallel` / `matrix` steps                                  |
-| Self-documenting `help` target (`awk`-parsed)     | Free: `atmos help` and each command's `description:`         |
+| Self-documenting `help` target (`awk`-parsed)     | Free: `atmos --help` and each command's `description:`       |
 
 ## Before and After
 
@@ -123,7 +124,7 @@ actually name the component.
 
 Turn each `.PHONY` target that has no dependency into its own
 [custom command](/cli/configuration/commands). In the example above, these are `build`, `test`,
-`lint`, and `clean`. Give each command a `description:`. Then `atmos help` shows the same
+`lint`, and `clean`. Give each command a `description:`. Then `atmos --help` shows the same
 information as a hand-written, `awk`-parsed `help` target, so you can delete that target. Turn
 `VAR ?= default` into a `flags:` entry with a matching `default:`.
 
@@ -152,15 +153,22 @@ from another command or workflow step, prefer `type: atmos` with `command: build
 `type: shell` with `command: atmos build`: `type: atmos` auto-applies `-s <stack>` from the
 step's `stack:` field and renders through Atmos's structured step output.
 
-For a simple, single-caller chain such as `deploy: build test`, steps calling each prerequisite in
-order are enough. But `make` itself only builds a shared prerequisite once per invocation, even
-when more than one target depends on it — plain steps lose that property, since each caller's
-`type: atmos`/`type: shell` step runs it again. Command-level
+For a chain such as `deploy: build test`, steps calling each prerequisite in order is the
+default-preserving match — GNU Make's own default is to build a target's prerequisites one at a
+time, in the order listed, not concurrently (`-j` is required for that). Do not reach for
+`dependencies.commands` here just because it exists; it runs concurrently by default, which
+changes the order unless you've confirmed the prerequisites are genuinely independent.
+
+`dependencies.commands` earns its place for a different reason: `make` only builds a shared
+prerequisite once per invocation, even when more than one target depends on it — plain steps
+lose that property, since each caller's `type: atmos`/`type: shell` step runs it again.
 [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies)
-is the direct match for that case: it resolves through the same DAG scheduler as
-[`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:`,
-runs concurrently by default, and dedups a dependency shared by more than one command to a single
-run — the same guarantee `make` gives you for free:
+dedups a dependency shared by more than one command to a single run, the same guarantee `make`
+gives you for free, independent of whether you also want the concurrency. If order still matters
+between the shared dependents (`test` must still finish before `deploy`'s own steps run, and
+`build` before `test`), declare that edge directly on the later command's own
+`dependencies.commands`, rather than listing every prerequisite as a flat, sibling list on the
+caller — the scheduler then waits for it, concurrency aside:
 
 ```yaml
 commands:
@@ -183,6 +191,9 @@ commands:
       - type: atmos
         command: terraform apply infra -s dev
 ```
+
+`build` still runs exactly once for the whole `atmos deploy` invocation — `test`'s own edge on
+`build` orders it correctly ahead of `test`, and `deploy`'s own steps wait for both to finish.
 
 If the Makefile's `deploy` target also selects a Terraform environment, for example through
 `-var-file=envs/$(ENV).tfvars`, that part is a Terraform migration step, not a Make migration
@@ -241,19 +252,28 @@ when it didn't. Use `when: timestamp.changed` instead if you want Make's exact m
 See [inputs](/workflows/steps/inputs) for the full field reference. It does not carry over on its
 own — add `inputs`/`artifacts` to the migrated step yourself.
 
+The scope is different, too: Make's freshness check gates the target's *entire* recipe, but
+`inputs`/`artifacts` are declared per step — skipping one step does not stop later steps in the
+same command from running. If a target's recipe has more than one command line and the freshness
+decision must gate all of them together, combine them into a single `shell`/`script` step rather
+than spreading `inputs`/`artifacts` across several steps.
+
 ## What Stays the Same
 
 - **Your Terraform code, scripts, and CLIs.** Atmos wraps them. It does not replace them.
 - **Environment variables you already export.** Move them into a command or step `env:` map.
-- **The Makefile itself, for a while.** Keep it as a thin wrapper around `atmos` commands until
-  your team is ready. Then remove it, once each leaf target and chain has become a command or a
-  workflow.
+- **The Makefile itself, for as long as you want.** A custom command can call `make <target>`
+  directly as its one step — Atmos becomes a consistent facade over the tools you already have,
+  not a mandatory rewrite of them. Move a target's own recipe logic into native `steps:` only when
+  you want something `make` doesn't give you: richer step types, freshness checks, or interactive
+  prompts.
 
 ## What You Gain
 
-- **One command for discovery.** Run `atmos help` to list every command. Run
-  `atmos <command> --help` to see its flags and arguments. A Makefile has no built-in match for
-  this. It needs a hand-written, `awk`-parsed `help` target instead.
+- **One command for discovery.** Run `atmos --help` to list every command (recommended over the
+  interactive `atmos help`, which pages the same listing). Run `atmos <command> --help` to see its
+  flags and arguments. A Makefile has no built-in match for this. It needs a hand-written,
+  `awk`-parsed `help` target instead.
 - **One consistent interface.** Every custom command uses the same flag and argument syntax.
   A Makefile has no fixed convention. Each target can parse its own variables in its own way.
 - **More than 30 built-in step types.** Atmos ships step types for shell commands, orchestration
@@ -273,19 +293,23 @@ own — add `inputs`/`artifacts` to the migrated step yourself.
 - [ ] List every Makefile target. Mark each one as independent, or part of a chain
 - [ ] Turn independent targets into custom commands in `atmos.yaml`
 - [ ] Turn `VAR ?= default` variables into command `flags:` with defaults
-- [ ] Turn dependency chains into steps in order, or `dependencies.commands` when a prerequisite is shared by more than one target
+- [ ] Turn dependency chains into steps in order (`make`'s own default) -- reach for `dependencies.commands` only when a prerequisite is shared by more than one target, or the source used `-j`
 - [ ] Replace `$(MAKE) -j`/`-C` with `parallel`/`matrix` steps
-- [ ] Delete any hand-written `help` target. `atmos help` replaces it
-- [ ] Keep the Makefile as a thin wrapper during the transition, if you want one
+- [ ] Delete any hand-written `help` target. `atmos --help` replaces it
+- [ ] Keep the Makefile for as long as you want -- call `make <target>` from a step, or migrate the logic into `steps:`, whichever fits
 - [ ] Turn file-timestamp targets into step `inputs.sources`/`artifacts.paths`
 </TaskList>
 
 ## Common Questions
 
 <FAQItem question="Do I have to delete my Makefile?">
-No. It can stay as a thin wrapper around `atmos` commands during a step-by-step migration. Each
-leaf target should become a custom command over time. Each dependency chain should become a
-workflow. There is no fixed deadline for this.
+No, and not every target has to move into Atmos either. A custom command can call `make <target>`
+as its one step (`command: make build`), which gives you `atmos build`'s consistent flags,
+`atmos --help` discovery, and tool-dependency management as a facade over the Makefile you already
+have — the point of migrating is a consistent interface over every tool, not necessarily rewriting
+every tool. Move a target's logic into native `steps:` when you want something `make` doesn't
+have: richer step types, freshness checks, or interactive prompts. Neither is required, and there
+is no fixed deadline for either.
 </FAQItem>
 
 <FAQItem question="What happens to targets that skip work based on file timestamps?">
@@ -298,9 +322,10 @@ carry over automatically; you add it to the migrated step yourself. See
 <FAQItem question="Can one custom command call another?">
 Yes, through either step type: `type: atmos` with `command: <other-command-name>`, or
 `type: shell` with `command: atmos <other-command-name>`. Prefer `type: atmos` — it auto-applies
-`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not. If the same
-prerequisite is shared by more than one target, prefer `dependencies.commands` instead — it dedups
-a shared dependency to a single run, the way `make` already does.
+`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not. This preserves
+`make`'s own sequential default. Reach for `dependencies.commands` instead only when the same
+prerequisite is shared by more than one target — it dedups a shared dependency to a single run,
+the way `make` already does — or when the source target actually used `-j`.
 </FAQItem>
 
 <FAQItem question="What if I use Just or Task instead of Make?">

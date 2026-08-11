@@ -72,8 +72,10 @@ user's repository.
     targets, recipes, and tasks that Make, Just, and Task provide. This doesn't have to happen all
     at once — a Makefile, Justfile, or Taskfile can stay as a thin wrapper around `atmos` commands
     during migration, the same incremental approach described in Principle 6. The end state turns
-    each leaf target into a custom command and each target chain into a workflow, reached step by
-    step.
+    each leaf target into a custom command; a target chain usually stays a custom command too,
+    using `dependencies.commands`/`dependencies.workflows` for its prerequisites. Reserve
+    workflows for fixed, multi-step orchestration across more than one component — not every
+    dependency chain needs one.
 
 ## Decide the Migration Shape First
 
@@ -99,23 +101,32 @@ the user has existing Terraform state that a new Atmos component must read.
 
 These behaviors apply to every task runner. Check them before you open a reference file:
 
-- **The default order can change.** Task runs `deps:` at the same time by default. Make and Just
-  run dependencies one after another, unless the user adds a flag such as `make -j`. Atmos steps
-  always run one after another, unless you put them inside a `parallel` or `matrix` step. A named
-  task/target/recipe dependency (Task's `deps:`, Make's `target: dep1 dep2`) maps to command-level
-  `dependencies.commands`/`dependencies.workflows`, not to plain steps or a hand-built `parallel`
-  step -- it runs concurrently by default and dedups a dependency shared by more than one caller
-  to a single run, matching Task's/Make's own behavior. Check the source tool's real default. Do
-  not assume the step order stays the same when you move it to Atmos.
-- **Freshness checks map to `inputs`/`artifacts`, not to plain steps.** Task's `sources:`/
-  `generates:` fields and non-`.PHONY` Make targets both skip work when a file has not changed.
-  Atmos's step-level `inputs.sources`/`artifacts.paths` fields are the direct match: with no
-  explicit `when:`, declaring them implicitly means `when: checksum.changed`, and the step is
-  skipped when nothing has changed since its last successful run. This does not carry over on its
-  own -- add `inputs`/`artifacts` to the migrated step yourself. The `require`/`assert` step type
-  does not replace this. It only checks that a file exists, not whether it is fresh.
+- **The default order can change, and it differs by source tool.** Task runs `deps:` at the same
+  time by default, so command-level `dependencies.commands`/`dependencies.workflows` -- also
+  concurrent by default -- is its direct match. Make and Just run dependencies one after another
+  by default; `make -j` is required for concurrency. Do not describe `dependencies.commands` as
+  matching Make's/Just's *default* -- it changes the order, and can introduce a race between
+  prerequisites that were only ever sequential by accident, not by a declared dependency. For an
+  ordinary Make/Just chain, ordered steps preserve the default; reach for `dependencies.commands`
+  there only when the source used `-j`, the prerequisites are genuinely independent, or a
+  prerequisite is shared by more than one caller (it dedups a shared dependency to a single run
+  regardless of concurrency -- true for every one of these tools). Check the source tool's real
+  default before you move it.
+- **Freshness checks map to `inputs`/`artifacts`, not to plain steps -- and the scope is per
+  step.** Task's `sources:`/`generates:` fields and non-`.PHONY` Make targets both skip the
+  *entire* recipe/task when a file has not changed. Atmos's step-level `inputs.sources`/
+  `artifacts.paths` fields are the direct match: with no explicit `when:`, declaring them
+  implicitly means `when: checksum.changed`, and *that one step* is skipped when nothing has
+  changed since its last successful run -- later steps in the same command still run regardless.
+  If the source recipe/task runs more than one command and the freshness decision must gate all
+  of them together, combine them into a single `shell`/`script` step rather than spreading
+  `inputs`/`artifacts` across several steps. This does not carry over on its own -- add
+  `inputs`/`artifacts` to the migrated step yourself. The `require`/`assert` step type does not
+  replace this. It only checks that a file exists, not whether it is fresh.
 - **`workflows.base_path` needs to be set explicitly once the user has their own `atmos.yaml`.**
-  A target chain becomes an Atmos workflow (Principle 7), but `atmos workflow <name>` fails with
+  Only fixed, multi-step orchestration across more than one component becomes an Atmos workflow
+  (Principle 7) -- most target chains stay a custom command with `dependencies.commands` instead.
+  `atmos workflow <name>` fails with
   `'workflows.base_path' must be configured in 'atmos.yaml'` until you add it (for example,
   `workflows.base_path: "stacks/workflows"`). None of this skill's `atmos.yaml` snippets show it
   by default -- add it the moment the user's migration reaches its first workflow.

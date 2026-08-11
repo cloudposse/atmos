@@ -51,7 +51,7 @@ clean: ## Remove build artifacts
     [Split commands across files](#split-commands-across-files) below.
 2. Turn the silent-recipe `@` prefix into the step field `output: none`.
 3. Delete the `help` target. Atmos generates the same information from each command's
-    `description:` field. Run `atmos help` or `atmos <command> --help` to see it.
+    `description:` field. Run `atmos --help` or `atmos <command> --help` to see it.
 4. When one target depends on another leaf target, such as `test: build`, add a step that runs
     the dependency's command. Do not use a `type: atmos` step to call a custom command. That step
     type is only for native Atmos verbs, such as `terraform plan`. Use a `type: shell` step with
@@ -102,14 +102,19 @@ deploy: build test ## Plan and apply the given ENV (default: dev)
 **Steps:**
 
 1. Turn `ENV ?= dev` into a command `flags:` entry with `default: "dev"`.
-2. Turn the target list (`deploy: build test`) into command-level `dependencies.commands: [build,
-    test]`. This is the direct match, not a workaround: it resolves through the same DAG scheduler
-    as `parallel`/`matrix` `needs:`, runs concurrently by default -- `make` itself does not
-    guarantee prerequisite order without `-j` either -- and dedups a dependency shared by more
-    than one target to a single run, the same guarantee `make` already gives for free. Do not turn
-    this into plain sequential steps unless one prerequisite genuinely must finish before another
-    starts; if so, declare that dependency directly on the later one's own `dependencies.commands`
-    instead of ordering a flat list.
+2. GNU Make's own default is to build a target's prerequisites one at a time, in the order
+    listed, not concurrently (`-j` is required for that) -- so ordered steps, not
+    `dependencies.commands`, are the default-preserving match for a plain target list. Reach for
+    command-level `dependencies.commands: [build, test]` instead only when: a prerequisite is
+    shared by more than one target (it dedups a shared dependency to a single run, the same
+    guarantee `make` already gives for free, independent of concurrency), the prerequisites are
+    genuinely independent, or the source target actually used `-j`. Here, `build` is shared --
+    Shape A's `test` already depends on it via its own `atmos build` step -- so
+    `dependencies.commands` is the right call for `deploy`. Convert Shape A's `test` from its
+    `atmos build` step to `dependencies.commands: [build]` at the same time, so the scheduler
+    still orders `build` before `test` even though both now run through the same
+    concurrent-by-default mechanism, instead of listing `build` and `test` as a flat, unordered
+    sibling list on `deploy`.
 3. Move the Terraform-specific line, `terraform apply -var-file=envs/$(ENV).tfvars`, to
     [from-native-terraform.md Shape B](from-native-terraform.md#shape-b-single-dir-with--var-file-from-a-makefile).
     That guide shows how the Terraform side maps to stacks. Here, the line becomes a single
@@ -121,6 +126,14 @@ deploy: build test ## Plan and apply the given ENV (default: dev)
 
 ```yaml
 commands:
+  - name: test
+    description: Run unit tests
+    dependencies:
+      commands: [build]
+    steps:
+      - type: shell
+        command: go test ./...
+
   - name: deploy
     description: Plan and apply the given environment (default dev)
     flags:
@@ -133,6 +146,9 @@ commands:
       - type: atmos
         command: terraform apply infra -s {{ .Flags.env }}
 ```
+
+`build` still runs exactly once for the whole `atmos deploy` invocation -- `test`'s own edge on
+`build` orders it correctly ahead of `test`, and `deploy`'s own steps wait for both to finish.
 
 `infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
 target's Terraform code to `components/terraform/infra/` (the default
@@ -190,6 +206,11 @@ every file's mtime, which makes Make think everything changed even when it didn'
 `when: timestamp.changed` instead for Make's exact mtime semantics. Task's `sources:`/`generates:`
 feature maps to the same fields. See
 [from-taskfile.md](from-taskfile.md#sourcesgenerates-becomes-inputsartifacts) for more detail.
+The scope is different, too: Make's freshness check gates the target's entire recipe, but
+`inputs`/`artifacts` are declared per step -- skipping one step does not stop later steps in the
+same command from running. If a target's recipe has more than one command line and the freshness
+decision must gate all of them together, combine them into a single `shell`/`script` step rather
+than spreading `inputs`/`artifacts` across several steps.
 
 ### Silent recipes and command echo
 
@@ -216,18 +237,26 @@ language.
 
 - Do not confuse `.PHONY` with a caching feature -- it is not one. Do not drop file-timestamp
   caching without adding the matching `inputs`/`artifacts` fields to the migrated step; it is a
-  direct match, not a gap, but it does not carry over on its own.
-- Do not turn `target: dep1 dep2` into plain sequential steps, or into a hand-built `parallel`
-  step, without first considering command-level `dependencies.commands` -- it runs concurrently
-  by default and dedups a dependency shared by more than one target, the way `make` already does.
+  direct match, not a gap, but it does not carry over on its own. Remember the scope difference
+  too: it gates one step, not the whole recipe -- combine multiple command lines into a single
+  step if the freshness decision must cover all of them.
+- Do not describe `dependencies.commands` as matching Make's *default* prerequisite order --
+  `make` builds prerequisites one at a time, in the order listed, unless `-j` is given.
+  `dependencies.commands` runs concurrently by default, which changes that order. Ordered steps
+  are the default-preserving match for a plain `target: dep1 dep2`; reach for
+  `dependencies.commands` only when a prerequisite is shared by more than one target (it dedups a
+  shared dependency to a single run regardless of concurrency, the way `make` already does), the
+  prerequisites are genuinely independent, or the source used `-j`.
 - Do not turn every private or helper target into its own discoverable command by default. If the
   helper is called from only one recipe, put its logic in a step inside the command or workflow
   that needs it. If it needs to be called from more than one recipe, or invoked directly for
   debugging, make it a custom command with `internal: true` instead -- it stays runnable but is
   excluded from `atmos --help` listings and completion suggestions.
 - Do not treat "wrap `atmos` commands in the Makefile" as the final state. It is a valid bridge
-  during early migration. Leaf targets should become custom commands. Target chains should become
-  workflows.
+  during early migration. Leaf targets should become custom commands. A target chain usually stays
+  a custom command too, using `dependencies.commands` for its prerequisites -- do not prescribe a
+  workflow for every dependency chain. Reserve workflows for fixed, multi-step orchestration
+  across more than one component.
 - Do not invent `when:` conditions that check flag values on workflow steps. The `when:` field
   checks CEL context values, such as `stack`, `ci`, and `local`. Flag-based conditionals belong
   in the custom command's own Go templates.
