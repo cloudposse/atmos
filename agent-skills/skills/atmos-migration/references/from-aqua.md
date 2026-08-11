@@ -185,11 +185,17 @@ just in one project. Atmos has no matching variable. Use the project `.tool-vers
 tools every developer needs, or `toolchain.aliases`/`toolchain.registries` in `atmos.yaml` or in
 `.atmos.d/`.
 
-### No lazy, shim-based install
+### Shims are opt-in, not automatic
 
-Aqua CLI installs a shim for each declared tool, then downloads the real binary the first time
-the shim runs. Atmos does not use shims. Atmos installs a tool when a component, workflow, or
-command that declares it runs, or when the user runs `atmos toolchain install` directly.
+Aqua CLI installs a shim for every declared tool automatically, then downloads the real binary
+the first time the shim runs. Atmos has an equivalent, `toolchain.proxies`, but it is opt-in per
+command, not automatic for every package in `.tool-versions`: add a `proxies:` entry (command
+name -> tool) under the `toolchain:` block, then run `atmos toolchain env` to activate it in an
+interactive shell -- the pinned tool installs on first use, the same lazy-install behavior as an
+Aqua shim. See [Toolchain Proxies](https://atmos.tools/cli/configuration/toolchain/proxies).
+
+Without an explicit proxy entry, Atmos installs a tool when a component, workflow, or command
+that declares it runs, or when the user runs `atmos toolchain install` directly.
 
 ### Unsupported package types
 

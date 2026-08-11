@@ -200,10 +200,15 @@ through the work.
 
 ### Shims vs. `dependencies.tools`
 
-mise adds tools to the shell PATH with shims. Atmos does not do this by default. Atmos adds a
-tool to PATH only for the command, workflow, or component that declares it, through
-`dependencies.tools`. For an interactive shell, run `atmos toolchain env` or
-`atmos toolchain path`.
+mise adds every declared tool to the shell PATH with shims automatically. Atmos has an
+equivalent, `toolchain.proxies`, but it is opt-in per command, not automatic for every tool in
+`.tool-versions`: add a `proxies:` entry (command name -> tool) under the `toolchain:` block, then
+run `atmos toolchain env` to activate it in an interactive shell. See
+[Toolchain Proxies](https://atmos.tools/cli/configuration/toolchain/proxies).
+
+Without an explicit proxy entry, Atmos adds a tool to PATH only for the command, workflow, or
+component that declares it, through `dependencies.tools`. For an interactive shell without
+proxies, run `atmos toolchain env` or `atmos toolchain path`.
 
 ## What to NOT Do
 
