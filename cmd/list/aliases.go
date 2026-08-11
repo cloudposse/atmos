@@ -25,7 +25,21 @@ import (
 const (
 	aliasTypeBuiltIn    = "built-in"
 	aliasTypeConfigured = "configured"
+	aliasTypeCustom     = "custom"
+
+	// These two constants mirror cmd.annotationCustomCommand/annotationValueTrue
+	// (cmd/help_template.go) -- duplicated rather than imported since cmd/list is a subpackage
+	// of cmd (cmd already imports cmd/list to register the `atmos list` command group), so
+	// importing cmd from here would be a cycle.
+	customCommandAnnotationKey   = "customCommand"
+	customCommandAnnotationValue = "true"
 )
+
+// isCustomCommand reports whether cmd was registered from atmos.yaml's `commands:` (native
+// aliases on such a command should be categorized aliasTypeCustom, not aliasTypeBuiltIn).
+func isCustomCommand(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[customCommandAnnotationKey] == customCommandAnnotationValue
+}
 
 // AliasInfo represents a command alias with its source type.
 type AliasInfo struct {
@@ -209,10 +223,15 @@ func collectCommandAliases(cmd *cobra.Command, parentPath, cmdPath, rootName str
 		// Build command path without root command name for display.
 		displayCmdPath := stripRootPrefix(cmdPath, rootName)
 
+		aliasType := aliasTypeBuiltIn
+		if isCustomCommand(cmd) {
+			aliasType = aliasTypeCustom
+		}
+
 		aliases = append(aliases, AliasInfo{
 			Alias:   aliasPath,
 			Command: displayCmdPath,
-			Type:    aliasTypeBuiltIn,
+			Type:    aliasType,
 		})
 	}
 
@@ -310,10 +329,14 @@ func buildAliasFooter(aliases []AliasInfo) string {
 
 	builtInCount := 0
 	configuredCount := 0
+	customCount := 0
 	for _, alias := range aliases {
-		if alias.Type == aliasTypeBuiltIn {
+		switch alias.Type {
+		case aliasTypeBuiltIn:
 			builtInCount++
-		} else {
+		case aliasTypeCustom:
+			customCount++
+		default:
 			configuredCount++
 		}
 	}
@@ -322,7 +345,7 @@ func buildAliasFooter(aliases []AliasInfo) string {
 	if len(aliases) != 1 {
 		footer += "es"
 	}
-	footer += fmt.Sprintf(" (%d built-in, %d configured)", builtInCount, configuredCount)
+	footer += fmt.Sprintf(" (%d built-in, %d custom, %d configured)", builtInCount, customCount, configuredCount)
 
 	return styles.Footer.Render(footer) + "\n"
 }

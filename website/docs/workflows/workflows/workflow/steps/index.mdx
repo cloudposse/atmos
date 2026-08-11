@@ -56,6 +56,18 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
   <dt>`when`</dt>
   <dd>Optional condition that decides whether the step runs. Built-in predicate keywords are evaluated first; other non-empty scalar strings are evaluated as CEL.</dd>
 
+  <dt>[`continue`](/workflows/steps/continue)</dt>
+  <dd>Forgive this step's own failure so later steps still run and the overall workflow status is unaffected — GitHub Actions' `continue-on-error` semantics.</dd>
+
+  <dt>[`inputs`](/workflows/steps/inputs)</dt>
+  <dd>Declare this step's freshness sources (`sources`) so Atmos can skip the step when nothing has changed since it last ran successfully. Pair with [`artifacts`](/workflows/steps/artifacts) (outputs) and [`preconditions`](/workflows/steps/preconditions) (required tools) — three separate sibling fields.</dd>
+
+  <dt>[`artifacts`](/workflows/steps/artifacts)</dt>
+  <dd>Declare this step's expected output files.</dd>
+
+  <dt>[`preconditions`](/workflows/steps/preconditions)</dt>
+  <dd>Declare tools that must already be on `PATH` for this step to be considered already satisfied.</dd>
+
   <dt>`env`</dt>
   <dd>Step-level environment variables. See [env](/workflows/steps/env).</dd>
 
@@ -157,6 +169,11 @@ steps:
 ```
 
 Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and `env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate while `when: !cel 'ci'` evaluates CEL. `status` starts as `success` and becomes `failure` after a previous step fails.
+
+Two more small fact groups are always available:
+
+- `os`, `arch`, `platform` — the equivalent of a dedicated `platforms:` field, letting a step run only on a given OS/architecture: `when: "os == 'darwin'"`, `when: "platform == 'linux/arm64'"`.
+- `checksum`, `timestamp`, `preconditions`, `sources`, `artifacts` — freshness facts for a step's [`inputs`](/workflows/steps/inputs)/[`artifacts`](/workflows/steps/artifacts)/[`preconditions`](/workflows/steps/preconditions) (`checksum.changed`, `timestamp.changed`, `preconditions.success`), computed lazily so a step only pays for the specific fact its `when` expression references. `sources`/`artifacts` resolve to structured per-file records (`path`, `mtime`, `checksum`), not bare strings — see [inputs: Advanced](/workflows/steps/inputs#advanced-structured-records).
 
 ## Cleanup Steps
 
