@@ -72,6 +72,13 @@ type ClusterInfo struct {
 	// or "aks", reproducing the existing "atmos-eks-<name>-<region>" scheme.
 	UserPrefix string
 
+	// AccountID further disambiguates the exec-plugin username for clouds
+	// where Name+Region is not guaranteed unique: Azure resource groups are
+	// scoped per-subscription, so the same cluster name and resource group
+	// can exist in two subscriptions. Leave empty to keep the existing
+	// "atmos-eks-<name>-<region>" AWS/EKS username format unchanged.
+	AccountID string
+
 	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
 	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or
 	// [azure, aks, token, --cluster-name, X, --resource-group, Y]. Built by
@@ -266,6 +273,9 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
 	userName := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
+	if info.AccountID != "" {
+		userName += "-" + info.AccountID
+	}
 
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = contextName
