@@ -214,7 +214,9 @@ atmos auth login          # or omit --identity, an interactive selector appears
 Then, to actually use the credentials:
 
 ```bash
-# Option A: isolated subshell, credentials auto-cleaned on exit
+# Option A: isolated subshell — credential env vars are scoped to this child
+# shell and go away when it exits (the underlying credential files on disk
+# aren't revoked; they just expire on their own normal schedule)
 atmos auth shell
 
 # Option B: run one command with credentials injected
@@ -235,7 +237,9 @@ eval $(atmos auth env --chdir=/path/to/your/checkout)
 
 ## What's Actually Zero-Setup (and What's Optional)
 
-Install Atmos once; use it on every repo in the organization. No other setup required: clone a repo, run
+Install Atmos once; use it on every repo in the organization. For a private central repo, that also means
+GitHub-authenticating once (`gh auth login`, or a configured token — see
+[step 3](#3-private-repo-access--no-token-setup-needed) above). From there: clone a repo, run
 `atmos auth login`, then `atmos auth shell` or `atmos auth exec` — no profile block to copy, no account
 ID to transcribe.
 
@@ -251,9 +255,10 @@ just by existing in your shell; it only gets credentials if something explicitly
 Want that ambient parity anyway? Add `eval $(atmos auth env --chdir=...)` to your shell profile (see
 [Developer Workflow](#developer-workflow)) — optional, and most repo-scoped work doesn't need it.
 
-Either way, updates are centrally managed: add an account or rotate a role once in the central repo, tag
-a release, and every project that imports it picks it up — no re-broadcast, no per-developer drift, no
-stale access lingering after revocation.
+Either way, updates are centrally managed rather than re-broadcast: add an account or rotate a role once
+in the central repo and tag a release. Projects tracking a branch pick up the change immediately; projects
+pinned to a tag (the pattern this guide recommends) pick it up the next time they bump their `ref` — still
+a one-line change in one file, not a wiki post and a round of developers hand-editing `~/.aws/config`.
 
 ## Troubleshooting
 
