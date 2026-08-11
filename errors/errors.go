@@ -1115,6 +1115,20 @@ var (
 	ErrDeleteBucket              = errors.New("failed to delete bucket")
 	ErrListObjects               = errors.New("failed to list bucket objects")
 
+	// Azure (azurerm) backend provisioning errors.
+	ErrResourceGroupRequired     = errors.New("backend.resource_group_name is required for azurerm backend provisioning")
+	ErrAzureSubscriptionRequired = errors.New("an Azure subscription id is required for azurerm backend provisioning (set backend.subscription_id or a subscription on the active Azure identity)")
+	ErrAzureLocationRequired     = errors.New("an Azure location is required to create the resource group for azurerm backend provisioning")
+	ErrLoadAzureConfig           = errors.New("failed to build Azure client for backend provisioning")
+	ErrCheckResourceGroupExist   = errors.New("failed to check Azure resource group existence")
+	ErrCreateResourceGroup       = errors.New("failed to create Azure resource group")
+	ErrCheckStorageAccountExist  = errors.New("failed to check Azure storage account existence")
+	ErrCreateStorageAccount      = errors.New("failed to create Azure storage account")
+	ErrApplyBlobDataProtection   = errors.New("failed to apply Azure blob data-protection defaults")
+	ErrCheckContainerExist       = errors.New("failed to check Azure storage container existence")
+	ErrCreateStorageContainer    = errors.New("failed to create Azure storage container")
+	ErrDeleteStorageAccount      = errors.New("failed to delete Azure storage account")
+
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
 	ErrComponentTypeMismatch  = errors.New("path component type does not match command")
