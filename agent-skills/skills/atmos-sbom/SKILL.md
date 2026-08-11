@@ -4,6 +4,7 @@ description: "Atmos SBOM provenance: CycloneDX and SPDX generation from vendor a
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - ../atmos-ci/references/native-ci.md
   - ../atmos-vendoring/references/component-updater.md

@@ -8,7 +8,7 @@ slug: /cli/configuration/commands/dependencies
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `dependencies` field declares tool dependencies that Atmos installs automatically before a command runs. This ensures any CLI tools your command requires are available at the correct version, leveraging Atmos's [toolchain management](/cli/configuration/toolchain/).
+The `dependencies` field declares tool dependencies that Atmos installs automatically before a command runs, and the named commands and workflows that must complete first. This ensures any CLI tools your command requires are available at the correct version, leveraging Atmos's [toolchain management](/cli/configuration/toolchain/).
 </Intro>
 
 ## Basic Usage
@@ -166,6 +166,81 @@ Dependencies support SemVer constraints:
 :::tip
 The combination of `.tool-versions` for project-wide defaults and per-command `dependencies` for overrides gives you flexibility while maintaining consistency across your team.
 :::
+
+## Named command and workflow dependencies
+
+`dependencies.commands` and `dependencies.workflows` declare other named custom commands and [workflows](/workflows) that must complete before this command runs its own steps. They resolve and run **concurrently by default** — like go-task's `deps:` — through the same generic DAG scheduler used by [`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:` and Terraform's `dependencies.components`:
+
+```yaml
+commands:
+  - name: build
+    steps:
+      - command: go build ./...
+
+  - name: test
+    dependencies:
+      commands: [build]
+    steps:
+      - command: go test ./...
+
+  - name: lint
+    dependencies:
+      commands: [build]
+    steps:
+      - command: golangci-lint run ./...
+
+  - name: release
+    dependencies:
+      commands: [test, lint]
+    steps:
+      - type: atmos
+        command: terraform apply infra -s dev
+```
+
+Running `atmos release` resolves the full dependency closure: `build` runs once (even though both `test` and `lint` depend on it — a shared dependency is deduped, not run twice), then `test` and `lint` run concurrently once `build` finishes, then `release`'s own steps run.
+
+<dl>
+  <dt>`commands`</dt>
+  <dd>List of custom command names. Entries can be a plain string (`build`) or an object with `flags`/`args` overrides for a parameterized invocation. Commands run **in-process**, reusing the already-registered Cobra command — no subprocess is spawned. Resolved globally: Atmos deep-merges every `atmos.d`-imported command definition into one list before any command runs, so there's no file boundary to specify.</dd>
+
+  <dt>`workflows`</dt>
+  <dd>List of workflow names, each as an object with a required `file:` — a custom command has no "current workflow file" to default a bare name against, so the file is always explicit, resolved the same way the CLI's `atmos workflow <name> -f <file>` resolves it. Workflow dependencies run in-process within `internal/exec`.</dd>
+</dl>
+
+### Parameterized dependencies
+
+An entry with `flags`/`args` runs the target with those overrides. Two entries with the **same** name and parameters collapse into one execution; entries with **different** parameters are distinct and both run:
+
+```yaml
+commands:
+  - name: build
+    flags:
+      - name: env
+        default: dev
+    steps:
+      - command: go build -o bin/{{ .Flags.env }}/handler ./cmd/handler
+
+  - name: release
+    dependencies:
+      commands:
+        - name: build
+          flags: { env: dev }
+        - name: build
+          flags: { env: prod }
+    steps:
+      - command: ./scripts/publish.sh
+```
+
+### Failure propagation
+
+By default (`wait_all`), a failed dependency skips everything that transitively depends on it. `fail` reuses the exact same modes [`parallel`](/workflows/steps/type/parallel#failure-behavior) uses, derived from every direct dependency entry on this command (`best_effort` wins if any sets it, else `fail_fast` if any sets it, else `wait_all`):
+
+```yaml
+dependencies:
+  commands:
+    - name: test
+      fail: best_effort   # wait_all (default) | fail_fast | best_effort
+```
 
 ## Related Documentation
 

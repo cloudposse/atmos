@@ -4,6 +4,7 @@ description: "Shared Atmos step DSL for workflows, custom commands, hooks, and c
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Steps
@@ -138,6 +139,25 @@ Do not use `--chdir` or `cd` for real workflow, custom-command, or step executio
 `type: simulate` `cd <directory>` is the exception: use it to keep the recorded story coherent,
 and still configure `working_directory` on every real step. Relative paths must be checked
 against the surface's base path rules.
+
+Working-directory resolution is not one rule — it differs by surface, and getting this wrong
+silently anchors relative fields (`source`, `destination`, `path`, `files`, `context`, ...) to the
+wrong directory instead of erroring:
+
+| Surface | Relative `working_directory` resolves against |
+|---|---|
+| Custom command's own `working_directory:` (command- or step-level) | Atmos `base_path` — always, whether or not the value starts with `./` |
+| A workflow's own `working_directory:` (the workflow-level default), or a `type: shell`/`exec`/`atmos` step's `working_directory:` | Atmos `base_path` — always, whether or not the value starts with `./` |
+| An extended/registered step type (`archive`, `file`, `junit`, `workdir`, `container`, ...) with its own step-level `working_directory:` | The current working directory — always, whether or not the value starts with `./` |
+| `kind: step`/`kind: steps` hook | The component's own working directory for a bare value or when unset; the current working directory for a dot-prefixed value (`.`, `..`, `./x`, `../x`) — see `atmos-hooks` for the full Dot/Bare rule |
+
+A workflow-level `working_directory:` default still reaches extended step types that leave their
+own `working_directory:` unset — it falls back to the same `base_path`-anchored resolution the
+workflow-level default already gets for shell/exec/atmos steps.
+
+After `working_directory` is resolved, relative handler fields such as `source`, `destination`,
+`path`, `files`, and `context` resolve against that directory. For container builds, `Dockerfile`
+resolves relative to the resolved `context`, not directly to `working_directory`.
 
 ## Output
 

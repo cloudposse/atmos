@@ -7,7 +7,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -15,20 +17,36 @@ import (
 var valueType string
 
 var configGetCmd = &cobra.Command{
-	Use:     "get <path>",
-	Short:   "Read a value from atmos.yaml by dot-notation path",
-	Long:    "Read a value from atmos.yaml using a dot-notation path (e.g. logs.level).",
+	Use:   "get <path>",
+	Short: "Read a value from the effective Atmos configuration by dot-notation path",
+	Long: `Read a value using a dot-notation path (e.g. logs.level) from the effective,
+fully-merged Atmos configuration for this invocation -- the same configuration
+"terraform plan", "list stacks", etc. actually use, including every --config
+file, --config-path directory, and profile applied on top of each other. This
+can differ from what a single physical atmos.yaml file declares on its own
+(cloudposse/atmos#2867): use "atmos config format" or read the file directly
+to inspect one file's own declared value instead.`,
 	Example: "atmos config get logs.level",
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "config.getRunE")()
 
-		file, err := resolveConfigFile(cmd)
+		// Reload rather than reuse atmosConfigPtr, mirroring configListCmd: this keeps `get`
+		// independently correct (and independently testable via RunE) even before root.go's
+		// PersistentPreRun has populated the package-level pointer. Safe to call with an empty
+		// ConfigAndStacksInfo{} -- LoadConfig now falls back to os.Args/env for
+		// --config/--config-path/--base-path itself (cloudposse/atmos#2868).
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return err
 		}
 
-		value, err := atmosyaml.GetFile(file, args[0])
+		effectiveYAML, err := u.ConvertToYAML(atmosConfig)
+		if err != nil {
+			return err
+		}
+
+		value, err := atmosyaml.Get([]byte(effectiveYAML), args[0])
 		if err != nil {
 			return err
 		}
@@ -140,12 +158,16 @@ func init() {
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent
-// --config flag (first entry) acts as an explicit override; otherwise the file
-// is discovered in the current directory or git root.
+// --config flag acts as an explicit override when it names exactly one file;
+// otherwise the file is discovered in the current directory or git root.
 func resolveConfigFile(cmd *cobra.Command) (string, error) {
-	override := ""
-	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
-		override = cfgFiles[0]
+	cfgFiles, _ := cmd.Flags().GetStringSlice("config")
+	override, err := cfg.ResolveConfigOverride(cfgFiles)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation(err.Error()).
+			WithHint("Pass a single --config file to config set/delete/format, or edit the target file directly.").
+			Err()
 	}
 
 	file, err := cfg.ResolveEditableConfigFile(atmosConfigPtr, override)
