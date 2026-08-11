@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -465,6 +466,15 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 	spinHandler := handler.(*SpinHandler)
 	executable, err := os.Executable()
 	require.NoError(t, err)
+	if runtime.GOOS == "windows" {
+		// Exercise cmd.exe quoting with the path shape that needs it.
+		sourceExecutable := executable
+		executable = filepath.Join(t.TempDir(), "path with spaces", filepath.Base(executable))
+		require.NoError(t, os.MkdirAll(filepath.Dir(executable), 0o755))
+		binary, err := os.ReadFile(sourceExecutable)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(executable, binary, 0o755))
+	}
 	var stdout, stderr bytes.Buffer
 	ctx := WithOutputSuppressed(t.Context())
 	vars := NewVariables()
@@ -488,7 +498,7 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 
 func shellQuoteArgument(argument string) string {
 	if runtime.GOOS == "windows" {
-		return `""` + strings.ReplaceAll(argument, `"`, `""`) + `""`
+		return `"` + strings.ReplaceAll(argument, `"`, `""`) + `"`
 	}
 	return "'" + strings.ReplaceAll(argument, "'", "'\\''") + "'"
 }
