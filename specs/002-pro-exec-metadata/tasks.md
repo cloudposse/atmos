@@ -328,7 +328,7 @@ Task: "Unit tests for UploadExecMetadata in pkg/pro/api_client_exec_test.go"
 2. Complete Phase 2: Foundational (CRITICAL — blocks all stories)
 3. Complete Phase 3: User Story 1
 4. **STOP and VALIDATE**: every command in CI+Pro reports async, with zero effect
-   elsewhere
+  elsewhere
 5. This alone satisfies SC-001/SC-002/SC-005 (async half) and is a demoable MVP
 
 ### Incremental Delivery

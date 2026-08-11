@@ -12,32 +12,32 @@ This supplements the existing "Pact Contract Testing" README section
 
 1. Configure Atmos Pro locally (static token is simplest for manual testing):
 
-   ```bash
-   export ATMOS_PRO_TOKEN=<a-real-or-test-token>
-   export ATMOS_PRO_BASE_URL=http://localhost:<port>   # point at a local stub if desired
-   ```
+  ```bash
+  export ATMOS_PRO_TOKEN=<a-real-or-test-token>
+  export ATMOS_PRO_BASE_URL=http://localhost:<port>   # point at a local stub if desired
+  ```
 
 2. Simulate CI detection (the gate requires `telemetry.IsCI()` to be true):
 
-   ```bash
-   export CI=true
-   ```
+  ```bash
+  export CI=true
+  ```
 
 3. Run any command and confirm (via `--logs-level Debug` or `ATMOS_LOGS_LEVEL=Debug`) that
-   an exec-metadata upload attempt is logged:
+  an exec-metadata upload attempt is logged:
 
-   ```bash
-   ATMOS_LOGS_LEVEL=Debug atmos version
-   ```
+  ```bash
+  ATMOS_LOGS_LEVEL=Debug atmos version
+  ```
 
 4. Run a synchronous command and confirm it visibly waits on / reports the upload outcome:
 
-   ```bash
-   ATMOS_LOGS_LEVEL=Debug atmos terraform plan <component> -s <stack>
-   ```
+  ```bash
+  ATMOS_LOGS_LEVEL=Debug atmos terraform plan <component> -s <stack>
+  ```
 
 5. Unset `CI` and confirm no upload attempt is logged for the same commands — this is the
-   negative-path check from Acceptance Scenario US1.2/US1.3.
+  negative-path check from Acceptance Scenario US1.2/US1.3.
 
 ## Regenerating the Pact contract
 

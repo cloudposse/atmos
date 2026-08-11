@@ -36,14 +36,14 @@ its own `pkg/` package, following the precedent of `pkg/pro/`, `pkg/git/`, `pkg/
 
 **Decision**: Two distinct call sites:
 1. **Async default**: `cmd/root.go`, immediately after the existing
-   `telemetry.CaptureCmd(cmd, err)` call (line ~1905), add
-   `proexec.CaptureAsync(cmd, err)`. This covers every command uniformly, mirroring the
-   existing telemetry hook's placement exactly.
+  `telemetry.CaptureCmd(cmd, err)` call (line ~1905), add
+  `proexec.CaptureAsync(cmd, err)`. This covers every command uniformly, mirroring the
+  existing telemetry hook's placement exactly.
 2. **Synchronous allowlist**: `terraform plan`, `terraform apply` (both already funnel
-   through `internal/exec/terraform.go: ExecuteTerraform`), and `describe affected` call
-   `proexec.CaptureSync(...)` directly and explicitly from their own execution path,
+  through `internal/exec/terraform.go: ExecuteTerraform`), and `describe affected` call
+  `proexec.CaptureSync(...)` directly and explicitly from their own execution path,
    *before* returning, passing whatever command-specific structured data they have
-   already computed (e.g. `terraform plan`'s `plugin.OutputResult`).
+  already computed (e.g. `terraform plan`'s `plugin.OutputResult`).
 
 `proexec.CaptureAsync`/`CaptureSync` both internally re-check the CI+Pro gate and no-op
 if it doesn't hold, so call sites don't need to duplicate that check.
