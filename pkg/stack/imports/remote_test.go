@@ -40,6 +40,29 @@ func newTestRemoteImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration)
 	return importer
 }
 
+// useTestGlobalImporter swaps the package-global remote importer for one backed by an
+// isolated temp cache dir, and resets the singleton (Once, importer, and error) to its
+// zero state on cleanup — it does not restore any prior importer, so stacked use is not
+// safe. It must prime globalImporterOnce (not just assign globalImporter): getGlobalImporter()
+// calls globalImporterOnce.Do, so a freshly-reset Once would otherwise run and overwrite the
+// injection with a real-cache importer that writes to the shared user cache dir — which flakes
+// on CI runners (notably Windows: "The system cannot find the path specified").
+func useTestGlobalImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration) {
+	t.Helper()
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	globalImporterOnce = sync.Once{}
+	globalImporterErr = nil
+	// Consume the Once now so the lazy getGlobalImporter() keeps our injected importer.
+	globalImporterOnce.Do(func() { globalImporter = importer })
+
+	t.Cleanup(func() {
+		globalImporterOnce = sync.Once{}
+		globalImporter = nil
+		globalImporterErr = nil
+	})
+}
+
 func initGitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 
@@ -528,14 +551,7 @@ func TestRemoteImporter_ResolveRemoteImport_GlobalImporter(t *testing.T) {
 	}))
 	defer server.Close()
 
-	globalImporterOnce = sync.Once{}
-	globalImporter = newTestRemoteImporter(t, &schema.AtmosConfiguration{})
-	globalImporterErr = nil
-	t.Cleanup(func() {
-		globalImporterOnce = sync.Once{}
-		globalImporter = nil
-		globalImporterErr = nil
-	})
+	useTestGlobalImporter(t, &schema.AtmosConfiguration{})
 
 	uri := server.URL + "/config.yaml"
 	matches, err := ResolveRemoteImport(&schema.AtmosConfiguration{}, uri)
@@ -556,14 +572,7 @@ func TestRemoteImporter_DownloadRemoteImport_GlobalImporter(t *testing.T) {
 	}))
 	defer server.Close()
 
-	globalImporterOnce = sync.Once{}
-	globalImporter = newTestRemoteImporter(t, &schema.AtmosConfiguration{})
-	globalImporterErr = nil
-	t.Cleanup(func() {
-		globalImporterOnce = sync.Once{}
-		globalImporter = nil
-		globalImporterErr = nil
-	})
+	useTestGlobalImporter(t, &schema.AtmosConfiguration{})
 
 	path, err := DownloadRemoteImport(&schema.AtmosConfiguration{}, server.URL+"/config.yaml")
 	require.NoError(t, err)
@@ -636,12 +645,11 @@ func TestProcessImportPath_Remote(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Reset the global importer for this test.
-	globalImporterOnce = sync.Once{}
-	globalImporter = nil
-	globalImporterErr = nil
-
 	atmosConfig := &schema.AtmosConfiguration{}
+	// Isolate the global importer's cache to a temp dir so the remote download does not
+	// write to (and flake on) the shared real user cache dir.
+	useTestGlobalImporter(t, atmosConfig)
+
 	basePath := filepath.Join(string(os.PathSeparator), "stacks")
 
 	// Process a remote import path.
@@ -694,12 +702,11 @@ func TestResolveImportPaths_MixedPaths(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Reset the global importer for this test.
-	globalImporterOnce = sync.Once{}
-	globalImporter = nil
-	globalImporterErr = nil
-
 	atmosConfig := &schema.AtmosConfiguration{}
+	// Isolate the global importer's cache to a temp dir so the remote download does not
+	// write to (and flake on) the shared real user cache dir.
+	useTestGlobalImporter(t, atmosConfig)
+
 	basePath := filepath.Join(string(os.PathSeparator), "stacks")
 
 	importPaths := []string{
@@ -830,12 +837,11 @@ func TestResolveImportPaths_ErrorPropagation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Reset the global importer for this test.
-	globalImporterOnce = sync.Once{}
-	globalImporter = nil
-	globalImporterErr = nil
-
 	atmosConfig := &schema.AtmosConfiguration{}
+	// Isolate the global importer's cache to a temp dir so the remote download does not
+	// write to (and flake on) the shared real user cache dir.
+	useTestGlobalImporter(t, atmosConfig)
+
 	basePath := filepath.Join(string(os.PathSeparator), "stacks")
 
 	importPaths := []string{

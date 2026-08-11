@@ -1,0 +1,60 @@
+vars:
+  stage: local
+
+components:
+  # The emulator is a stack-scoped component; `atmos emulator up aws -s local`
+  # starts (or reuses) it and the identity above resolves its live endpoint.
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1
+      # Pin to the same Floci digest as the service containers in
+      # .github/workflows/test.yml (job "[floci] go e2e") for reproducibility and to
+      # avoid pulling a drifting `:latest`. Keep in sync; comment tracks the tag.
+      container:
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+
+  terraform:
+    # KMS key — proves the provider contributor + identity let Terraform apply a
+    # real resource against the emulator. Components run under the default identity
+    # (`local-aws`, declared with `default: true` in atmos.yaml) — no per-component
+    # identity binding is needed.
+    kms:
+      vars:
+        name: kms
+
+    # Producer — encrypts its bucket with the KMS key via `!terraform.output`
+    # (remote state) and publishes its bucket id to the store via an after-apply hook.
+    producer:
+      dependencies:
+        components:
+          - name: kms
+      hooks:
+        publish:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            bucket_id: .bucket_id
+      vars:
+        name: producer
+        kms_key_arn: !terraform.output kms key_arn
+
+    # Consumer — reads the producer's coordinate via `!store` and a declared secret
+    # via `!secret`, proving in-process store + secret resolution against the emulator.
+    consumer:
+      dependencies:
+        components:
+          - name: producer
+      secrets:
+        vars:
+          APP_SECRET:
+            description: Application secret stored in the emulated SSM SecureString.
+            store: secrets/ssm
+            required: true
+      vars:
+        name: consumer
+        kms_key_arn: !terraform.output kms key_arn
+        upstream_bucket: !store config/ssm producer bucket_id
+        app_secret: !secret APP_SECRET

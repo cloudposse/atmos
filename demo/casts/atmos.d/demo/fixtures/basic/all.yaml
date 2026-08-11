@@ -1,0 +1,27 @@
+commands:
+  - name: casts generate demo fixtures basic
+    description: Regenerate casts sourced from demo/casts/fixtures/basic
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts generate demo fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts generate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures basic
+    description: Validate casts sourced from demo/casts/fixtures/basic
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts validate demo fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts validate demo fixtures basic describe-stacks

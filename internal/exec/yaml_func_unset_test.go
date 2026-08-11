@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -164,6 +165,54 @@ func TestProcessUnsetWithSkip(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, result)
+}
+
+// TestProcessNodesPreservesEmptyLists guards against a regression where the slice-rebuilding
+// branch of processNodes returned a nil slice for empty lists. A nil slice round-trips through
+// YAML as `[]` (so `atmos describe` looks fine) but marshals to JSON `null` in generated
+// `*.terraform.tfvars.json`, which breaks consumers such as Terraform's `concat()` that reject
+// null where a list is expected. Empty lists must remain empty (non-nil) slices.
+func TestProcessNodesPreservesEmptyLists(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := map[string]any{
+		"empty_list": []any{},
+		"nested": map[string]any{
+			"inner_empty": []any{},
+		},
+		"non_empty": []any{"a"},
+		// A list whose only items are removed by !unset must also stay an empty (non-nil) list.
+		"unset_to_empty": []any{"!unset"},
+	}
+
+	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	assert.NoError(t, err)
+
+	emptyList, ok := result["empty_list"].([]any)
+	assert.True(t, ok, "empty_list should remain a []any")
+	assert.NotNil(t, emptyList, "empty_list must not become nil")
+	assert.Len(t, emptyList, 0)
+
+	nested, ok := result["nested"].(map[string]any)
+	assert.True(t, ok)
+	innerEmpty, ok := nested["inner_empty"].([]any)
+	assert.True(t, ok, "nested.inner_empty should remain a []any")
+	assert.NotNil(t, innerEmpty, "nested.inner_empty must not become nil")
+	assert.Len(t, innerEmpty, 0)
+
+	unsetToEmpty, ok := result["unset_to_empty"].([]any)
+	assert.True(t, ok, "unset_to_empty should remain a []any")
+	assert.NotNil(t, unsetToEmpty, "a list emptied by !unset must not become nil")
+	assert.Len(t, unsetToEmpty, 0)
+
+	// Confirm the user-facing symptom directly: empty lists serialize to `[]`, not `null`.
+	j, err := json.Marshal(result)
+	assert.NoError(t, err)
+	assert.JSONEq(
+		t,
+		`{"empty_list":[],"nested":{"inner_empty":[]},"non_empty":["a"],"unset_to_empty":[]}`,
+		string(j),
+	)
 }
 
 func TestUnsetMarker(t *testing.T) {

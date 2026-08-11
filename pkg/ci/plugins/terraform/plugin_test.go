@@ -21,17 +21,23 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have 6 bindings: before/after for plan, apply, deploy.
-	require.Len(t, bindings, 6)
+	// Should have 11 bindings: before/after for plan/apply/test/deploy plus
+	// aggregate hooks for graph-backed plan/apply/destroy runs.
+	require.Len(t, bindings, 11)
 
 	// Verify all bindings have handlers.
 	expectedEvents := []string{
 		"before.terraform.plan",
 		"after.terraform.plan",
+		"after.terraform.plan.aggregate",
 		"before.terraform.apply",
 		"after.terraform.apply",
+		"after.terraform.apply.aggregate",
+		"before.terraform.test",
+		"after.terraform.test",
 		"before.terraform.deploy",
 		"after.terraform.deploy",
+		"after.terraform.destroy.aggregate",
 	}
 
 	for _, expectedEvent := range expectedEvents {
@@ -72,6 +78,35 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	// Check terraform-specific fields.
 	assert.Equal(t, 1, ctx.Resources.Create)
 	assert.True(t, ctx.HasChanges())
+}
+
+func TestPlugin_BuildTemplateContext_Test(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "local"}
+	output := "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n"
+
+	result, err := p.buildTemplateContext(info, nil, output, "test", nil)
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+	assert.Equal(t, "test", ctx.Command)
+	require.NotNil(t, ctx.TestResult, "test command should populate TestResult")
+	assert.Equal(t, 2, ctx.TestResult.Total)
+	assert.Equal(t, 2, ctx.TestResult.Pass)
+}
+
+func TestPlugin_GetOutputVariables_Test(t *testing.T) {
+	p := &Plugin{}
+	result := ParseTestOutput("  run \"a\"... pass\n  run \"b\"... fail\n\nFailure! 1 passed, 1 failed.\n")
+	result.HasErrors = true
+
+	vars := p.getOutputVariables(result, "test")
+	assert.Equal(t, "2", vars["tests_total"])
+	assert.Equal(t, "1", vars["tests_passed"])
+	assert.Equal(t, "1", vars["tests_failed"])
+	assert.Equal(t, "0", vars["tests_errored"])
+	assert.Equal(t, "false", vars["success"])
 }
 
 func TestPlugin_BuildTemplateContext_StripsOutputBeforePlanActions(t *testing.T) {

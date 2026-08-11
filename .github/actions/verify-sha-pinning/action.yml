@@ -1,8 +1,10 @@
 name: Verify SHA Pinning
 description: >
-  Verifies that SHA-pinned GitHub Actions in workflow files match
-  the tag claimed in their version comment. Prevents supply chain
-  attacks where tags are force-pushed to malicious commits.
+  Verifies that every third-party GitHub Action reference in workflow
+  files is SHA-pinned (coverage), and that SHA-pinned references match
+  the tag claimed in their version comment (drift). Prevents supply
+  chain attacks where tags are force-pushed to malicious commits or
+  actions are left unpinned entirely.
 
 inputs:
   github-token:
@@ -15,11 +17,14 @@ inputs:
 
 outputs:
   verified-count:
-    description: 'Number of SHA-pinned actions verified'
+    description: 'Number of tag-pinned actions verified against their upstream tag'
     value: ${{ steps.verify.outputs.verified_count }}
   failed-count:
-    description: 'Number of mismatches found'
+    description: 'Number of drift mismatches or resolution errors found'
     value: ${{ steps.verify.outputs.failed_count }}
+  unpinned-count:
+    description: 'Number of third-party action references that are not SHA-pinned at all'
+    value: ${{ steps.verify.outputs.unpinned_count }}
   status:
     description: 'Overall result: pass or fail'
     value: ${{ steps.verify.outputs.status }}
@@ -29,7 +34,7 @@ runs:
   steps:
     - name: Verify SHA pins against upstream tags
       id: verify
-      uses: actions/github-script@v7
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
       with:
@@ -39,6 +44,29 @@ runs:
           const path = require('path');
 
           const workflowDir = process.env.WORKFLOW_DIR;
+          const tagShaCache = new Map();
+          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
+
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          async function withRetries(operation, label, maxAttempts = 3) {
+            let lastErr;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                return await operation();
+              } catch (err) {
+                if (nonRetryableStatuses.has(err.status)) {
+                  throw err;
+                }
+                lastErr = err;
+                if (attempt < maxAttempts) {
+                  core.warning(`${label} failed on attempt ${attempt}/${maxAttempts}: ${err.message}; retrying`);
+                  await sleep(250 * attempt);
+                }
+              }
+            }
+            throw lastErr;
+          }
 
           // Find all workflow files
           const files = fs.readdirSync(workflowDir)
@@ -49,70 +77,105 @@ runs:
             core.info('No workflow files found');
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
+            core.setOutput('unpinned_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
           }
 
-          // Match: uses: owner/repo[/sub]@<40-char-sha> # <tag>
-          const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+          // Classify a `uses:` line into one of:
+          //   - tag-pinned:    owner/repo[/sub]@<40-char-sha> # v<tag>  (drift-checked against the tag)
+          //   - branch-pinned: owner/repo[/sub]@<40-char-sha> # <branch>  (SHA nailed down, no tag to diff)
+          //   - unpinned:      owner/repo[/sub]@<tag-or-branch>  (no SHA at all — the coverage gap)
+          // Local composite/action refs (./..., ../...) are not third-party and are skipped.
+          function parseUsesLine(line) {
+            const m = line.match(/uses:\s*(\S+)(?:\s*#\s*(\S+))?/);
+            if (!m) return null;
+            const [, refValue, comment] = m;
+            if (refValue.startsWith('./') || refValue.startsWith('../')) return null;
 
-          // Collect all pinned references
+            const atIdx = refValue.lastIndexOf('@');
+            if (atIdx === -1) return null;
+            const refPath = refValue.slice(0, atIdx);
+            const ref = refValue.slice(atIdx + 1);
+            const parts = refPath.split('/');
+            if (parts.length < 2) return null;
+            const [owner, repo] = parts;
+
+            if (/^[a-f0-9]{40}$/.test(ref)) {
+              if (comment && /^v?\d/.test(comment)) {
+                return { kind: 'tag-pinned', owner, repo, sha: ref, tag: comment };
+              }
+              return { kind: 'branch-pinned', owner, repo, sha: ref, ref: comment || null };
+            }
+
+            return { kind: 'unpinned', owner, repo, ref };
+          }
+
+          // Collect all third-party references
           const refs = [];
           for (const file of files) {
             const content = fs.readFileSync(file, 'utf8');
             const lines = content.split('\n');
             for (let i = 0; i < lines.length; i++) {
-              let match;
-              pattern.lastIndex = 0;
-              while ((match = pattern.exec(lines[i])) !== null) {
-                refs.push({
-                  file: path.basename(file),
-                  line: i + 1,
-                  owner: match[1],
-                  repo: match[2],
-                  pinnedSha: match[3],
-                  tag: match[4],
-                });
-              }
+              const parsed = parseUsesLine(lines[i]);
+              if (!parsed) continue;
+              refs.push({ file: path.basename(file), line: i + 1, ...parsed });
             }
           }
 
           if (refs.length === 0) {
-            core.info('No SHA-pinned actions found');
+            core.info('No third-party action references found');
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
+            core.setOutput('unpinned_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
           }
 
-          core.info(`Found ${refs.length} SHA-pinned action(s) to verify\n`);
+          core.info(`Found ${refs.length} third-party action reference(s) to check\n`);
 
           // Resolve a tag to its commit SHA, handling annotated tags
           async function resolveTagSha(owner, repo, tag) {
+            const cacheKey = `${owner}/${repo}@${tag}`;
+            if (tagShaCache.has(cacheKey)) {
+              return tagShaCache.get(cacheKey);
+            }
+
             try {
-              const ref = await github.rest.git.getRef({
-                owner,
-                repo,
-                ref: `tags/${tag}`,
-              });
+              const ref = await withRetries(
+                () => github.rest.git.getRef({
+                  owner,
+                  repo,
+                  ref: `tags/${tag}`,
+                }),
+                `Resolving ${cacheKey}`
+              );
 
               const obj = ref.data.object;
+              let sha;
 
               // Lightweight tag — points directly to a commit
               if (obj.type === 'commit') {
-                return obj.sha;
+                sha = obj.sha;
+                tagShaCache.set(cacheKey, sha);
+                return sha;
               }
 
               // Annotated tag — dereference to get the commit
               if (obj.type === 'tag') {
-                const tagObj = await github.rest.git.getTag({
-                  owner,
-                  repo,
-                  tag_sha: obj.sha,
-                });
-                return tagObj.data.object.sha;
+                const tagObj = await withRetries(
+                  () => github.rest.git.getTag({
+                    owner,
+                    repo,
+                    tag_sha: obj.sha,
+                  }),
+                  `Dereferencing ${cacheKey}`
+                );
+                sha = tagObj.data.object.sha;
+                tagShaCache.set(cacheKey, sha);
+                return sha;
               }
 
               throw new Error(`Unexpected ref object type: ${obj.type}`);
@@ -130,7 +193,10 @@ runs:
 
             // Check if the pinned SHA exists in this repo at all
             try {
-              await github.rest.repos.getCommit({ owner, repo, ref: pinnedSha });
+              await withRetries(
+                () => github.rest.repos.getCommit({ owner, repo, ref: pinnedSha }),
+                `Checking ${owner}/${repo}@${pinnedSha}`
+              );
               details.existsInRepo = true;
             } catch (err) {
               details.existsInRepo = (err.status !== 404 && err.status !== 422);
@@ -139,9 +205,12 @@ runs:
             // Find which tags (if any) point to this SHA
             if (details.existsInRepo) {
               try {
-                const tags = await github.paginate(github.rest.repos.listTags, {
-                  owner, repo, per_page: 100,
-                });
+                const tags = await withRetries(
+                  () => github.paginate(github.rest.repos.listTags, {
+                    owner, repo, per_page: 100,
+                  }),
+                  `Listing tags for ${owner}/${repo}`
+                );
                 details.matchingTags = tags
                   .filter(t => t.commit.sha === pinnedSha)
                   .map(t => t.name);
@@ -155,15 +224,41 @@ runs:
 
           let verified = 0;
           let failed = 0;
+          let unpinned = 0;
           const errors = [];
           const results = [];
 
           for (const ref of refs) {
+            if (ref.kind === 'unpinned') {
+              const label = `${ref.owner}/${ref.repo}@${ref.ref}`;
+              const detail = `Currently uses floating ref "@${ref.ref}" — not SHA-pinned`;
+              const msg = `❌ ${label} — not SHA-pinned (${ref.file}:${ref.line})`;
+              core.error(msg);
+              errors.push(msg);
+              unpinned++;
+              results.push({
+                action: label, file: ref.file, line: ref.line,
+                status: 'unpinned', detail,
+              });
+              continue;
+            }
+
+            if (ref.kind === 'branch-pinned') {
+              const label = `${ref.owner}/${ref.repo}@${ref.ref || 'HEAD'}`;
+              core.info(`ℹ️  ${label} — SHA-pinned to branch, not tag-verified (${ref.file}:${ref.line})`);
+              results.push({
+                action: label, file: ref.file, line: ref.line,
+                status: 'pinned-branch', detail: `Tracks "${ref.ref}", not tag-verified`,
+              });
+              continue;
+            }
+
+            // kind === 'tag-pinned'
             const label = `${ref.owner}/${ref.repo}@${ref.tag}`;
             try {
               const resolvedSha = await resolveTagSha(ref.owner, ref.repo, ref.tag);
 
-              if (resolvedSha === ref.pinnedSha) {
+              if (resolvedSha === ref.sha) {
                 core.info(`✅ ${label} — SHA verified (${ref.file}:${ref.line})`);
                 verified++;
                 results.push({
@@ -171,10 +266,10 @@ runs:
                   status: 'verified',
                 });
               } else {
-                const info = await investigateMismatch(ref.owner, ref.repo, ref.pinnedSha);
+                const info = await investigateMismatch(ref.owner, ref.repo, ref.sha);
 
                 let msg = `❌ ${label} — SHA mismatch (${ref.file}:${ref.line})\n` +
-                  `   Pinned:   ${ref.pinnedSha}\n` +
+                  `   Pinned:   ${ref.sha}\n` +
                   `   Expected: ${resolvedSha}`;
 
                 let detail = '';
@@ -194,7 +289,7 @@ runs:
                 failed++;
                 results.push({
                   action: label, file: ref.file, line: ref.line,
-                  status: 'mismatch', pinnedSha: ref.pinnedSha,
+                  status: 'mismatch', pinnedSha: ref.sha,
                   expectedSha: resolvedSha, detail,
                 });
               }
@@ -212,32 +307,57 @@ runs:
           }
 
           core.info(`\n${'─'.repeat(60)}`);
-          core.info(`Verified: ${verified}  Failed: ${failed}  Total: ${refs.length}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Total: ${refs.length}`);
 
           core.setOutput('verified_count', verified);
           core.setOutput('failed_count', failed);
-          core.setOutput('status', failed > 0 ? 'fail' : 'pass');
+          core.setOutput('unpinned_count', unpinned);
+          core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
           core.setOutput('results_json', JSON.stringify(results));
 
-          if (failed > 0) {
+          if (failed > 0 || unpinned > 0) {
             core.setFailed(
-              `${failed} SHA-pinned action(s) failed verification:\n\n` +
+              `${failed} action reference(s) failed drift verification and ${unpinned} ` +
+              `action reference(s) are not SHA-pinned at all:\n\n` +
               errors.join('\n\n')
             );
           }
 
     - name: Post or update PR comment
       if: always() && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
         VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}
         FAILED_COUNT: ${{ steps.verify.outputs.failed_count }}
+        UNPINNED_COUNT: ${{ steps.verify.outputs.unpinned_count }}
         STATUS: ${{ steps.verify.outputs.status }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
           const marker = '<!-- verify-sha-pinning -->';
+          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          async function withRetries(operation, label, maxAttempts = 3) {
+            let lastErr;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                return await operation();
+              } catch (err) {
+                if (nonRetryableStatuses.has(err.status)) {
+                  throw err;
+                }
+                lastErr = err;
+                if (attempt < maxAttempts) {
+                  core.warning(`${label} failed on attempt ${attempt}/${maxAttempts}: ${err.message}; retrying`);
+                  await sleep(250 * attempt);
+                }
+              }
+            }
+            throw lastErr;
+          }
+
           const prNumber = context.issue.number;
           if (!prNumber) {
             core.info('Not a PR context — skipping comment');
@@ -247,15 +367,20 @@ runs:
           const results = JSON.parse(process.env.RESULTS_JSON || '[]');
           const verified = parseInt(process.env.VERIFIED_COUNT || '0', 10);
           const failed = parseInt(process.env.FAILED_COUNT || '0', 10);
-          const total = verified + failed;
+          const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
+          const total = results.length;
+          const branchPinned = results.filter(r => r.status === 'pinned-branch').length;
           const status = process.env.STATUS || 'pass';
 
           // Find existing comment
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: prNumber,
-          });
+          const { data: comments } = await withRetries(
+            () => github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            }),
+            `Listing comments for PR #${prNumber}`
+          );
           const existing = comments.find(c => c.body?.includes(marker));
 
           let body;
@@ -265,16 +390,21 @@ runs:
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
-              } else {
-                return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
               }
+              if (r.status === 'pinned-branch') {
+                return `| \`${r.action}\` | ${loc} | ℹ️ Pinned (branch) | ${r.detail || ''} |`;
+              }
+              if (r.status === 'unpinned') {
+                return `| \`${r.action}\` | ${loc} | ❌ Unpinned | ${r.detail || ''} |`;
+              }
+              return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
 
             body = `${marker}
           > [!WARNING]
           > #### SHA Pin Verification Failed
           >
-          > **${failed} of ${total}** SHA-pinned action(s) failed verification.
+          > **${failed}** drift/error issue(s) and **${unpinned}** unpinned reference(s) out of **${total}** total.
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
@@ -282,17 +412,17 @@ runs:
 
           See the [action run](${'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId}) for full details.`;
           } else if (total === 0) {
-            // No SHA-pinned actions found — only update if there was a previous warning
+            // No third-party action references found — only update if there was a previous warning
             if (!existing) return;
             body = `${marker}
           > [!NOTE]
-          > #### SHA Pin Verification — No Pins Found
+          > #### SHA Pin Verification — No References Found
           >
-          > No SHA-pinned actions detected in workflow files.`;
+          > No third-party action references detected in workflow files.`;
           } else {
             // All passed — only post if updating a previous warning
             if (!existing) {
-              core.info('All SHA pins verified — no previous comment to update');
+              core.info('All action references verified/covered — no previous comment to update');
               return;
             }
             // Skip update if already showing success
@@ -304,23 +434,29 @@ runs:
           > [!NOTE]
           > #### SHA Pin Verification Passed ✅
           >
-          > All **${total}** SHA-pinned action(s) verified against upstream tags.`;
+          > All **${total}** third-party action reference(s) are SHA-pinned (**${verified}** tag-verified, **${branchPinned}** branch-pinned).`;
           }
 
           if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body,
-            });
+            await withRetries(
+              () => github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              }),
+              `Updating comment #${existing.id}`
+            );
             core.info(`Updated existing comment #${existing.id}`);
           } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body,
-            });
+            await withRetries(
+              () => github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              }),
+              `Creating comment for PR #${prNumber}`
+            );
             core.info('Created new PR comment');
           }

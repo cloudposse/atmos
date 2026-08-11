@@ -15,6 +15,7 @@ import (
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -216,18 +217,14 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
 
-func TestSSOProvider_WithCustomResolver(t *testing.T) {
-	// Test SSO provider with custom resolver configuration.
+func TestSSOProvider_WithCustomEndpoint(t *testing.T) {
+	// Test SSO provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
 		StartURL: "https://company.awsapps.com/start",
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -238,16 +235,14 @@ func TestSSOProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", p.region)
 	assert.Equal(t, "https://company.awsapps.com/start", p.startURL)
 
-	// Verify the provider has the config with resolver.
+	// Verify the provider has the config with endpoint.
 	assert.NotNil(t, p.config)
 	assert.NotNil(t, p.config.Spec)
-	awsSpec, ok := p.config.Spec["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsSpec)
+	assert.Equal(t, "http://localhost:4566", p.config.Spec["endpoint_url"])
 }
 
-func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SSO provider without custom resolver configuration.
+func TestSSOProvider_WithoutCustomEndpoint(t *testing.T) {
+	// Test SSO provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
@@ -687,6 +682,19 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	assert.Equal(t, "test-token", pollRes.token.AccessToken)
 
 	close(resultChan)
+}
+
+// TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage covers the
+// non-CI branch of displayVerificationPlainText, where a non-empty URL is
+// shown as a message about opening the browser rather than the plain
+// "Verification URL" message used under CI.
+func TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage(t *testing.T) {
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
+	assert.NotPanics(t, func() {
+		displayVerificationPlainText("ABCD-1234", "https://device.sso.us-east-1.amazonaws.com/")
+	})
 }
 
 func TestDisplayVerificationPlainText_EmptyValues(t *testing.T) {

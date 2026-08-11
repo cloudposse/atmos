@@ -120,25 +120,6 @@ func extractIdentityFromArgs(args []string) string {
 	return ""
 }
 
-// CreateAuthManagerFromIdentity creates and authenticates an AuthManager from an identity name.
-// Returns nil if identityName is empty (no authentication requested).
-// Returns error if identityName is provided but auth is not configured in atmos.yaml.
-// This helper reduces nested complexity in describe commands.
-//
-// This function delegates to auth.CreateAndAuthenticateManager to ensure consistent
-// authentication behavior across CLI commands and internal execution logic.
-//
-// Note: This function does not load stack configs for default identities.
-// Use CreateAuthManagerFromIdentityWithAtmosConfig if you need stack-level default identity resolution.
-func CreateAuthManagerFromIdentity(
-	identityName string,
-	authConfig *schema.AuthConfig,
-) (auth.AuthManager, error) {
-	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentity")()
-
-	return auth.CreateAndAuthenticateManager(identityName, authConfig, cfg.IdentityFlagSelectValue)
-}
-
 // CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an
 // identity name using a pre-merged auth config.
 //
@@ -155,10 +136,14 @@ func CreateAuthManagerFromIdentityWithAtmosConfig(
 	identityName string,
 	authConfig *schema.AuthConfig,
 	atmosConfig *schema.AtmosConfiguration,
+	stack string,
 ) (auth.AuthManager, error) {
 	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentityWithAtmosConfig")()
 
-	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	// Thread the target stack so stack-scoped identities (e.g. kind: <target>/emulator)
+	// receive it via SetStack before authentication and can populate the in-process auth
+	// context that identity-aware stores (`!store`) resolve through.
+	return auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig, stack)
 }
 
 // CreateAuthManagerFromIdentityWithStackScan creates and authenticates an AuthManager, first

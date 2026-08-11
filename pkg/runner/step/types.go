@@ -40,6 +40,8 @@ type StepResult struct {
 	Values []string
 	// Metadata contains additional data from the step execution.
 	Metadata map[string]any
+	// Outputs contains named outputs declared by the step.
+	Outputs map[string]string
 	// Skipped indicates if the step was skipped.
 	Skipped bool
 	// Error captures any error message from the step.
@@ -53,6 +55,7 @@ func NewStepResult(value string) *StepResult {
 	return &StepResult{
 		Value:    value,
 		Metadata: make(map[string]any),
+		Outputs:  make(map[string]string),
 	}
 }
 
@@ -72,6 +75,17 @@ func (r *StepResult) WithMetadata(key string, value any) *StepResult {
 		r.Metadata = make(map[string]any)
 	}
 	r.Metadata[key] = value
+	return r
+}
+
+// WithOutput adds a declared output to the result.
+func (r *StepResult) WithOutput(key, value string) *StepResult {
+	defer perf.Track(nil, "step.StepResult.WithOutput")()
+
+	if r.Outputs == nil {
+		r.Outputs = make(map[string]string)
+	}
+	r.Outputs[key] = value
 	return r
 }
 

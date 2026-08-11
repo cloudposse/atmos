@@ -65,15 +65,30 @@ func (c *context) Write(stream Stream, content string) error {
 	case DataStream:
 		writer = c.streams.RawOutput() // Use raw since we already masked
 	case UIStream:
-		writer = c.streams.RawError() // Use raw since we already masked
+		// A scoped override (e.g. SuppressUI for a full-screen TUI) takes precedence
+		// over the live stderr stream, but only for UI output.
+		if override := uiWriterOverride(); override != nil {
+			writer = override
+		} else {
+			writer = c.streams.RawError() // Use raw since we already masked
+		}
 	default:
 		return fmt.Errorf("%w: %v", errUtils.ErrUnknownStream, stream)
 	}
 
 	// Write to stream
-	_, err := fmt.Fprint(writer, masked)
+	written, err := stdio.WriteString(writer, masked)
+	if written > 0 {
+		if written > len(masked) {
+			written = len(masked)
+		}
+		recordOutput(stream, masked[:written])
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
+	}
+	if written < len(masked) {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, stdio.ErrShortWrite)
 	}
 	return nil
 }

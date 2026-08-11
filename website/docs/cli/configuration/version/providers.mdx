@@ -1,0 +1,78 @@
+---
+title: Version Providers
+sidebar_position: 45
+sidebar_label: providers
+sidebar_class_name: command
+description: Configure version lookup backends for managed software versions.
+---
+
+import File from '@site/src/components/File'
+
+`version.providers` names the remote systems Atmos uses to discover and resolve versions. Entries in `version.dependencies` reference providers by name.
+
+Providers are lookup backends, not the software catalog itself. Use them for registries and APIs such as Docker Hub, OCI registries, ECR, and GitHub.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  providers:
+    github:
+      kind: github
+
+    dockerhub:
+      kind: docker
+      url: registry-1.docker.io
+
+    ghcr:
+      kind: oci
+      url: ghcr.io
+
+    ecr_prod:
+      kind: aws/ecr
+      region: us-east-1
+      registry_id: "123456789012"
+
+    local_registry:
+      kind: oci
+      url: localhost:5000
+      insecure: true
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>Provider kind, such as `github`, `docker`, `oci`, or `aws/ecr`.</dd>
+
+  <dt>`url`</dt>
+  <dd>Registry or API endpoint used by the provider.</dd>
+
+  <dt>`region`</dt>
+  <dd>Cloud region for regional providers such as ECR.</dd>
+
+  <dt>`registry_id`</dt>
+  <dd>Registry account or tenant identifier, such as an AWS account ID for ECR.</dd>
+
+  <dt>`insecure`</dt>
+  <dd>Allow plain-HTTP registry access. Use only for local or emulated registries.</dd>
+</dl>
+
+## Example
+
+```yaml
+version:
+  providers:
+    dockerhub:
+      kind: docker
+      url: registry-1.docker.io
+  dependencies:
+    nginx:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: dockerhub
+      package: library/nginx
+      desired: "1.29.0"
+```

@@ -118,7 +118,9 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext,
 	// Build a deterministic cache key including auth profile if present.
 	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
 	if authContext != nil && authContext.AWS != nil {
-		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+		// Include the identity endpoint so an emulator-backed read and a real-AWS
+		// read (same region/role/profile) never alias to the same cached client.
+		cacheKey += fmt.Sprintf(";profile=%s;auth_endpoint=%s", authContext.AWS.Profile, authContext.AWS.EndpointURL)
 	}
 	if envOverlay != nil {
 		// Two components with different env profiles/credentials/endpoints must
@@ -162,14 +164,22 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext,
 		return nil, err
 	}
 
-	// Apply per-service S3 overrides from the env overlay. In SDK v2 the
-	// endpoint URL is a per-service option, not a global config setting, so
-	// we set it at client construction rather than inside LoadConfigWithAuth.
+	// Resolve the S3 endpoint. SDK v2 endpoint URLs are per-service options, not a
+	// global config setting, so we apply it at client construction. Precedence:
+	// the component env overlay (AWS_ENDPOINT_URL_S3) wins, then the active
+	// identity's endpoint (e.g. an emulator). Without this, an emulator-backed
+	// `!terraform.state` read silently targets real AWS — the identity endpoint is
+	// injected into the Terraform subprocess but was never honored in-process.
+	s3Endpoint := ""
+	if envOverlay != nil {
+		s3Endpoint = envOverlay["AWS_ENDPOINT_URL_S3"]
+	}
+	if s3Endpoint == "" && authContext != nil && authContext.AWS != nil {
+		s3Endpoint = authContext.AWS.EndpointURL
+	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		if envOverlay != nil {
-			if ep := envOverlay["AWS_ENDPOINT_URL_S3"]; ep != "" {
-				o.BaseEndpoint = aws.String(ep)
-			}
+		if s3Endpoint != "" {
+			o.BaseEndpoint = aws.String(s3Endpoint)
 		}
 	})
 	s3ClientCache.Store(cacheKey, s3Client)
@@ -260,6 +270,18 @@ func ReadTerraformBackendS3Internal(
 			var nsk *types.NoSuchKey
 			if errors.As(err, &nsk) {
 				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
+				return nil, nil
+			}
+			// A missing backend bucket means nothing in this backend has been
+			// provisioned yet (e.g. a fresh emulator, or before the state-backend is
+			// bootstrapped). Treat it the same as a missing state object so that
+			// cross-component `!terraform.state` reads resolve to `null` instead of
+			// hard-failing the whole stack describe. NoSuchBucket is not a modeled
+			// error for GetObject, so it arrives as a generic smithy.APIError (code
+			// "NoSuchBucket") rather than *types.NoSuchBucket — match on the code.
+			var apiErr smithy.APIError
+			if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket" {
+				log.Debug("Terraform state S3 bucket doesn't exist; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
 

@@ -1,0 +1,43 @@
+---
+title: style
+sidebar_label: style
+slug: /workflows/steps/type/style
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `style` step type applies the Atmos terminal styling engine — colors, borders, padding, and text decoration — to any text, so your custom commands and workflows can highlight the output that matters.
+</Intro>
+
+```yaml
+steps:
+  - name: heading
+    type: style
+    content: Production deploy
+    foreground: "#ffcc00"
+    bold: true
+    border: rounded
+    padding: "1 2"
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Text to style. Supports templates.</dd>
+
+  <dt>`foreground` / `background`</dt>
+  <dd>Optional text and background colors.</dd>
+
+  <dt>`border`</dt>
+  <dd>Optional border style such as `normal`, `rounded`, `thick`, or `double`.</dd>
+
+  <dt>`padding` / `margin`</dt>
+  <dd>Optional spacing values.</dd>
+
+  <dt>`bold`, `italic`, `underline`, `strikethrough`, `faint`</dt>
+  <dd>Optional text decoration booleans.</dd>
+</dl>
+
+Set `markdown: true` to render Markdown before applying the style.

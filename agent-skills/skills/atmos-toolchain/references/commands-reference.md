@@ -8,13 +8,17 @@ Complete reference for all `atmos toolchain` subcommands, flags, and usage patte
 |------|---------|---------|-------------|
 | `--github-token` | `ATMOS_GITHUB_TOKEN`, `GITHUB_TOKEN` | -- | GitHub authentication token (hidden) |
 | `--tool-versions` | `ATMOS_TOOL_VERSIONS` | `.tool-versions` | Path to .tool-versions file |
-| `--toolchain-path` | `ATMOS_TOOLCHAIN_PATH` | `.tools` | Tool installation directory |
+| `--toolchain-path` | `ATMOS_TOOLCHAIN_PATH` | XDG data dir, `.tools` fallback | Tool installation directory |
 
 ---
 
 ## atmos toolchain install
 
 Install tools from .tool-versions or by name.
+
+Prefer declarative `dependencies.tools` for normal Atmos execution. Use this command for manual
+bootstrap, cache warming, shell setup, ad-hoc verification, or tools outside a component/workflow/
+custom-command execution context.
 
 ```shell
 atmos toolchain install [tool@version] [flags]
@@ -23,9 +27,9 @@ atmos toolchain install [tool@version] [flags]
 ### Examples
 
 ```shell
-atmos toolchain install                        # Install all from .tool-versions
-atmos toolchain install terraform@1.9.8        # Install specific version
-atmos toolchain install jq                     # Install latest from .tool-versions
+atmos toolchain install                        # Warm/install .tool-versions for a shell or cache
+atmos toolchain install terraform@1.9.8        # Ad-hoc install a specific version
+atmos toolchain install jq                     # Bootstrap a repo-wide default tool
 ```
 
 ---
@@ -181,7 +185,7 @@ eval "$(atmos toolchain env)"                         # Bash/Zsh
 eval "$(atmos toolchain env --format=bash)"           # Explicit bash
 atmos toolchain env --format=fish | source            # Fish
 atmos toolchain env --format=powershell | Invoke-Expression  # PowerShell
-atmos toolchain env --format=github >> $GITHUB_PATH   # GitHub Actions
+atmos toolchain env --format=github                   # GitHub Actions; appends to $GITHUB_PATH when set
 ```
 
 ---

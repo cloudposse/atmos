@@ -1,0 +1,60 @@
+---
+date: 2026-06-30T12:00:00.000Z
+slug: diagnostics-jsonl
+title: "Structured Diagnostics for Agentic Troubleshooting"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Human logs are useful while you are watching a command run, but they are not enough when you need to diagnose subprocess execution, CI failures, or agent runs after the fact.
+
+<!--truncate-->
+
+## The Problem
+
+When a run fails, the important question is usually not "what did the terminal print?" It is "what command ran, with which arguments, from which directory, for how long, and how did it exit?"
+
+Humans can sometimes reconstruct that from logs. Agents and support tooling should not have to scrape terminal prose to find the root cause.
+
+## The Change
+
+Atmos now supports an opt-in diagnostics stream: machine-readable JSONL events written to a file.
+
+```yaml
+diagnostics:
+  enabled: true
+  file: .atmos/diagnostics.jsonl
+  include_output: false
+```
+
+The same settings can be controlled with environment variables:
+
+```shell
+ATMOS_DIAGNOSTICS_ENABLED=true \
+ATMOS_DIAGNOSTICS_FILE=.atmos/diagnostics.jsonl \
+atmos terraform plan vpc -s plat-ue2-dev
+```
+
+Because the output is JSONL, it is easy to inspect with tools like `jq`:
+
+```shell
+jq 'select(.type == "process.exit")' .atmos/diagnostics.jsonl
+```
+
+## Diagnostics vs. Logging
+
+Logs are human-readable status and narrative output. They explain what Atmos is doing for someone watching the run.
+
+Diagnostics are machine-readable event records for tooling, agents, and post-run inspection. They are designed to accelerate root-cause analysis by giving agents structured facts about subprocesses, exits, durations, cancellation, and failures without requiring them to parse terminal output.
+
+`diagnostics.include_output` can include masked subprocess stdout and stderr chunks, but it is disabled by default. Diagnostic output is masked before it is written.
+
+## Why It Matters
+
+- **Agentic troubleshooting gets faster.** Agents can reason from structured events, identify the failing step, and move from diagnosis to remediation.
+- **CI artifacts become more useful.** Save the JSONL file with a failed job and inspect it after the terminal session is gone.
+- **Logs stay for people.** Diagnostics add a tooling-oriented layer without replacing human-readable logs.
+
+## Get Involved
+
+Enable diagnostics when you need a structured troubleshooting artifact, especially for CI and agent-driven workflows.

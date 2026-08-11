@@ -1,0 +1,75 @@
+---
+title: atmos git
+sidebar_label: git
+sidebar_class_name: command
+id: usage
+description: GitOps enablement for Atmos — make automated Git commits easy, safe, and conventional both locally and in CI across every project.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+`atmos git` is GitOps enablement for Atmos: it makes **automated Git commits easy, safe, and conventional** — the same way on your laptop and in CI, across every project. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — committed and pushed automatically — from the CLI, from [hooks](/stacks/hooks#kind-git) (e.g. after `terraform apply`), or from native CI workflows. Initialize, clone, pull, inspect, diff, commit, push, and clean managed repositories by logical name, with consistent authentication, commit signing, and safety rules so no two pipelines reinvent their own brittle `git` scripting.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure Git Repositories">
+    Define managed repositories, authentication, commit signing, and local Git hooks under the top-level `git` section of `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/git">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos git --help" src="/casts/screengrabs/atmos-git--help.cast" static chrome />
+
+## Managed Repositories
+
+Define repositories once under `git.repositories` in `atmos.yaml`, then refer to them everywhere by logical name:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      auth:
+        identity: platform-admin
+
+    generated-terraform:
+      uri: https://github.com/acme/generated-terraform.git
+```
+
+```shell
+atmos git clone flux-deploy
+atmos git status flux-deploy
+atmos git commit flux-deploy --message="Update manifests" --path=clusters/prod
+atmos git push flux-deploy
+atmos git clean flux-deploy --dry-run
+```
+
+Repository names (`flux-deploy`, `generated-terraform`) are arbitrary, user-defined logical keys — not reserved values. Repository configuration follows standard Atmos deep-merge, so repositories can be defined in imported configuration and overridden per environment.
+
+## How It Differs from Plain Git
+
+Every `atmos git` command goes through the shared Atmos Git service, which adds:
+
+- **Authentication via Atmos Auth** — repository `auth.identity` brings linked integrations (such as `github/sts`) along automatically; the ambient credential broker covers the zero-config CI case; your own credential helpers and SSH agent always continue to work.
+- **Safety rules** — pulls are always fast-forward-only, force push is never performed, rejected pushes retry with a bounded `pull --rebase` + re-push loop, and path-scoped commits refuse to commit when unrelated dirty files are present.
+- **Reconcile semantics** — `atmos git clone` is idempotent: it clones when the workdir is absent and fetches/fast-forwards when it already exists, which makes restored CI caches safe.
+- **Automatic workdirs** — managed repositories clone into a deterministic location under the Atmos XDG cache root, so the [native CI cache](/cli/configuration/ci) captures them across runs for free.
+- **Native escape hatch** — `init`, `clone`, `pull`, and `push` pass arguments after `--` verbatim to the underlying git invocation (e.g., `atmos git clone flux-deploy -- --no-tags`), so Atmos safety rules and uncommon git flags compose.
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [Git Configuration](/cli/configuration/git) — `git.repositories`, `git.hooks`, and `git.list` in `atmos.yaml`
+- [`kind: git` hooks](/stacks/hooks#kind-git) — publish artifacts on lifecycle events like `after.terraform.apply`
+- [Authentication](/cli/configuration/auth) — identities and integrations used by `auth.identity`
+- [CI Configuration](/cli/configuration/ci) — native CI detection used by no-arg `atmos git clone`

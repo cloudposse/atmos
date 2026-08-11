@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/version/track"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -31,6 +32,7 @@ type VersionOptions struct {
 // This is called from root.go after atmosConfig is initialized.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	atmosConfigPtr = config
+	track.SetAtmosConfig(config)
 }
 
 // versionCmd represents the version command.
@@ -95,6 +97,9 @@ func init() {
 	if err := versionParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	// Attach the Version Tracker command group (atmos version track ...).
+	versionCmd.AddCommand(track.GetTrackCommand())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

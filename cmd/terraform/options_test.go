@@ -56,7 +56,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				All:                     true,
 				Affected:                true,
 				MaxConcurrency:          4,
-				PlanLogOrder:            "grouped",
+				LogOrder:                "grouped",
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
@@ -287,7 +287,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
 			assert.Equal(t, tt.expected.Affected, result.Affected, "Affected should match")
 			assert.Equal(t, tt.expected.MaxConcurrency, result.MaxConcurrency, "MaxConcurrency should match")
-			assert.Equal(t, tt.expected.PlanLogOrder, result.PlanLogOrder, "PlanLogOrder should match")
+			assert.Equal(t, tt.expected.LogOrder, result.LogOrder, "LogOrder should match")
 			assert.Equal(t, tt.expected.PlanHide, result.PlanHide, "PlanHide should match")
 			assert.Equal(t, tt.expected.PlanHideNoChanges, result.PlanHideNoChanges, "PlanHideNoChanges should match")
 			assert.Equal(t, tt.expected.PlanSummaryFile, result.PlanSummaryFile, "PlanSummaryFile should match")
@@ -307,14 +307,14 @@ func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
 			setup: func(v *viper.Viper) {
 				v.Set("failure-mode", "eventually")
 			},
-			wantErr: `invalid --failure-mode "eventually": supported values are "fail-fast", "keep-going"`,
+			wantErr: `invalid value for flag: invalid --failure-mode "eventually": supported values are "fail-fast", "keep-going"`,
 		},
 		{
 			name: "invalid log order",
 			setup: func(v *viper.Viper) {
 				v.Set("log-order", "interleaved")
 			},
-			wantErr: `invalid --log-order "interleaved": supported values are "stream", "grouped"`,
+			wantErr: `invalid value for flag: invalid --log-order "interleaved": supported values are "stream", "grouped"`,
 		},
 	}
 
@@ -340,7 +340,7 @@ func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, terraformFailureModeKeepGoing, result.FailureMode)
-	assert.Equal(t, terraformPlanLogOrderGrouped, result.PlanLogOrder)
+	assert.Equal(t, terraformLogOrderGrouped, result.LogOrder)
 }
 
 func TestTerraformRunOptions_Fields(t *testing.T) {
@@ -362,7 +362,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		All:                     true,
 		Affected:                true,
 		MaxConcurrency:          4,
-		PlanLogOrder:            "grouped",
+		LogOrder:                "grouped",
 		PlanHide:                []string{"no-changes"},
 		PlanHideNoChanges:       true,
 		PlanSummaryFile:         "/tmp/summary.json",
@@ -385,7 +385,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.True(t, opts.All)
 	assert.True(t, opts.Affected)
 	assert.Equal(t, 4, opts.MaxConcurrency)
-	assert.Equal(t, "grouped", opts.PlanLogOrder)
+	assert.Equal(t, "grouped", opts.LogOrder)
 	assert.Equal(t, []string{"no-changes"}, opts.PlanHide)
 	assert.True(t, opts.PlanHideNoChanges)
 	assert.Equal(t, "/tmp/summary.json", opts.PlanSummaryFile)
@@ -482,7 +482,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				InitRunReconfigure:      "false",
 				InitPassVars:            true,
 				MaxConcurrency:          4,
-				PlanLogOrder:            "grouped",
+				LogOrder:                "grouped",
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
@@ -496,7 +496,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, "false", info.InitRunReconfigure)
 				assert.Equal(t, "true", info.InitPassVars)
 				assert.Equal(t, 4, info.MaxConcurrency)
-				assert.Equal(t, "grouped", info.TerraformPlanLogOrder)
+				assert.Equal(t, "grouped", info.TerraformLogOrder)
 				assert.Equal(t, []string{"no-changes"}, info.TerraformPlanHide)
 				assert.True(t, info.TerraformPlanHideNoChanges)
 				assert.Equal(t, "/tmp/summary.json", info.TerraformPlanSummaryFile)
@@ -514,4 +514,60 @@ func TestApplyOptionsToInfo(t *testing.T) {
 			tt.checkInfo(t, info)
 		})
 	}
+}
+
+// TestParseTerraformRunOptionsClosureFlags covers the depth-carrying
+// --include-dependencies/--include-dependents values: bare (NoOptDefVal "all")
+// means unlimited (-1), =N bounds the depth, boolean spellings stay
+// backward compatible, and invalid values error.
+func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
+	tests := []struct {
+		name             string
+		dependencies     string
+		dependents       string
+		wantDependencies int
+		wantDependents   int
+		wantErr          bool
+	}{
+		{name: "absent means off"},
+		{name: "bare flags mean unlimited", dependencies: "all", dependents: "all", wantDependencies: -1, wantDependents: -1},
+		{name: "numeric depth", dependencies: "2", dependents: "1", wantDependencies: 2, wantDependents: 1},
+		{name: "boolean compat", dependencies: "true", dependents: "false", wantDependencies: -1, wantDependents: 0},
+		{name: "invalid dependencies value", dependencies: "banana", wantErr: true},
+		{name: "invalid dependents value", dependents: "-3", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			if tt.dependencies != "" {
+				v.Set("include-dependencies", tt.dependencies)
+			}
+			if tt.dependents != "" {
+				v.Set("include-dependents", tt.dependents)
+			}
+
+			result, err := ParseTerraformRunOptions(v)
+			if tt.wantErr {
+				assert.Nil(t, result)
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDependencies, result.IncludeDependencies)
+			assert.Equal(t, tt.wantDependents, result.IncludeDependents)
+		})
+	}
+}
+
+// TestApplyOptionsToInfoClosureFlags asserts the closure depths reach
+// schema.ConfigAndStacksInfo for the scheduler adapter to consume.
+func TestApplyOptionsToInfoClosureFlags(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{}
+	applyOptionsToInfo(info, &TerraformRunOptions{
+		IncludeDependencies: -1,
+		IncludeDependents:   2,
+	})
+	assert.Equal(t, -1, info.IncludeDependencies)
+	assert.Equal(t, 2, info.IncludeDependents)
 }

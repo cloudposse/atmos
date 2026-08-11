@@ -1,0 +1,10 @@
+{
+  "label": "command",
+  "position": 1,
+  "collapsible": true,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "cli/configuration/commands/command/index"
+  }
+}

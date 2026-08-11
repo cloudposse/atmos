@@ -219,6 +219,24 @@ func isAuthManagedVar(key string) bool {
 		"AWS_REGION",
 		"AWS_DEFAULT_REGION",
 		"AWS_EC2_METADATA_DISABLED",
+		// Emulator-managed vars: emulator identities (kind: <target>/emulator) inject
+		// a live endpoint + static dummy credentials instead of a profile/creds file.
+		// These must reach the component subprocess so Terraform (and SDK clients) talk
+		// to the local emulator rather than the real cloud API.
+		"AWS_ENDPOINT_URL",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+		// GCP emulator host vars (per-service; see pkg/emulator/target/gcp.go).
+		"STORAGE_EMULATOR_HOST",
+		"PUBSUB_EMULATOR_HOST",
+		"FIRESTORE_EMULATOR_HOST",
+		"BIGTABLE_EMULATOR_HOST",
+		"DATASTORE_EMULATOR_HOST",
+		// Azure (Azurite) emulator vars.
+		"AZURE_STORAGE_ACCOUNT",
+		"AZURE_STORAGE_KEY",
+		"AZURE_STORAGE_CONNECTION_STRING",
 		// Azure auth-managed vars.
 		"AZURE_CONFIG_DIR",
 		"AZURE_SUBSCRIPTION_ID",

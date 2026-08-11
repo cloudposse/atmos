@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -9,17 +10,29 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// filterTerraformAffected narrows the affected list to items that `atmos terraform
+// extractAffectedNodeIDs extracts node IDs from the affected components list.
+func extractAffectedNodeIDs(affectedList []schema.Affected) []string {
+	nodeIDs := make([]string, len(affectedList))
+	for i := range affectedList {
+		nodeIDs[i] = fmt.Sprintf("%s-%s", affectedList[i].Component, affectedList[i].Stack)
+	}
+	return nodeIDs
+}
+
+// FilterTerraformAffected narrows the affected list to items that `atmos terraform
 // plan/apply --affected` should actually execute: terraform components only, and
 // only those that still exist (not deleted in HEAD). Helmfile and Packer items
 // belong to their own subcommands; deleted components have no on-disk module so
-// terraform plan/apply against them would fail or no-op. See issue #2361.
-func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+// terraform plan/apply against them would fail or no-op. See issue #2361. Exported
+// so other terraform-affected dispatchers (e.g. `atmos terraform lint --affected`)
+// reuse the same filter instead of re-declaring it.
+func FilterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+	defer perf.Track(nil, "exec.FilterTerraformAffected")()
+
 	filtered := affectedList[:0]
 	for i := range affectedList {
 		a := &affectedList[i]
@@ -34,17 +47,36 @@ func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
 	return filtered
 }
 
-// getAffectedComponents retrieves the list of affected components based on the provided arguments.
-func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
-	defer perf.Track(nil, "exec.getAffectedComponents")()
+// GetAffectedComponents retrieves the list of affected components based on the
+// provided arguments, dispatching to the right git-target resolution mode
+// (repo path / clone-and-diff / local ref checkout). Exported so other
+// affected-target dispatchers (e.g. `atmos terraform lint --affected`) reuse
+// this switch instead of re-declaring it against the same three
+// ExecuteDescribeAffectedWith* functions.
+func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponents")()
+
+	return GetAffectedComponentsWithOptions(args, DescribeStacksErrorOptions{})
+}
+
+// GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
+// for recoverable per-value YAML function errors (see DescribeStacksErrorOptions), dispatching
+// to the *WithOptions variant of whichever git-target resolution mode applies.
+func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponentsWithOptions")()
 
 	if args == nil {
 		return nil, errUtils.ErrNilParam
 	}
+	return dispatchAffectedComponentsWithOptions(args, errOptions)
+}
 
+// dispatchAffectedComponentsWithOptions is GetAffectedComponentsWithOptions's git-target
+// dispatch switch, split out so the exported entry point stays a short nil-check + delegate.
+func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
 	switch {
 	case args.RepoPath != "":
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 			args.CLIConfig,
 			args.RepoPath,
 			args.IncludeSpaceliftAdminStacks,
@@ -56,10 +88,11 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefClone(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
@@ -74,10 +107,11 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	default:
-		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckout(
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
@@ -91,6 +125,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ExcludeLocked,
 			args.AuthManager,
 			args.AuthDisabled,
+			errOptions,
 		)
 		return affectedList, err
 	}
@@ -130,15 +165,14 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		return err
 	}
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
 	args.CLIConfig = &atmosConfig
 	args.AuthManager = authManager
 	args.AuthDisabled = authDisabled
 
-	affectedList, err := getAffectedComponents(args)
+	affectedList, err := GetAffectedComponents(args)
 	if err != nil {
 		return err
 	}
@@ -146,7 +180,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 	// Drop non-terraform component types (helmfile, packer) and deleted components
 	// before resolving dependents — `addDependentsToAffected` is expensive and there
 	// is no reason to walk dependency graphs for items we will not execute.
-	affectedList = filterTerraformAffected(affectedList)
+	affectedList = FilterTerraformAffected(affectedList)
 
 	if len(affectedList) == 0 {
 		ui.Success("No components affected")
@@ -159,7 +193,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 	}
 	log.Debug("Affected", "components", affectedYaml)
 
-	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := ExecuteDescribeStacksWithAuthDisabledAndMocks(
 		&atmosConfig,
 		"",  // all stacks; the affected selector already constrains direct matches
 		nil, // all components; graph filtering applies the selected affected set
@@ -172,6 +206,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		info.Skip,
 		authManager,
 		authDisabled,
+		info.UseMocks,
 	)
 	if err != nil {
 		return err
@@ -182,49 +217,26 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		Info:        info,
 		Stacks:      stacks,
 		Executor:    executeTerraformQueryComponent,
-		Selection: &scheduleradapters.TerraformSelection{
-			NodeIDs:           extractAffectedNodeIDs(affectedList),
-			IncludeDependents: args.IncludeDependents,
-		},
+		Selection:   affectedTerraformSelection(affectedList, args, info),
 	})
 }
 
-// executeAffectedComponents processes each affected component in dependency order.
-func executeAffectedComponents(affectedList []schema.Affected, info *schema.ConfigAndStacksInfo, args *DescribeAffectedCmdArgs) error {
-	defer perf.Track(nil, "exec.executeAffectedComponents")()
-
-	// Early return for empty list - nothing to process.
-	if len(affectedList) == 0 {
-		ui.Success("No components affected")
-		return nil
+// affectedTerraformSelection builds the scheduler selection for the affected
+// set. The args.IncludeDependents bool bridges the depth-carrying
+// --include-dependents flag, so the selection must also carry the parsed depth
+// from info: the closure spec merges selection and info keeping the most
+// permissive depth per direction, and a zero DependentDepth means *unlimited*
+// in dependency.Filter encoding — leaving it unset would silently erase a
+// user-supplied --include-dependents=N bound. When the bool is set without a
+// flag-side depth (e.g. dependents forced programmatically), zero is kept and
+// correctly means unlimited.
+func affectedTerraformSelection(affectedList []schema.Affected, args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) *scheduleradapters.TerraformSelection {
+	selection := &scheduleradapters.TerraformSelection{
+		NodeIDs:           extractAffectedNodeIDs(affectedList),
+		IncludeDependents: args.IncludeDependents,
 	}
-
-	affectedYaml, err := u.ConvertToYAML(affectedList)
-	if err != nil {
-		return err
+	if args.IncludeDependents && info != nil {
+		selection.DependentDepth = scheduleradapters.FlagDepthToFilterDepth(info.IncludeDependents)
 	}
-	log.Debug("Affected", "components", affectedYaml)
-
-	for i := 0; i < len(affectedList); i++ {
-		affected := &affectedList[i]
-		// If the affected component is included in the dependencies of any other component, don't process it now.
-		// It will be processed in the dependency order.
-		if !affected.IncludedInDependents {
-			err = executeTerraformAffectedComponentInDepOrder(
-				info,
-				affectedList,
-				&affectedDepOrderParams{
-					AffectedComponent: affected.Component,
-					AffectedStack:     affected.Stack,
-					Dependents:        affected.Dependents,
-				},
-				args,
-			)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return selection
 }

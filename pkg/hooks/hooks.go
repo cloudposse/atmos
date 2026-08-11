@@ -3,6 +3,7 @@ package hooks
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -13,17 +14,30 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"   // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
+
+// logKeyStatus is the structured-log/template key for a hook's lifecycle outcome status.
+const logKeyStatus = "status"
+
+// runHookLogGroup is a test seam for wrapping each lifecycle hook in CI log
+// group markers without making hooks tests depend on the active CI provider.
+//
+//nolint:gochecknoglobals // test seam for CI log grouping.
+var runHookLogGroup = ci.Group
 
 type Hooks struct {
 	config *schema.AtmosConfiguration
@@ -37,14 +51,22 @@ type Hooks struct {
 	// populated by the time RunAll fires for terraform/helmfile callers.
 	sections map[string]any
 
-	// preflightDone is set after the first RunAll has installed component
-	// dependencies and verified that each hook's command resolves on the
-	// resulting PATH. Subsequent RunAll calls skip the preflight so we
-	// don't redo work for every lifecycle event in a single command.
+	// preflightDone preserves the legacy "already checked" marker for tests.
 	preflightDone bool
+	// preflightedKeys tracks the runnable hook filter used for each preflight.
+	// Preflight only verifies hooks that can run for the current event, status,
+	// and CI state, so a Hooks instance reused across different outcomes must
+	// not skip checks when the runnable hook set changes.
+	preflightedKeys map[hookPreflightKey]bool
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
+	stdout        io.Writer
+	stderr        io.Writer
+
+	// outcome is the lifecycle operation result (success/failure) for the next
+	// RunAll, set by SetOutcome. Zero value defaults to success.
+	outcome Outcome
 }
 
 func (h Hooks) HasHooks() bool {
@@ -66,8 +88,9 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component: info.ComponentFromArg,
-		Stack:     info.Stack,
+		Component:     info.ComponentFromArg,
+		Stack:         info.Stack,
+		ComponentType: info.ComponentType,
 		// Hook discovery only needs static hook metadata; avoid template rendering
 		// here to prevent pre-auth side effects during command preflight.
 		ProcessTemplates:     false,
@@ -110,63 +133,140 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	return &hooks, nil
 }
 
+// SetOutcome records the lifecycle operation outcome (success/failure) for the
+// next RunAll. Hooks are filtered by their `when` against this status, and the
+// outcome is exposed to engines (env vars, template context). A zero value (or
+// not calling this) defaults to a successful outcome, preserving the original
+// behavior where after-* hooks fired only on success.
+func (h *Hooks) SetOutcome(outcome Outcome) {
+	h.outcome = outcome
+}
+
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
-	log.Debug("Running hooks", "count", len(h.items))
-	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
+	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
+
+	outcome := h.outcome
+	if outcome.Status == "" {
+		outcome.Status = RunSuccess
+	}
+
+	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)
+	skipPredicate := NewSkipPredicate(ResolveSkipHooks(cmd))
+	filter := hookFilter{
+		event:         event.Normalize(),
+		skipPredicate: skipPredicate,
+		status:        outcome.Status,
+		isCI:          telemetry.IsCI(),
+		stack:         info.Stack,
+		component:     info.ComponentFromArg,
+	}
 
 	// Preflight runs once per command lifecycle: install component
 	// dependencies up front and verify every hook's binary resolves before
 	// any terraform action runs. Failures here surface BEFORE terraform —
 	// users find out their hook is misconfigured before plan/apply takes
-	// time, not after.
-	if err := h.preflight(atmosConfig, info, skipPredicate); err != nil {
+	// time, not after. The outcome status is threaded through so a hook that
+	// won't run for this outcome (e.g. a success-only hook on the failure
+	// path) doesn't fail preflight and block the hooks that should run.
+	if err := h.preflight(atmosConfig, info, filter); err != nil {
 		return err
 	}
 
-	for name, hook := range h.items {
-		if !hook.MatchesEvent(event) {
-			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
-			continue
-		}
-
-		if skipPredicate(name) {
-			log.Info("Skipping hook (--skip-hooks)", "hook", name, "kind", hook.Kind)
-			continue
-		}
-
-		// CI commands are deprecated — use RunCIHooks instead, which automatically
-		// triggers CI actions based on component provider bindings.
-		if isDeprecatedCIKind(hook.Kind) {
-			log.Debug("CI hook command deprecated, use RunCIHooks instead", "kind", hook.Kind)
-			continue
-		}
-
-		kind, ok := GetKind(hook.Kind)
-		if !ok {
-			log.Debug("Unknown hook kind", "kind", hook.Kind)
-			continue
-		}
-
-		executionHook, err := h.resolveHookForExecution(name, &hook, atmosConfig, info)
-		if err != nil {
-			return err
-		}
-
-		resolved := kind.ResolveDefaults(executionHook)
-		if _, err := kind.Engine.Run(&ExecContext{
-			Hook:          resolved,
-			Kind:          kind,
-			Event:         event,
-			AtmosConfig:   atmosConfig,
-			Info:          info,
-			Cmd:           cmd,
-			Args:          args,
-			ToolchainPATH: h.toolchainPATH,
-		}); err != nil {
+	runCtx := hookRunContext{
+		event:       event,
+		atmosConfig: atmosConfig,
+		info:        info,
+		cmd:         cmd,
+		args:        args,
+		filter:      filter,
+		outcome:     outcome,
+	}
+	for name := range h.items {
+		hook := h.items[name]
+		if err := h.runHookIfMatch(name, &hook, &runCtx); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+type hookRunContext struct {
+	event       HookEvent
+	atmosConfig *schema.AtmosConfiguration
+	info        *schema.ConfigAndStacksInfo
+	cmd         *cobra.Command
+	args        []string
+	filter      hookFilter
+	outcome     Outcome
+}
+
+func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) error {
+	if !hook.MatchesEvent(ctx.filter.event) {
+		log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", ctx.event, "hook_events", hook.Events)
+		return nil
+	}
+
+	if ctx.filter.skipPredicate(name) {
+		log.Info("Skipping hook (--skip-hooks)", "hook", name, "kind", hook.Kind)
+		return nil
+	}
+
+	// Filter by the operation outcome. Default (when: success) runs only on
+	// success, so existing hooks keep their behavior; when: failure / always
+	// opt into running after a failed operation.
+	runs, err := hook.RunsWhenE(ctx.filter.conditionContext(name))
+	if err != nil {
+		return err
+	}
+	if !runs {
+		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, logKeyStatus, ctx.outcome.Status)
+		return nil
+	}
+
+	// CI commands are deprecated — use RunCIHooks instead, which automatically
+	// triggers CI actions based on component provider bindings.
+	if isDeprecatedCIKind(hook.Kind) {
+		log.Debug("CI hook command deprecated, use RunCIHooks instead", "kind", hook.Kind)
+		return nil
+	}
+
+	kind, ok := GetKind(hook.Kind)
+	if !ok {
+		return unknownHookKindError(name, hook.Kind)
+	}
+
+	executionHook, err := h.resolveHookForExecution(name, hook, ctx.atmosConfig, ctx.info, ctx.outcome)
+	if err != nil {
+		return err
+	}
+
+	return h.runResolvedHook(name, kind, executionHook, ctx)
+}
+
+func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ctx *hookRunContext) error {
+	resolved := kind.ResolveDefaults(executionHook)
+	execCtx := &ExecContext{
+		Hook:          resolved,
+		Kind:          kind,
+		Event:         ctx.event,
+		AtmosConfig:   ctx.atmosConfig,
+		Info:          ctx.info,
+		Cmd:           ctx.cmd,
+		Args:          ctx.args,
+		HookName:      name,
+		Outcome:       ctx.outcome,
+		ToolchainPATH: h.toolchainPATH,
+		Stdout:        h.stdout,
+		Stderr:        h.stderr,
+	}
+	return runHookLogGroup(ctx.atmosConfig, ci.DimensionPhase, hookLogGroupLabel(name, ctx.event), func() error {
+		_, err := kind.Engine.Run(execCtx)
+		return err
+	})
+}
+
+func hookLogGroupLabel(name string, event HookEvent) string {
+	return fmt.Sprintf("hook %s (%s)", name, event.Normalize())
 }
 
 // resolveHookForExecution renders a hook's fields at execution time. GetHooks
@@ -175,14 +275,32 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 // templates and `!`-prefixed YAML functions. This re-fetches the raw hook
 // section, processes its values, and unmarshals the result into a typed Hook.
 // If the raw section is unavailable it returns the original hook unchanged.
-func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hook, error) {
+func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, outcome Outcome) (*Hook, error) {
 	rawHook, ok := h.rawHookSection(name)
 	if !ok {
 		return hook, nil
 	}
 
 	stackInfo := h.executionStackInfo(info)
-	processed, err := processHookExecutionValue(atmosConfig, rawHook, stackInfo)
+	// Expose the operation outcome to the hook's templates (e.g. `{{ .status }}`
+	// in a step's `with:` message). Component/stack are already in the section
+	// (`{{ .atmos_component }}`, `{{ .stack }}`).
+	stackInfo.ComponentSection = withOutcomeTemplateData(stackInfo.ComponentSection, outcome)
+	// Step-backed hooks render their payload immediately before each step, not
+	// when the hook starts. This allows an earlier type: env item to provide
+	// values to {{ .env.* }} in a later item while leaving the envelope's
+	// lifecycle fields eagerly resolved.
+	rawForEnvelope := make(map[string]any, len(rawHook))
+	for key, value := range rawHook {
+		rawForEnvelope[key] = value
+	}
+	rawWith, hasWith := rawForEnvelope["with"]
+	deferWith := hook.Kind == stepKindName || hook.Kind == stepsKindName
+	if deferWith {
+		delete(rawForEnvelope, "with")
+	}
+
+	processed, err := processHookExecutionValue(atmosConfig, rawForEnvelope, stackInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render hook %q: %w", name, err)
 	}
@@ -190,6 +308,9 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	processedHook, ok := processed.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: hook %q expected map, got %T", errRenderedHookNotMap, name, processed)
+	}
+	if deferWith && hasWith {
+		processedHook["with"] = rawWith
 	}
 
 	yamlData, err := yaml.Marshal(processedHook)
@@ -201,6 +322,7 @@ func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *sc
 	if err := yaml.Unmarshal(yamlData, &rendered); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rendered hook %q: %w", name, err)
 	}
+	rendered.stepTemplateInfo = stackInfo
 	return &rendered, nil
 }
 
@@ -252,6 +374,27 @@ func (h *Hooks) executionStackInfo(info *schema.ConfigAndStacksInfo) *schema.Con
 		}
 	}
 	return &stackInfo
+}
+
+// withOutcomeTemplateData returns a shallow copy of the component section with
+// the lifecycle outcome injected as top-level template keys (`status`,
+// `exit_code`, `error`). The copy avoids mutating the captured sections shared
+// across lifecycle events. A nil section yields a map with just the outcome keys.
+func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string]any {
+	// Size the map from a single len() — CodeQL's allocation-size-overflow rule
+	// flags `len(section)+N`. The map grows as needed for the outcome keys.
+	augmented := make(map[string]any, len(section))
+	for k, v := range section {
+		augmented[k] = v
+	}
+	augmented[logKeyStatus] = string(outcome.Status)
+	augmented["exit_code"] = outcome.ExitCode
+	if outcome.Err != nil {
+		augmented["error"] = outcome.Err.Error()
+	} else {
+		augmented["error"] = ""
+	}
+	return augmented
 }
 
 // processHookExecutionValue recursively renders a hook value, dispatching on its
@@ -384,14 +527,14 @@ func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, va
 	return processHookExecutionString(atmosConfig, processedString, info)
 }
 
-// resolveSkipHooks returns the effective --skip-hooks value. It prefers the
+// ResolveSkipHooks returns the effective --skip-hooks value. It prefers the
 // Cobra flag when explicitly set, because before-* hooks run in PreRunE —
 // before the flag is bound to Viper in RunE (see pkg/flags/standard.go
 // BindFlagsToViper) — so viper.GetString would miss the CLI value there (it
 // only sees ATMOS_SKIP_HOOKS / the default). Reading the parsed Cobra flag
 // makes skipping symmetric across before-* and after-* events. Falling back to
 // Viper preserves env-var support and the nil-cmd path used by tests.
-func resolveSkipHooks(cmd *cobra.Command) string {
+func ResolveSkipHooks(cmd *cobra.Command) string {
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("skip-hooks"); f != nil && f.Changed {
 			return f.Value.String()
@@ -400,11 +543,11 @@ func resolveSkipHooks(cmd *cobra.Command) string {
 	return viper.GetString("skip-hooks")
 }
 
-// newSkipPredicate builds the per-hook skip decision from the value of the
+// NewSkipPredicate builds the per-hook skip decision from the value of the
 // --skip-hooks flag / ATMOS_SKIP_HOOKS env. Empty / "false" runs all hooks;
 // "*" / "true" (set when --skip-hooks is passed without a value) skips
 // everything; a comma-separated list skips only the named hooks.
-func newSkipPredicate(raw string) func(string) bool {
+func NewSkipPredicate(raw string) func(string) bool {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.EqualFold(raw, "false") {
 		return func(string) bool { return false }
@@ -424,23 +567,61 @@ func newSkipPredicate(raw string) func(string) bool {
 	}
 }
 
+type hookFilter struct {
+	event         HookEvent
+	skipPredicate func(string) bool
+	status        RunStatus
+	isCI          bool
+	stack         string
+	component     string
+}
+
+type hookPreflightKey struct {
+	event  HookEvent
+	status RunStatus
+	isCI   bool
+}
+
+func (f *hookFilter) conditionContext(hookName string) schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:        f.isCI,
+		Status:    string(f.status),
+		Stack:     f.stack,
+		Component: f.component,
+		Hook:      hookName,
+		Event:     string(f.event),
+	}
+}
+
+func (f hookFilter) preflightKey() hookPreflightKey {
+	return hookPreflightKey{
+		event:  f.event,
+		status: f.status,
+		isCI:   f.isCI,
+	}
+}
+
 // preflight installs the component's declared tool dependencies and
 // verifies every hook's command resolves on the resulting PATH. Runs once
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
 // Failures use the error builder so the user sees a friendly message and
 // a hint pointing at dependencies.tools.
-func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool) error {
+func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, filter hookFilter) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
-	if h.preflightDone {
+	if h.preflightAlreadyDone(filter) {
 		return nil
 	}
-	h.preflightDone = true
+	h.markPreflightDone(filter)
 
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
 	}
-	if !h.hasUnskippedHooks(skipPredicate) {
+	hasHooks, err := h.hasUnskippedHooks(&filter)
+	if err != nil {
+		return err
+	}
+	if !hasHooks {
 		return nil
 	}
 
@@ -451,16 +632,45 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if err := h.installDeps(atmosConfig, info, deps); err != nil {
 		return err
 	}
-	return h.verifyAllBinaries(skipPredicate)
+	return h.verifyAllBinaries(filter)
 }
 
-func (h *Hooks) hasUnskippedHooks(skipPredicate func(string) bool) bool {
+// preflightAlreadyDone reports whether preflight checks already ran for this
+// runnable hook filter. The legacy preflightDone marker covers tests that set
+// it directly; preflightedKeys scopes checks per event, status, and CI state.
+func (h *Hooks) preflightAlreadyDone(filter hookFilter) bool {
+	if h.preflightDone && len(h.preflightedKeys) == 0 {
+		return true
+	}
+	return h.preflightedKeys != nil && h.preflightedKeys[filter.preflightKey()]
+}
+
+func (h *Hooks) markPreflightDone(filter hookFilter) {
+	h.preflightDone = true
+	if h.preflightedKeys == nil {
+		h.preflightedKeys = make(map[hookPreflightKey]bool)
+	}
+	h.preflightedKeys[filter.preflightKey()] = true
+}
+
+func (h *Hooks) hasUnskippedHooks(filter *hookFilter) (bool, error) {
 	for name := range h.items {
-		if skipPredicate == nil || !skipPredicate(name) {
-			return true
+		hook := h.items[name]
+		if !hook.MatchesEvent(filter.event) {
+			continue
+		}
+		runs, err := hook.RunsWhenE(filter.conditionContext(name))
+		if err != nil {
+			return false, err
+		}
+		if !runs {
+			continue
+		}
+		if filter.skipPredicate == nil || !filter.skipPredicate(name) {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // resolveDeps walks the global → component-type → component-instance
@@ -479,8 +689,12 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	}
 
 	resolver := dependencies.NewResolver(atmosConfig)
+	componentType := info.ComponentType
+	if componentType == "" {
+		componentType = cfg.TerraformComponentType
+	}
 	deps, err := resolver.ResolveComponentDependencies(
-		cfg.TerraformComponentType,
+		componentType,
 		stackSection,
 		componentSection,
 	)
@@ -528,35 +742,73 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 
 // verifyAllBinaries checks every hook's command resolves on the
 // toolchain-augmented PATH so failures surface before terraform runs.
-// Store-kind hooks have no Command and are skipped naturally.
-func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool) error {
+// Store-kind hooks have no Command and are skipped naturally. Hooks that
+// won't run for the current outcome status (per their `when`) are skipped so
+// an unrelated hook's misconfiguration cannot block the hooks that do run
+// (e.g. a success-only hook with a missing binary must not fail the failure path).
+func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
 	for name := range h.items {
-		if skipPredicate != nil && skipPredicate(name) {
+		if filter.skipPredicate != nil && filter.skipPredicate(name) {
 			continue
 		}
 		hook := h.items[name]
-		if isDeprecatedCIKind(hook.Kind) {
+		if !hook.MatchesEvent(filter.event) {
 			continue
 		}
-		kind, ok := GetKind(hook.Kind)
-		if !ok {
+		runs, err := hook.RunsWhenE(filter.conditionContext(name))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			continue
 		}
-		resolved := kind.ResolveDefaults(&hook)
-		if resolved.Command == "" {
-			continue
+		if err := h.verifyHookBinary(name, &hook); err != nil {
+			return err
 		}
-		if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
-			return errUtils.Build(errUtils.ErrCommandNotFound).
-				WithCause(err).
-				WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
-				WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before terraform runs", resolved.Command).
-				WithHint("Or install it manually so it appears on PATH").
-				WithContext("hook", name).
-				WithContext("kind", hook.Kind).
-				WithContext("command", resolved.Command).
-				Err()
-		}
+	}
+	return nil
+}
+
+// verifyHookBinary verifies a single hook's configuration and runtime
+// requirement: the hook's own on_failure literal (if set) must be a valid
+// value; step-kind hooks need a registered step type; command-backed kinds
+// need their command on PATH. Returns nil for hooks with nothing further to
+// verify (deprecated CI kinds, no command).
+func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
+	if err := verifyOnFailureValue(name, hook); err != nil {
+		return err
+	}
+	if isDeprecatedCIKind(hook.Kind) {
+		return nil
+	}
+	kind, ok := GetKind(hook.Kind)
+	if !ok {
+		return unknownHookKindError(name, hook.Kind)
+	}
+	// Step-kind hooks have no Command to resolve on PATH; instead verify the
+	// named step type is registered so a typo fails before terraform runs
+	// rather than mid-lifecycle.
+	if hook.Kind == stepKindName {
+		return verifyStepHookType(name, hook.Type)
+	}
+	if hook.Kind == stepsKindName {
+		return verifyStepsHookTypes(name, hook)
+	}
+	resolved := kind.ResolveDefaults(hook)
+	if resolved.Command == "" {
+		return nil
+	}
+	if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
+		// The cause already wraps ErrCommandNotFound with the command name, so
+		// build on it directly instead of stacking a second sentinel prefix.
+		return errUtils.Build(err).
+			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
+			WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it before terraform runs", resolved.Command).
+			WithHintf("Alternatively, install %s manually so it appears on PATH", resolved.Command).
+			WithContext("hook", name).
+			WithContext("kind", hook.Kind).
+			WithContext("command", resolved.Command).
+			Err()
 	}
 	return nil
 }
@@ -571,6 +823,40 @@ func verifyCommandAvailable(name, toolchainPATH string) error {
 	}
 	_, err := resolveBinaryOnPath(name, toolchainPATH)
 	return err
+}
+
+// unknownHookKindError builds the hard error for a hook whose kind is not
+// registered. There is no reasonable "skip and continue" behavior for a kind
+// Atmos has never heard of: the hook's author almost certainly made a typo,
+// and silently no-op'ing it would let a state-affecting hook (e.g.
+// kind: tfmigrate) simply never run with no signal to the user.
+func unknownHookKindError(name, kind string) error {
+	return errUtils.Build(errUtils.ErrUnknownHookKind).
+		WithExplanationf("Hook %q uses kind %q, which is not registered", name, kind).
+		WithHintf("Valid kinds: %s", strings.Join(ListKinds(), ", ")).
+		WithContext("hook", name).
+		WithContext("kind", kind).
+		Err()
+}
+
+// verifyOnFailureValue checks a hook's own on_failure literal, if set, is one
+// of the values the stack manifest schema allows. Empty is valid (falls back
+// to the kind's default, then "warn"). Checked here at preflight - before any
+// terraform operation runs - rather than only inside applyOnFailure's runtime
+// switch, so a typo (e.g. "waarn") is caught immediately instead of silently
+// behaving like "warn" only if and when the hook happens to fail.
+func verifyOnFailureValue(name string, hook *Hook) error {
+	switch hook.OnFailure {
+	case "", OnFailureWarn, OnFailureFail, OnFailureIgnore:
+		return nil
+	default:
+		return errUtils.Build(errUtils.ErrInvalidHookOnFailure).
+			WithExplanationf("Hook %q has on_failure: %q, which is not a valid value", name, hook.OnFailure).
+			WithHintf("Use one of: %s, %s, %s", OnFailureWarn, OnFailureFail, OnFailureIgnore).
+			WithContext("hook", name).
+			WithContext("on_failure", hook.OnFailure).
+			Err()
+	}
 }
 
 // isDeprecatedCIKind reports whether the given kind name was one of the
@@ -608,6 +894,10 @@ type RunCIHooksOptions struct {
 	// authoritative signal plugins use to determine success/failure and (for
 	// `terraform plan` with -detailed-exitcode) change detection. Pass 0 on success.
 	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
 }
 
 // RunCIHooks executes CI actions based on provider bindings.
@@ -651,7 +941,71 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		ForceCIMode:  opts.ForceCIMode,
 		CommandError: opts.CommandError,
 		ExitCode:     opts.ExitCode,
+		Aggregate:    opts.Aggregate,
 	})
+}
+
+// RunPerComponentHooksOptions configures a RunPerComponentHooks invocation for
+// one resolved component/stack node in a multi-component (bulk) Terraform run,
+// or for Helmfile's single-component execution.
+type RunPerComponentHooksOptions struct {
+	// Event is the hook event (e.g., "before.terraform.apply", "after.terraform.apply").
+	Event HookEvent
+
+	// AtmosConfig is the Atmos configuration, already initialized for this component.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// Info is the fully resolved component/stack info for this node (Component,
+	// ComponentFromArg, and Stack already set to this node's values).
+	Info *schema.ConfigAndStacksInfo
+
+	// Cmd is the cobra command in effect, used for --skip-hooks resolution
+	// (ResolveSkipHooks) exactly as the single-component Terraform path does.
+	Cmd *cobra.Command
+
+	// Args is the CLI args threaded through to hook engines that read them.
+	// Optional; nil is safe.
+	Args []string
+
+	// Outcome is the lifecycle outcome (success/failure) used to filter `when:`
+	// and expose status to hook engines. Zero value defaults to success.
+	Outcome Outcome
+
+	// Stdout and Stderr receive hook subprocess output. Nil preserves the
+	// process streams used by single-component execution.
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// RunPerComponentHooks resolves and runs one component's user-defined hooks
+// (the `hooks:` stack section) for a single lifecycle event. It is the exact
+// GetHooks + SetOutcome + RunAll sequence used by the single-component
+// Terraform CLI path (runUserHooks in cmd/terraform/utils.go), parameterized
+// so it can be called once per graph node — both before and after that node's
+// execution — from bulk Terraform/Helmfile dispatch. The returned error
+// already reflects each hook's on_failure resolution (fail returns non-nil;
+// warn/ignore already resolve to nil inside RunAll) — callers must not
+// swallow it.
+func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
+	if opts == nil || opts.Info == nil {
+		return nil
+	}
+	defer perf.Track(opts.AtmosConfig, "hooks.RunPerComponentHooks")()
+
+	hooksForComponent, err := GetHooks(opts.AtmosConfig, opts.Info)
+	if err != nil {
+		return err
+	}
+	if hooksForComponent == nil || !hooksForComponent.HasHooks() {
+		return nil
+	}
+
+	hooksForComponent.SetOutcome(opts.Outcome)
+	hooksForComponent.stdout = opts.Stdout
+	hooksForComponent.stderr = opts.Stderr
+	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
+	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
 }
 
 // ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.

@@ -48,7 +48,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	// Register external MCP server tools (filtered by routing).
 	// Skip for CLI providers — they handle MCP via provider-specific pass-through.
 	var mcpMgr *mcpclient.Manager
-	if !isCLIProvider(atmosConfig.AI.DefaultProvider) {
+	if !ai.IsCLIProvider(atmosConfig.AI.DefaultProvider) {
 		mcpMgr = registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
 	}
 
@@ -65,11 +65,11 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 
 	// Create permission checker with cache-aware prompter.
 	permConfig := &permission.Config{
-		Mode:            getPermissionMode(atmosConfig),
-		AllowedTools:    atmosConfig.AI.Tools.AllowedTools,
-		RestrictedTools: atmosConfig.AI.Tools.RestrictedTools,
-		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
-		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
+		Mode:       getPermissionMode(atmosConfig),
+		Allowed:    atmosConfig.AI.Tools.Allowed,
+		Restricted: atmosConfig.AI.Tools.Restricted,
+		Blocked:    atmosConfig.AI.Tools.Blocked,
+		YOLOMode:   atmosConfig.AI.Tools.YOLOMode,
 	}
 	var prompter permission.Prompter
 	if permCache != nil {
@@ -163,6 +163,32 @@ func selectManualServers(servers map[string]schema.MCPServerConfig, mcpServerNam
 	return filtered
 }
 
+// clientConfigForMCP returns atmosConfig unchanged, unless both the provider is a
+// CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) and mcpServers
+// (the --mcp flag) was given, in which case it returns a copy with MCP.Servers
+// filtered to the requested subset.
+//
+// CLI-provider clients (pkg/ai/agent/{claudecode,codexcli,copilotcli,geminicli})
+// read atmosConfig.MCP.Servers directly and pass every configured server through
+// unconditionally, ignoring --mcp entirely — unlike API providers, where MCP
+// servers are exposed as tools via initializeAIToolsAndExecutor/
+// registerMCPServerTools, which already applies this same --mcp filtering (and
+// prints the same selection/warning messages). Filtering only for CLI providers
+// here fixes the CLI-provider gap without emitting the "MCP servers selected via
+// --mcp flag" message a second time for API providers.
+//
+// The atmosConfig parameter is taken by pointer (it's large) but returned by
+// value: the returned struct is a copy, so reassigning its MCP.Servers field
+// to a new map cannot affect the caller's original struct.
+func clientConfigForMCP(atmosConfig *schema.AtmosConfiguration, mcpServers []string) schema.AtmosConfiguration {
+	if len(mcpServers) == 0 || !ai.IsCLIProvider(atmosConfig.AI.DefaultProvider) {
+		return *atmosConfig
+	}
+	result := *atmosConfig
+	result.MCP.Servers = selectManualServers(atmosConfig.MCP.Servers, mcpServers)
+	return result
+}
+
 // selectRoutedServers uses the AI provider to select relevant servers, with validation.
 func selectRoutedServers(atmosConfig *schema.AtmosConfiguration, servers map[string]schema.MCPServerConfig, question string) map[string]schema.MCPServerConfig {
 	selected := routeWithAI(atmosConfig, question)
@@ -217,10 +243,7 @@ func createRoutingClient(atmosConfig *schema.AtmosConfiguration) (router.Message
 	routingConfig := *atmosConfig
 
 	// Override max_tokens for routing (responses are just a JSON array of server names).
-	provider := atmosConfig.AI.DefaultProvider
-	if provider == "" {
-		provider = "anthropic"
-	}
+	provider := ai.GetProvider(atmosConfig)
 
 	// Deep-copy the provider map to avoid mutating the original config.
 	if atmosConfig.AI.Providers != nil {
@@ -289,19 +312,6 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 		return nil
 	}
 	return mcpclient.NewScopedAuthProvider()
-}
-
-// cliProviders lists providers that invoke a local CLI binary as a subprocess.
-// These providers handle MCP via provider-specific pass-through, not via the Atmos tool registry.
-var cliProviders = map[string]bool{
-	"claude-code": true,
-	"codex-cli":   true,
-	"gemini-cli":  true,
-}
-
-// isCLIProvider returns true if the provider invokes a local CLI binary.
-func isCLIProvider(providerName string) bool {
-	return cliProviders[providerName]
 }
 
 // serversNeedAuth returns true if any configured MCP server has identity set.

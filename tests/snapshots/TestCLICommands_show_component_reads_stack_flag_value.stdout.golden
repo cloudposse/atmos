@@ -1,4 +1,5 @@
-Atmos component from argument: vpc
-ATMOS_COMPONENT: vpc
-Atmos stack: plat-ue2-dev
-Terraform component: vpc
+Atmos component from argument: mock
+ATMOS_COMPONENT: mock
+Atmos stack: dev
+Terraform component: mock
+Stage: dev

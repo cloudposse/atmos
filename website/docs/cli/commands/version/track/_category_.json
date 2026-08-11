@@ -1,0 +1,11 @@
+{
+  "label": "track",
+  "position": 40,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/version/track/index"
+  }
+}

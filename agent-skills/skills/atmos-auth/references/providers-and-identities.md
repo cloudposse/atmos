@@ -19,6 +19,7 @@ auth:
       console:
         session_duration: 12h               # Optional: web console session (max 12h for AWS)
       spec:
+        endpoint_url: http://localhost:4566  # Optional: AWS-compatible base endpoint for Floci/LocalStack
         files:
           base_path: ~/.config/atmos/aws/   # Optional: custom credential file storage path
 ```
@@ -56,7 +57,10 @@ auth:
         audience: sts.us-east-1.amazonaws.com  # Optional: defaults to STS endpoint for region
 ```
 
-GitHub Actions workflow must have `id-token: write` permission.
+GitHub Actions workflow must have `id-token: write` permission and should select the CI profile with
+`ATMOS_PROFILE`. The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended
+repository plus branch or GitHub environment, such as `repo:ORG/REPO:ref:refs/heads/main` or
+`repo:ORG/REPO:environment:prod`.
 
 ### GCP Application Default Credentials
 
@@ -179,6 +183,8 @@ auth:
         secret_access_key: !env AWS_SECRET_ACCESS_KEY  # Use !env for env var references
         region: us-east-1                            # AWS region
         mfa_arn: arn:aws:iam::123456789012:mfa/user  # Optional: prompts for TOTP
+      spec:
+        endpoint_url: http://localhost:4566           # Optional: AWS-compatible base endpoint for Floci/LocalStack
       session:
         duration: 1h                        # Optional: 15m-12h (no MFA) or 15m-36h (with MFA)
 ```
@@ -348,6 +354,9 @@ auth:
         assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
 ```
 
+In GitHub Actions, do not add a routine `atmos auth login` step for OIDC jobs. Atmos resolves
+credentials when the command runs.
+
 ### GCP WIF with Service Account Impersonation
 
 Federate from GitHub Actions OIDC into GCP, then impersonate a service account.
@@ -414,7 +423,8 @@ components:
 ## Profiles for Multi-Environment Auth
 
 Use Atmos profiles to swap provider implementations while keeping the same provider name. Identity
-configurations reference a consistent provider name that behaves differently per profile.
+configurations reference a consistent provider name that behaves differently per profile. For profile
+directory layout, activation, and merge behavior, see `atmos-profiles`.
 
 ```text
 profiles/
@@ -448,6 +458,41 @@ auth:
 
 ECR tokens expire after approximately 12 hours (AWS-enforced). Credentials are written to
 `~/.docker/config.json`. Integration failures during `atmos auth login` are non-blocking.
+
+## Atmos Pro GitHub STS
+
+Use `atmos/pro` plus `github/sts` when CI needs private GitHub access for remote imports,
+component `source:`, vendoring, Terraform modules, or managed Git operations.
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: !env ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+  integrations:
+    github-sts:
+      kind: github/sts
+      via:
+        provider: atmos-pro
+      spec:
+        auto_provision: true
+        repos: [acme/modules]
+        policy_name: default
+        git_config_mode: env
+        revoke_on_exit: true
+        token_env: ATMOS_PRO_GITHUB_TOKEN
+```
+
+In GitHub Actions, grant `permissions.id-token: write`. In CI, Atmos can lazily provision
+`github/sts` before the first private remote read; an explicit `atmos auth login` is not required
+for normal remote import/source/vendor reads when `auto_provision` is enabled.
 
 ## Keyring Configuration
 

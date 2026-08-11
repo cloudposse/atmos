@@ -61,6 +61,77 @@ func TestNewDefaultClient(t *testing.T) {
 	}
 }
 
+func TestDefaultClient_HTTPClient(t *testing.T) {
+	t.Run("returns the underlying *http.Client", func(t *testing.T) {
+		client := NewDefaultClient(WithTimeout(5 * time.Second))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		assert.Equal(t, 5*time.Second, got.Timeout)
+	})
+
+	t.Run("reflects transport configured via WithGitHubToken", func(t *testing.T) {
+		client := NewDefaultClient(WithGitHubToken("test-token"))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		_, ok := got.Transport.(*GitHubAuthenticatedTransport)
+		assert.True(t, ok, "expected the GitHub-authenticated transport to be set")
+	})
+
+	t.Run("is the same instance backing Do", func(t *testing.T) {
+		client := NewDefaultClient()
+		assert.Same(t, client.client, client.HTTPClient())
+	})
+}
+
+// TestNewGitHubAuthenticatedHTTPClient covers the raw *http.Client constructor used by
+// consumers that can't take the Client interface — e.g. hashicorp/go-getter's HttpGetter
+// (pkg/downloader/gogetter_downloader.go) and the toolchain verifier's sidecar downloader
+// (pkg/toolchain/installer/installer.go), both of which need a real *http.Client.
+func TestNewGitHubAuthenticatedHTTPClient(t *testing.T) {
+	t.Run("empty token returns a plain client with no timeout", func(t *testing.T) {
+		client := NewGitHubAuthenticatedHTTPClient("")
+		require.NotNil(t, client)
+		assert.Nil(t, client.Transport, "no custom transport should be set without a token")
+		assert.Nil(t, client.CheckRedirect)
+		assert.Zero(t, client.Timeout, "no overall request timeout, matching go-getter's own unauthenticated default")
+	})
+
+	t.Run("non-empty token wires the GitHub authenticated transport", func(t *testing.T) {
+		client := NewGitHubAuthenticatedHTTPClient("test-token")
+		require.NotNil(t, client)
+		transport, ok := client.Transport.(*GitHubAuthenticatedTransport)
+		require.True(t, ok, "Transport should be *GitHubAuthenticatedTransport, got %T", client.Transport)
+		assert.Equal(t, "test-token", transport.GitHubToken)
+		assert.Equal(t, http.DefaultTransport, transport.Base)
+		assert.NotNil(t, client.CheckRedirect, "cross-host redirects must strip the Authorization header")
+		assert.Zero(t, client.Timeout)
+	})
+
+	t.Run("attaches Authorization header on requests to allowed GitHub hosts", func(t *testing.T) {
+		var gotAuth string
+		// Authorization is only ever injected over https (see RoundTrip), so this needs a TLS
+		// test server; httptest.Server's Client() is pre-configured to trust its own cert.
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		client := NewGitHubAuthenticatedHTTPClient("test-token")
+		transport := client.Transport.(*GitHubAuthenticatedTransport)
+		transport.hostMatcher = func(string) bool { return true }
+		transport.Base = server.Client().Transport
+
+		req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, "Bearer test-token", gotAuth)
+	})
+}
+
 func TestGetGitHubTokenFromEnv(t *testing.T) {
 	tests := []struct {
 		name        string

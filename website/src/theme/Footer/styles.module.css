@@ -1,0 +1,188 @@
+/**
+ * Custom site-wide footer styles.
+ *
+ * Layout mirrors the Atmos Pro footer: a brand block (wordmark + tagline +
+ * inline social icons) on the left, link columns to the right, and a divider'd
+ * bottom bar. Colors reuse Infima theme tokens (defined in src/css/custom.css)
+ * so the footer adapts automatically to light/dark mode; local fallbacks are
+ * provided for tokens that aren't theme-defined.
+ */
+
+.footer {
+  --footer-text: var(--ifm-footer-color, var(--ifm-font-color-base));
+  --footer-muted: var(--ifm-color-emphasis-600);
+  --footer-divider: var(--ifm-color-emphasis-200);
+
+  background: var(--ifm-background-surface-color);
+  padding: 4rem 1rem 2rem;
+}
+
+.container {
+  max-width: var(--ifm-container-width, 1140px);
+  margin: 0 auto;
+}
+
+/* Top section: brand block on the left, link columns filling the rest. */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3rem;
+}
+
+.brand {
+  flex: 1 1 280px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.brandLink {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brandLogo {
+  display: block;
+  height: 52px;
+  width: auto;
+}
+
+.tagline {
+  margin: 1.25rem 0 0;
+  color: var(--footer-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.social {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.socialLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--footer-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.socialLink:hover {
+  color: var(--ifm-color-primary-light);
+  transform: translateY(-1px);
+}
+
+/* Link columns. */
+.columns {
+  flex: 1 1 560px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+.column {
+  min-width: 0;
+}
+
+.columnTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--footer-text);
+  margin: 0 0 1rem;
+}
+
+.itemList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  margin-bottom: 0.7rem;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--footer-muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.link:hover {
+  color: var(--ifm-color-primary-light);
+  text-decoration: none;
+}
+
+.externalIcon {
+  width: 0.8em;
+  height: 0.8em;
+  opacity: 0.7;
+}
+
+/* Bottom bar. */
+.bottomBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 3.5rem;
+}
+
+.copyright {
+  color: var(--footer-muted);
+  font-size: 0.85rem;
+}
+
+/* Theme-based logo switching (matches the Watermark component pattern). */
+:global(html:not([data-theme='dark'])) .logoDark {
+  display: none;
+}
+
+:global(html[data-theme='dark']) .logoLight {
+  display: none;
+}
+
+@media (max-width: 996px) {
+  .top {
+    gap: 2.5rem;
+  }
+
+  .brand {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .columns {
+    flex-basis: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .footer {
+    padding-top: 3rem;
+  }
+
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .bottomBar {
+    justify-content: center;
+    text-align: center;
+  }
+}

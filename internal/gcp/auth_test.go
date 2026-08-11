@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"testing"
+	"time"
 
 	"google.golang.org/api/option"
 )
@@ -20,6 +21,14 @@ func TestGetClientOptions(t *testing.T) {
 			expected: 0, // ADC uses no explicit options
 		},
 		{
+			name: "access token",
+			opts: AuthOptions{
+				AccessToken: "ya29.access-token",
+				TokenExpiry: time.Now().Add(time.Hour),
+			},
+			expected: 1, // WithTokenSource
+		},
+		{
 			name: "JSON credentials",
 			opts: AuthOptions{
 				Credentials: `{"type": "service_account", "project_id": "test"}`,
@@ -32,6 +41,22 @@ func TestGetClientOptions(t *testing.T) {
 				Credentials: "/path/to/service-account.json",
 			},
 			expected: 1, // WithCredentialsFile
+		},
+		{
+			name: "custom endpoint",
+			opts: AuthOptions{
+				Endpoint: "localhost:4566",
+			},
+			expected: 1, // WithEndpoint
+		},
+		{
+			name: "custom insecure endpoint without auth",
+			opts: AuthOptions{
+				Endpoint:              "http://localhost:4566",
+				EndpointInsecure:      true,
+				WithoutAuthentication: true,
+			},
+			expected: 3, // WithEndpoint + plaintext gRPC + WithoutAuthentication
 		},
 		{
 			name: "JSON with whitespace",
@@ -49,6 +74,21 @@ func TestGetClientOptions(t *testing.T) {
 				t.Errorf("GetClientOptions() returned %d options, expected %d", len(clientOpts), tt.expected)
 			}
 		})
+	}
+}
+
+func TestNormalizeEndpoint(t *testing.T) {
+	tests := map[string]string{
+		"localhost:4566":        "localhost:4566",
+		"http://localhost:4566": "localhost:4566",
+		"https://example.com":   "example.com",
+		"  localhost:8686  ":    "localhost:8686",
+	}
+
+	for input, expected := range tests {
+		if got := normalizeEndpoint(input); got != expected {
+			t.Fatalf("normalizeEndpoint(%q) = %q, expected %q", input, got, expected)
+		}
 	}
 }
 

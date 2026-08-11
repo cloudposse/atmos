@@ -8,7 +8,7 @@ description: Use the `atmos.yaml` configuration file to control the behavior of 
 ---
 
 import DocCardList from '@theme/DocCardList'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -29,14 +29,16 @@ Think of this file as where you bootstrap the settings of your project. If you'l
 
 Atmos discovers configuration from multiple sources in the following precedence order (highest to lowest priority):
 
-1. **Command-line flags** (`--config`, `--config-path`)
-2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
-3. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
-4. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
-5. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
-6. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
-7. **Home directory** (`~/.atmos/atmos.yaml`)
-8. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+1. **Command-line flags** (`--config`, `--config-path`) — if a flag is set, it always wins over
+   its environment variable equivalent below, even when both are present
+2. **Environment variable equivalents of the flags above** (`ATMOS_CONFIG`, `ATMOS_CONFIG_PATH`)
+3. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
+4. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
+5. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
+6. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
+7. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
+8. **Home directory** (`~/.atmos/atmos.yaml`)
+9. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
 Each configuration file discovered is deep-merged with the preceding configurations. Separately, Atmos may also auto-import configuration fragments from `.atmos.d/`. The git repository root is special: even when `atmos.yaml` is found elsewhere, Atmos always checks for `.atmos.d/` at the repo root to load shared fragments like custom commands.
 
@@ -72,7 +74,14 @@ atmos --config /path/to/config1.yaml --config /path/to/config2.yaml \
       --config-path /path/first/config/ --config-path /path/second/config/ ...
 ```
 
-Configurations are deep-merged in the order provided, with later configurations overriding earlier ones.
+Configurations are deep-merged in the order provided, with later configurations overriding earlier ones. `--config-path` directories are always merged after — and therefore override — `--config` files, regardless of the order the flags appear on the command line.
+
+Both flags also accept comma-separated values via environment variables — `ATMOS_CONFIG` for `--config`, `ATMOS_CONFIG_PATH` for `--config-path`:
+
+```bash
+export ATMOS_CONFIG=/path/to/config1.yaml,/path/to/config2.yaml
+atmos describe config
+```
 
 ### Profiles
 
@@ -478,7 +487,8 @@ The `atmos.yaml` file is organized into the following sections:
 
 | Section | Description |
 |---------|-------------|
-| [Toolchain](/cli/commands/toolchain/usage) | Tool version management and registry configuration |
+| [Toolchain](/cli/configuration/toolchain) | Install and run exact local CLI tool versions from registry metadata |
+| [Version Management](/cli/configuration/version/managed-versions) | Track, lock, update, and render software versions whether or not Atmos installs them locally |
 | [Profiles](/cli/configuration/profiles) | Named configuration overrides for different environments |
 | [Custom Commands](/cli/configuration/commands) | Define custom Atmos commands |
 | [Aliases](/cli/configuration/aliases) | Create shortcut names for commands |
@@ -487,7 +497,7 @@ The `atmos.yaml` file is organized into the following sections:
 | [Vendor](/cli/configuration/vendor) | Vendoring configuration and manifest paths |
 | [Stores](/cli/configuration/stores) | External key-value store configuration |
 | [Docs](/cli/configuration/docs) | Documentation generation for READMEs and release notes |
-| [Version](/cli/configuration/version) | Version pinning, automatic checking, and constraint enforcement |
+| [Version](/cli/configuration/version) | Atmos CLI version pinning, automatic checking, constraints, and managed software versions |
 
 ### Validation and Integration
 
@@ -507,7 +517,7 @@ Use `atmos describe config` to view your fully-merged CLI configuration:
 atmos describe config
 ```
 
-<Screengrab title="atmos describe config" slug="atmos-describe-config" />
+<CastPlayer title="atmos describe config" src="/casts/screengrabs/atmos-describe-config.cast" static chrome />
 
 See [`atmos describe config`](/cli/commands/describe/config) for more details.
 

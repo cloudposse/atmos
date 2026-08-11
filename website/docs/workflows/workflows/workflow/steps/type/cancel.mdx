@@ -1,0 +1,51 @@
+---
+title: cancel
+sidebar_label: cancel
+slug: /workflows/steps/type/cancel
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `cancel` step type stops and removes a [background container service](/workflows/steps/type/container#background-services) that an earlier step started with `background: true`. It gives you explicit, in-workflow teardown for long-running dependencies — emulators, databases, registries — without dropping into shell scripts to track and kill container IDs.
+</Intro>
+
+Name the background service to stop with the `for` field. Atmos gracefully stops the container and removes it:
+
+```yaml
+steps:
+  - name: emulator
+    type: container
+    action: run
+    background: true
+    with:
+      image: localstack/localstack
+      ports:
+        - host: 4566
+          container: 4566
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+        interval: 5s
+        retries: 10
+        start_period: 30s
+
+  - name: apply
+    type: atmos
+    command: terraform apply vpc -s dev
+
+  - type: cancel
+    for: emulator
+```
+
+## Fields
+
+<dl>
+  <dt>`for`</dt>
+  <dd>Name of the background service step to stop and remove. Must reference an earlier `action: run` step with `background: true`. The container is gracefully stopped, then removed.</dd>
+</dl>
+
+## Automatic teardown
+
+A `cancel` step is optional. If you never cancel a background service explicitly, Atmos automatically tears down all background services when the workflow ends — including on failure — so a crashed or short-circuited workflow does not leave orphaned containers running. Use `cancel` when you want to free a service early, before the workflow finishes, or to make teardown explicit in the workflow file.
+
+See [background services](/workflows/steps/type/container#background-services) on the `container` step page for the full lifecycle, and [`wait`](/workflows/steps/type/wait) for gating steps on service readiness.

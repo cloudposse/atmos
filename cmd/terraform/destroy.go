@@ -43,10 +43,12 @@ func init() {
 		flags.WithBoolFlag("all", "", false, "Destroy all components in all stacks"),
 		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform destroy components to execute concurrently"),
 		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform destroy failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform destroy logs. Supported values: stream, grouped"),
 		flags.WithEnvVars("affected", "ATMOS_TERRAFORM_DESTROY_AFFECTED"),
 		flags.WithEnvVars("all", "ATMOS_TERRAFORM_DESTROY_ALL"),
 		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_DESTROY_MAX_CONCURRENCY"),
 		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_DESTROY_FAILURE_MODE"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_DESTROY_LOG_ORDER"),
 	)
 	destroyParser.RegisterFlags(destroyCmd)
 	if err := destroyParser.BindToViper(viper.GetViper()); err != nil {

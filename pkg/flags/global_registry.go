@@ -1,6 +1,8 @@
 package flags
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -39,8 +41,8 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Working directory and path configuration.
 		Chdir:      v.GetString("chdir"),
 		BasePath:   v.GetString("base-path"),
-		Config:     v.GetStringSlice("config"),
-		ConfigPath: v.GetStringSlice("config-path"),
+		Config:     stringSliceFromViperOrEnv(v, "config", "ATMOS_CONFIG"),
+		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
 		LogsLevel: v.GetString("logs-level"),
@@ -51,6 +53,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -82,7 +85,28 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 
 		// Settings overrides.
 		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+
+		// Edition pin.
+		Edition: v.GetString("edition"),
 	}
+}
+
+// stringSliceFromViperOrEnv reads a StringSlice flag from Viper, correcting for Viper's
+// comma-splitting quirk (see cfg.FixViperEnvStringSliceQuirk) when the value came from one of
+// the given environment variables rather than the CLI flag itself. CLI-flag-sourced values are
+// already parsed correctly by pflag/Cobra and must not be re-split.
+//
+// This is currently scoped to "config"/"config-path" (cloudposse/atmos#2867/#2868); other
+// StringSlice+EnvVar flags (e.g. "skill"/ATMOS_SKILL) share the same latent Viper quirk but are
+// deliberately left as a known follow-up rather than fixed here.
+func stringSliceFromViperOrEnv(v *viper.Viper, key string, envVars ...string) []string {
+	values := v.GetStringSlice(key)
+	for _, envVar := range envVars {
+		if _, ok := os.LookupEnv(envVar); ok {
+			return cfg.FixViperEnvStringSliceQuirk(values)
+		}
+	}
+	return values
 }
 
 func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
@@ -175,6 +199,23 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 // Deprecated: Use cfg.NormalizeIdentityValue() instead. This wrapper exists for backward compatibility.
 func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
+}
+
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
+	if flag == nil {
+		return ""
+	}
+	if changed {
+		return flag.Value.String()
+	}
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
+	}
+	return ""
 }
 
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
@@ -320,6 +361,16 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
 	})
+
+	registry.Register(&StringFlag{
+		Name:                    cfg.CastFlagName,
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Record command output as an asciinema cast",
+		NoOptDefVal:             cfg.CastFlagAutoValue,
+		NoOptDefValNoSpaceValue: true,
+		EnvVars:                 []string{cfg.CastEnvVarName},
+	})
 }
 
 // registerProfilingFlags registers profiling configuration flags.
@@ -433,6 +484,14 @@ func registerSettingsFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
 		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "edition",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+		EnvVars:     []string{"ATMOS_EDITION"},
 	})
 }
 

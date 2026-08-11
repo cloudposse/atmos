@@ -1,0 +1,85 @@
+commands:
+  - name: casts generate examples demo-atlantis repo-config
+    description: Regenerate the Atlantis example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-atlantis
+        working_directory: &atlantis_fixture "../../.context/cast-fixtures/demo-atlantis"
+        output: none
+        command: rm -f atlantis.yaml
+      - type: cast
+        name: repo-config
+        working_directory: *atlantis_fixture
+        title: "Atlantis: generate repo config and automation files"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-atlantis/repo-config.cast"
+        steps:
+          - type: simulate
+            text: "# generate an Atlantis repo configuration from Atmos templates"
+          - type: simulate
+            text: &repo_cmd atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+          - type: shell
+            name: repo-config
+            duration: 450ms
+            interval: 750ms
+            command: *repo_cmd
+          - type: simulate
+            text: "# inspect the generated repo settings"
+          - type: simulate
+            text: &show_cmd sed -n '1,22p' atlantis.yaml
+          - type: shell
+            name: show-config
+            duration: 450ms
+            interval: 750ms
+            command: *show_cmd
+          - type: simulate
+            text: "# run the custom command that builds all Atlantis artifacts"
+          - type: simulate
+            text: &build_cmd atmos atlantis build-all
+          - type: shell
+            name: build-all
+            duration: 450ms
+            interval: 750ms
+            command: *build_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-atlantis repo-config
+  - name: casts validate examples demo-atlantis repo-config
+    description: Validate the Atlantis example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-atlantis/repo-config.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos atlantis generate repo-config --config-template config-1 --project-template project-1",
+              "version: 3",
+              "automerge: true",
+              "parallel_plan: true",
+              "workflows:",
+              "atmos atlantis build-all",
+              "Building Atlantis config...",
+              "Generating varfiles...",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-atlantis cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

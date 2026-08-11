@@ -40,8 +40,8 @@ type Formatter interface {
 	Warningf(format string, a ...interface{}) string // Returns "⚠ {formatted}" in yellow
 	Error(text string) string                        // Returns "✗ {text}" in red
 	Errorf(format string, a ...interface{}) string   // Returns "✗ {formatted}" in red
-	Info(text string) string                         // Returns "ℹ {text}" in cyan
-	Infof(format string, a ...interface{}) string    // Returns "ℹ {formatted}" in cyan
+	Info(text string) string                         // Returns "▶ {text}" in cyan.
+	Infof(format string, a ...interface{}) string    // Returns "▶ {formatted}" in cyan.
 	Hint(text string) string                         // Returns "💡 {text}" in muted color
 	Hintf(format string, a ...interface{}) string    // Returns "💡 {formatted}" in muted color
 	Muted(text string) string                        // Returns muted text (gray, no icon)
@@ -61,4 +61,9 @@ type Formatter interface {
 	// Markdown rendering - returns rendered markdown string (pure function, no I/O)
 	// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage()
 	Markdown(content string) (string, error)
+
+	// MarkdownNoWrap renders markdown without word-wrapping long lines, for
+	// deterministic, snapshot-stable single-line notices. For writing to
+	// channels, use package-level ui.MarkdownMessageNoWrap().
+	MarkdownNoWrap(content string) (string, error)
 }

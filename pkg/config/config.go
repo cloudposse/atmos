@@ -435,10 +435,20 @@ func getGitRootOrEmpty() string {
 
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// First, resolve the base path itself to an absolute path.
-	// Relative paths are resolved relative to atmos.yaml location (atmosConfig.CliConfigPath).
+	// Relative paths are resolved relative to atmos.yaml location. Normally that's
+	// atmosConfig.CliConfigPath, but when multiple --config files or --config-path directories
+	// were merged, CliConfigPath becomes a ";"-joined multi-directory string (see connectPaths) --
+	// not a valid single directory to join a relative path against. BasePathConfigDir tracks the
+	// directory of whichever source actually declared base_path (or the first source, if none did)
+	// for exactly that case; it's empty for the single-source path, where CliConfigPath is already
+	// the correct single directory.
+	basePathAnchor := atmosConfig.CliConfigPath
+	if atmosConfig.BasePathConfigDir != "" {
+		basePathAnchor = atmosConfig.BasePathConfigDir
+	}
 	var atmosBasePathAbs string
 	var err error
-	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath, atmosConfig.BasePathSource)
+	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, basePathAnchor, atmosConfig.BasePathSource)
 	if err != nil {
 		return err
 	}
@@ -507,6 +517,41 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
+
+	// Convert Kubernetes dir to an absolute path.
+	kubernetesBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Kubernetes.BasePath)
+	kubernetesDirAbsPath, err := filepath.Abs(kubernetesBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.KubernetesDirAbsolutePath = kubernetesDirAbsPath
+
+	// Convert Helm dir to an absolute path.
+	helmBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Helm.BasePath)
+	helmDirAbsPath, err := filepath.Abs(helmBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
+
+	// Convert Vendor base path to an absolute path. Consumers previously re-joined the raw
+	// (possibly still-relative) atmosConfig.BasePath at call time instead of using a
+	// precomputed absolute path -- the same bug shape #2864 fixed for the top-level
+	// base_path itself, just not yet applied here.
+	vendorBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Vendor.BasePath)
+	vendorDirAbsPath, err := absPathOrError(vendorBasePath, "vendor base path")
+	if err != nil {
+		return err
+	}
+	atmosConfig.VendorDirAbsolutePath = vendorDirAbsPath
+
+	// Convert Workflows base path to an absolute path (same rationale as Vendor above).
+	workflowsBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Workflows.BasePath)
+	workflowsDirAbsPath, err := absPathOrError(workflowsBasePath, "workflows base path")
+	if err != nil {
+		return err
+	}
+	atmosConfig.WorkflowsDirAbsolutePath = workflowsDirAbsPath
 
 	return nil
 }

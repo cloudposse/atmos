@@ -3,6 +3,7 @@ package exec
 import (
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -292,8 +293,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 			// Check if the 'components' filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[string]any); !ok {
 					continue
@@ -401,7 +401,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				switch {
 				case stackNameTemplate != "":
-					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
@@ -418,10 +418,10 @@ func ExecuteAtlantisGenerateRepoConfig(
 				if len(stacks) == 0 ||
 					// 'stacks' filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackConfigFileName) ||
+					slices.Contains(stacks, stackConfigFileName) ||
 					// 'stacks' filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackSlug) {
+					slices.Contains(stacks, stackSlug) {
 					// Generate an atlantis project for the component in the stack
 					// Replace the context tokens
 					var whenModified []string

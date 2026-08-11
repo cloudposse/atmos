@@ -86,6 +86,35 @@ func TestStandardFlagParser_Parse(t *testing.T) {
 	assert.NotNil(t, cfg.Flags)
 }
 
+// TestStandardFlagParser_Parse_ZeroArgsBindsChangedFlags is a regression test for
+// https://github.com/cloudposse/atmos/issues/2505: commands with zero leftover
+// positional args after Cobra's own flag parsing (e.g. Args: cobra.NoArgs, or any
+// command invoked as `cmd --stack dev` with no other positional args) must still
+// have CLI-supplied flag values reflected in Parse()'s result, even though the
+// args slice Parse() receives is empty.
+func TestStandardFlagParser_Parse_ZeroArgsBindsChangedFlags(t *testing.T) {
+	parser := NewStandardFlagParser(WithStackFlag())
+	cmd := &cobra.Command{Use: "test", Args: cobra.NoArgs}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	// Deliberately bind only env-vars/defaults here, not pflags — this proves
+	// Parse() is self-sufficient for CLI-supplied values without a caller also
+	// having to remember an explicit BindFlagsToViper() call.
+	require.NoError(t, parser.BindToViper(v))
+
+	// Simulate Cobra having already parsed "--stack dev" before RunE/Parse runs.
+	// Cobra strips recognized flags out of args, so for a NoArgs command the
+	// leftover positional args slice passed to Parse() is empty.
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	result, err := parser.Parse(context.Background(), []string{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev", GetString(result.Flags, "stack"),
+		"CLI-supplied --stack value must be reflected even when len(args)==0")
+}
+
 func TestStandardFlagParser_GetIdentityFromCmd(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -443,6 +472,195 @@ func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStandardFlagParser_ValidateSingleFlag_StringSlice covers the []string branch
+// added to validateSingleFlag so a repeatable flag (e.g. --client) validates every
+// element, not just a single scalar value.
+func TestStandardFlagParser_ValidateSingleFlag_StringSlice(t *testing.T) {
+	tests := []struct {
+		name          string
+		flags         map[string]interface{}
+		expectError   bool
+		errorContains []string
+	}{
+		{
+			name:        "all values valid",
+			flags:       map[string]interface{}{"client": []string{"claude-code", "vscode"}},
+			expectError: false,
+		},
+		{
+			name:          "one invalid value among valid ones",
+			flags:         map[string]interface{}{"client": []string{"claude-code", "bogus-name"}},
+			expectError:   true,
+			errorContains: []string{"bogus-name", "client"},
+		},
+		{
+			name:        "empty elements are skipped",
+			flags:       map[string]interface{}{"client": []string{""}},
+			expectError: false,
+		},
+		{
+			name:        "empty slice",
+			flags:       map[string]interface{}{"client": []string{}},
+			expectError: false,
+		},
+	}
+
+	validValues := []string{"claude-code", "vscode", "gemini"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewStandardFlagParser(
+				WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+				WithValidValues("client", validValues...),
+			)
+
+			err := parser.validateSingleFlag("client", validValues, tt.flags, nil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				for _, text := range tt.errorContains {
+					assert.Contains(t, err.Error(), text)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestStandardFlagParser_ValidateFlagValues_StringSlice_ThroughFlagSet covers
+// validateFlagValues end-to-end for a StringSliceFlag: setting an invalid element on
+// a real Cobra FlagSet must be rejected the same way validateSingleFlag rejects it
+// directly.
+func TestStandardFlagParser_ValidateFlagValues_StringSlice_ThroughFlagSet(t *testing.T) {
+	parser := NewStandardFlagParser(
+		WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+		WithValidValues("client", "claude-code", "vscode", "gemini"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	require.NoError(t, cmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+	flags := map[string]interface{}{"client": []string{"claude-code", "bogus-name"}}
+	err := parser.validateFlagValues(flags, cmd.Flags())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+}
+
+// TestStandardFlagParser_ValidateFlagValues_MethodOnCmd covers the exported
+// ValidateFlagValues entry point used by commands (e.g. `atmos ai skill
+// install`/`uninstall`) that bind flags via BindFlagsToViper and read them back
+// manually instead of calling Parse().
+func TestStandardFlagParser_ValidateFlagValues_MethodOnCmd(t *testing.T) {
+	t.Run("rejects an invalid element on a changed StringSliceFlag", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+		err := parser.ValidateFlagValues(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bogus-name")
+	})
+
+	t.Run("accepts valid elements", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("client", "vscode"))
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("no-op when the flag was never changed", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("nil cmd is a no-op", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+
+		assert.NoError(t, parser.ValidateFlagValues(nil))
+	})
+}
+
+// TestStandardFlagParser_ValidateFlagValues_EnvVarOnly is a regression test:
+// a flag whose invalid value is supplied only through its bound environment
+// variable -- never touched on the CLI -- must still be rejected. Before this
+// fix, ValidateFlagValues only inspected cmd.Flags().Changed(), so an
+// env-only value (e.g. ATMOS_AI_SKILL_CLIENT=bogus) silently bypassed
+// validation: the command reported success while distributing to zero
+// clients, since "bogus" matched no real client.
+func TestStandardFlagParser_ValidateFlagValues_EnvVarOnly(t *testing.T) {
+	t.Run("rejects an invalid value sourced only from an env var", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		t.Setenv("TEST_ATMOS_VALIDATE_CLIENT_ENV", "bogus-name")
+
+		err := parser.ValidateFlagValues(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bogus-name")
+	})
+
+	t.Run("accepts a valid value sourced only from an env var", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV_OK"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		t.Setenv("TEST_ATMOS_VALIDATE_CLIENT_ENV_OK", "vscode")
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
+
+	t.Run("still a no-op when nothing was set anywhere", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+			WithEnvVars("client", "TEST_ATMOS_VALIDATE_CLIENT_ENV_UNSET"),
+			WithValidValues("client", "claude-code", "vscode", "gemini"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.NoError(t, parser.ValidateFlagValues(cmd))
+	})
 }
 
 // TestStandardFlagParser_ParseWithPositionalArgs tests parsing with positional arguments.
@@ -1318,6 +1536,39 @@ func TestStandardFlagParser_BindFlagsToViper_WithPrefix(t *testing.T) {
 	})
 }
 
+func TestStandardFlagParser_BindFlagsToViper_BindsRegistryPersistentFlagOnChildCommand(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		addChildBeforeReg bool
+	}{
+		{name: "child added before persistent flags", addChildBeforeReg: true},
+		{name: "child added after persistent flags", addChildBeforeReg: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			parser := NewStandardFlagParser(
+				WithStringFlag("stack", "s", "", "Stack name"),
+				WithEnvVars("stack", "ATMOS_STACK"),
+			)
+
+			parent := &cobra.Command{Use: "parent"}
+			child := &cobra.Command{Use: "child"}
+			if tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			parser.RegisterPersistentFlags(parent)
+			if !tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			require.NoError(t, parser.BindToViper(v))
+			require.NoError(t, parent.PersistentFlags().Set("stack", "local"))
+
+			require.NoError(t, parser.BindFlagsToViper(child, v))
+			assert.Equal(t, "local", v.GetString("stack"))
+		})
+	}
+}
+
 // TestStringFlag_GetValidValues tests the GetValidValues method.
 func TestStringFlag_GetValidValues(t *testing.T) {
 	t.Run("returns valid values when set", func(t *testing.T) {
@@ -1481,6 +1732,24 @@ func TestStandardParser_Registry(t *testing.T) {
 	assert.True(t, registry.Has("format"))
 }
 
+// TestStandardParser_ValidateFlagValues verifies that StandardParser.ValidateFlagValues
+// delegates to the underlying StandardFlagParser's ValidateFlagValues, exactly like
+// `atmos ai skill install`/`uninstall` call it after BindFlagsToViper.
+func TestStandardParser_ValidateFlagValues(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringSliceFlag("client", "c", nil, "AI client(s) to target"),
+		WithValidValues("client", "claude-code", "vscode", "gemini"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	require.NoError(t, cmd.Flags().Set("client", "bogus-name"))
+
+	err := parser.ValidateFlagValues(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+}
+
 // TestStandardParser_SetPositionalArgs verifies that StandardParser.SetPositionalArgs
 // correctly configures positional argument handling.
 func TestStandardParser_SetPositionalArgs(t *testing.T) {
@@ -1513,4 +1782,30 @@ func TestStandardParser_SetPositionalArgs(t *testing.T) {
 	opts, err := parser.Parse(context.Background(), []string{"vpc"})
 	require.NoError(t, err)
 	assert.Equal(t, "vpc", opts.Component, "positional arg should be mapped to Component field")
+}
+
+func TestConditionalPositionalPromptSkipsWhenPredicateIsFalse(t *testing.T) {
+	predicateCalled := false
+	argsBuilder := NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&PositionalArgSpec{Name: "component", Required: true, TargetField: "Component"})
+	specs, validator, usage := argsBuilder.Build()
+
+	parser := NewStandardFlagParser(WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose a component",
+		func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+			return []string{"api"}, cobra.ShellCompDirectiveNoFileComp
+		},
+		func(*ParsedConfig) bool {
+			predicateCalled = true
+			return false
+		},
+	))
+	parser.SetPositionalArgs(specs, validator, usage)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	_, err := parser.Parse(context.Background(), nil)
+	require.Error(t, err, "the normal required-argument validator should run when prompting is skipped")
+	assert.True(t, predicateCalled)
 }

@@ -226,6 +226,92 @@ func TestAddAffectedSpaceliftAdminStack_WithValidConfig(t *testing.T) {
 	assert.True(t, found, "Spacelift admin stack should be added to affected list")
 }
 
+func TestAddAffectedSpaceliftAdminStack_IgnoresMissingTemplateValues(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			NameTemplate: "{{ .vars.environment }}-{{ .vars.stage }}-{{ .vars.missing }}",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				IgnoreMissingTemplateValues: true,
+			},
+		},
+	}
+
+	stackName := "tenant1-ue2-dev"
+	componentName := "app"
+	adminComponentName := "spacelift-admin"
+	affectedList := []schema.Affected{{
+		Component:     componentName,
+		Stack:         stackName,
+		ComponentType: "terraform",
+		Affected:      "test",
+	}}
+	settingsSection := map[string]any{
+		"spacelift": map[string]any{
+			"admin_stack_selector": map[string]string{
+				"component":   adminComponentName,
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+	stacks := map[string]any{
+		"ue2-admin-<no value>": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					adminComponentName: map[string]any{
+						"vars": map[string]any{
+							"environment": "ue2",
+							"stage":       "admin",
+							"component":   adminComponentName,
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"vars": map[string]any{
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+
+	result, err := addAffectedSpaceliftAdminStack(
+		atmosConfig,
+		&affectedList,
+		&settingsSection,
+		&stacks,
+		stackName,
+		componentName,
+		configAndStacksInfo,
+		true,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, *result, 2)
+
+	found := false
+	for _, affected := range *result {
+		if affected.Component == adminComponentName &&
+			affected.Stack == "ue2-admin-<no value>" &&
+			affected.ComponentType == "terraform" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected spacelift admin stack to be added even with ignored missing template values")
+}
+
 func TestIsComponentFolderChanged(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
@@ -988,6 +1074,144 @@ func TestMatchLegacyContextFields(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// Fixed navigation keys for the remote-stacks fixtures below. The locator's lookup is
+// what's exercised, so the map keys stay constant and mismatches are introduced via the
+// locator fields (e.g. a wrong stackName) rather than by varying the map.
+const (
+	locatorStack     = "dev"
+	locatorCompType  = "terraform"
+	locatorComponent = "vpc"
+)
+
+// remoteStacksWithSection builds the nested remote-stacks map shape
+// (stack -> components -> componentType -> componentName -> section) used by
+// remoteComponentLocator.
+func remoteStacksWithSection(componentType, component, section string, value any) map[string]any {
+	return map[string]any{
+		locatorStack: map[string]any{
+			"components": map[string]any{
+				componentType: map[string]any{
+					component: map[string]any{
+						section: value,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestRemoteComponentLocator_Section(t *testing.T) {
+	const section = "vars"
+	value := map[string]any{"region": "us-east-1"}
+
+	t.Run("found returns value and true", func(t *testing.T) {
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		require.True(t, ok)
+		assert.Equal(t, value, got)
+	})
+
+	t.Run("located component without the section returns nil and true", func(t *testing.T) {
+		// The component path resolves, but the requested section key is absent:
+		// the lookup still succeeds (ok=true) with a nil value.
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "env", value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.True(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("stack not found returns false", func(t *testing.T) {
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: "missing", componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("components key missing returns false", func(t *testing.T) {
+		remote := map[string]any{locatorStack: map[string]any{"vars": map[string]any{}}}
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("component type missing returns false", func(t *testing.T) {
+		remote := remoteStacksWithSection("helmfile", locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("component missing returns false", func(t *testing.T) {
+		remote := remoteStacksWithSection(locatorCompType, "other", section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+}
+
+func TestIsSectionValueEqual(t *testing.T) {
+	const section = "command"
+
+	newLocator := func(remote map[string]any) remoteComponentLocator {
+		return remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+	}
+
+	t.Run("remote path absent treated as not equal", func(t *testing.T) {
+		remote := map[string]any{}
+		assert.False(t, isSectionValueEqual(newLocator(remote), "terraform", section))
+	})
+
+	t.Run("equal scalar values", func(t *testing.T) {
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, "terraform")
+		assert.True(t, isSectionValueEqual(newLocator(remote), "terraform", section))
+	})
+
+	t.Run("unequal scalar values", func(t *testing.T) {
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, "terraform")
+		assert.False(t, isSectionValueEqual(newLocator(remote), "tofu", section))
+	})
+
+	t.Run("equal map values", func(t *testing.T) {
+		remoteVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		localVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "providers", remoteVal)
+		assert.True(t, isSectionValueEqual(newLocator(remote), localVal, "providers"))
+	})
+
+	t.Run("unequal map values", func(t *testing.T) {
+		remoteVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		localVal := map[string]any{"aws": map[string]any{"region": "us-west-2"}}
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "providers", remoteVal)
+		assert.False(t, isSectionValueEqual(newLocator(remote), localVal, "providers"))
+	})
 }
 
 func TestContextToComponentDependency(t *testing.T) {

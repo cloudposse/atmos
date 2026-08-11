@@ -265,9 +265,16 @@ func ExecutePacker(
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
+	// Resolve info.Command to the toolchain-installed binary (if any), mirroring
+	// the "version" subcommand branch above and the terraform/helmfile executors.
+	// Without this, a component-level `dependencies.tools.packer` constraint
+	// installs the pinned Packer version but the subprocess still fails with
+	// "executable file not found in $PATH", because exec.Command resolves the
+	// binary via the process's real PATH at call time, not via the PATH=...
+	// entry later added to envVars.
 	return ExecuteShellCommand(
 		atmosConfig,
-		info.Command,
+		tenv.Resolve(info.Command),
 		allArgsAndFlags,
 		componentPath,
 		envVars,

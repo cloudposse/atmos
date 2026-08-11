@@ -9,15 +9,17 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
-        - "AVAILABLE COMMANDS"
+        - "BUILT-IN COMMANDS"
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
         - "\\bdescribe\\b"
         - "\\bdocs\\b"
+        - "\\bgit\\b"
         - "\\bhelmfile\\b"
         - "\\bhelp\\b"
         - "\\blist\\b"
@@ -83,6 +85,9 @@ tests:
       - "docs"
       - "myapp"
     expect:
+      # Glamour pads wrapped output to the terminal width; the padding is not
+      # user-visible content and varies by platform.
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Example Terraform Weather Component"

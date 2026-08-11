@@ -2,6 +2,7 @@ package pager
 
 import (
 	"errors"
+	"math"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -257,6 +258,40 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 
 	// Verify the program options
 	assert.Len(t, capturedOpts, 1, "Should have 1 tea program option (WithAltScreen)")
+}
+
+func TestPageCreator_Run_WithTerminalSpeedUsesPacedContent(t *testing.T) {
+	content := "one\ntwo\n"
+	var written string
+	teaProgramCalled := false
+
+	pc := &pageCreator{
+		enablePager:   true,
+		terminalSpeed: math.MaxFloat64,
+		writer: stringWriterFunc(func(content string) error {
+			written += content
+			return nil
+		}),
+		newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
+			teaProgramCalled = true
+			return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
+		},
+		contentFitsTerminal: func(content string) bool {
+			return false
+		},
+		isTTYSupportForStdout: func() bool {
+			return true
+		},
+		isTTYAccessible: func() bool {
+			return true
+		},
+	}
+
+	err := pc.Run("Title", content)
+
+	assert.NoError(t, err)
+	assert.False(t, teaProgramCalled, "terminal.speed should use non-interactive paced reveal")
+	assert.Equal(t, content, written)
 }
 
 func TestPageCreator_Run_WithoutPager(t *testing.T) {

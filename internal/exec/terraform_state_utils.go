@@ -16,8 +16,21 @@ import (
 
 var terraformStateCache = sync.Map{}
 
-// ResetStateCache clears the terraform state cache.
-// This is exported for use in tests to ensure cache isolation between test functions.
+type terraformStateNotProvisionedCacheEntry struct{}
+
+// invalidateTerraformStateCache removes the cached outputs for one component.
+// Terraform can create an empty state file while selecting a workspace, then later
+// populate that same file during apply or deploy. Keeping the empty map cached would
+// make downstream !terraform.state expressions continue to use their fallback values.
+func invalidateTerraformStateCache(stack, component string) {
+	terraformStateCache.Delete(fmt.Sprintf("%s-%s", stack, component))
+}
+
+// ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
+// This is exported for use in tests to ensure cache isolation between test functions. The two caches
+// are cleared together because the managers in nestedAuthManagerCache are what read the state held in
+// terraformStateCache: clearing state to force a fresh backend read while reusing a stale auth manager
+// would be inconsistent. Neither cache is reset in production.
 func ResetStateCache() {
 	defer perf.Track(nil, "exec.ResetStateCache")()
 
@@ -25,6 +38,8 @@ func ResetStateCache() {
 		terraformStateCache.Delete(key)
 		return true
 	})
+
+	ResetNestedAuthManagerCache()
 }
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
@@ -57,7 +72,10 @@ func GetTerraformState(
 	// If the result for the component in the stack already exists in the cache, return it.
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
-		if found && backend != nil {
+		if found {
+			if _, notProvisioned := backend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
+				return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
+			}
 			log.Debug(
 				"Cache hit",
 				"function", yamlFunc,
@@ -165,14 +183,15 @@ func GetTerraformState(
 		return nil, er
 	}
 
-	// Cache the result.
-	terraformStateCache.Store(stackSlug, backend)
-
-	// If `backend` is `nil`, return a recoverable error (the component in the stack has not been provisioned yet).
-	// This allows callers to use YQ defaults if available.
+	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
+	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
+		terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
+
+	// Cache the result now that we know it reflects a real, provisioned backend.
+	terraformStateCache.Store(stackSlug, backend)
 
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)

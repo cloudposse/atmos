@@ -15,10 +15,15 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const atmosDocsURL = "https://atmos.tools"
+
+var openDocsURL = func(url string) error {
+	return browser.New().Open(url)
+}
 
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
@@ -120,12 +125,11 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		if err := browser.New().Open(atmosDocsURL); err != nil {
+		if err := openDocsURL(atmosDocsURL); err != nil {
 			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
-		// UI messages should go to stderr; stdout is for data/results.
-		fmt.Fprintf(os.Stderr, "Opening default browser to '%v'.\n", atmosDocsURL)
+		ui.Infof("Opening default browser to '%v'.", atmosDocsURL)
 		return nil
 	},
 }

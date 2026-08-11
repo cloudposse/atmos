@@ -8,8 +8,11 @@ import FileTree from './FileTree';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
+import CopyMarkdownButton from './CopyMarkdownButton';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
+import CastPlayer from '@site/src/components/CastPlayer';
+import CommandBox from '@site/src/components/CommandBox';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -45,6 +48,10 @@ export default function DirectoryPage({
   const pageTitle = dirData.path === exampleName
     ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
+  const isExampleRoot = dirData.path === exampleName;
+  const showCast = isExampleRoot && !!example.cast?.file;
+  const showCopyMarkdown = isExampleRoot && !!optionsData.enableCopyMarkdown;
+  const showInstallCommand = isExampleRoot && !!optionsData.installCommandTemplate;
 
   return (
     <Layout title={pageTitle}>
@@ -53,12 +60,41 @@ export default function DirectoryPage({
           example={example}
           routeBasePath={routeBasePath}
           currentPath={dirData.path}
+          titleAsCode={optionsData.titleAsCode}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+          <div className={styles.pageToolbar}>
+            <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+            {showCopyMarkdown && (
+              <CopyMarkdownButton
+                directory={dirData}
+                title={example.title || example.name}
+                description={example.description}
+              />
+            )}
+          </div>
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          {showInstallCommand && (
+            <CommandBox
+              label={optionsData.installCommandLabel}
+              command={optionsData.installCommandTemplate.replace('{name}', exampleName)}
+            />
+          )}
+
+          {showCast && (
+            <div className={styles.castSection}>
+              <CastPlayer
+                src={example.cast!.file!}
+                title={example.cast!.title || example.name}
+                chrome
+                controls
+                scrubber
+              />
+            </div>
           )}
 
           {/* Show README if present */}

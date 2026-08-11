@@ -17,10 +17,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_ask.md
@@ -48,19 +49,24 @@ var askCmd = &cobra.Command{
 		noAutoContext := v.GetBool("no-auto-context")
 		noTools := v.GetBool("no-tools")
 		mcpServers := v.GetStringSlice("mcp")
+		sessionID := v.GetString("session")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// ask can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {
@@ -78,8 +84,11 @@ var askCmd = &cobra.Command{
 
 		log.Debug("Asking AI question", "question", question)
 
-		// Create AI client using factory.
-		client, err := ai.NewClient(&atmosConfig)
+		// Create AI client using factory. When --mcp was given, filter MCP.Servers
+		// for CLI providers, whose clients otherwise read atmosConfig.MCP.Servers
+		// directly and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
@@ -122,12 +131,28 @@ var askCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()
 
+		// Load or create a persisted session when --session and ai.sessions.enabled
+		// are both set. Cheap no-op (no storage opened) otherwise.
+		sess, err := prepareSession(ctx, &atmosConfig, sessionID, client.GetModel())
+		if err != nil {
+			return fmt.Errorf("failed to prepare session: %w", err)
+		}
+		defer sess.Close() // Best-effort session storage cleanup.
+
 		// Execute question with tool support.
-		utils.PrintfMessageToTUI("👽 Thinking...\n")
+		ui.Writef("👽 Thinking...\n")
 		result := exec.Execute(ctx, executor.Options{
 			Prompt:       finalQuestion,
 			ToolsEnabled: !noTools && toolExecutor != nil,
+			SessionID:    sessionID,
+			History:      sess.History(),
 		})
+
+		// Persist this turn (the plain question, not the context-augmented
+		// finalQuestion) so a subsequent `--session` invocation sees it.
+		if result.Success {
+			sess.recordTurn(ctx, question, result.Response)
+		}
 
 		if !result.Success {
 			if result.Error != nil {
@@ -142,9 +167,7 @@ var askCmd = &cobra.Command{
 		if err := mdFormatter.Format(&buf, result); err != nil {
 			return fmt.Errorf("failed to format response: %w", err)
 		}
-		utils.PrintfMarkdown("%s", buf.String())
-
-		return nil
+		return data.Markdownf("%s", buf.String())
 	},
 }
 
@@ -156,11 +179,13 @@ func init() {
 		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
 		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
+		flags.WithStringFlag("session", "s", "", "Session ID for conversation context"),
 		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
 		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
 		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
 		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
 		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
+		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
 	)
 
 	// Register flags on the command.

@@ -1,5 +1,23 @@
 import:
+  - catalog/backend
   - orgs/acme/plat/staging/_defaults
   - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
-  - catalog/vpc/staging
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Still allow forced teardown of pre-production environments.
+        force_destroy: true
+        # Mirror prod durability so staging validates the same behavior.
+        versioning_enabled: true
+    kms-key:
+      vars:
+        # Middle-ground deletion window.
+        deletion_window_in_days: 14
+        # Rotate keys like prod, so staging exercises the same path.
+        enable_key_rotation: true
+    sqs-queue:
+      vars:
+        # Default 4-day retention.
+        message_retention_seconds: 345600

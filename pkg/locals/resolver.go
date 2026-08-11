@@ -452,6 +452,14 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 	// Add resolved locals (these take precedence over template context).
 	context["locals"] = r.resolved
 
+	if ref, ok, err := atmostmpl.ExtractPlainFieldRef(strVal); err != nil {
+		return nil, fmt.Errorf("failed to parse template for local %q in %s: %w", localName, r.filePath, err)
+	} else if ok {
+		if value, found := atmostmpl.LookupFieldPath(context, ref.Path); found {
+			return value, nil
+		}
+	}
+
 	// Parse and execute the template.
 	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Parse(strVal)
 	if err != nil {

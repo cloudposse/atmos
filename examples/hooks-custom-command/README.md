@@ -1,7 +1,15 @@
+---
+title: Custom Command Hook
+tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-custom-command/hook-config.cast
+  title: atmos custom command hook
+---
+
 # `hooks-custom-command`
 
 Demonstrates the generic **`kind: command`** hook by wiring a custom
-Python script as an `after-terraform-plan` hook — the pattern for
+Python script as an `after.terraform.plan` hook — the pattern for
 **anything** Atmos doesn't ship a named kind for.
 
 ## What this shows
@@ -33,7 +41,7 @@ atmos terraform plan demo -s test
 ```
 
 Expected: tofu plan creates two `random_*` resources; the
-`after-terraform-plan` hook fires; the script writes a markdown table
+`after.terraform.plan` hook fires; the script writes a markdown table
 to `$ATMOS_OUTPUT_FILE` showing all the env vars it received; Atmos
 renders that markdown to your terminal.
 

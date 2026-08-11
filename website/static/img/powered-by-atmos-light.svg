@@ -1,0 +1,8 @@
+<svg width="194" height="48" viewBox="0 0 194 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Powered by atmos</title>
+  <desc id="desc">A light Powered by atmos badge for dark backgrounds.</desc>
+  <rect x="0.75" y="0.75" width="192.5" height="46.5" rx="12" fill="#ffffff"/>
+  <rect x="0.75" y="0.75" width="192.5" height="46.5" rx="12" fill="none" stroke="#171717" stroke-opacity="0.14" stroke-width="1.5"/>
+  <text x="22" y="29" fill="#5b6470" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="600" letter-spacing="0.2">Powered by</text>
+  <text x="100" y="32" fill="#171717" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="0">atmos</text>
+</svg>

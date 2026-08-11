@@ -15,7 +15,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
-	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
@@ -205,6 +204,12 @@ func NewAuthManager(
 		if receiver, ok := identity.(credentialStoreReceiver); ok {
 			receiver.SetCredentialStore(m.credentialStore)
 		}
+		// Inject the emulator resolver into identities that target an emulator
+		// (kind: <target>/emulator), so they can resolve the running emulator's
+		// project-scoped connection profile at auth time.
+		if receiver, ok := identity.(emulatorResolverReceiver); ok {
+			receiver.SetEmulatorResolver(defaultEmulatorResolver)
+		}
 	}
 
 	return m, nil
@@ -323,8 +328,13 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Manager:      m,
 			Realm:        m.realm.Value,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
+			// Keep structured details and hints from the identity error. Emulator
+			// identities use those hints to tell the user how to start the selected
+			// emulator when it is not running.
+			wrappedErr := errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation("Post-authentication failed.").
+				Err()
 			return nil, wrappedErr
 		}
 
@@ -708,8 +718,14 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	if err != nil || len(chain) == 0 {
 		return ""
 	}
-	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
-		return "aws-user"
+	// A standalone identity forms a single-element chain whose root is the identity
+	// itself; some standalone kinds (aws/user) report a synthetic provider name instead.
+	if len(chain) == 1 {
+		if identity, exists := m.config.Identities[chain[0]]; exists {
+			if name, ok := types.StandaloneProviderName(identity.Kind); ok {
+				return name
+			}
+		}
 	}
 	return chain[0]
 }

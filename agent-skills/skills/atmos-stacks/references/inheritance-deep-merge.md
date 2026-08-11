@@ -304,8 +304,9 @@ overrides:
 terraform:
   overrides:
     settings:
-      spacelift:
-        autodeploy: true
+      validation:
+        check-cidr:
+          schema_path: schemas/vpc-override.json
     command: tofu
 ```
 

@@ -2,7 +2,6 @@ package exec
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -388,23 +387,19 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
     - b
     - c`)
 
+		// Verify whitespace-trimmed templates still decode JSON lists and maps.
+		assert.Contains(t, y, `trimmed_template_list:
+    - one
+    - two`)
+		assert.Contains(t, y, `trimmed_template_map:
+    key: value`)
+
 		// Verify stack variable access
 		assert.Contains(t, y, "stack_var: nonprod")
 	})
 
-	// requireTerraformOrTofu skips the test if neither terraform nor tofu is available.
-	requireTerraformOrTofu := func(t *testing.T) {
-		t.Helper()
-		_, tofuErr := exec.LookPath("tofu")
-		_, tfErr := exec.LookPath("terraform")
-		if tofuErr != nil && tfErr != nil {
-			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH")
-		}
-	}
-
 	// Test template with atmos.Component() integration.
 	t.Run("atmos.Component integration", func(t *testing.T) {
-		requireTerraformOrTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",
 			Stack:                stack,
@@ -442,7 +437,6 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in lists
 	t.Run("template in lists", func(t *testing.T) {
-		requireTerraformOrTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-lists",
 			Stack:                stack,
@@ -467,7 +461,6 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in maps
 	t.Run("template in maps", func(t *testing.T) {
-		requireTerraformOrTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-maps",
 			Stack:                stack,

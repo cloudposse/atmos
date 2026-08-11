@@ -72,7 +72,8 @@ func (r *Resolver) ResolveComponentFromPath(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPath")()
 
-	log.Debug("Resolving component from path",
+	log.Debug(
+		"Resolving component from path",
 		"path", path,
 		"stack", stack,
 		"expected_type", expectedComponentType,
@@ -89,7 +90,7 @@ func (r *Resolver) ResolveComponentFromPath(
 	// 2. Verify component type matches.
 	if componentInfo.ComponentType != expectedComponentType {
 		err := errUtils.Build(errUtils.ErrComponentTypeMismatch).
-			WithHintf("Path resolves to `%s` component but command expects `%s` component\nYou ran: `atmos %s <command> %s`\nThe path points to: `%s` component",
+			WithExplanationf("Path resolves to `%s` component but command expects `%s` component\nYou ran: `atmos %s <command> %s`\nThe path points to: `%s` component",
 				componentInfo.ComponentType, expectedComponentType, expectedComponentType, path, componentInfo.ComponentType).
 			WithHint("Run the correct command for this component type").
 			WithContext("path", path).
@@ -113,7 +114,8 @@ func (r *Resolver) ResolveComponentFromPath(
 		resolvedComponent = componentInfo.FullComponent
 	}
 
-	log.Debug("Successfully resolved component from path",
+	log.Debug(
+		"Successfully resolved component from path",
 		"path", path,
 		"component", resolvedComponent,
 		"type", componentInfo.ComponentType,
@@ -131,7 +133,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPathWithoutTypeCheck")()
 
-	log.Debug("Resolving component from path (without type check)",
+	log.Debug(
+		"Resolving component from path (without type check)",
 		"path", path,
 		"stack", stack,
 	)
@@ -156,7 +159,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 		resolvedComponent = componentInfo.FullComponent
 	}
 
-	log.Debug("Successfully resolved component from path (without type check)",
+	log.Debug(
+		"Successfully resolved component from path (without type check)",
 		"path", path,
 		ComponentKey, resolvedComponent,
 		"detected_type", componentInfo.ComponentType,
@@ -187,7 +191,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPathWithoutValidation")()
 
-	log.Debug("Resolving component from path (without validation)",
+	log.Debug(
+		"Resolving component from path (without validation)",
 		"path", path,
 		"expected_type", expectedComponentType,
 	)
@@ -215,7 +220,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 		return "", err
 	}
 
-	log.Debug("Successfully resolved component from path (without validation)",
+	log.Debug(
+		"Successfully resolved component from path (without validation)",
 		"path", path,
 		"component", componentInfo.FullComponent,
 		"type", componentInfo.ComponentType,
@@ -238,7 +244,7 @@ func (r *Resolver) loadStackConfig(
 	if err != nil {
 		loadErr := errUtils.Build(errUtils.ErrStackNotFound).
 			WithCause(err).
-			WithHintf("Failed to load stack configurations: %s\n\nPath-based component resolution requires valid stack configuration", err.Error()).
+			WithExplanationf("Failed to load stack configurations: %s\n\nPath-based component resolution requires valid stack configuration", err.Error()).
 			WithHint("Run `atmos describe config` to see stack configuration paths\nVerify your stack manifests are in the configured stacks directory").
 			WithContext("stack", stack).
 			WithContext("component", componentName).
@@ -251,8 +257,8 @@ func (r *Resolver) loadStackConfig(
 	stackConfig, ok := stacksMap[stack]
 	if !ok {
 		notFoundErr := errUtils.Build(errUtils.ErrStackNotFound).
-			WithHintf("Stack `%s` not found", stack).
-			WithHint("Run `atmos list stacks` to see all available stacks\nVerify the stack name matches your stack manifest files").
+			WithExplanationf("Stack `%s` not found", stack).
+			WithHint("Run `atmos list stacks` to see all available stacks.\nVerify the stack name matches your stack manifest files").
 			WithContext("stack", stack).
 			WithContext("component", componentName).
 			WithExitCode(2).
@@ -380,7 +386,7 @@ func handleComponentMatches(
 // handleNoMatches returns an error when no component matches are found.
 func handleNoMatches(componentName, stack, componentType string) (string, error) {
 	err := errUtils.Build(errUtils.ErrComponentNotInStack).
-		WithHintf("Component `%s` not found in stack `%s`", componentName, stack).
+		WithExplanationf("Component `%s` not found in stack `%s`", componentName, stack).
 		WithHintf("Run `atmos list stacks --component %s` to see stacks containing this component\nRun `atmos list components --stack %s` to see components in this stack",
 			componentName, stack).
 		WithContext("component", componentName).
@@ -402,7 +408,8 @@ func handleMultipleMatches(matches []string, componentName, stack, componentType
 	}
 
 	// Interactive terminal - prompt user to select.
-	log.Debug("Multiple component matches found, prompting user for selection",
+	log.Debug(
+		"Multiple component matches found, prompting user for selection",
 		"matches", matches,
 		"component", componentName,
 		StackKey, stack,
@@ -415,14 +422,16 @@ func handleMultipleMatches(matches []string, componentName, stack, componentType
 			return "", errUtils.ErrUserAborted
 		}
 		// Other error - fall back to ambiguous path error.
-		log.Debug("Component selection failed, falling back to error",
+		log.Debug(
+			"Component selection failed, falling back to error",
 			"error", err.Error(),
 		)
 		return "", buildAmbiguousComponentError(matches, componentName, stack, componentType)
 	}
 
 	// User made a selection - return it.
-	log.Info("User selected component from interactive prompt",
+	log.Info(
+		"User selected component from interactive prompt",
 		"selected", selected,
 		"matches", matches,
 		StackKey, stack,
@@ -444,7 +453,7 @@ func buildAmbiguousComponentError(matches []string, componentName, stack, compon
 	exampleComponent := matches[0]
 
 	return errUtils.Build(errUtils.ErrAmbiguousComponentPath).
-		WithHintf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\nMatching components: %s",
+		WithExplanationf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\n\nMatching components: %s",
 			componentName, stack, matchesStr).
 		WithHintf("Use the exact component name instead of a path\nExample: `atmos %s <command> %s --stack %s`",
 			componentType, exampleComponent, stack).
@@ -497,7 +506,8 @@ func promptForComponentSelection(
 		return "", fmt.Errorf("component selection failed: %w", err)
 	}
 
-	log.Debug("User selected component",
+	log.Debug(
+		"User selected component",
 		"selected", selected,
 		"from_matches", matches,
 		StackKey, stack,
@@ -514,7 +524,8 @@ func (r *Resolver) validateComponentInStack(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.validateComponentInStack")()
 
-	log.Debug("Validating component exists in stack",
+	log.Debug(
+		"Validating component exists in stack",
 		ComponentKey, componentName,
 		StackKey, stack,
 		TypeKey, componentType,
@@ -543,13 +554,15 @@ func (r *Resolver) validateComponentInStack(
 
 	// Log success.
 	if resolvedComponent == componentName {
-		log.Debug("Component validated successfully in stack (direct match)",
+		log.Debug(
+			"Component validated successfully in stack (direct match)",
 			ComponentKey, componentName,
 			StackKey, stack,
 			TypeKey, componentType,
 		)
 	} else {
-		log.Debug("Component validated successfully in stack (alias match)",
+		log.Debug(
+			"Component validated successfully in stack (alias match)",
 			"path_component", componentName,
 			"stack_key", resolvedComponent,
 			StackKey, stack,

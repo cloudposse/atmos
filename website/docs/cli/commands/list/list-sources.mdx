@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: sources
 description: List all components with source configuration across all component types
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -21,7 +21,7 @@ Use this command to list all components with `source` configuration across all c
     </div>
 </ActionCard>
 
-<Screengrab title="atmos list sources --help" slug="atmos-list-sources--help" />
+<CastPlayer title="atmos list sources --help" src="/casts/screengrabs/atmos-list-sources--help.cast" static chrome />
 
 ## Usage
 
@@ -132,6 +132,12 @@ atmos list sources --format csv
 <dl>
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Filter by stack name. When provided, only shows sources within that stack and omits the Stack column from output.<br/>Environment variable: `ATMOS_STACK`</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Filter by component tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by component labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
 
   <dt>`--format` / `-f`</dt>
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_FORMAT`</dd>

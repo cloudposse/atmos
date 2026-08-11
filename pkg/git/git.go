@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go-git/go-billy/v5/osfs"
@@ -20,6 +22,58 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+const gitConfigExtensionsSection = "extensions"
+
+// scpLikeURLPattern matches scp-style SSH Git URLs: `[user@]host:path`.
+// Example: `git@gitlab.example.com:group/sub/repo.git`
+//
+// The leading user@ is required so the pattern doesn't false-match relative
+// filesystem paths like `dir:file`.
+var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
+
+// GitURLParts holds the host, owner, and repository name parsed from a Git remote URL.
+type GitURLParts struct {
+	Host  string
+	Owner string
+	Name  string
+}
+
+// ParseGenericGitURL is a fallback parser used when the canonical parser
+// (github.com/kubescape/go-git-url) rejects a URL because the host is not
+// one of the few it ships hardcoded support for (github.com, gitlab.com,
+// azure DevOps). It handles the URL shapes Git itself supports:
+//
+//   - http(s)://[user[:pass]@]host[:port]/owner/repo[.git]
+//   - ssh://[user@]host[:port]/owner/repo[.git]
+//   - [user@]host:owner/repo[.git]                   (scp-style)
+//
+// On success returns (parts, true). On unrecognized shape returns
+// (GitURLParts{}, false) — the caller should treat this as a parse error and
+// surface the original kubescape error to preserve existing semantics.
+//
+// `Owner` is the first path segment and `Name` is the remainder (with any
+// trailing `.git` stripped). For GitLab-style nested groups
+// (`group/subgroup/repo.git`) this assigns the top-level group as owner and
+// `subgroup/repo` as name, matching kubescape's behavior.
+func ParseGenericGitURL(repoUrl string) (GitURLParts, bool) {
+	if u, err := url.Parse(repoUrl); err == nil && u.Scheme != "" && u.Host != "" {
+		host := u.Hostname()
+		path := strings.TrimPrefix(u.Path, "/")
+		path = strings.TrimSuffix(path, ".git")
+		if i := strings.Index(path, "/"); i > 0 {
+			return GitURLParts{Host: host, Owner: path[:i], Name: path[i+1:]}, true
+		}
+	}
+	if m := scpLikeURLPattern.FindStringSubmatch(repoUrl); m != nil {
+		host := m[1]
+		path := strings.TrimSuffix(m[2], ".git")
+		if i := strings.Index(path, "/"); i > 0 {
+			return GitURLParts{Host: host, Owner: path[:i], Name: path[i+1:]}, true
+		}
+	}
+	return GitURLParts{}, false
+}
 
 func GetLocalRepo() (*git.Repository, error) {
 	localPath := "."
@@ -57,6 +111,11 @@ func GetRepoConfig(repo *git.Repository) (*config.Config, error) {
 	return repoConfig, nil
 }
 
+// RepoInfo describes the local Git repository plus metadata extracted from
+// its remote URL. The Repo* fields are populated by ParseRepoURL using the
+// canonical parser (kubescape/go-git-url) when the host is recognized, or
+// the generic fallback parser for self-hosted instances. They may be empty
+// when the working tree has no remotes configured.
 type RepoInfo struct {
 	LocalRepoPath     string
 	LocalWorktree     *git.Worktree
@@ -67,6 +126,11 @@ type RepoInfo struct {
 	RepoHost          string
 }
 
+// GetRepoInfo opens the given local repository, reads its first remote URL,
+// and resolves host/owner/name via ParseRepoURL. Returns an empty RepoInfo
+// (no error) when the repository has no remotes or the remote URL is empty;
+// returns an error when the URL cannot be parsed by either the canonical or
+// the generic fallback parser.
 func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 	localRepoConfig, err := GetRepoConfig(localRepo)
 	if err != nil {
@@ -101,22 +165,37 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 		return RepoInfo{}, nil
 	}
 
-	gitURL, err := giturl.NewGitURL(repoUrl)
+	parts, err := ParseRepoURL(repoUrl)
 	if err != nil {
 		return RepoInfo{}, err
 	}
-
-	response := RepoInfo{
+	return RepoInfo{
 		LocalRepoPath:     localRepoPath,
 		LocalWorktree:     localRepoWorktree,
 		LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
 		RepoUrl:           repoUrl,
-		RepoOwner:         gitURL.GetOwnerName(),
-		RepoName:          gitURL.GetRepoName(),
-		RepoHost:          gitURL.GetHostName(),
-	}
+		RepoOwner:         parts.Owner,
+		RepoName:          parts.Name,
+		RepoHost:          parts.Host,
+	}, nil
+}
 
-	return response, nil
+// ParseRepoURL resolves host, owner, and repo name from a remote URL.
+//
+// The kubescape/go-git-url package ships hardcoded support for github.com,
+// gitlab.com, and azure DevOps. Self-hosted instances (GitHub Enterprise
+// Server, GitLab self-managed, Bitbucket Server, etc.) fall back to
+// ParseGenericGitURL, which handles the URL shapes Git itself supports. If
+// both parsers fail, the canonical error is returned so genuinely-malformed
+// URLs still propagate as before.
+func ParseRepoURL(repoUrl string) (GitURLParts, error) {
+	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
+		return GitURLParts{Host: gitURL.GetHostName(), Owner: gitURL.GetOwnerName(), Name: gitURL.GetRepoName()}, nil
+	} else if parts, ok := ParseGenericGitURL(repoUrl); ok {
+		return parts, nil
+	} else {
+		return GitURLParts{}, gerr
+	}
 }
 
 // GitRepoInterface defines the interface for git repository operations.
@@ -168,12 +247,12 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrLocalRepoFetch, err)
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get HEAD reference: %s", errUtils.ErrHeadLookup, err)
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %w", errUtils.ErrHeadLookup, err)
 	}
 
 	return ref.Hash().String(), nil
@@ -299,23 +378,23 @@ func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Reposi
 		return nil, originalErr
 	}
 
-	repoRoot, gitDir, commonDir, err := gitRepositoryPaths(path)
+	paths, err := gitRepositoryPaths(path)
 	if err != nil {
 		return nil, errors.Join(err, originalErr)
 	}
 
-	dotGitFs := osfs.New(gitDir)
+	dotGitFs := osfs.New(paths.gitDir)
 	repositoryFs := dotGitFs
-	if commonDir != "" && commonDir != gitDir {
-		repositoryFs = dotgit.NewRepositoryFilesystem(dotGitFs, osfs.New(commonDir))
+	if paths.commonDir != "" && paths.commonDir != paths.gitDir {
+		repositoryFs = dotgit.NewRepositoryFilesystem(dotGitFs, osfs.New(paths.commonDir))
 	}
 
 	storer := filesystem.NewStorage(repositoryFs, cache.NewObjectLRUDefault())
-	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(repoRoot))
+	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(paths.repoRoot))
 }
 
 // isUnsupportedWorktreeConfigError reports go-git failures caused by worktreeConfig.
-// go-git does not expose typed errors for unsupported extension failures, so
+// Go-git does not expose typed errors for unsupported extension failures, so
 // this checks for the repositoryformatversion and worktreeconfig fragments.
 func isUnsupportedWorktreeConfigError(err error) bool {
 	if err == nil {
@@ -327,11 +406,11 @@ func isUnsupportedWorktreeConfigError(err error) bool {
 
 // removeWorktreeConfigExtension removes the worktreeConfig extension from config.
 func removeWorktreeConfigExtension(cfg *config.Config) {
-	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection(gitConfigExtensionsSection) {
 		return
 	}
 
-	section := cfg.Raw.Section("extensions")
+	section := cfg.Raw.Section(gitConfigExtensionsSection)
 	keys := make([]string, 0, len(section.Options))
 	for _, opt := range section.Options {
 		if strings.EqualFold(opt.Key, "worktreeConfig") {
@@ -372,11 +451,11 @@ func hasWorktreeConfigExtension(cfg *config.Config) bool {
 }
 
 func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
-	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection(gitConfigExtensionsSection) {
 		return "", false
 	}
 
-	section := cfg.Raw.Section("extensions")
+	section := cfg.Raw.Section(gitConfigExtensionsSection)
 	for _, opt := range section.Options {
 		if strings.EqualFold(opt.Key, "worktreeConfig") {
 			return opt.Value, true
@@ -385,24 +464,27 @@ func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
 	return "", false
 }
 
+type repositoryPaths struct {
+	repoRoot  string
+	gitDir    string
+	commonDir string
+}
+
 // gitRepositoryPaths returns the repository root, git dir, and common dir for path.
-func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err error) {
+func gitRepositoryPaths(path string) (repositoryPaths, error) {
 	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandExited, err)
+			return repositoryPaths{}, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitCommandExited, err)
 		}
-		return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)
+		return repositoryPaths{}, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitCommandFailed, err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(string(out)), "\r\n", "\n"), "\n")
 	if len(lines) != 3 {
-		return "", "", "", fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
+		return repositoryPaths{}, fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
 	}
 
-	repoRoot = filepath.Clean(lines[0])
-	gitDir = filepath.Clean(lines[1])
-	commonDir = filepath.Clean(lines[2])
-	return repoRoot, gitDir, commonDir, nil
+	return repositoryPaths{repoRoot: filepath.Clean(lines[0]), gitDir: filepath.Clean(lines[1]), commonDir: filepath.Clean(lines[2])}, nil
 }

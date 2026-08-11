@@ -235,7 +235,8 @@ components:
         ansible:
           playbook: <file>   # Playbook file (relative to component directory)
           inventory: <src>   # Inventory source (file, directory, or script)
-        depends_on: []       # Dependency ordering
+      dependencies:
+        components: []       # Dependency ordering
       metadata: {}           # Component behavior and inheritance
       command: ansible       # Override the ansible binary
       hooks: {}              # Lifecycle event handlers

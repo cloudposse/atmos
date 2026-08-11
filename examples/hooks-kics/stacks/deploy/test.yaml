@@ -8,11 +8,9 @@ components:
     bucket:
       vars:
         environment: test
-      # KICS auto-installs via this example's per-project registry
-      # override (see atmos.yaml). The override defines KICS as a
-      # github_release tarball, which gives us both the binary and the
-      # assets/queries/ tree extracted side-by-side in the install dir
-      # — exactly the layout KICS expects at runtime.
+      # KICS auto-installs via the built-in Atmos registry override, but the
+      # upstream release tarball contains only the binary. Provide the query
+      # library separately with KICS_QUERIES_PATH.
       dependencies:
         tools:
           # The `kics` alias resolves to Checkmarx/kics, which is
@@ -23,7 +21,7 @@ components:
       hooks:
         security:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: kics
           # KICS doesn't ship its query library alongside the binary in
           # most installs, so it can't autodetect the path. Tell it where

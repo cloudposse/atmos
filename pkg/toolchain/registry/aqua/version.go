@@ -1,6 +1,7 @@
 package aqua
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -151,12 +152,20 @@ func parseReleasesJSON(body []byte) ([]releaseInfo, error) {
 func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersions")()
 
+	return ar.GetAvailableVersionsContext(context.Background(), owner, repo)
+}
+
+// GetAvailableVersionsContext fetches all available non-prerelease, non-draft
+// versions from GitHub releases, honoring caller cancellation and deadlines.
+func (ar *AquaRegistry) GetAvailableVersionsContext(ctx context.Context, owner, repo string) ([]string, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersionsContext")()
+
 	versionPrefix, metadataAvailable, _ := ar.versionMetadata(owner, repo)
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
 
 	var versions []string
 	for apiURL != "" {
-		pageVersions, nextURL, err := ar.fetchVersionsFromPage(apiURL, versionPrefix, metadataAvailable)
+		pageVersions, nextURL, err := ar.fetchVersionsFromPage(ctx, apiURL, versionPrefix, metadataAvailable)
 		if err != nil {
 			return nil, err
 		}
@@ -172,8 +181,8 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 }
 
 // fetchVersionsFromPage fetches all versions from a single page.
-func (ar *AquaRegistry) fetchVersionsFromPage(apiURL, prefix string, metadataAvailable bool) (versions []string, nextURL string, err error) {
-	resp, err := ar.get(apiURL)
+func (ar *AquaRegistry) fetchVersionsFromPage(ctx context.Context, apiURL, prefix string, metadataAvailable bool) (versions []string, nextURL string, err error) {
+	resp, err := ar.getWithContext(ctx, apiURL)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
 	}

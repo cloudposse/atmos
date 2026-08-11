@@ -1,7 +1,13 @@
 
 ## No Changes for `stable` in `prod`
 
-<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a> [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-prod-stable)
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v=">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
+</picture></a>
+
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-prod-stable)
 <details><summary><a id="result-prod-stable" />Plan: 0 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>

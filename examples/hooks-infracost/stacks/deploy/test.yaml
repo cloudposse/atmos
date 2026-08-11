@@ -8,20 +8,12 @@ components:
     nat-gateway:
       vars:
         environment: test
-      # The hook engine auto-installs anything in dependencies.tools
-      # before running — same surface ansible and custom commands use.
-      dependencies:
-        tools:
-          # Pin a concrete version (or a SemVer constraint like "~> 0.10"). "latest"
-          # is supported by the installer but the engine builds PATH from the
-          # constraint string, so it must match a real installed-version dir.
-          infracost: "0.10.44"
       hooks:
         cost:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: infracost
-          # OS env vars propagate automatically. Forwarding explicitly here
-          # makes the API-key requirement visible to anyone reading the YAML.
-          env:
-            INFRACOST_API_KEY: "$INFRACOST_API_KEY"
+          # The example uses a local Infracost-compatible emulator so docs and
+          # tests are deterministic. Real usage can omit `command` and declare
+          # `dependencies.tools.infracost` plus INFRACOST_API_KEY instead.
+          command: ./bin/infracost-emulator

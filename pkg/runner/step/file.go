@@ -36,11 +36,25 @@ func (h *FileHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for file selection and returns the chosen path.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// path is returned without prompting. When there is no TTY and no `default` is
+// set, resolveInteractive returns ErrStepTTYRequired.
 func (h *FileHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.FileHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	shouldPrompt, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default path without prompting.
+	if !shouldPrompt {
+		defaultVal, resolveErr := h.ResolveDefault(ctx, step, vars)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)
@@ -77,24 +91,14 @@ func (h *FileHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	return NewStepResult(fullPath), nil
 }
 
-// resolveStartPath resolves and validates the starting path for file scanning.
+// resolveStartPath resolves and validates the starting path for file scanning,
+// anchoring a relative path to step.WorkingDirectory.
 func (h *FileHandler) resolveStartPath(step *schema.WorkflowStep, vars *Variables) (string, error) {
 	startPath := step.Path
 	if startPath == "" {
 		startPath = "."
-	} else {
-		var err error
-		startPath, err = vars.Resolve(startPath)
-		if err != nil {
-			return "", fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
-		}
 	}
-
-	absPath, err := filepath.Abs(startPath)
-	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
-	}
-	return absPath, nil
+	return h.ResolveInWorkingDirectory(step, vars, startPath, "path")
 }
 
 // collectFiles walks the directory and collects matching files.

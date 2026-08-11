@@ -10,7 +10,9 @@ operations.
 
 **Configuration:**
 Requires `mcp.enabled: true` and `ai.enabled: true` with `ai.tools.enabled: true`
-in `atmos.yaml`.
+in `atmos.yaml`. Stack manifests are loaded lazily by stack-dependent tools, so
+the MCP server can start before stacks exist or while stack imports are being
+fixed.
 
 The server runs until interrupted (Ctrl+C) or the client disconnects.
 

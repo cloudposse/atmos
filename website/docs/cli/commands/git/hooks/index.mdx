@@ -1,0 +1,46 @@
+---
+title: atmos git hooks
+sidebar_label: hooks
+sidebar_class_name: command
+id: index
+description: Manage local Git hooks that delegate to Atmos workflows and custom commands.
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Install, uninstall, and run local Git hooks (`pre-commit`, `commit-msg`, `pre-push`, ...) configured under [`git.hooks`](/cli/configuration/git#local-git-hooks) in `atmos.yaml`. Atmos writes thin `.git/hooks/*` shims that delegate to `atmos git hooks run`, so your hooks execute through Atmos workflows and custom commands — with the toolchain, environment, and identity behavior you already have — instead of through Husky-style shell scripts.
+</Intro>
+
+Configure hooks once in `atmos.yaml`:
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      command: atmos workflow pre-commit
+    commit-msg:
+      command: atmos workflow commit-msg -- "$1"
+```
+
+Then install the shims:
+
+```shell
+atmos git hooks install
+```
+
+:::note Local Git hooks vs. lifecycle hooks
+
+Local Git hooks are triggered by **Git itself** (`git commit`, `git push`, ...) in the current repository. They are separate from Atmos lifecycle hooks (the [`git` hook kind](/stacks/hooks#kind-git)), which trigger on Atmos events like `after.terraform.apply`.
+
+:::
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [Git Configuration](/cli/configuration/git#local-git-hooks) — the `git.hooks` section
+- [Workflows](/cli/configuration/workflows) — what hook commands typically invoke
+- [`kind: git` lifecycle hooks](/stacks/hooks#kind-git) — event-bound Git publishing

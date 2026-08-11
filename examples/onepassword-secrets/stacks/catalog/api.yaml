@@ -1,0 +1,21 @@
+components:
+  terraform:
+    api:
+      metadata:
+        component: api
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            description: "Datadog API key for monitoring"
+            store: op
+            # A literal 1Password secret reference (op://vault/item/field).
+            reference: "op://vaultshared111111111111111/itemdatadogaaaaaaaaaaaaaaa/api_key"
+            required: true
+          DB_PASSWORD:
+            description: "Per-stack database password"
+            store: op
+            reference: "op://vaultdev222222222222222222/itempostgresbbbbbbbbbbbbbb/password"
+      vars:
+        # Resolved at runtime via the 1Password-backed !secret function.
+        datadog_api_key: !secret DATADOG_API_KEY
+        db_password: !secret DB_PASSWORD

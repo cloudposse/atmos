@@ -1,0 +1,33 @@
+---
+title: atmos version track remove
+sidebar_position: 60
+sidebar_label: remove
+sidebar_class_name: command
+description: Remove a dependency entry from atmos.yaml.
+---
+
+Remove a dependency entry from a version track in `atmos.yaml`, preserving comments and formatting. The alias is `rm`.
+
+## Usage
+
+```shell
+atmos version track remove NAME [flags]
+atmos version track rm NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name to remove.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Remove nginx from the default track
+atmos version track remove nginx
+
+# Remove nginx from prod
+atmos version track rm nginx --track=prod
+```

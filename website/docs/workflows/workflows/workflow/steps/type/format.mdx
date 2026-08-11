@@ -1,0 +1,27 @@
+---
+title: format
+sidebar_label: format
+slug: /workflows/steps/type/format
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `format` step type resolves templates and writes plain text to stdout — the building block for passing computed values into shell pipelines, CI logs, or later steps in your custom commands and workflows.
+</Intro>
+
+```yaml
+steps:
+  - name: message
+    type: format
+    content: "Deploying {{ .steps.environment.value }}"
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Template text to resolve and print.</dd>
+</dl>
+
+Use `format` when later shell pipelines or CI logs should receive plain stdout output.

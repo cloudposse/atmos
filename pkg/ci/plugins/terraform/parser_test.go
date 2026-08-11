@@ -921,6 +921,15 @@ func TestParseOutput(t *testing.T) {
 		assert.True(t, result.HasChanges)
 	})
 
+	t.Run("destroy command", func(t *testing.T) {
+		result := ParseOutput("Destroy complete! Resources: 2 destroyed.", "destroy")
+		assert.True(t, result.HasChanges)
+		data, ok := result.Data.(*plugin.TerraformOutputData)
+		require.True(t, ok)
+		assert.Equal(t, 2, data.ResourceCounts.Destroy)
+		assert.Equal(t, "Destroy complete! Resources: 2 destroyed", data.ChangedResult)
+	})
+
 	t.Run("unknown command", func(t *testing.T) {
 		result := ParseOutput("some output", "unknown")
 		require.NotNil(t, result)

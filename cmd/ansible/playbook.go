@@ -6,13 +6,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // playbookCmd represents the `atmos ansible playbook` command.
 var playbookCmd = &cobra.Command{
 	Use:     "playbook",
 	Aliases: []string{"pb"},
-	Args:    cobra.ExactArgs(1),
 	Short:   "Run Ansible playbooks for configuration management.",
 	Long: `This command runs an Ansible playbook, applying configuration changes to target hosts.
 
@@ -20,12 +20,29 @@ Example usage:
   atmos ansible playbook <component> --stack <stack> [options]
   atmos ansible playbook <component> --stack <stack> --playbook <playbook.yml> [options]
   atmos ansible playbook <component> -s <stack> -p <playbook.yml> [options]
+  atmos ansible playbook <component> -s <stack> -- --check --tags <tags>
 
 To see all available options, refer to https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html
 `,
 	// FParseErrWhitelist allows unknown flags to pass through to ansible-playbook.
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE:               runPlaybook,
+}
+
+func init() {
+	// Declare the positional-args contract through the flag handler. The
+	// builder-generated validator is separator-aware: pass-through args after
+	// "--" (forwarded to ansible-playbook) are not counted as positional args.
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:        "component",
+		Description: "Ansible component",
+		Required:    true,
+		TargetField: "Component",
+	})
+	_, validator, usage := argsBuilder.Build()
+	playbookCmd.Use = "playbook " + usage
+	playbookCmd.Args = validator
 }
 
 // runPlaybook executes the ansible playbook command.

@@ -216,6 +216,84 @@ func TestReadTerraformBackendLocal_DefaultWorkspace_WrongLocation(t *testing.T) 
 	assert.Nil(t, content, "Should not find state file in terraform.tfstate.d/default/ for default workspace")
 }
 
+func TestReadTerraformBackendLocal_ConfiguredBackendPath(t *testing.T) {
+	const stateJSON = `{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"id": {
+				"value": "from-configured-backend-path",
+				"type": "string"
+			}
+		}
+	}`
+
+	t.Run("relative path resolves from component directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "components", "terraform", "producer")
+		statePath := filepath.Join(componentDir, ".context", "tfstate", "producer.tfstate")
+		require.NoError(t, os.MkdirAll(filepath.Dir(statePath), 0o755))
+		require.NoError(t, os.WriteFile(statePath, []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"component":    "producer",
+			"workspace":    "default",
+			"backend_type": "local",
+			"backend": map[string]any{
+				"path": filepath.Join(".context", "tfstate", "producer.tfstate"),
+			},
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content)
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "from-configured-backend-path", result["id"])
+	})
+
+	t.Run("workdir component uses backend path relative to workdir", func(t *testing.T) {
+		tempDir := t.TempDir()
+		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "test-producer")
+		statePath := filepath.Join(workdirPath, ".context", "tfstate", "producer.tfstate")
+		require.NoError(t, os.MkdirAll(filepath.Dir(statePath), 0o755))
+		require.NoError(t, os.WriteFile(statePath, []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"component":       "producer",
+			"atmos_component": "producer",
+			"atmos_stack":     "test",
+			"workspace":       "default",
+			"backend_type":    "local",
+			"backend": map[string]any{
+				"local": map[string]any{
+					"path": filepath.Join(".context", "tfstate", "producer.tfstate"),
+				},
+			},
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"_workdir_path": workdirPath,
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content)
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "from-configured-backend-path", result["id"])
+	})
+}
+
 // TestReadTerraformBackendLocal_JITWorkdir verifies that ReadTerraformBackendLocal
 // resolves the correct path for components with provision.workdir.enabled: true.
 // Regression test for https://github.com/cloudposse/atmos/issues/2167.

@@ -1,6 +1,7 @@
 package filetype
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/joho/godotenv"
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
 )
@@ -101,6 +103,19 @@ func parseYAML(data []byte) (any, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+func parseDotenv(data []byte) (any, error) {
+	envMap, err := godotenv.Parse(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]any, len(envMap))
+	for key, value := range envMap {
+		result[key] = value
+	}
+	return result, nil
 }
 
 func processYAMLNode(node *yaml.Node) {

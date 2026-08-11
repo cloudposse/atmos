@@ -103,7 +103,8 @@ func (s *Service) Execute(opts *Options, atmosConfig *schema.AtmosConfiguration)
 		return errUtils.ErrNilParam
 	}
 
-	log.Debug("Execute called",
+	log.Debug(
+		"Execute called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"force", opts.Force,
@@ -449,7 +450,7 @@ func confirmDeletion() (bool, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := utils.NewAtmosHuhTheme()
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := utils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes!").
 		Negative("No.").

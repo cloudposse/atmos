@@ -12,14 +12,26 @@
 - Download stored planfile to a `stored.*` prefix path
 - Generate a fresh `terraform plan` (without CI side effects — no upload, no checks, no summaries)
 - Compare the two planfiles using plan-diff (`internal/exec/terraform_plan_diff*.go`)
-- Fail deploy if plan has drifted
-- Apply the fresh planfile if plans match
-- Enabled by default in CI mode (`--ci`)
+- On drift: **fail** the deploy (mode `fail`) or **warn and proceed** (mode `warn`)
+- Apply the **fresh** planfile if plans match (reconcile, don't replay): the freshly generated plan is
+  built with the apply-time state and credentials, so the deploy avoids the brittleness of a saved plan —
+  which goes stale when state moves, and whose base credentials come from the apply environment, not the
+  plan (so a plan built on a PR can fail to apply on merge) — while the diff preserves the review
+  guarantee. (Replaying the stored binary directly is still available via `--from-plan` / `--planfile`.)
+- **Automatic under CI when planfile storage is configured.** Configurable via
+  `components.terraform.planfiles.verify` (`fail` | `warn` | `off`, default `fail` under CI), and
+  overridable per-run with `--verify-plan` (force `fail`) / `--verify-plan=false` (force `off`). Precedence:
+  CLI flag > config > CI default.
 
 **Why `deploy`, not `apply`?**
-- `apply` is a thin wrapper around `terraform apply` — it should not interact with planfile storage
-- `deploy` is the opinionated CI command designed for automation
-- Clean separation: `apply` = simple, `deploy` = full CI workflow
+- **It's where the fresh plan exists.** Drift detection requires comparing the stored planfile against a
+  *current* plan. `deploy` runs a discrete `terraform plan` step (then applies), so a fresh planfile to
+  diff against is captured as part of the command. `apply` does **not** run that separate plan step — it
+  applies a planfile passed with `--planfile`, or plans-and-applies in one step like `terraform apply` —
+  so Atmos has no separately-captured fresh plan to diff against. Verification therefore belongs on
+  `deploy` by construction.
+- `apply` is a thin wrapper around `terraform apply` — it should not interact with planfile storage.
+- `deploy` is the opinionated CI command designed for automation; clean separation keeps `apply` simple.
 
 **Validation**:
 - Detects resource changes between stored plan and current state
@@ -32,11 +44,16 @@ When `atmos terraform deploy` runs in CI mode:
 
 1. **Download** the stored planfile from planfile storage to a `stored.*` prefix path (e.g., `stored.plan.tfplan`)
 2. **Run `terraform plan`** to generate a **fresh planfile** at the canonical path — this runs without any CI hooks (no upload, no status checks, no summaries)
-3. **Show stored plan** — run `terraform show stored.plan.tfplan` to produce text output A
-4. **Show fresh plan** — run `terraform show plan.tfplan` to produce text output B
-5. **Compare** text A vs text B using plan-diff semantic comparison
-6. If differences detected → **fail** with a clear error showing what drifted
+3. **JSON of stored plan** — run `terraform show -json stored.plan.tfplan` (output A)
+4. **JSON of fresh plan** — run `terraform show -json plan.tfplan` (output B)
+5. **Compare** A vs B using the JSON-structural plan-diff (parsed to maps, sorted, deep-compared)
+6. If differences detected → **fail** (mode `fail`) with a clear error showing what drifted, or **warn and proceed** (mode `warn`)
 7. If no differences → **proceed** with apply using the fresh planfile
+
+> **Runtime token in GitHub Actions:** the automatic download uses the GitHub Artifacts runtime API
+> (when the store is `github/artifacts`), so the workflow must surface `ACTIONS_RUNTIME_TOKEN` /
+> `ACTIONS_RESULTS_URL` via the [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime)
+> action before `deploy` — the same requirement as upload.
 
 ```bash
 # Deploy downloads stored plan, verifies, and applies
@@ -65,7 +82,19 @@ The plan-diff implementation exists and is fully implemented:
 - `internal/exec/terraform_plan_diff_comparison.go` — Comparison logic
 - `internal/exec/terraform_plan_diff_preparation.go` — Output normalization
 
-The comparison is **text-based semantic comparison** — it works on `terraform show` output (not binary `.tfplan` files), normalizes plan output (strips timestamps, run IDs, ordering noise) and compares resource blocks structurally.
+The comparison is **JSON-structural** — it runs `terraform show -json` on the stored and fresh
+planfiles, parses each to a map, sorts keys for determinism, and deep-compares variables, managed
+resources (data sources skipped), and outputs (`internal/exec/terraform_verify_plan.go` →
+`generatePlanDiff`). Sensitive values are masked and computed-hash attributes are ignored.
+
+**Why not a naive diff?** A plan legitimately contains values that vary between review and apply —
+attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte
+comparison of planfiles (or of raw `terraform show` text) flags all of that as drift, so a still-valid
+plan is rejected; Terraform's own saved-plan apply is stricter still (any state-lineage movement
+invalidates the saved plan). Real-world verification needs **wiggle room**: tolerate benign variation
+while catching substantive drift (a resource added/removed/changed). The semantic, normalized
+comparison above provides exactly that — which is what makes plan-then-deploy practical rather than
+perpetually failing.
 
 ## Integration Point
 

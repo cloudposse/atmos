@@ -68,9 +68,12 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		log.Debug("Skipping token injection for an unsupported host", keyHost, rawHost)
 		return "", false, nil
 	}
+	d.normalizeRepositorySubdirPath(parsedURL)
 
 	// Check if token injection is enabled for this host and inject if appropriate.
-	if shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
+	// atmosConfig may be nil (e.g. callers that don't need token injection), in which
+	// case there is nothing to inject.
+	if d.atmosConfig != nil && shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
 		log.Debug("Token injection enabled for host", keyHost, rawHost)
 		d.injectToken(parsedURL, host)
 	} else {
@@ -197,6 +200,24 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 	} else {
 		parsedURL.Path = filepath.ToSlash(parsedURL.Path)
 	}
+}
+
+// normalizeRepositorySubdirPath makes go-getter repository subdir imports unambiguous.
+// Native Atmos imports commonly use `github.com/org/repo//path/file.yaml`. Without the
+// explicit `.git` suffix, go-getter can split the source at the wrong `//` and try to clone
+// `github.com/org` instead of `github.com/org/repo`.
+func (d *CustomGitDetector) normalizeRepositorySubdirPath(parsedURL *url.URL) {
+	repoPath, subdir, ok := strings.Cut(parsedURL.Path, "//")
+	if !ok || subdir == "" || strings.HasSuffix(repoPath, ".git") {
+		return
+	}
+
+	segments := strings.Split(strings.Trim(repoPath, "/"), "/")
+	if len(segments) < 2 {
+		return
+	}
+	segments[len(segments)-1] += ".git"
+	parsedURL.Path = "/" + strings.Join(segments, "/") + "//" + subdir
 }
 
 // injectToken injects a token into the URL if available.

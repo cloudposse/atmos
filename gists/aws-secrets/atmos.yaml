@@ -1,0 +1,33 @@
+base_path: "./"
+
+components:
+  terraform:
+    command: tofu
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+stores:
+  secrets/ssm:
+    kind: aws/ssm
+    secret: true
+    options:
+      region: us-east-1
+      prefix: /atmos-gist/secrets
+
+  secrets/asm:
+    kind: aws/asm
+    secret: true
+    options:
+      region: us-east-1
+      prefix: atmos-gist/secrets
+
+logs:
+  file: /dev/stderr
+  level: Info

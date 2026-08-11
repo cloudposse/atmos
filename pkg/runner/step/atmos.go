@@ -43,7 +43,12 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		mode = OutputModeLog
 	}
 
-	return h.runAtmosCommand(ctx, step.Name, opts, mode, step.Viewport)
+	output := atmosOutputOptions{
+		mode:     mode,
+		viewport: step.Viewport,
+		show:     GetShowConfig(step, nil),
+	}
+	return h.runAtmosCommand(ctx, step.Name, opts, output)
 }
 
 // atmosExecOptions holds resolved options for command execution.
@@ -52,6 +57,12 @@ type atmosExecOptions struct {
 	stack   string
 	workDir string
 	envVars []string
+}
+
+type atmosOutputOptions struct {
+	mode     OutputMode
+	viewport *schema.ViewportConfig
+	show     *schema.ShowConfig
 }
 
 // prepareExecution resolves all step configuration for execution.
@@ -125,7 +136,7 @@ func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables
 }
 
 // runAtmosCommand executes the prepared atmos command.
-func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opts *atmosExecOptions, mode OutputMode, viewport *schema.ViewportConfig) (*StepResult, error) {
+func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opts *atmosExecOptions, output atmosOutputOptions) (*StepResult, error) {
 	args := strings.Fields(opts.command)
 	if opts.stack != "" && !containsStackFlag(args) {
 		args = append(args, "-s", opts.stack)
@@ -145,7 +156,7 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 	}
 	cmd.Env = append(os.Environ(), opts.envVars...)
 
-	writer := NewOutputModeWriter(mode, stepName, viewport)
+	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
 	stdout, stderr, err := writer.Execute(cmd)
 
 	return h.buildAtmosResult(stdout, stderr, err), err
@@ -179,7 +190,12 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	mode := GetOutputMode(step, workflow)
 	viewport := GetViewportConfig(step, workflow)
 
-	return h.runAtmosCommand(ctx, step.Name, opts, mode, viewport)
+	output := atmosOutputOptions{
+		mode:     mode,
+		viewport: viewport,
+		show:     GetShowConfig(step, workflow),
+	}
+	return h.runAtmosCommand(ctx, step.Name, opts, output)
 }
 
 // containsStackFlag checks if args already contain -s or --stack.

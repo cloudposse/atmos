@@ -1,0 +1,33 @@
+---
+title: working_directory
+sidebar_label: working_directory
+sidebar_position: 3
+slug: /workflows/working-directory
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The workflow-level `working_directory` field sets the default directory in which workflow steps run.
+</Intro>
+
+```yaml
+workflows:
+  build-all:
+    working_directory: !repo-root
+    steps:
+      - command: make build
+        type: shell
+      - command: make test
+        type: shell
+```
+
+## Path Resolution
+
+- Absolute paths are used as-is.
+- Relative paths are resolved by Atmos from the configured base path context.
+- The `!repo-root` YAML function resolves to the Git repository root.
+
+Step-level `working_directory` overrides the workflow-level value for that step.
+
+When a workflow-level [container](/workflows/container) is configured, `working_directory` remains a host-side Atmos path. Atmos maps it into the configured container workspace before running the command.

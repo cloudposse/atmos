@@ -1,0 +1,50 @@
+# Atmos Cache
+#
+# One-step cache for Atmos-managed directories. Atmos derives the cache key,
+# paths, and restore-keys from your `ci.cache` configuration (`atmos ci cache
+# paths`), and the native actions/cache does the storage. This exposes **no**
+# GitHub Actions runtime token to your job — the most secure of the integration
+# options. See actions/cache/README.md.
+#
+# Requires the `atmos` binary to be on PATH (install it before this step).
+name: 'Atmos Cache'
+description: 'Cache Atmos-managed directories via actions/cache, using the key/paths from your ci.cache configuration.'
+author: 'Cloud Posse'
+branding:
+  icon: 'archive'
+  color: 'blue'
+
+outputs:
+  cache-hit:
+    description: 'Whether an exact key match was found (from actions/cache).'
+    value: ${{ steps.cache.outputs.cache-hit }}
+  key:
+    description: 'The resolved cache key.'
+    value: ${{ steps.meta.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - id: meta
+      shell: bash
+      run: atmos ci cache paths --format=github
+    - id: validate
+      shell: bash
+      env:
+        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
+        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
+      run: |
+        if [ -z "${ATMOS_CACHE_KEY}" ]; then
+          echo "::error::Atmos cache metadata did not include a cache key. Check the previous 'atmos ci cache paths --format=github' step output."
+          exit 1
+        fi
+        if [ -z "${ATMOS_CACHE_PATH}" ]; then
+          echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
+          exit 1
+        fi
+    - id: cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        key: ${{ steps.meta.outputs.key }}
+        path: ${{ steps.meta.outputs.path }}
+        restore-keys: ${{ steps.meta.outputs.restore-keys }}

@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,6 +22,42 @@ const (
 	// ErrFormatWithFile is the error format string for errors with file context.
 	errFormatWithFile = "%w in file '%s'"
 )
+
+// globalMetadataAllowedKeys are the only `metadata:` fields permitted at the
+// stack-manifest root (global scope). Everything else is a structural/identity
+// field (component, inherits, type, name, terraform_workspace) that would be
+// actively harmful if silently applied to every component in the stack.
+var globalMetadataAllowedKeys = map[string]bool{
+	"labels":                      true,
+	"tags":                        true,
+	"custom":                      true,
+	"enabled":                     true,
+	"locked":                      true,
+	"terraform_workspace_pattern": true,
+}
+
+// validateGlobalMetadataSection filters/validates a stack-manifest-root `metadata:`
+// block. Any key outside the allowlist is a hard error (fail-closed), not a
+// silent no-op — this is the exact bug this feature fixes: metadata.labels set
+// at the stack root used to silently do nothing.
+func validateGlobalMetadataSection(raw map[string]any, stackName string) (map[string]any, error) {
+	var disallowed []string
+	for k := range raw {
+		if !globalMetadataAllowedKeys[k] {
+			disallowed = append(disallowed, k)
+		}
+	}
+	if len(disallowed) > 0 {
+		sort.Strings(disallowed)
+		return nil, errUtils.Build(errUtils.ErrGlobalMetadataFieldNotAllowed).
+			WithContext("file", stackName).
+			WithContext("fields", disallowed).
+			WithHint("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern").
+			WithHint("Move component-identity fields (component, inherits, type, name, terraform_workspace) under components.<type>.<name>.metadata").
+			Err()
+	}
+	return raw, nil
+}
 
 // ProcessStackConfig processes a stack configuration.
 //
@@ -59,6 +96,15 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Extract the stack-level 'version' section (e.g. `version.track`, asserting
+	// which Atmos Version Tracker track this stack resolves `!version`/
+	// `{{ .version.* }}` against) if present. Imports are already deep-merged
+	// into `config` by this point, so a single map assertion is sufficient.
+	var stackVersionSection map[string]any
+	if versionSection, ok := config[cfg.VersionSectionName].(map[string]any); ok {
+		stackVersionSection = versionSection
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
@@ -68,8 +114,12 @@ func ProcessStackConfig(
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
 	globalAnsibleSection := map[string]any{}
+	globalKubernetesSection := map[string]any{}
+	globalHelmSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
+	globalSecretsSection := map[string]any{}
+	globalMetadataSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -102,10 +152,39 @@ func ProcessStackConfig(
 	ansibleAuth := map[string]any{}
 	ansibleDependencies := map[string]any{}
 
+	kubernetesVars := map[string]any{}
+	kubernetesSettings := map[string]any{}
+	kubernetesEnv := map[string]any{}
+	kubernetesCommand := ""
+	kubernetesAuth := map[string]any{}
+	kubernetesDependencies := map[string]any{}
+	kubernetesHooks := map[string]any{}
+	kubernetesGenerate := map[string]any{}
+	kubernetesSource := map[string]any{}
+	kubernetesProvision := map[string]any{}
+	kubernetesProvider := ""
+	var kubernetesPaths any
+	var kubernetesManifests any
+	kubernetesRender := map[string]any{}
+	var kubernetesValidate any
+
+	helmVars := map[string]any{}
+	helmSettings := map[string]any{}
+	helmEnv := map[string]any{}
+	helmCommand := ""
+	helmAuth := map[string]any{}
+	helmDependencies := map[string]any{}
+	helmHooks := map[string]any{}
+	helmGenerate := map[string]any{}
+	helmSource := map[string]any{}
+	helmProvision := map[string]any{}
+
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
 	packerComponents := map[string]any{}
 	ansibleComponents := map[string]any{}
+	kubernetesComponents := map[string]any{}
+	helmComponents := map[string]any{}
 	allComponents := map[string]any{}
 
 	// Global sections.
@@ -172,6 +251,20 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := config[cfg.KubernetesSectionName]; ok {
+		globalKubernetesSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.HelmSectionName]; ok {
+		globalHelmSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
 	if i, ok := config[cfg.ComponentsSectionName]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
@@ -183,6 +276,32 @@ func ProcessStackConfig(
 		globalAuthSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	// Stack-level (global) metadata defaults — a restricted allowlist of fields that
+	// make sense stack-wide (data bags and gates). Structural/identity fields
+	// (component, inherits, type, name, terraform_workspace) are rejected with a
+	// clear error rather than silently doing nothing, since that silent no-op is
+	// exactly the confusing behavior this feature fixes.
+	if i, ok := config[cfg.MetadataSectionName]; ok {
+		globalMetadataSectionRaw, ok := i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGlobalMetadataSection, stackName)
+		}
+		validatedGlobalMetadata, err := validateGlobalMetadataSection(globalMetadataSectionRaw, stackName)
+		if err != nil {
+			return nil, err
+		}
+		globalMetadataSection = validatedGlobalMetadata
+	}
+
+	// Stack-level (global) secrets declarations/providers; merged into every component's
+	// secrets section so providers and declarations can be defined once per stack.
+	if i, ok := config[cfg.SecretsSectionName]; ok {
+		globalSecretsSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
 		}
 	}
 
@@ -564,6 +683,246 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	// Kubernetes section.
+	if i, ok := globalKubernetesSection[cfg.CommandSectionName]; ok {
+		kubernetesCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.VarsSectionName]; ok {
+		kubernetesVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+		}
+	}
+
+	globalAndKubernetesVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, kubernetesVars})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.HooksSectionName]; ok {
+		kubernetesHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
+		}
+	}
+
+	globalAndKubernetesHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, kubernetesHooks})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.GenerateSectionName]; ok {
+		kubernetesGenerate, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+		}
+	}
+
+	globalAndKubernetesGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, kubernetesGenerate})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.SettingsSectionName]; ok {
+		kubernetesSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+		}
+	}
+
+	globalAndKubernetesSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, kubernetesSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.EnvSectionName]; ok {
+		kubernetesEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+		}
+	}
+
+	globalAndKubernetesEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, kubernetesEnv})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.AuthSectionName]; ok {
+		kubernetesAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	globalAndKubernetesAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, kubernetesAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.DependenciesSectionName]; ok {
+		kubernetesDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+		}
+	}
+
+	globalAndKubernetesDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, kubernetesDependencies})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalKubernetesSection[cfg.SourceSectionName]; ok {
+		kubernetesSource, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ProvisionSectionName]; ok {
+		kubernetesProvision, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
+		}
+	}
+
+	// Stack-global Kubernetes provider/paths/manifests/render defaults. These form
+	// the lowest-precedence layer (below base and component) in the final merge.
+	if i, ok := globalKubernetesSection[cfg.ProviderSectionName]; ok {
+		kubernetesProvider, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.PathsSectionName]; ok {
+		kubernetesPaths = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ManifestsSectionName]; ok {
+		kubernetesManifests = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.RenderSectionName]; ok {
+		kubernetesRender, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ValidateSectionName]; ok {
+		kubernetesValidate = i
+	}
+
+	// Helm section.
+	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
+		helmCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
+		}
+	}
+
+	if i, ok := globalHelmSection[cfg.VarsSectionName]; ok {
+		helmVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+		}
+	}
+
+	globalAndHelmVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, helmVars})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.HooksSectionName]; ok {
+		helmHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
+		}
+	}
+
+	globalAndHelmHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, helmHooks})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.GenerateSectionName]; ok {
+		helmGenerate, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+		}
+	}
+
+	globalAndHelmGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, helmGenerate})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.SettingsSectionName]; ok {
+		helmSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+		}
+	}
+
+	globalAndHelmSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, helmSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.EnvSectionName]; ok {
+		helmEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+		}
+	}
+
+	globalAndHelmEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmEnv})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.AuthSectionName]; ok {
+		helmAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	globalAndHelmAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.DependenciesSectionName]; ok {
+		helmDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+		}
+	}
+
+	globalAndHelmDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, helmDependencies})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalHelmSection[cfg.SourceSectionName]; ok {
+		helmSource, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
+		}
+	}
+
+	if i, ok := globalHelmSection[cfg.ProvisionSectionName]; ok {
+		helmProvision, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
+		}
+	}
+
 	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
 	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
 	// Use JSON marshaling for deep conversion of nested structs to maps.
@@ -603,7 +962,9 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalSecrets:                   globalSecretsSection,
 					GlobalDependencies:              globalAndTerraformDependencies,
+					GlobalMetadata:                  globalMetadataSection,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
@@ -650,7 +1011,9 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndHelmfileDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -688,7 +1051,9 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndPackerDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -726,7 +1091,9 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndAnsibleSettings,
 					GlobalEnv:                globalAndAnsibleEnv,
 					GlobalAuth:               globalAndAnsibleAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndAnsibleDependencies,
+					GlobalMetadata:           globalMetadataSection,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -741,19 +1108,130 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Process all Kubernetes components in parallel.
+	if componentTypeFilter == "" || componentTypeFilter == cfg.KubernetesComponentType {
+		if allKubernetesComponents, ok := globalComponentsSection[cfg.KubernetesComponentType]; ok {
+			allKubernetesComponentsMap, ok := allKubernetesComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			}
+
+			kubernetesComponentsBasePath := ""
+			if atmosConfig != nil {
+				kubernetesComponentsBasePath = atmosConfig.KubernetesDirAbsolutePath
+				if kubernetesComponentsBasePath == "" {
+					kubernetesComponentsBasePath = atmosConfig.Components.Kubernetes.BasePath
+				}
+			}
+
+			// Build options for each Kubernetes component.
+			buildKubernetesOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
+					ComponentType:              cfg.KubernetesComponentType,
+					Component:                  component,
+					Stack:                      stack,
+					StackName:                  stackName,
+					ComponentMap:               componentMap,
+					AllComponentsMap:           allKubernetesComponentsMap,
+					ComponentsBasePath:         kubernetesComponentsBasePath,
+					CheckBaseComponentExists:   checkBaseComponentExists,
+					GlobalVars:                 globalAndKubernetesVars,
+					GlobalSettings:             globalAndKubernetesSettings,
+					GlobalEnv:                  globalAndKubernetesEnv,
+					GlobalAuth:                 globalAndKubernetesAuth,
+					GlobalDependencies:         globalAndKubernetesDependencies,
+					GlobalMetadata:             globalMetadataSection,
+					GlobalCommand:              kubernetesCommand,
+					AtmosGlobalAuthMap:         atmosAuthConfig,
+					GlobalAndTerraformHooks:    globalAndKubernetesHooks,
+					GlobalAndTerraformGenerate: globalAndKubernetesGenerate,
+					GlobalSourceSection:        kubernetesSource,
+					GlobalProvisionSection:     kubernetesProvision,
+					GlobalKubernetesProvider:   kubernetesProvider,
+					GlobalKubernetesPaths:      kubernetesPaths,
+					GlobalKubernetesManifests:  kubernetesManifests,
+					GlobalKubernetesRender:     kubernetesRender,
+					GlobalKubernetesValidate:   kubernetesValidate,
+					AtmosConfig:                atmosConfig,
+				}, nil
+			}
+
+			var err error
+			kubernetesComponents, err = processComponentsInParallel(atmosConfig, allKubernetesComponentsMap, buildKubernetesOpts)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Process all Helm components in parallel.
+	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmComponentType {
+		if allHelmComponents, ok := globalComponentsSection[cfg.HelmComponentType]; ok {
+			allHelmComponentsMap, ok := allHelmComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			}
+
+			helmComponentsBasePath := ""
+			if atmosConfig != nil {
+				helmComponentsBasePath = atmosConfig.HelmDirAbsolutePath
+				if helmComponentsBasePath == "" {
+					helmComponentsBasePath = atmosConfig.Components.Helm.BasePath
+				}
+			}
+
+			// Build options for each Helm component.
+			buildHelmOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
+					ComponentType:              cfg.HelmComponentType,
+					Component:                  component,
+					Stack:                      stack,
+					StackName:                  stackName,
+					ComponentMap:               componentMap,
+					AllComponentsMap:           allHelmComponentsMap,
+					ComponentsBasePath:         helmComponentsBasePath,
+					CheckBaseComponentExists:   checkBaseComponentExists,
+					GlobalVars:                 globalAndHelmVars,
+					GlobalSettings:             globalAndHelmSettings,
+					GlobalEnv:                  globalAndHelmEnv,
+					GlobalAuth:                 globalAndHelmAuth,
+					GlobalDependencies:         globalAndHelmDependencies,
+					GlobalMetadata:             globalMetadataSection,
+					GlobalCommand:              helmCommand,
+					AtmosGlobalAuthMap:         atmosAuthConfig,
+					GlobalAndTerraformHooks:    globalAndHelmHooks,
+					GlobalAndTerraformGenerate: globalAndHelmGenerate,
+					GlobalSourceSection:        helmSource,
+					GlobalProvisionSection:     helmProvision,
+					AtmosConfig:                atmosConfig,
+				}, nil
+			}
+
+			var err error
+			helmComponents, err = processComponentsInParallel(atmosConfig, allHelmComponentsMap, buildHelmOpts)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	allComponents[cfg.TerraformComponentType] = terraformComponents
 	allComponents[cfg.HelmfileComponentType] = helmfileComponents
 	allComponents[cfg.PackerComponentType] = packerComponents
 	allComponents[cfg.AnsibleComponentType] = ansibleComponents
+	allComponents[cfg.KubernetesComponentType] = kubernetesComponents
+	allComponents[cfg.HelmComponentType] = helmComponents
 
-	// Include custom component types (non-terraform, non-helmfile, non-packer).
+	// Include custom component types (component types not processed above).
 	// Custom components don't need the same processing as built-in types - they just
 	// pass through with global vars/settings merged. This enables custom commands to
 	// access component configuration via {{ .Component.* }} templates.
 	builtInTypes := map[string]bool{
-		cfg.TerraformComponentType: true,
-		cfg.HelmfileComponentType:  true,
-		cfg.PackerComponentType:    true,
+		cfg.TerraformComponentType:  true,
+		cfg.HelmfileComponentType:   true,
+		cfg.PackerComponentType:     true,
+		cfg.AnsibleComponentType:    true,
+		cfg.KubernetesComponentType: true,
 	}
 	for componentType, components := range globalComponentsSection {
 		if builtInTypes[componentType] {
@@ -775,6 +1253,15 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
 					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
 			}
+			// Resolve `metadata.inherits` and deep-merge base components so custom
+			// component types (e.g. container) honor catalog/abstract defaults the
+			// same way built-in types do. This deep-merges ALL top-level component
+			// keys (image/build/run/composition/vars/...), not just vars/settings/env.
+			resolvedMap, inheritErr := resolveCustomComponentInheritance(atmosConfig, componentMap, componentsMap, map[string]bool{})
+			if inheritErr != nil {
+				return nil, inheritErr
+			}
+			componentMap = resolvedMap
 			// Merge global vars into component vars.
 			componentVars := map[string]any{}
 			for k, v := range globalVarsSection {
@@ -812,6 +1299,18 @@ func ProcessStackConfig(
 			if len(componentEnv) > 0 {
 				componentMap[cfg.EnvSectionName] = componentEnv
 			}
+			// Deep-merge global metadata into component metadata (component-local wins),
+			// consistent with how built-in component types merge metadata in
+			// mergeComponentConfigurations, so nested maps like `labels`/`custom`
+			// retain non-conflicting keys from both sides instead of being replaced wholesale.
+			componentLocalMetadata, _ := componentMap[cfg.MetadataSectionName].(map[string]any)
+			componentMetadata, mergeErr := m.Merge(atmosConfig, []map[string]any{globalMetadataSection, componentLocalMetadata})
+			if mergeErr != nil {
+				return nil, mergeErr
+			}
+			if len(componentMetadata) > 0 {
+				componentMap[cfg.MetadataSectionName] = componentMetadata
+			}
 			// Add metadata fields expected by the template system.
 			componentMap["component"] = componentName
 			componentMap[cfg.ComponentTypeSectionName] = componentType
@@ -829,7 +1328,118 @@ func ProcessStackConfig(
 		result[cfg.NameSectionName] = stackManifestName
 	}
 
+	// Include the stack-level 'version' section if it was set, so
+	// `EffectiveTrackFromStack` can resolve the stack-asserted track.
+	if stackVersionSection != nil {
+		result[cfg.VersionSectionName] = stackVersionSection
+	}
+
 	return result, nil
+}
+
+// resolveCustomComponentInheritance resolves a custom component's
+// `metadata.inherits` chain and deep-merges the base components (in listed
+// order, later wins) beneath the component's own config (highest precedence).
+// It deep-merges ALL top-level keys, so custom component types honor catalog and
+// abstract defaults like built-in types do. `visited` tracks the current
+// resolution path to guard against inheritance cycles (backtracked per branch so
+// diamond inheritance still resolves). Components with no `metadata.inherits` are
+// returned unchanged.
+func resolveCustomComponentInheritance(
+	atmosConfig *schema.AtmosConfiguration,
+	componentMap map[string]any,
+	allComponents map[string]any,
+	visited map[string]bool,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.resolveCustomComponentInheritance")()
+
+	bases, err := customComponentInheritsBases(componentMap)
+	if err != nil {
+		return nil, err
+	}
+	if len(bases) == 0 {
+		return componentMap, nil
+	}
+
+	merged := map[string]any{}
+	for _, baseName := range bases {
+		if visited[baseName] {
+			continue // cycle guard
+		}
+		baseConfig, ok := allComponents[baseName].(map[string]any)
+		if !ok {
+			continue // unknown base — lenient skip (mirrors describe's tolerance)
+		}
+
+		visited[baseName] = true
+		resolvedBase, err := resolveCustomComponentInheritance(atmosConfig, baseConfig, allComponents, visited)
+		delete(visited, baseName) // backtrack so siblings can reuse a shared ancestor
+		if err != nil {
+			return nil, err
+		}
+
+		sanitizedBase, err := sanitizeBaseForInheritance(resolvedBase)
+		if err != nil {
+			return nil, err
+		}
+		if merged, err = m.Merge(atmosConfig, []map[string]any{merged, sanitizedBase}); err != nil {
+			return nil, err
+		}
+	}
+
+	selfCopy, err := m.DeepCopyMap(componentMap)
+	if err != nil {
+		return nil, err
+	}
+	return m.Merge(atmosConfig, []map[string]any{merged, selfCopy})
+}
+
+// customComponentInheritsBases returns the ordered base component names from a
+// component's `metadata.inherits` list. A `metadata.inherits` that is present
+// but not a list is a config error and is reported rather than silently ignored.
+func customComponentInheritsBases(componentMap map[string]any) ([]string, error) {
+	metadata, ok := componentMap[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	rawInherits, exists := metadata[cfg.InheritsSectionName]
+	if !exists {
+		return nil, nil
+	}
+	inherits, ok := rawInherits.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: custom component metadata.%s must be a list", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
+	}
+	bases := make([]string, 0, len(inherits))
+	for _, item := range inherits {
+		name, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: custom component metadata.%s must contain only strings", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
+		}
+		if name != "" {
+			bases = append(bases, name)
+		}
+	}
+	return bases, nil
+}
+
+// sanitizeBaseForInheritance deep-copies a base component and strips the
+// per-component metadata fields (`type`, `inherits`, `component`) so an abstract
+// base does not poison a concrete component (e.g. mark it abstract).
+func sanitizeBaseForInheritance(base map[string]any) (map[string]any, error) {
+	clone, err := m.DeepCopyMap(base)
+	if err != nil {
+		return nil, err
+	}
+	if metadata, ok := clone[cfg.MetadataSectionName].(map[string]any); ok {
+		delete(metadata, "type")
+		delete(metadata, cfg.InheritsSectionName)
+		delete(metadata, cfg.ComponentSectionName)
+		if len(metadata) == 0 {
+			delete(clone, cfg.MetadataSectionName)
+		}
+	}
+	return clone, nil
 }
 
 // componentProcessResult holds the result of processing a single component in parallel.

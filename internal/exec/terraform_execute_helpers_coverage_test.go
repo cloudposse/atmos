@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -172,6 +173,157 @@ func TestPrintAndWriteVarFiles_WriteActualFile(t *testing.T) {
 	err := printAndWriteVarFiles(&atmosConfig, &info)
 	require.NoError(t, err)
 	assert.FileExists(t, expectedVarfilePath)
+}
+
+func TestPrintAndWriteVarFiles_WritesTerraformTestVarfile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:    "test",
+		ContextPrefix: "ctx",
+		Component:     "mycomp",
+		ComponentVarsSection: map[string]any{
+			"name": "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_id":       "vpc-123",
+					"expected_bucket_name": "app-test",
+				},
+			},
+		},
+	}
+	expectedVarfilePath := constructTerraformComponentTestVarfilePath(&atmosConfig, &info)
+	require.NoError(t, os.MkdirAll(filepath.Dir(expectedVarfilePath), 0o755))
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+
+	require.NoError(t, err)
+	data, err := os.ReadFile(expectedVarfilePath)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"fixture_vpc_id":"vpc-123","expected_bucket_name":"app-test"}`, string(data))
+}
+
+func TestDiskSafeVars_RemovesComponentVarCollidingWithSecretTestVar(t *testing.T) {
+	secret := "terraform-test-secret-collision-7f1d"
+	atmosio.RegisterSecret(secret)
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "test",
+		ComponentVarsSection: map[string]any{
+			"fixture_vpc_name": "public-fallback",
+			"name":             "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_name": secret,
+					"expected_name":    "app-test",
+				},
+			},
+		},
+	}
+
+	safe := diskSafeVars(info)
+	assert.NotContains(t, safe, "fixture_vpc_name")
+	assert.Equal(t, "app", safe["name"])
+	assert.Equal(t, map[string]any{"expected_name": "app-test"}, diskSafeTerraformTestVars(info))
+
+	env, err := terraformTestSecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, env, "TF_VAR_fixture_vpc_name="+secret)
+}
+
+func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:    "plan",
+		ContextPrefix: "ctx",
+		Component:     "mycomp",
+		ComponentVarsSection: map[string]any{
+			"name": "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_id": "vpc-123",
+				},
+			},
+		},
+	}
+	expectedVarfilePath := constructTerraformComponentTestVarfilePath(&atmosConfig, &info)
+	require.NoError(t, os.MkdirAll(filepath.Dir(expectedVarfilePath), 0o755))
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+
+	require.NoError(t, err)
+	assert.NoFileExists(t, expectedVarfilePath)
+}
+
+func TestTerraformTestVarsDefaults(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{
+			name: "nil info",
+			info: nil,
+		},
+		{
+			name: "non test command",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{
+						cfg.VarsSectionName: map[string]any{"fixture_vpc_id": "vpc-123"},
+					},
+				},
+			},
+		},
+		{
+			name: "missing test section",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "test",
+				ComponentSection: map[string]any{},
+			},
+		},
+		{
+			name: "test section without vars",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "test",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{},
+				},
+			},
+		},
+		{
+			name: "empty test vars",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "test",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{
+						cfg.VarsSectionName: map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Nil(t, terraformTestVars(tt.info))
+			assert.False(t, hasTerraformTestVars(tt.info))
+			assert.Nil(t, diskSafeTerraformTestVars(tt.info))
+			env, err := terraformTestSecretVarEnv(tt.info)
+			require.NoError(t, err)
+			assert.Nil(t, env)
+		})
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

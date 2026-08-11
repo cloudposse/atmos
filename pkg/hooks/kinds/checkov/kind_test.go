@@ -22,6 +22,7 @@ func TestKindIsRegistered(t *testing.T) {
 		"--output-file-path", "$ATMOS_OUTPUT_DIR",
 		"--quiet",
 		"--soft-fail",
+		"--skip-path", "providers_override.tf.json",
 	}, kind.DefaultArgs)
 	assert.Equal(t, hooks.OnFailureWarn, kind.OnFailure)
 	assert.NotNil(t, kind.ResultHandler)

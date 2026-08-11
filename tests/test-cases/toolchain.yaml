@@ -15,6 +15,7 @@ tests:
       - "toolchain"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -37,6 +38,7 @@ tests:
       - "install"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -59,6 +61,7 @@ tests:
       - "info"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -95,8 +98,11 @@ tests:
         # Sanitize dates (e.g., 2025-12-17)
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
       diff:
-        # Ignore table data rows - release titles change when upstream repos publish new versions.
+        # Release titles change when upstream repos publish new versions, which
+        # redistributes table columns without changing the configured width.
         - "YYYY-MM-DD"
+        - "^\\s*VERSION\\s+DATE\\s+TITLE\\s*$"
+        - "^─+$"
       exit_code: 0
 
   - name: "atmos toolchain info http type tool"
@@ -140,13 +146,17 @@ tests:
         - "atmos-inline"
         - "github_release"
         - "junegunn/fzf"
+      ignore_trailing_whitespace: true
       sanitize:
         "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
       diff:
-        # Ignore table data rows and continuation lines - release titles change
-        # when upstream repos publish new versions.
+        # Ignore table data rows, dynamic header spacing, and continuation lines.
+        # Release titles change when upstream repos publish new versions, which
+        # redistributes the title column without changing the configured width.
         - "YYYY-MM-DD"
+        - "^\\s*VERSION\\s+DATE\\s+TITLE\\s*$"
+        - "^─+$"
         - "^\\s{20,}\\S"
       exit_code: 0
 
@@ -168,13 +178,17 @@ tests:
         - "atmos-inline"
         - "http"
         - "jqlang/jq"
+      ignore_trailing_whitespace: true
       sanitize:
         # jq uses jq-X.X.X format for versions
         "jq-[0-9]+\\.[0-9]+(\\.[0-9]+)?": "jq-X.X"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
       diff:
-        # Ignore table data rows - release titles change when upstream repos publish new versions.
+        # Release titles change when upstream repos publish new versions, which
+        # redistributes table columns without changing the configured width.
         - "YYYY-MM-DD"
+        - "^\\s*VERSION\\s+DATE\\s+TITLE\\s*$"
+        - "^─+$"
       exit_code: 0
 
   - name: "atmos toolchain info yaml output"

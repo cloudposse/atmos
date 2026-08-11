@@ -11,11 +11,15 @@ import (
 
 	"github.com/creack/pty"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // setupTerminal configures terminal resize handling and raw mode.
+// The rawMode parameter controls whether the host terminal is switched to raw
+// mode; it is only needed when host input is forwarded to the PTY.
 // Returns a cleanup function that must be called when done.
-func setupTerminal(ptmx *os.File) (func(), error) {
+func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
 	// Handle terminal resize signals.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
@@ -26,10 +30,10 @@ func setupTerminal(ptmx *os.File) (func(), error) {
 	}()
 	ch <- syscall.SIGWINCH // Initial resize.
 
-	// Set terminal to raw mode (only if stdin is a TTY).
+	// Set terminal to raw mode (only if requested and stdin is a TTY).
 	var oldState *term.State
 	var err error
-	if term.IsTerminal(int(os.Stdin.Fd())) {
+	if rawMode && term.IsTerminal(int(os.Stdin.Fd())) { //nolint:gosec // Stdin fd fits in int on all supported platforms.
 		oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			signal.Stop(ch)
@@ -38,8 +42,19 @@ func setupTerminal(ptmx *os.File) (func(), error) {
 		}
 	}
 
+	// Restore the terminal even if the process exits through the signal
+	// handler (os.Exit skips deferred functions).
+	deregister := func() {}
+	if oldState != nil {
+		state := oldState
+		deregister = signals.RegisterExitCleanup(func() {
+			_ = term.Restore(int(os.Stdin.Fd()), state) //nolint:gosec // Stdin fd fits in int on all supported platforms.
+		})
+	}
+
 	// Return cleanup function.
 	cleanup := func() {
+		deregister()
 		signal.Stop(ch)
 		close(ch)
 		if oldState != nil {

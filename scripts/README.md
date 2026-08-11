@@ -12,6 +12,18 @@ Generates the `NOTICE` file containing license attributions for all Go dependenc
 ./scripts/generate-notice.sh
 ```
 
+Or use the Atmos development shortcut, which runs the slow license scan behind a spinner:
+
+```bash
+atmos dev generate notices
+```
+
+The same development namespace also exposes mock generation:
+
+```bash
+atmos dev generate mocks
+```
+
 ### What It Does
 
 1. Uses `go-licenses` to scan all Go dependencies

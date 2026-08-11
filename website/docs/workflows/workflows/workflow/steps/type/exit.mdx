@@ -1,0 +1,31 @@
+---
+title: exit
+sidebar_label: exit
+slug: /workflows/steps/type/exit
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `exit` step type stops a custom command or workflow immediately with an exit code, giving you a clean, explicit way to halt automation after a guard or validation step fails.
+</Intro>
+
+```yaml
+steps:
+  - name: stop
+    type: exit
+    code: 1
+    content: Refusing to deploy without approval.
+```
+
+## Fields
+
+<dl>
+  <dt>`code`</dt>
+  <dd>Optional exit code. Defaults to `0`.</dd>
+
+  <dt>`content`</dt>
+  <dd>Optional message to print before exiting. Supports templates.</dd>
+</dl>
+
+Use `exit` for explicit workflow termination after validation or guard steps.

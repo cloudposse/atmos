@@ -35,11 +35,25 @@ func (h *WriteHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for multi-line input and returns the result.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// text is returned without prompting. When there is no TTY and no `default` is
+// set, resolveInteractive returns ErrStepTTYRequired.
 func (h *WriteHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.WriteHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	shouldPrompt, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default text without prompting.
+	if !shouldPrompt {
+		defaultVal, resolveErr := h.ResolveDefault(ctx, step, vars)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)

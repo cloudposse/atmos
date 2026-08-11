@@ -20,6 +20,7 @@ func TestUIHandlersRegistration(t *testing.T) {
 		category StepCategory
 	}{
 		{"toast", CategoryUI},
+		{"hint", CategoryUI},
 		{"markdown", CategoryUI},
 		{"alert", CategoryUI},
 		{"title", CategoryUI},
@@ -55,6 +56,18 @@ func TestUIHandlersValidation(t *testing.T) {
 		{
 			name:      "toast without content",
 			stepType:  "toast",
+			content:   "",
+			expectErr: true,
+		},
+		{
+			name:      "hint with content",
+			stepType:  "hint",
+			content:   "Run atmos dev shell.",
+			expectErr: false,
+		},
+		{
+			name:      "hint without content",
+			stepType:  "hint",
 			content:   "",
 			expectErr: true,
 		},
@@ -251,6 +264,12 @@ func TestUIHandlersTemplateResolution(t *testing.T) {
 			level:           "error",
 			content:         "Failed in {{ .steps.select_env.value }}",
 			expectedContent: "Failed in production",
+		},
+		{
+			name:            "hint with template",
+			stepType:        "hint",
+			content:         "Run {{ .steps.select_component.value }} in {{ .steps.select_env.value }}",
+			expectedContent: "Run vpc in production",
 		},
 		{
 			name:            "markdown with template",

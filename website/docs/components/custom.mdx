@@ -1,0 +1,83 @@
+---
+title: Using Custom Component Types
+sidebar_position: 7
+sidebar_label: Custom
+id: custom
+description: Bring any tool—AWS CDK, CloudFormation, Pulumi, Bicep, database migrations, and more—under the same stack-based configuration used for Terraform, Helmfile, and Packer.
+---
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Beyond the native component types, Atmos lets you define **custom component types** so you can manage *any* tool—AWS CDK, CloudFormation, Pulumi, Bicep, database migrations, and more—with the same stack-based configuration system used for Terraform, Helmfile, and Packer.
+</Intro>
+
+Custom component types are defined through [custom commands](/cli/configuration/commands). Unlike the native types, which ship with built-in orchestration, a custom type is one you wire up yourself: you declare the type on a custom command and supply the execution `steps`, while Atmos handles stack resolution, inheritance, and configuration merging exactly as it does for native components.
+
+## How It Works
+
+Define a `component.type` on a custom command and tell Atmos which argument provides the component name and which provides the stack name. Atmos then looks up `components.<type>.<name>` from your stack manifests and exposes the fully resolved configuration via `{{ .Component.* }}`.
+
+```yaml
+# atmos.yaml
+commands:
+  - name: script
+    description: "Run script components"
+    arguments:
+      - name: component
+        type: component          # Provides the component name
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack     # Provides the stack name
+        required: true
+    component:
+      type: script               # Your custom component type
+    steps:
+      - 'echo "App: {{ .Component.vars.app_name }}"'
+      - 'echo "Version: {{ .Component.vars.version }}"'
+```
+
+Configure the component in stack manifests just like a native type—with full imports and inheritance:
+
+```yaml
+# stacks/deploy/dev.yaml
+components:
+  script:                        # Matches component.type
+    deploy-app:
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+```
+
+Run it:
+
+```shell
+atmos script deploy-app -s dev
+# App: myapp
+# Version: 1.0.0
+```
+
+Global `vars`, `settings`, and `env` are merged automatically, and a component's `env` section is exported as real environment variables—making it straightforward to pass [secrets](/cli/configuration/secrets) securely.
+
+## Native vs. Custom
+
+| Aspect | Native types (Terraform/Helmfile/Packer/Ansible) | Custom types |
+|--------|--------------------------------------------------|--------------|
+| Orchestration | Built into Atmos | You supply the `steps` |
+| Definition | Always available | Defined via a custom command |
+| Stack configuration | `components.<type>.<name>` | `components.<type>.<name>` |
+| Configuration access | Native flags/varfiles | `{{ .Component.* }}` templates |
+
+## Try It
+
+Explore a complete, working example that defines a custom `script` component type and configures it through stacks.
+
+<EmbedExample example="custom-components" />
+
+## Related
+
+- [Custom Component Types](/cli/configuration/commands/component#custom-component-types) — Full reference, including template variables and configuration options
+- [Custom Commands](/cli/configuration/commands) — How to define custom commands
+- [Introducing Custom Component Types](/changelog/custom-component-types) — Background and real-world examples

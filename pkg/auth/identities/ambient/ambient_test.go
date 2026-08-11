@@ -2,7 +2,6 @@ package ambient
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -150,60 +149,14 @@ func TestAmbientIdentityPrepareEnvironmentDoesNotMutateInput(t *testing.T) {
 	assert.False(t, exists, "new keys should not appear in input")
 }
 
-func TestIsStandaloneAmbientChain(t *testing.T) {
-	tests := []struct {
-		name       string
-		chain      []string
-		identities map[string]schema.Identity
-		want       bool
-	}{
-		{
-			name:  "single ambient identity",
-			chain: []string{"passthrough"},
-			identities: map[string]schema.Identity{
-				"passthrough": {Kind: "ambient"},
-			},
-			want: true,
-		},
-		{
-			name:  "single non-ambient identity",
-			chain: []string{"my-user"},
-			identities: map[string]schema.Identity{
-				"my-user": {Kind: "aws/user"},
-			},
-			want: false,
-		},
-		{
-			name:  "multi-element chain",
-			chain: []string{"deployer", "passthrough"},
-			identities: map[string]schema.Identity{
-				"passthrough": {Kind: "ambient"},
-				"deployer":    {Kind: "aws/assume-role"},
-			},
-			want: false,
-		},
-		{
-			name:       "empty chain",
-			chain:      []string{},
-			identities: map[string]schema.Identity{},
-			want:       false,
-		},
-		{
-			name:  "identity not found",
-			chain: []string{"missing"},
-			identities: map[string]schema.Identity{
-				"other": {Kind: "ambient"},
-			},
-			want: false,
-		},
-	}
+func TestAmbientIdentityIsStandalone(t *testing.T) {
+	identity, err := NewAmbientIdentity("test", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsStandaloneAmbientChain(tt.chain, tt.identities)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	// Ambient identities authenticate without an upstream provider step.
+	standalone, ok := identity.(types.StandaloneIdentity)
+	require.True(t, ok, "ambient identity must implement types.StandaloneIdentity")
+	assert.True(t, standalone.IsStandalone())
 }
 
 func TestAmbientIdentityCredentialsExist(t *testing.T) {
@@ -256,82 +209,15 @@ func TestAmbientIdentityLogout(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// mockIdentity is a test double for types.Identity used by AuthenticateStandaloneAmbient tests.
-type mockIdentity struct {
-	kind      string
-	authCreds types.ICredentials
-	authErr   error
-}
+func TestAmbientIdentityAuthenticateStandalone(t *testing.T) {
+	identity, err := NewAmbientIdentity("passthrough", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
 
-func (m *mockIdentity) Kind() string                            { return m.kind }
-func (m *mockIdentity) GetProviderName() (string, error)        { return "mock", nil }
-func (m *mockIdentity) Validate() error                         { return nil }
-func (m *mockIdentity) Environment() (map[string]string, error) { return nil, nil }
-func (m *mockIdentity) Paths() ([]types.Path, error)            { return nil, nil }
-func (m *mockIdentity) SetRealm(_ string)                       {}
-func (m *mockIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
-	return nil
-}
-func (m *mockIdentity) Logout(_ context.Context) error  { return nil }
-func (m *mockIdentity) CredentialsExist() (bool, error) { return true, nil }
-func (m *mockIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
-	return nil, nil
-}
+	standalone, ok := identity.(types.StandaloneIdentity)
+	require.True(t, ok, "ambient identity must implement types.StandaloneIdentity")
 
-func (m *mockIdentity) PrepareEnvironment(_ context.Context, env map[string]string) (map[string]string, error) {
-	return env, nil
-}
-
-func (m *mockIdentity) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
-	return m.authCreds, m.authErr
-}
-
-func TestAuthenticateStandaloneAmbient(t *testing.T) {
-	tests := []struct {
-		name         string
-		identityName string
-		identities   map[string]types.Identity
-		wantErr      bool
-		errSubstr    string
-	}{
-		{
-			name:         "success",
-			identityName: "passthrough",
-			identities: map[string]types.Identity{
-				"passthrough": &mockIdentity{kind: "ambient"},
-			},
-		},
-		{
-			name:         "identity not found",
-			identityName: "missing",
-			identities:   map[string]types.Identity{},
-			wantErr:      true,
-			errSubstr:    "not found",
-		},
-		{
-			name:         "authentication fails",
-			identityName: "broken",
-			identities: map[string]types.Identity{
-				"broken": &mockIdentity{
-					kind:    "ambient",
-					authErr: fmt.Errorf("credential resolution failed"),
-				},
-			},
-			wantErr:   true,
-			errSubstr: "authentication failed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			creds, err := AuthenticateStandaloneAmbient(context.Background(), tt.identityName, tt.identities)
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errSubstr)
-			} else {
-				require.NoError(t, err)
-				assert.Nil(t, creds, "ambient identity should return nil credentials")
-			}
-		})
-	}
+	// Ambient identities mint nothing, so standalone authentication returns nil creds.
+	creds, err := standalone.AuthenticateStandalone(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, creds, "ambient identity should return nil credentials")
 }

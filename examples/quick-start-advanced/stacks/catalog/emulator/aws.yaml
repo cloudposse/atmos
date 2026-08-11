@@ -1,0 +1,10 @@
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "{{ .vars.region }}"
+      # Pin the Floci image to the known-good release the test suite verifies (1.5.23).
+      # The driver default `floci/floci:latest` can drift to a build that rejects the
+      # dummy test credentials. Keep in sync with tests/floci_containers_test.go.
+      container:
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2

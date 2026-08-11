@@ -1,0 +1,41 @@
+# Packer + Docker Example
+#
+# Demonstrates the Packer component type (https://atmos.tools/components/packer)
+# using Packer's Docker builder, so the whole example runs with zero cloud
+# credentials — Packer only talks to a local Docker (or Podman) daemon and
+# pushes nothing anywhere.
+#
+# Prerequisites:
+#   - Docker or Podman running locally (the `docker` builder needs a daemon)
+#
+# Quick start:
+#   atmos packer init alpine -s alpine
+#   atmos packer build alpine -s alpine
+
+base_path: "."
+
+components:
+  packer:
+    base_path: components/packer
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+# Toolchain: Atmos installs Packer itself, pinned via the component-level
+# `dependencies.tools.packer` constraint in stacks/alpine.yaml — no manual
+# install step required.
+# Docs: https://atmos.tools/cli/configuration/toolchain
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  aliases:
+    packer: hashicorp/packer
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10

@@ -4,11 +4,48 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
+
+type testTerminal struct {
+	isTTY        map[terminal.Stream]bool
+	colorProfile terminal.ColorProfile
+	width        map[terminal.Stream]int
+}
+
+func (t testTerminal) Write(string) error { return nil }
+func (t testTerminal) IsTTY(stream terminal.Stream) bool {
+	return t.isTTY != nil && t.isTTY[stream]
+}
+func (t testTerminal) IsPiped(terminal.Stream) bool { return false }
+func (t testTerminal) ColorProfile() terminal.ColorProfile {
+	return t.colorProfile
+}
+
+func (t testTerminal) Width(stream terminal.Stream) int {
+	if t.width == nil {
+		return 0
+	}
+	return t.width[stream]
+}
+func (t testTerminal) Height(terminal.Stream) int { return 0 }
+func (t testTerminal) SetTitle(string)            {}
+func (t testTerminal) RestoreTitle()              {}
+func (t testTerminal) Alert()                     {}
+
+func resetRendererTerminalTestState(t *testing.T) {
+	t.Helper()
+	viper.Reset()
+	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI"} {
+		t.Setenv(envVar, "")
+	}
+	t.Cleanup(viper.Reset)
+}
 
 func TestRenderer(t *testing.T) {
 	tests := []struct {
@@ -48,12 +85,9 @@ func TestRenderer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r, _ := NewRenderer(tt.atmosConfig)
-			r.isTTYSupportForStdout = func() bool {
+			r.shouldRender = func(terminal.Stream) bool {
 				return true
 			}
-			defer func() {
-				r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-			}()
 			str, err := r.Render(tt.input)
 			assert.NoError(t, err)
 			// Strip ANSI codes to check content
@@ -103,21 +137,81 @@ func TestRenderErrorf(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r, _ := NewRenderer(schema.AtmosConfiguration{})
-			r.isTTYSupportForStderr = func() bool {
+			r.shouldRender = func(terminal.Stream) bool {
 				return tt.isColor
 			}
-			r.isTTYSupportForStdout = func() bool {
-				return tt.isColor
-			}
-			defer func() {
-				r.isTTYSupportForStderr = term.IsTTYSupportForStderr
-				r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-			}()
 			str, err := r.RenderErrorf(tt.input)
 			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestRendererUsesSharedTerminalSettings(t *testing.T) {
+	t.Run("shared terminal color profile enables styled non-tty rendering", func(t *testing.T) {
+		r, err := NewRenderer(schema.AtmosConfiguration{}, WithTerminal(testTerminal{
+			isTTY:        map[terminal.Stream]bool{terminal.Stderr: false},
+			colorProfile: terminal.Color16,
+		}))
+		require.NoError(t, err)
+
+		assert.True(t, r.shouldRenderStyled(terminal.Stderr))
+	})
+
+	t.Run("shared terminal no color disables styled rendering", func(t *testing.T) {
+		r, err := NewRenderer(schema.AtmosConfiguration{}, WithTerminal(testTerminal{
+			isTTY:        map[terminal.Stream]bool{terminal.Stderr: true},
+			colorProfile: terminal.ColorNone,
+		}))
+		require.NoError(t, err)
+
+		assert.False(t, r.shouldRenderStyled(terminal.Stderr))
+	})
+}
+
+func TestNewTerminalMarkdownRendererHonorsForceTTYWidth(t *testing.T) {
+	resetRendererTerminalTestState(t)
+	t.Setenv("TERM", "xterm-256color")
+	viper.Set("force-tty", true)
+
+	r, err := NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	require.NoError(t, err)
+
+	assert.True(t, r.shouldRenderStyled(terminal.Stdout))
+	assert.Equal(t, uint(120), r.width)
+}
+
+func TestRendererHonorsForceColorAndNoColor(t *testing.T) {
+	t.Run("force color enables styled non-tty rendering", func(t *testing.T) {
+		resetRendererTerminalTestState(t)
+		viper.Set("force-color", true)
+
+		r, err := NewRenderer(schema.AtmosConfiguration{})
+		require.NoError(t, err)
+
+		assert.True(t, r.shouldRenderStyled(terminal.Stderr))
+	})
+
+	t.Run("clicolor force enables styled non-tty rendering", func(t *testing.T) {
+		resetRendererTerminalTestState(t)
+		t.Setenv("CLICOLOR_FORCE", "1")
+
+		r, err := NewRenderer(schema.AtmosConfiguration{})
+		require.NoError(t, err)
+
+		assert.True(t, r.shouldRenderStyled(terminal.Stderr))
+	})
+
+	t.Run("no color disables styled rendering", func(t *testing.T) {
+		resetRendererTerminalTestState(t)
+		t.Setenv("NO_COLOR", "1")
+		viper.Set("force-color", true)
+
+		r, err := NewRenderer(schema.AtmosConfiguration{})
+		require.NoError(t, err)
+
+		assert.False(t, r.shouldRenderStyled(terminal.Stderr))
+	})
 }
 
 func TestTrimTrailingSpaces(t *testing.T) {
@@ -174,10 +268,7 @@ func TestTrimTrailingSpaces(t *testing.T) {
 func TestRenderer_NonTTY_ASCII(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	r, _ := NewRenderer(schema.AtmosConfiguration{})
-	r.isTTYSupportForStdout = func() bool { return false }
-	defer func() {
-		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-	}()
+	r.shouldRender = func(terminal.Stream) bool { return false }
 
 	result, err := r.Render("## Hello **world**")
 	assert.NoError(t, err)
@@ -194,10 +285,7 @@ func TestRenderer_NonTTY_ASCII(t *testing.T) {
 
 func TestRenderer_AllMethodsTrimTrailingSpaces(t *testing.T) {
 	r, _ := NewRenderer(schema.AtmosConfiguration{})
-	r.isTTYSupportForStdout = func() bool { return true }
-	defer func() {
-		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
-	}()
+	r.shouldRender = func(terminal.Stream) bool { return true }
 
 	testContent := "## Test\n\nContent"
 

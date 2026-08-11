@@ -6,12 +6,23 @@ sidebar_class_name: command
 description: Configure Helmfile components in your Atmos stack manifests for Kubernetes deployments.
 id: helmfile
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-Helmfile components manage Kubernetes deployments using Helmfile, a declarative spec for deploying Helm charts. They allow you to manage Helm releases with the same stack-based configuration approach used for Terraform.
+  Helmfile components manage Kubernetes deployments using Helmfile, a
+  declarative spec for deploying Helm charts. They allow you to manage Helm
+  releases with the same stack-based configuration approach used for Terraform.
 </Intro>
+
+:::tip Prefer native Helm for most new chart deployments
+Helmfile remains a great choice when you need its advanced orchestration
+features. If you are not relying on Helmfile-specific features, use native
+[`atmos helm`](/cli/commands/helm/usage) components instead. Atmos now handles
+stack-based values, inheritance, secrets, dependencies, hooks, provisioning
+targets, and CI summaries directly for Helm charts.
+:::
 
 ## Available Configuration Sections
 
@@ -21,17 +32,17 @@ Helmfile components support the common configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to helmfile.</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations and metadata.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integrations and metadata.</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>Component behavior and inheritance.</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override helmfile binary.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override helmfile binary.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -52,11 +63,11 @@ components:
         replica_count: 3
         service_type: LoadBalancer
       env:
-        KUBECONFIG: "{{ env \"HOME\" }}/.kube/config"
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+        KUBECONFIG: '{{ env "HOME" }}/.kube/config'
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Helmfile Directory Structure
@@ -173,9 +184,9 @@ components:
         replica_count: 3
         service_type: LoadBalancer
         metrics_enabled: true
-      settings:
-        depends_on:
-          - component: cert-manager
+      dependencies:
+        components:
+          - name: cert-manager
 
     prometheus:
       metadata:
@@ -186,9 +197,10 @@ components:
         chart_version: "45.0.0"
         retention: "15d"
         storage_size: "100Gi"
-      settings:
-        depends_on:
-          - component: nginx-ingress
+      dependencies:
+        components:
+          - name: nginx-ingress
+
 ```
 </File>
 
@@ -221,21 +233,74 @@ Common environment variables for Helmfile components:
   <dt>`KUBECONFIG`</dt>
   <dd>Path to kubeconfig file.</dd>
 
-  <dt>`HELM_CACHE_HOME`</dt>
-  <dd>Helm cache directory.</dd>
+<dt>`HELM_CACHE_HOME`</dt>
+<dd>Helm cache directory.</dd>
 
-  <dt>`HELM_CONFIG_HOME`</dt>
-  <dd>Helm configuration directory.</dd>
+<dt>`HELM_CONFIG_HOME`</dt>
+<dd>Helm configuration directory.</dd>
 
-  <dt>`HELM_DATA_HOME`</dt>
-  <dd>Helm data directory.</dd>
+<dt>`HELM_DATA_HOME`</dt>
+<dd>Helm data directory.</dd>
 
-  <dt>`AWS_PROFILE`</dt>
-  <dd>AWS profile for EKS authentication.</dd>
+<dt>`AWS_PROFILE`</dt>
+<dd>AWS profile for EKS authentication.</dd>
 
   <dt>`HELM_EXPERIMENTAL_OCI`</dt>
   <dd>Enable OCI registry support.</dd>
 </dl>
+
+## Passing Secrets Securely
+
+Helmfile writes the `vars` section to a [varfile **on disk** in plaintext](/cli/configuration/secrets)
+(world‑readable, `0644`) so Helmfile can read it. Unlike Terraform — which keeps secret‑bearing
+`vars` off disk — Helmfile performs **no** off‑disk partitioning. **Never put secrets in a Helmfile
+component's `vars` section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Helmfile subprocess environment and are
+**never written to disk**. Declare secrets under [`secrets.vars`](/cli/configuration/secrets#declaring-secrets),
+reference them with [`!secret`](/functions/yaml/secret) in `env`, and read them inside `helmfile.yaml`
+with Helmfile's `requiredEnv` function.
+:::
+
+A simple, self‑contained example:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  helmfile:
+    my-app:
+      secrets:
+        vars:
+          DB_PASSWORD:
+            description: "Application database password"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Resolved at runtime and injected ONLY into the Helmfile subprocess
+        # environment — never written to the varfile on disk.
+        DB_PASSWORD: !secret DB_PASSWORD
+      vars:
+        chart_version: "1.2.3"         # non-secret values only
+```
+</File>
+
+Read the secret from the environment in `helmfile.yaml` — not from `.Values` (which comes from the
+on‑disk varfile):
+
+<File title="components/helmfile/my-app/helmfile.yaml">
+```yaml
+releases:
+  - name: my-app
+    chart: my-repo/my-app
+    version: {{ .Values.chart_version | quote }}
+    values:
+      - database:
+          # `requiredEnv` reads the secret from the environment and fails fast if it is unset.
+          # Use `env "DB_PASSWORD"` instead if the variable is optional.
+          password: {{ requiredEnv "DB_PASSWORD" | quote }}
+```
+</File>
 
 ## Integration with Terraform
 
@@ -255,10 +320,10 @@ components:
         cluster_name: "{{ .terraform_outputs.eks.cluster_name }}"
       env:
         KUBECONFIG: "{{ .terraform_outputs.eks.kubeconfig_path }}"
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Values Handling
@@ -295,7 +360,7 @@ releases:
 
 ## Best Practices
 
-1. **Use Dependencies:** Define `depends_on` to ensure Helmfile components deploy after their infrastructure dependencies.
+1. **Use Dependencies:** Define `dependencies.components` to ensure Helmfile components deploy after their infrastructure dependencies.
 
 2. **Centralize Chart Versions:** Define chart versions in catalog defaults and override only when necessary.
 
@@ -313,4 +378,6 @@ releases:
 - [Terraform Components](/stacks/components/terraform)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
-- [depends_on](/stacks/settings/depends_on)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
+- [Component Dependencies](/stacks/dependencies/components)

@@ -1,0 +1,57 @@
+---
+title: atmos version track apply
+sidebar_position: 110
+sidebar_label: apply
+sidebar_class_name: command
+description: Rewrite version-managed files from the lock file.
+---
+
+Run the file managers over paths configured in `version.files` and rewrite version references from the lock file. The alias is `sync`.
+
+## Usage
+
+```shell
+atmos version track apply [track] [flags]
+atmos version track sync [track] [flags]
+```
+
+## File Managers
+
+<dl>
+  <dt>`github-actions`</dt>
+  <dd>Scans workflow files for `uses:` lines and rewrites refs from the lock by `owner/repo` package.</dd>
+
+  <dt>`marker`</dt>
+  <dd>Rewrites version tokens on lines annotated with `<comment> atmos:version <name> [match=<regex>]`.</dd>
+
+  <dt>`template`</dt>
+  <dd>Renders `*.tmpl` files to sibling files with the `.tmpl` suffix stripped, using the `.version` context.</dd>
+</dl>
+
+See [Version Files Configuration](/cli/configuration/version/files) for `version.files` and marker syntax.
+
+## Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Fail without writing when managed files are out of date. Intended for CI.</dd>
+
+  <dt>`--dir`</dt>
+  <dd>Root directory to resolve managed paths from. Defaults to the current directory.</dd>
+
+  <dt>`--manager`</dt>
+  <dd>Limit the run to the named file managers. Repeat the flag for multiple managers.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Rewrite every configured managed file from the lock
+atmos version track apply prod
+
+# CI: fail if any managed file is stale
+atmos version track apply prod --check
+
+# Only rewrite GitHub Actions workflow refs
+atmos version track apply prod --manager=github-actions
+```

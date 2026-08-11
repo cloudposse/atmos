@@ -97,8 +97,12 @@ func executeMCPList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if nudge := atmosProNudge(&atmosConfig); nudge != "" {
+		ui.Info(nudge)
+	}
+
 	if len(atmosConfig.MCP.Servers) == 0 {
-		ui.Info("No MCP servers configured. Add servers under `mcp.servers` in `atmos.yaml`.")
+		ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
 		return nil
 	}
 

@@ -19,7 +19,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -47,11 +46,12 @@ var sessionsExportLongMarkdown string
 var sessionsImportLongMarkdown string
 
 const (
-	hoursPerDay  = 24
-	daysPerWeek  = 7
-	daysPerMonth = 30
-	contextFlag  = "context"
-	outputFlag   = "output"
+	hoursPerDay   = 24
+	daysPerWeek   = 7
+	daysPerMonth  = 30
+	contextFlag   = "context"
+	outputFlag    = "output"
+	olderThanFlag = "older-than"
 )
 
 // aiSessionsCmd represents the ai sessions command.
@@ -108,8 +108,10 @@ func init() {
 
 	// Create parser for clean command.
 	cleanParser = flags.NewStandardParser(
-		flags.WithStringFlag("older-than", "", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)"),
-		flags.WithEnvVars("older-than", "ATMOS_AI_SESSIONS_OLDER_THAN"),
+		flags.WithStringFlag(olderThanFlag, "", "30d",
+			"Delete sessions older than this duration (e.g., 30d, 7d, 24h). "+
+				"0d deletes all sessions now; omitting the flag uses the 30-day default."),
+		flags.WithEnvVars(olderThanFlag, "ATMOS_AI_SESSIONS_OLDER_THAN"),
 	)
 	cleanParser.RegisterFlags(sessionsCleanCmd)
 	if err := cleanParser.BindToViper(viper.GetViper()); err != nil {
@@ -150,16 +152,17 @@ func init() {
 
 // initSessionManager initializes and validates session management.
 func initSessionManager() (*session.Manager, func(), error) {
-	// Initialize configuration.
+	// Initialize configuration. Stack graph tools load stack manifests lazily so
+	// sessions can start before stacks exist or while stack imports are temporarily broken.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Check if AI is enabled.
 	if !isAIEnabled(&atmosConfig) {
-		return nil, nil, fmt.Errorf("%w: Set 'ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
+		return nil, nil, errAINotEnabled()
 	}
 
 	// Check if sessions are enabled.
@@ -262,15 +265,21 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get older-than flag from Viper (supports CLI > ENV > config > defaults).
-	olderThanStr := v.GetString("older-than")
+	olderThanStr := v.GetString(olderThanFlag)
 
-	// Parse duration.
-	retentionDays, err := parseDuration(olderThanStr)
-	if err != nil {
-		return fmt.Errorf("invalid duration format '%s': %w", olderThanStr, err)
+	// Distinguish "flag not explicitly provided" from "explicitly set" (including
+	// to "0d") so a genuinely-requested zero retention isn't silently coerced to
+	// the 30-day default. See session.RetentionUnset.
+	retentionDays := session.RetentionUnset
+	if cmd.Flags().Changed(olderThanFlag) {
+		var err error
+		retentionDays, err = parseDuration(olderThanStr)
+		if err != nil {
+			return fmt.Errorf("invalid duration format '%s': %w", olderThanStr, err)
+		}
 	}
 
-	log.Debugf("Cleaning sessions older than %d days", retentionDays)
+	log.Debugf("Cleaning sessions older than: %s (retentionDays=%d)", olderThanStr, retentionDays)
 
 	manager, cleanup, err := initSessionManager()
 	if err != nil {
@@ -286,9 +295,9 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if count == 0 {
-		u.PrintMessage("No sessions to clean.")
+		ui.Info("No sessions to clean.")
 	} else {
-		u.PrintMessage(fmt.Sprintf("✅ Deleted %d session(s) older than %s", count, olderThanStr))
+		ui.Successf("Deleted %d session(s) older than %s", count, olderThanStr)
 	}
 
 	return nil
@@ -307,6 +316,14 @@ func parseDuration(durationStr string) (int, error) {
 	n, err := fmt.Sscanf(durationStr, "%d%s", &value, &unit)
 	if err != nil || n != 2 {
 		return 0, fmt.Errorf("%w: format should be like '30d', '7d', or '24h'", errUtils.ErrAIInvalidDurationFormat)
+	}
+
+	// Negative durations are rejected outright. 0d now has a real, destructive
+	// meaning ("delete all sessions now", distinct from "flag unset" — see
+	// session.RetentionUnset), so silently coercing a negative value to that
+	// same default behavior would be confusing and error-prone.
+	if value < 0 {
+		return 0, fmt.Errorf("%w: negative durations are not supported; use '0d' to delete all sessions now, or omit the flag for the default", errUtils.ErrAIInvalidDurationFormat)
 	}
 
 	switch unit {
@@ -364,7 +381,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to export session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
+	ui.Successf("Session '%s' exported to '%s'", sessionName, outputPath)
 
 	return nil
 }
@@ -405,13 +422,13 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to import session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
-	u.PrintMessage(fmt.Sprintf("  ID: %s", importedSession.ID))
-	u.PrintMessage(fmt.Sprintf("  Model: %s", importedSession.Model))
-	u.PrintMessage(fmt.Sprintf("  Provider: %s", importedSession.Provider))
-	u.PrintMessage(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
-	u.PrintMessage("")
-	u.PrintMessage("Resume the session with: atmos ai chat --session " + importedSession.Name)
+	ui.Successf("Session '%s' imported successfully", importedSession.Name)
+	ui.Writeln(fmt.Sprintf("  ID: %s", importedSession.ID))
+	ui.Writeln(fmt.Sprintf("  Model: %s", importedSession.Model))
+	ui.Writeln(fmt.Sprintf("  Provider: %s", importedSession.Provider))
+	ui.Writeln(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
+	ui.Writeln("")
+	ui.Writeln(fmt.Sprintf("Resume the session with: atmos ai chat --session %s", importedSession.Name))
 
 	return nil
 }

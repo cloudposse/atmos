@@ -713,18 +713,14 @@ func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123:role/Development", sel.RoleARN)
 }
 
-func TestSAMLProvider_WithCustomResolver(t *testing.T) {
-	// Test SAML provider with custom resolver configuration
+func TestSAMLProvider_WithCustomEndpoint(t *testing.T) {
+	// Test SAML provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",
 		URL:    "https://idp.example.com/saml",
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -739,16 +735,14 @@ func TestSAMLProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", sp.region)
 	assert.Equal(t, "https://idp.example.com/saml", sp.url)
 
-	// Verify the provider has the config with resolver
+	// Verify the provider has the config with endpoint
 	assert.NotNil(t, sp.config)
 	assert.NotNil(t, sp.config.Spec)
-	awsSpec, exists := sp.config.Spec["aws"]
-	assert.True(t, exists)
-	assert.NotNil(t, awsSpec)
+	assert.Equal(t, "http://localhost:4566", sp.config.Spec["endpoint_url"])
 }
 
-func TestSAMLProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SAML provider without custom resolver configuration
+func TestSAMLProvider_WithoutCustomEndpoint(t *testing.T) {
+	// Test SAML provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",

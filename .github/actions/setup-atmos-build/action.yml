@@ -1,0 +1,26 @@
+name: 'Set up and Build Atmos'
+description: 'Set up Go, bootstrap Atmos with retry, then build Atmos from source and add it to PATH'
+
+inputs:
+  atmos-bootstrap-version:
+    description: 'Atmos version to install for bootstrapping repository-local Atmos Build commands'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      with:
+        go-version-file: "go.mod"
+
+    - name: Set up Atmos bootstrap
+      uses: ./.github/actions/setup-atmos-bootstrap
+      with:
+        atmos-version: ${{ inputs.atmos-bootstrap-version }}
+
+    - name: Build Atmos
+      shell: bash
+      run: |
+        atmos build binary --target=linux --version=test
+        echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"

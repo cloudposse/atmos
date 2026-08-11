@@ -10,7 +10,7 @@
         "init_run_reconfigure": true,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
@@ -20,6 +20,7 @@
         "plan": {
           "skip_planfile": false
         },
+        "lint": {},
         "planfiles": {
           "default": ""
         },
@@ -30,7 +31,7 @@
       },
       "helmfile": {
         "base_path": "",
-        "use_eks": true,
+        "use_eks": false,
         "kubeconfig_path": "",
         "helm_aws_profile_pattern": "",
         "cluster_name_pattern": "",
@@ -47,6 +48,15 @@
       "ansible": {
         "base_path": "",
         "command": "",
+        "auto_generate_files": false
+      },
+      "kubernetes": {
+        "base_path": "",
+        "provider": "",
+        "auto_generate_files": false
+      },
+      "helm": {
+        "base_path": "",
         "auto_generate_files": false
       },
       "list": {
@@ -67,7 +77,9 @@
         "format": "",
         "columns": null
       },
-      "inherit": {}
+      "inherit": {
+        "metadata": true
+      }
     },
     "workflows": {
       "base_path": "",
@@ -88,7 +100,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "mock",
   "component_info": {
     "component_path": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock",
@@ -153,8 +165,8 @@
   "env": {},
   "generate": {},
   "hooks": {},
-  "imports": null,
-  "inheritance": null,
+  "imports": [],
+  "inheritance": [],
   "metadata": {},
   "overrides": {},
   "providers": {},

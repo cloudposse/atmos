@@ -1,3 +1,8 @@
+---
+title: FinOps with AWS MCP Servers
+tags: [AI, AWS]
+---
+
 # FinOps with AWS MCP Servers
 
 Give your AI coding assistant direct access to AWS cost data, billing, and pricing information — all authenticated automatically through Atmos. Ask Claude questions like "What did we spend on EC2 last month?" and get real answers from your actual AWS account.

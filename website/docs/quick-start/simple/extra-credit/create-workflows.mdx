@@ -12,14 +12,15 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-[Atmos Workflows](/workflows) combine multiple commands into executable units of work, ideal for automating common
-tasks and orchestrating “cold starts,” where you bring an environment up from scratch.
+[Atmos Workflows](/workflows) combine multiple commands into executable units of work, which makes them useful for packaging
+the commands your operators run every day.
 </Intro>
 
 Workflows can call other workflows and be combined with [Custom Commands](/cli/configuration/commands). Usually, we use
-workflows to provision some combinations of [Terraform](/components/terraform) components.
+workflows to orient operators, validate configuration, or wrap a common sequence of built-in Atmos commands.
 
-Defining workflows is entirely optional; use them if they are helpful for your project.
+Defining workflows is entirely optional. You already learned how to deploy the stack with `atmos terraform deploy --all -s dev`; use workflows when
+you want to package that guidance for your project.
 
 <Step>
 ## <StepNumber/> Configure Your Project to Support Workflows
@@ -49,29 +50,47 @@ Now, let's create a workflow in the `stacks/workflows` directory.
            └── weather.yaml
 ```
 
-Add the following Atmos workflows to the `stacks/workflows/weather.yaml` file:
+Add the following Atmos workflow to the `stacks/workflows/weather.yaml` file:
 
 ```yaml
 name: Workflows for Weather Station
-description: Atmos workflows for managing Weather Station
+description: Operator workflows for managing Weather Station
 
 workflows:
-
-  plan-all:
+  operator/orient:
     description: |
-      Run 'terraform plan' on all 'station' components in all stacks
+      Show the stack list, component instances, validation command, and
+      day-to-day commands an operator uses for this quick-start stack.
     steps:
-      - command: terraform plan station -s dev
-      - command: terraform plan station -s staging
-      - command: terraform plan station -s prod
+      - name: stacks
+        type: stage
+        title: Stack list
 
-  apply-all:
-    description: |
-      Run 'terraform apply' on all 'station' components in all stacks
-    steps:
-      - command: terraform apply station -auto-approve -s dev
-      - command: terraform apply station -auto-approve -s staging
-      - command: terraform apply station -auto-approve -s prod
+      - name: show-stacks
+        command: list stacks
+
+      - name: instances
+        type: stage
+        title: Component instances
+
+      - name: show-instances
+        command: list instances
+
+      - name: commands
+        type: table
+        title: Quick-start operator commands
+        columns:
+          - task
+          - command
+        data:
+          - task: Validate manifests
+            command: atmos validate stacks
+          - task: Preview stack
+            command: atmos terraform plan --all -s <stack>
+          - task: Deploy stack
+            command: atmos terraform deploy --all -s <stack>
+          - task: Destroy stack
+            command: atmos terraform destroy --all -s <stack> -auto-approve
 ```
 </Step>
 
@@ -79,32 +98,31 @@ workflows:
 
 ## <StepNumber/> Run the Atmos Workflow
 
-Run the following Atmos commands to execute the workflows:
+Run the workflow for the `dev` stack:
 
 ```shell
-# Execute the workflow `plan-all-vpc-flow-logs` from the workflow manifest `weather.yaml`
-atmos workflow plan-all -f weather
-
-# Execute the workflow `apply-all-components` from the workflow manifest `weather.yaml`
-atmos workflow apply-all -f weather
+atmos workflow operator/orient -f weather -s dev
 ```
 
 The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about
 the executed workflow steps without executing them. For example:
 
-<Terminal title="atmos workflow plan-all -f weather --dry-run">
+<Terminal title="atmos workflow operator/orient -f weather -s dev --dry-run">
 ```console
-Executing the workflow 'plan-all' from 'stacks/workflows/weather.yaml'
+Executing the workflow 'operator/orient' from 'stacks/workflows/weather.yaml'
 
-Executing workflow step: terraform plan station -s dev
-Executing workflow step: terraform plan station -s staging
-Executing workflow step: terraform plan station -s prod
+Executing workflow step: stacks
+Executing workflow step: atmos list stacks
+Executing workflow step: instances
+Executing workflow step: atmos list instances -s dev
+Executing workflow step: commands
 ```
 </Terminal>
 </Step>
 
 :::tip
-Refer to [atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command
+For bulk Terraform operations, keep using explicit selectors such as `--all`, `--components`, or `--query`. Refer to
+[atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command.
 :::
 
 <ActionCard title="Want to go deeper on this topic?">

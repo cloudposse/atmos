@@ -1,0 +1,53 @@
+---
+title: atmos emulator ps
+sidebar_label: ps
+sidebar_class_name: command
+id: ps
+description: List running emulators in a stack
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to list the running emulator containers in the component's stack. Containers are discovered by the labels derived from their canonical instance addresses.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos emulator ps --help" src="/casts/screengrabs/atmos-emulator-ps--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos emulator ps <component> --stack <stack> [flags]
+```
+
+## Examples
+
+```shell
+# List running emulators in the plat-ue2-dev stack
+atmos emulator ps aws --stack=plat-ue2-dev
+
+# Using the emu alias
+atmos emu ps aws --stack=plat-ue2-dev
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component whose stack is inspected (for example, `aws`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack to list running emulators for (for example, `plat-ue2-dev`).</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator up`](/cli/commands/emulator/up) — Start (or reuse) the emulator container
+- [`atmos emulator logs`](/cli/commands/emulator/logs) — Stream the emulator container's logs

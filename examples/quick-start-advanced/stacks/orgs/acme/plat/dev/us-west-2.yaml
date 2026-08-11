@@ -1,5 +1,24 @@
 import:
+  - catalog/backend
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
-  - catalog/vpc/dev
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Allow `terraform destroy` to remove a non-empty bucket so dev tears down cleanly.
+        force_destroy: true
+        # Versioning costs storage; not worth it for throwaway dev data. The prod OPA
+        # policy (see configure-validation) requires versioning in `prod`, not here.
+        versioning_enabled: false
+    kms-key:
+      vars:
+        # Shortest window AWS allows, so a destroyed dev key frees its alias quickly.
+        deletion_window_in_days: 7
+        # No rotation needed for ephemeral dev keys.
+        enable_key_rotation: false
+    sqs-queue:
+      vars:
+        # Retain messages for 1 day — plenty for dev debugging.
+        message_retention_seconds: 86400

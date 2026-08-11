@@ -1,0 +1,40 @@
+---
+title: shell
+sidebar_label: shell
+slug: /workflows/steps/type/shell
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `shell` step type runs a shell command or script, letting your custom commands and workflows reach beyond Atmos to repository scripts, make targets, test commands, and any other tooling in your stack.
+</Intro>
+
+```yaml
+steps:
+  - name: test
+    type: shell
+    working_directory: !repo-root
+    command: make test
+```
+
+## Fields
+
+<dl>
+  <dt>`command`</dt>
+  <dd>Required. Shell command text.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Optional directory where the command runs.</dd>
+
+  <dt>`env`</dt>
+  <dd>Optional environment variables for this step.</dd>
+
+  <dt>`tty`</dt>
+  <dd>Allocate a pseudo-terminal for terminal-native commands.</dd>
+
+  <dt>`interactive`</dt>
+  <dd>Attach host stdin so the command can read from the terminal.</dd>
+</dl>
+
+Non-interactive shell steps can use [output modes](/workflows/steps/output). Steps with `tty` or `interactive` attach directly to the terminal and do not produce capturable stdout.

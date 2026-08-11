@@ -326,6 +326,46 @@ func TestResolveComponentAuthManager_ResolverErrorIsFatal(t *testing.T) {
 	_ = parentMgr // documented intent: parentMgr is the untyped-nil fallback value.
 }
 
+// TestResolveComponentAuthManager_ResolverErrorDegradesInWarnMode verifies that a
+// component-specific AuthManager construction failure (e.g. an unrelated component's
+// broken identity config) does NOT abort describe-stacks when onWarning is set — it falls
+// back to the parent AuthManager and reports a DegradationWarning instead, matching the
+// same "recoverable, substitute, continue" pattern YAML-function processing already uses.
+func TestResolveComponentAuthManager_ResolverErrorDegradesInWarnMode(t *testing.T) {
+	t.Parallel()
+
+	parentMgr := auth.AuthManager(nil)
+	spy := &componentAuthResolverSpy{
+		returnMgr: nil,
+		returnErr: assert.AnError,
+	}
+
+	var warnings []DegradationWarning
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		authManager:           parentMgr,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+	p.withDegradation(func(w DegradationWarning) { warnings = append(warnings, w) })
+
+	got, err := p.resolveComponentAuthManager(
+		componentSectionWithAuth(authSectionWithDefault()),
+		"test-component",
+		"test-stack",
+	)
+
+	require.NoError(t, err, "warn mode must not fail the whole describe-stacks call")
+	assert.Equal(t, parentMgr, got, "warn mode falls back to the parent AuthManager")
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "test-stack", warnings[0].Stack)
+	assert.Equal(t, "test-component", warnings[0].Component)
+	assert.Equal(t, "auth", warnings[0].Function)
+	assert.Contains(t, warnings[0].Reason, assert.AnError.Error())
+}
+
 func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
 	t.Parallel()
 
@@ -361,4 +401,118 @@ func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
 	assert.Contains(t, err.Error(), "test-component")
 	assert.Contains(t, err.Error(), "test-stack")
 	assert.EqualValues(t, 1, spy.calls.Load(), "resolver should stop processing after the first auth failure")
+}
+
+// TestProcessComponentEntry_OutOfScopeSkipsAuth verifies that per-component auth is NOT resolved
+// for a component the caller did not request — whether it is filtered out by the requested stack
+// or excluded by the --components filter. Both filters must run before resolveComponentAuthManager;
+// otherwise `atmos secret list -s <stack>` authenticates every component in every other stack and
+// hangs on large repos. See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
+func TestProcessComponentEntry_OutOfScopeSkipsAuth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		filterByStack string
+		components    []string
+		stackFileName string
+		componentName string
+	}{
+		{
+			// stackFileName differs from filterByStack, so this component is out of scope.
+			name:          "out_of_scope_stack",
+			filterByStack: "wanted-stack",
+			stackFileName: "other-stack",
+			componentName: "test-component",
+		},
+		{
+			// componentName is not in p.components, so this component is out of scope.
+			name:          "out_of_scope_component",
+			components:    []string{"wanted-component"},
+			stackFileName: "test-stack",
+			componentName: "other-component",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The spy returns an error, so if the resolver were invoked the call would surface as
+			// a non-nil error from processComponentEntry. An out-of-scope component must skip it.
+			spy := &componentAuthResolverSpy{
+				returnMgr: nil,
+				returnErr: assert.AnError,
+			}
+
+			componentSection := componentSectionWithAuth(authSectionWithDefault())
+			allTypeComponents := map[string]any{tc.componentName: componentSection}
+			p := &describeStacksProcessor{
+				atmosConfig:           &schema.AtmosConfiguration{},
+				filterByStack:         tc.filterByStack,
+				components:            tc.components,
+				processTemplates:      true,
+				processYamlFunctions:  false,
+				componentAuthResolver: spy.resolver(),
+				finalStacksMap:        make(map[string]any),
+			}
+
+			err := p.processComponentEntry(
+				tc.stackFileName,
+				"",
+				"helmfile",
+				tc.componentName,
+				componentSection,
+				allTypeComponents,
+				processComponentTypeOpts{},
+			)
+
+			require.NoError(t, err, "out-of-scope component must be skipped without resolving auth")
+			require.EqualValues(t, 0, spy.calls.Load(), "per-component auth must not run for an out-of-scope component")
+		})
+	}
+}
+
+// TestResolveComponentAuthManager_CachesByAuthSection verifies that components sharing an auth
+// section resolve the per-component AuthManager only once per describe-stacks pass: a second
+// component with the same auth section reuses the cached manager (resolver not called again),
+// while a distinct auth section misses the cache and resolves anew.
+// See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
+func TestResolveComponentAuthManager_CachesByAuthSection(t *testing.T) {
+	t.Parallel()
+
+	type sentinelAuthManager struct{ auth.AuthManager }
+	mgr := &sentinelAuthManager{}
+
+	spy := &componentAuthResolverSpy{returnMgr: mgr}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+		authManagerCache:      make(map[string]auth.AuthManager),
+	}
+
+	// First component with auth section A: cache miss, resolver runs once.
+	got1, err := p.resolveComponentAuthManager(componentSectionWithAuth(authSectionWithDefault()), "comp-a", "stack-1")
+	require.NoError(t, err)
+	assert.Same(t, mgr, got1, "first resolution returns the resolver's manager")
+	require.EqualValues(t, 1, spy.calls.Load(), "first component must invoke the resolver")
+
+	// Second component with the SAME auth section (different component and stack): cache hit.
+	got2, err := p.resolveComponentAuthManager(componentSectionWithAuth(authSectionWithDefault()), "comp-b", "stack-2")
+	require.NoError(t, err)
+	assert.Same(t, mgr, got2, "cache hit returns the same manager instance")
+	require.EqualValues(t, 1, spy.calls.Load(), "second component with an identical auth section must reuse the cached manager")
+
+	// Third component with a DIFFERENT auth section: cache miss, resolver runs again.
+	otherAuth := map[string]any{
+		"identities": map[string]any{
+			"other-default": map[string]any{"default": true},
+		},
+	}
+	_, err = p.resolveComponentAuthManager(componentSectionWithAuth(otherAuth), "comp-c", "stack-3")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, spy.calls.Load(), "a distinct auth section must miss the cache and resolve anew")
 }

@@ -1,3 +1,11 @@
+---
+title: Native Terraform Migration
+tags: [Components]
+cast:
+  file: /casts/demo/fixtures/native-terraform/plan.cast
+  title: atmos terraform plan
+---
+
 # Native Terraform Migration Example
 
 This example demonstrates migrating from native Terraform (with `.tfvars` files) to Atmos.

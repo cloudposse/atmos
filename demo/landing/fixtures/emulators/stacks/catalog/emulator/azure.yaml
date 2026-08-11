@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Local Azure cloud (Floci). `atmos emulator up azure -s <stack>` starts it.
+# The driver identifier is `floci/az` (the `az` shorthand matches the Azure CLI).
+components:
+  emulator:
+    azure:
+      driver: floci/az
+      region: eastus

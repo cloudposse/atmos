@@ -29,14 +29,15 @@ type KeyringConfig struct {
 
 // Provider defines an authentication provider configuration.
 type Provider struct {
-	Kind                    string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL                string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	URL                     string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Region                  string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Kind     string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL      string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region   string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	//nolint:gosec // Provider configuration intentionally accepts a user-supplied password.
 	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
 	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
-	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
+	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type" jsonschema_extras:"deprecated=true,x-atmos-replacement=driver"` // Deprecated: use driver.
 	DownloadBrowserDriver   bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
 	BrowserType             string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
 	BrowserExecutablePath   string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.
@@ -45,6 +46,8 @@ type Provider struct {
 	Console                 *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
 	Default                 bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	Spec                    map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	// Tags are user-defined categorical labels for filtering (atmos auth list/logout --tags).
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 }
 
 // SessionConfig defines session configuration for providers.
@@ -75,9 +78,16 @@ type Identity struct {
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Kind-specific SDK/client configuration.
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	// Emulator references an emulator component by name (resolved against the stack
+	// the command runs in). Used by emulator identity kinds (kind: <target>/emulator)
+	// to harvest the running emulator's connection profile (SDK env vars or kubeconfig).
+	Emulator string `yaml:"emulator,omitempty" json:"emulator,omitempty" mapstructure:"emulator"`
+	// Tags are user-defined categorical labels for filtering (atmos auth list/login --tags).
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.
