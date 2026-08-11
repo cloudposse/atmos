@@ -775,11 +775,13 @@ var (
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrWorkflowNoSteps               = errors.New("workflow has no steps defined")
 	ErrInvalidWorkflowStepType       = errors.New("invalid workflow step type")
+	ErrInvalidContinueCondition      = errors.New("invalid 'continue' condition")
 	ErrInvalidFromStep               = errors.New("invalid from-step flag")
 	ErrWorkflowStepFailed            = errors.New("workflow step execution failed")
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrResolveExecutablePath         = errors.New("failed to resolve the running atmos executable's own path")
 	ErrUnknownStepType               = errors.New("unknown step type")
 	ErrStepOptionsRequired           = errors.New("options is required for step")
 	ErrStepContentOrOptionsRequired  = errors.New("either content or options is required for step")
@@ -827,6 +829,13 @@ var (
 	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
 	ErrMissingDependencyField    = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
+	// names a command that isn't registered under the custom-command cobra tree.
+	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")
+	// ErrAmbiguousCommandName is returned when a dependencies.commands entry names a command
+	// that more than one declared Command shares (e.g. two unrelated parents each with a nested
+	// child of the same name) -- there is no well-defined "first" match to silently pick.
+	ErrAmbiguousCommandName = errors.New("multiple commands share this name; use a unique name or restructure your commands")
 
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
