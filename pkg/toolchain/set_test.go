@@ -995,6 +995,87 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	})
 }
 
+// TestMakeGitHubRequestRetry covers the retry behavior added to recover from
+// transient failures (network hiccups, rate limiting, server errors) the kind
+// CI runners occasionally hit — without retrying deterministic client errors
+// that a retry cannot fix.
+func TestMakeGitHubRequestRetry(t *testing.T) {
+	t.Run("recovers after a transient 503 then succeeds", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts, "expected exactly one retry after the transient 503")
+	})
+
+	t.Run("recovers after rate limiting (429)", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts)
+	})
+
+	t.Run("does not retry a deterministic 404", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err, "a 404 is returned as a response, not an error, at this layer")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a deterministic client error must not be retried")
+	})
+
+	t.Run("exhausts retries on a persistent outage", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "GitHub API returned status 503")
+		assert.Equal(t, githubRequestRetryMaxAttempts, attempts)
+	})
+}
+
 // Test the View method with different focus states.
 func TestVersionListModelViewFocusStates(t *testing.T) {
 	items := []list.Item{

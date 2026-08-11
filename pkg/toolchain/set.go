@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,8 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -378,22 +381,65 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	return items, nil
 }
 
+// GitHub API request retry tuning: bounded, short backoff so a transient
+// network/TLS hiccup (the kind CI runners occasionally hit) doesn't silently
+// degrade `atmos toolchain info/list/set` to "no available versions" when a
+// second attempt would have succeeded.
+const (
+	githubRequestRetryMaxAttempts  = 3
+	githubRequestRetryInitialDelay = 300 * time.Millisecond
+	githubRequestRetryMaxDelay     = 2 * time.Second
+)
+
+func defaultGitHubRequestRetryConfig() *schema.RetryConfig {
+	maxAttempts := githubRequestRetryMaxAttempts
+	initialDelay := githubRequestRetryInitialDelay
+	maxDelay := githubRequestRetryMaxDelay
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+}
+
+// isRetryableGitHubStatus reports whether a GitHub API response status code
+// indicates a transient failure worth retrying (rate limiting or a server-side
+// hiccup), as opposed to a deterministic client error (not found, forbidden)
+// that a retry cannot fix.
+func isRetryableGitHubStatus(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
+}
+
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
 	client := &http.Client{
 		Timeout: defaultHTTPTimeout,
 	}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 
-	resp, err := client.Do(req)
+	var resp *http.Response
+	err := retry.Do(context.Background(), defaultGitHubRequestRetryConfig(), func() error {
+		req, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
+		if err != nil {
+			return fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+		}
+		if isRetryableGitHubStatus(r.StatusCode) {
+			r.Body.Close()
+			return fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, r.StatusCode)
+		}
+		resp = r
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+		return nil, err
 	}
 	return resp, nil
 }
