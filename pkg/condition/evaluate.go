@@ -55,6 +55,20 @@ func (c Condition) EvaluateWithImplicitSuccessE(ctx Context) (bool, error) {
 	return c.EvaluateE(ctx)
 }
 
+// EvaluateContinueE evaluates a `continue:` condition against a step's own just-finished
+// outcome (ctx.Status, expected to be PredicateSuccess or PredicateFailure). Unlike
+// EvaluateWithImplicitSuccessE (used for `when:`, which defaults an unset condition to true
+// only on success), an unset `continue:` always returns false — no forgiveness, preserving
+// today's fail-stop behavior when `continue:` isn't set.
+//
+//nolint:gocritic,lintroller // Public compatibility API keeps Context by value; condition cannot import perf.
+func (c Condition) EvaluateContinueE(ctx Context) (bool, error) {
+	if c.node == nil {
+		return false, nil
+	}
+	return c.EvaluateE(ctx)
+}
+
 // MentionsAny reports whether any predicate with one of the supplied names is
 // present in the condition tree.
 //
@@ -68,6 +82,20 @@ func (c Condition) MentionsAny(names ...string) bool {
 		wanted[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
 	}
 	return c.node.mentionsAny(wanted)
+}
+
+// MentionsCELIdentifier reports whether the condition's CEL expression(s) reference the named
+// identifier (e.g. "checksum", "timestamp"). Used by pkg/runner/freshness to lazily compute
+// expensive freshness facts only when a step's `when:` expression actually asks for them --
+// computing both checksum (hashes file content) and timestamp (stats mtimes) unconditionally
+// would defeat the point of timestamp being the cheap option.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MentionsCELIdentifier(name string) bool {
+	if c.node == nil {
+		return false
+	}
+	return c.node.mentionsCELIdentifier(name)
 }
 
 // MentionsLifecycleStatus reports whether the condition explicitly reasons
@@ -200,11 +228,21 @@ func (n Node) mentionsAny(names map[string]struct{}) bool {
 
 //nolint:gocritic // Node methods keep value receivers for existing tests and aliases.
 func (n Node) mentionsCELStatus() bool {
+	return n.mentionsCELIdentifier("status")
+}
+
+// mentionsCELIdentifier generalizes mentionsCELStatus to any identifier, used by
+// pkg/runner/freshness to lazily compute expensive facts (checksum.changed hashes file
+// content; timestamp.changed stats mtimes) only when a step's `when:` expression actually
+// references them.
+//
+//nolint:gocritic // Node methods keep value receivers for existing tests and aliases.
+func (n Node) mentionsCELIdentifier(ident string) bool {
 	if n.Kind == kindCEL {
-		return celMentionsIdentifier(n.Expr, "status")
+		return celMentionsIdentifier(n.Expr, ident)
 	}
 	for _, child := range n.Children {
-		if child.mentionsCELStatus() {
+		if child.mentionsCELIdentifier(ident) {
 			return true
 		}
 	}

@@ -99,6 +99,20 @@ aliases:
   lc: list components
 ```
 
+## Custom command aliases
+
+A [custom command](/cli/configuration/commands/command#aliases) can also declare its own `aliases:` directly, native and in-process (the same command object, just with extra names):
+
+```yaml
+commands:
+  - name: deploy
+    aliases: [dep, d]
+    description: Deploy a component to a stack
+    steps: [...]
+```
+
+This is a different mechanism from the top-level `aliases:` section on this page — the top-level map redirects an alias to a **possibly-unrelated** command by re-executing Atmos as a subprocess, which is what it takes to alias one arbitrary command to another. A custom command's own `aliases:` names the same command, so it needs none of that indirection. Use the top-level `aliases:` section to shorten built-in or already-defined commands (`tf: terraform`); use a custom command's own `aliases:` when you're defining the command yourself.
+
 ## See Also
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration
