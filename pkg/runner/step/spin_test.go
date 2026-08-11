@@ -488,7 +488,7 @@ func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
 
 func shellQuoteArgument(argument string) string {
 	if runtime.GOOS == "windows" {
-		return `"` + strings.ReplaceAll(argument, `"`, `""`) + `"`
+		return `""` + strings.ReplaceAll(argument, `"`, `""`) + `""`
 	}
 	return "'" + strings.ReplaceAll(argument, "'", "'\\''") + "'"
 }

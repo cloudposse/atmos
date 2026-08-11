@@ -12,7 +12,7 @@ Direct writes to component writers bypassed the UI layer. The initial writer-awa
 
 ## Changes
 
-Added `ui.New(writer)` with semantic success, warning, and info methods. Updated provisioning call sites and tests to use one bound output object per operation.
+Added `ui.New(writer)` with semantic success, warning, and info methods. Updated provisioning call sites and tests to use one bound output object per operation. Normalized formatted-output assertions and Windows `cmd /C` test-binary quoting.
 
 ## Validation
 
