@@ -94,7 +94,9 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIdentityAuthFailed, err)
 	}
 
-	if whoami.Credentials == nil {
+	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil) return) before
+	// dereferencing Credentials, in addition to the by-design nil-credentials case.
+	if whoami == nil || whoami.Credentials == nil {
 		return fmt.Errorf("%w: no credentials available", errUtils.ErrIdentityAuthFailed)
 	}
 
