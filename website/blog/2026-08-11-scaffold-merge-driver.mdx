@@ -6,9 +6,13 @@ authors: [jorrite]
 tags: [feature]
 ---
 
-Updating a scaffolded project with `atmos scaffold generate --update` (or `atmos init --update`)
-now supports `--merge-driver=text`, so your CI pipeline's blank-line formatting survives an
-update instead of getting silently flattened.
+Atmos scaffolds can perform genuinely complex three-way merges of YAML templates: keys merge
+intelligently, comments survive, and local customizations aren't clobbered by an upstream update.
+That capability comes from parsing YAML into a structured document and re-serializing it—and
+structured serialization is lossy by nature. Formatting that isn't part of the data model, like
+blank lines separating sections, doesn't survive the round trip. If your team treats that
+whitespace as a convention rather than noise, `atmos scaffold generate --update` (and `atmos init
+--update`) used to flatten it every time, whether or not the file had actually changed.
 
 <!--truncate-->
 
@@ -16,25 +20,28 @@ update instead of getting silently flattened.
 
 `--update` re-runs a template against an existing project and 3-way merges the result. Scaffold
 picks its merge algorithm by file extension: YAML-aware for `.yaml`/`.yml`, line-oriented text for
-everything else. The YAML-aware path preserves comments and merges keys intelligently, which is
-usually what you want — but it re-encodes the whole document through a YAML parser and
-serializer. Blank lines between top-level blocks simply aren't part of what a YAML parser models,
-so the re-encode drops them unconditionally, on every update, whether or not the file actually
-changed.
-
-That's a real cost for files where formatting *is* a convention — many CI pipeline definitions use
-blank lines to visually separate jobs, stages, and other top-level blocks. Every `--update` used
-to reformat those files even when nothing meaningful had changed.
+everything else. The YAML-aware path is what makes the complex merges possible in the first
+place—but re-encoding the whole document through a YAML parser and serializer means anything the
+parser doesn't model, blank lines between top-level blocks being the common case, gets dropped
+unconditionally. That's a real cost for files where formatting *is* a convention—many CI pipeline
+definitions use blank lines to visually separate jobs, stages, and other top-level blocks.
 
 ## The Fix
 
-`--merge-driver` lets you choose which merge algorithm runs, named after git's own merge driver
+`--merge-driver` lets you override which merge algorithm runs, named after git's own merge driver
 concept:
 
 - **`auto`** (default, unchanged) — YAML-aware for `.yaml`/`.yml`, text otherwise.
 - **`text`** — forces every file, YAML included, through a line-oriented, diff3-style merge.
   Comments, blank lines, and other structural formatting the YAML-aware merger doesn't model
   come through untouched.
+
+Because it's a flag on the `--update` invocation itself, not a project-wide setting, you're not
+choosing one mode for the project's entire lifetime. Most updates can stay on the default `auto`
+merge, and you reach for `--merge-driver=text` on the specific update that needs it—bundle up a
+template's formatting-sensitive changes (a CI pipeline overhaul, say) and pull them in with one
+deliberate `--merge-driver=text` run, rather than running every future update through the coarser
+text merger just to protect that one file.
 
 This is a different axis from `--merge-strategy`, which decides how a genuine conflict resolves
 (manual, ours, or theirs) once a merge algorithm has already run. `--merge-driver` decides which
@@ -43,14 +50,14 @@ algorithm runs in the first place.
 ## How to Use It
 
 ```shell
+# Everyday updates: the default auto merge is usually what you want.
+atmos scaffold generate my-template ./my-project --update
+
+# This update brings in a batch of formatting-sensitive template changes—
+# override the driver just for this run.
 atmos scaffold generate my-template ./my-project --update --merge-driver=text
 atmos init --update --merge-driver=text
 ```
-
-Reach for `--merge-driver=text` when a template's YAML (or YAML-like) files rely on formatting
-conventions — blank-line grouping, specific list styles — that matter to your team as much as the
-keys and values do. Stick with the default `auto` everywhere else; you'll still get intelligent
-key-level merging and comment preservation for ordinary config.
 
 ## Get Involved
 
