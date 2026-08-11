@@ -312,6 +312,21 @@ func TestParseTapeUnsupportedDirectiveError(t *testing.T) {
 	assert.Equal(t, 1, tapeErr.Line)
 }
 
+// TestParseTapeCtrlKeyRejectsNonLetterSuffix ensures "Ctrl+<X>" only accepts
+// the documented Ctrl+<Letter> grammar -- a digit or symbol suffix (e.g.
+// "Ctrl+1", "Ctrl++") isn't a real Ctrl-modified key and must be rejected as
+// an unsupported directive rather than silently becoming an invalid session
+// key.
+func TestParseTapeCtrlKeyRejectsNonLetterSuffix(t *testing.T) {
+	for _, suffix := range []string{"Ctrl+1", "Ctrl++", "Ctrl+!", "Ctrl+."} {
+		t.Run(suffix, func(t *testing.T) {
+			_, err := ParseTape(suffix, "test.tape", ".", fakeTapeFileReader{})
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedTapeDirective))
+		})
+	}
+}
+
 func TestParseTapeSourceInlining(t *testing.T) {
 	fr := fakeTapeFileReader{
 		"defaults.tape": "Set Shell bash\nSet WaitTimeout 300s",

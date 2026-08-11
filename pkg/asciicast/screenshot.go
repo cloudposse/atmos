@@ -51,6 +51,9 @@ func RenderMarkerScreenshots(castPath string) error {
 // (and so never lost) by a failed render.
 func writeScreenshotPNG(path string, img image.Image) error {
 	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, castDirPerm); err != nil {
+		return fmt.Errorf(screenshotRenderErrorFormat, ErrScreenshotRenderFailed, path, err)
+	}
 	tmp, err := os.CreateTemp(dir, ".screenshot-*.png.tmp")
 	if err != nil {
 		return fmt.Errorf(screenshotRenderErrorFormat, ErrScreenshotRenderFailed, path, err)
