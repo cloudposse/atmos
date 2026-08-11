@@ -72,8 +72,8 @@ atmos-config/
 ```
 
 Only the `providers:`/`identities:` block inside each `auth.yaml` differs by cloud; everything else in
-this guide (the import, the `gh auth token` fallback, the `atmos auth` workflow) is identical no matter
-which tab you're in:
+this guide (the import, private-repo access, the `atmos auth` workflow) is identical no matter which tab
+you're in:
 
 <Tabs>
   <TabItem value="aws" label="AWS" default>
@@ -162,6 +162,11 @@ That's the entire integration. Every project that adds this one line inherits th
 identities — add an account or rotate a role name once in the central repo, tag a new release, and bump
 the `ref` across projects (or leave them tracking a branch if you'd rather changes roll out immediately).
 
+This import is re-resolved (a fresh shallow clone) on every single `atmos` command in the project, not
+just auth commands — there's no local cache for this form of import. That means every command now
+depends on network reachability to the central repo; a transient outage there will affect this project
+too.
+
 #### Import only what a project needs
 
 A project doesn't have to pull in the entire org's `auth:` config just to get one identity. Extend the
@@ -186,20 +191,26 @@ import:
 This composes the same way whether the split is by team, by environment (`nonprod/auth.yaml`/
 `prod/auth.yaml`), or by cloud provider — you're not limited to one monolithic file imported everywhere.
 
-### 3. Private repo access — no token setup needed
+### 3. Private repo access — one token, set once
 
-Because `atmos-config` is private, fetching it needs authentication. Atmos resolves a GitHub token
-automatically, in this order:
+Because `atmos-config` is private, fetching it needs authentication. This `git::` import is cloned by
+Git itself under the hood, and Atmos resolves a token for that clone in this order:
 
-1. `--github-token` flag
+1. `ATMOS_PRO_GITHUB_TOKEN` environment variable (set automatically if you use Atmos Pro's GitHub
+   integration)
 2. `ATMOS_GITHUB_TOKEN` environment variable
 3. `GITHUB_TOKEN` environment variable
-4. **`gh auth token`**, if the [GitHub CLI](https://cli.github.com/) is installed and the developer has
-   already run `gh auth login`
 
-For most developers, step 4 means there's nothing to configure at all — `gh auth login` is already a
-common onboarding step at organizations that use GitHub, and Atmos silently reuses that session. Nobody
-has to mint or paste a personal access token just to pull down the shared auth config.
+**`gh auth login` by itself is not enough here.** That authenticates the `gh` CLI, but this import goes
+through a plain `git clone`, which `gh auth login` doesn't wire up on its own. Two ways to make it work:
+
+- Export `GITHUB_TOKEN` (or `ATMOS_GITHUB_TOKEN`) in your shell profile, pointing at a token with read
+  access to the central repo — the most explicit option, and the one Atmos itself checks directly.
+- Or run `gh auth setup-git` once. This configures Git's own credential helper to use your `gh` session,
+  so a plain `git clone` (and therefore this import) picks it up — no Atmos-specific token needed, but
+  it's `gh` wiring up Git, not Atmos reading `gh`'s token.
+
+Either is a one-time setup step per developer, not per project.
 
 ## Developer Workflow
 
@@ -208,7 +219,7 @@ With the import wired up, a new developer's entire setup is:
 ```bash
 git clone git@github.com:acme-corp/some-project.git
 cd some-project
-atmos auth login          # or omit --identity, an interactive selector appears
+atmos auth login          # auto-uses the default identity; pass a bare --identity to force a selector
 ```
 
 Then, to actually use the credentials:
@@ -238,10 +249,10 @@ eval $(atmos auth env --chdir=/path/to/your/checkout)
 ## What's Actually Zero-Setup (and What's Optional)
 
 Install Atmos once; use it on every repo in the organization. For a private central repo, that also means
-GitHub-authenticating once (`gh auth login`, or a configured token — see
-[step 3](#3-private-repo-access--no-token-setup-needed) above). From there: clone a repo, run
-`atmos auth login`, then `atmos auth shell` or `atmos auth exec` — no profile block to copy, no account
-ID to transcribe.
+setting up Git access once — a `GITHUB_TOKEN`/`ATMOS_GITHUB_TOKEN`, or `gh auth setup-git` (see
+[step 3](#3-private-repo-access--one-token-set-once) above; plain `gh auth login` alone isn't enough).
+From there: clone a repo, run `atmos auth login`, then `atmos auth shell` or `atmos auth exec` — no
+profile block to copy, no account ID to transcribe.
 
 The one thing that isn't automatic is **ambient parity with a manually managed `[profile]` block** — a
 bare `aws s3 ls`, or an IDE extension finding credentials, with no `atmos auth` wrapper involved at all.
@@ -262,12 +273,17 @@ a one-line change in one file, not a wiki post and a round of developers hand-ed
 
 ## Troubleshooting
 
-**Import fails with an authentication error** — confirm `gh auth status` shows an active session, or
-that `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set, and that the token's account has read access to the
-central config repo.
+**`atmos auth login` doesn't find the identity, with no error** — a failed import is silent by design: a
+typo'd `ref`, an unreachable repo, or a private repo Git can't authenticate to all produce an empty
+`auth:` section and exit `0`, not an error. Run `atmos auth list` first to confirm the import actually
+resolved anything. If it's empty, re-run with `ATMOS_LOGS_LEVEL=Debug` and look for a
+`failed to resolve import` line — that's the only place the real reason (bad ref, 403, DNS failure, etc.)
+shows up.
 
-**`atmos auth login` doesn't find the identity** — run `atmos auth list` to confirm the import resolved;
-a typo'd `ref` or a private repo the token can't read will silently produce an empty `auth:` section.
+**That debug line shows an authentication error** — confirm `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set,
+or that `gh auth setup-git` has been run (`gh auth status` alone is not enough — see
+[step 3](#3-private-repo-access--one-token-set-once)), and that the token's account has read access to
+the central config repo.
 
 **AWS CLI/Terraform outside of Atmos can't find credentials** — you're missing `eval $(atmos auth env)`
 in your shell profile, or the tool was launched before you ran it in that shell session.
