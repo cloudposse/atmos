@@ -269,11 +269,21 @@ Type "pwd" Enter`,
 // working_directory: field doesn't evaluate `$(...)` -- even once `current`
 // is already non-empty from an earlier real cd, not just when it's "".
 func TestTapeResolveCd(t *testing.T) {
+	// filepath.IsAbs's definition of "absolute" is OS-specific (e.g. a bare
+	// leading "/" isn't absolute on Windows, which requires a drive letter
+	// or UNC prefix) -- filepath.Abs resolves against the working directory
+	// and always returns something IsAbs agrees is absolute on the current
+	// OS, giving this table a real absolute path without hardcoding one.
+	absTarget, err := filepath.Abs(filepath.Join("srv", "app"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name, current, target, want string
 	}{
 		{name: "empty target keeps current", current: "demo", target: "", want: ""},
-		{name: "absolute target replaces current", current: "demo", target: "/srv/app", want: "/srv/app"},
+		{name: "absolute target replaces current", current: "demo", target: absTarget, want: absTarget},
 		{name: "relative target joins onto current", current: "demo", target: "nested", want: filepath.Join("demo", "nested")},
 		{name: "relative target with empty current is unchanged", current: "", target: "nested", want: "nested"},
 		{
