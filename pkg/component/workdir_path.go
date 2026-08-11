@@ -11,6 +11,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -204,6 +205,7 @@ func componentDirExists(componentPath, contextLabel string, sentinel error) (boo
 // (e.g., context.WithTimeout(parent, 5*time.Minute)) before invocation.
 func ProvisionAndResolveComponentPath(
 	ctx context.Context,
+	writers provisioner.OutputWriters,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentType, fallbackComponentPath string,
@@ -225,7 +227,7 @@ func ProvisionAndResolveComponentPath(
 		return fallbackComponentPath, exists, err
 	}
 
-	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, componentType, info.ComponentSection, info.AuthContext); autoErr != nil {
+	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, componentType, info.ComponentSection, info.AuthContext, writers); autoErr != nil {
 		return "", false, errors.Join(errUtils.ErrProvisionerFailed, fmt.Errorf("auto-provision component source: %w", autoErr))
 	}
 
