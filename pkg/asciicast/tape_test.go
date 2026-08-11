@@ -97,6 +97,18 @@ func TestTokenizeTape(t *testing.T) {
 			},
 		},
 		{
+			// Only Set WaitPattern's value may be a regex -- every other Set
+			// key's value (like Shell's path) must stay a bare word, or a
+			// value like "/bin/bash" mis-lexes as regex "bin" + word "bash".
+			name:   "Set Shell absolute path is a bare word, not a regex",
+			source: "Set Shell /bin/bash",
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Set", Line: 1},
+				{Kind: tapeTokenWord, Value: "Shell", Line: 1},
+				{Kind: tapeTokenWord, Value: "/bin/bash", Line: 1},
+			},
+		},
+		{
 			name:   "trailing comment after a directive is skipped",
 			source: `Type "x" # set up the demo`,
 			want: []tapeToken{

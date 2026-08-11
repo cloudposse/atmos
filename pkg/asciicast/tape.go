@@ -290,11 +290,13 @@ func (lx *tapeLexer) scanRaw(delim rune) error {
 // regexAllowed reports whether a /regex/ literal is legal at the current
 // lexer position, so a leading '/' on an absolute path (e.g. `Output
 // /tmp/demo.gif`) scans as a bare word instead. Only Wait/Wait+Screen/
-// Wait+Line's optional trailing pattern, and a Set directive's value, ever
+// Wait+Line's optional trailing pattern, and a `Set WaitPattern` value, ever
 // accept a regex token -- see consumeTapeWait and nextTapeSetValue in
 // tape_parser.go, which is where a Set key's regex value is actually
 // consumed; this lexer-level guard only needs to recognize the two token
-// shapes that precede a legal regex start.
+// shapes that precede a legal regex start. Every other Set key's value is a
+// bare word or quoted string (e.g. `Set Shell /bin/bash` must stay a path,
+// not a regex).
 func (lx *tapeLexer) regexAllowed() bool {
 	n := len(lx.tokens)
 	if n == 0 {
@@ -304,7 +306,7 @@ func (lx *tapeLexer) regexAllowed() bool {
 	case "Wait", "Wait+Screen", "Wait+Line":
 		return true
 	}
-	return n >= 2 && lx.tokens[n-2].Value == "Set"
+	return n >= 2 && lx.tokens[n-2].Value == "Set" && lx.tokens[n-1].Value == "WaitPattern"
 }
 
 func (lx *tapeLexer) scanRegexToken() error {
