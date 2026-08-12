@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -272,6 +273,43 @@ settings:
 
 	// The import should work despite being outside base directory.
 	// The message is now logged at Trace level, not Warn level.
+}
+
+// TestMergeResolvedImports_MergeFailureLogsWarnAndContinues verifies that when one resolved
+// import file fails to merge (e.g. malformed YAML), mergeResolvedImports logs the failure at
+// Warn level with a sanitized import path and continues merging the remaining files instead
+// of aborting the whole config load.
+func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	tempDir := t.TempDir()
+
+	badFile, err := setupTestFile("key: [unterminated", tempDir, "bad.yaml")
+	require.NoError(t, err)
+	goodFile, err := setupTestFile("key2: value2", tempDir, "good.yaml")
+	require.NoError(t, err)
+
+	resolvedPaths := []ResolvedPaths{
+		{FilePath: badFile, ImportPaths: "https://user:super-secret-token@example.com/bad.yaml", ImportType: REMOTE},
+		{FilePath: goodFile, ImportPaths: "./good.yaml", ImportType: LOCAL},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	basePathSourceDir := mergeResolvedImports(resolvedPaths, v, defaultFileSystem)
+
+	assert.Empty(t, basePathSourceDir, "neither file declares base_path")
+	assert.Equal(t, "value2", v.Get("key2"), "the good file after the bad one must still merge")
+	logged := buffer.String()
+	assert.Contains(t, logged, "error loading config file", "the merge failure should be logged")
+	assert.NotContains(t, logged, "super-secret-token", "the merge-failure warning must not leak credentials")
 }
 
 // TestProcessImports_FailedImportLogSanitized verifies that the Warn log emitted when an

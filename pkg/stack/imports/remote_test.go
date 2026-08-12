@@ -1049,6 +1049,32 @@ func TestRemoteImporter_Download_HonorsConfigTTL(t *testing.T) {
 	assert.Equal(t, afterExpired, requestCount.Load(), "unset Imports.TTL must preserve the existing cache-forever behavior")
 }
 
+// TestRemoteImporter_downloadCacheFresh_EmptyTTL verifies downloadCacheFresh's own defensive
+// guard: called with an empty ttl it must report "not fresh" even when fresh metadata exists,
+// so a caller can never accidentally treat an unset ttl as "cached forever" through this path.
+func TestRemoteImporter_downloadCacheFresh_EmptyTTL(t *testing.T) {
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{})
+	uri := "https://example.com/config.yaml"
+
+	data, err := json.Marshal(sourceMetadata{SourceURI: uri, UpdatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, importer.cache.Set(downloadMetaCacheKey(uri), data))
+
+	assert.False(t, importer.downloadCacheFresh(uri, ""), "an empty ttl must never be treated as fresh, regardless of stored metadata")
+}
+
+// TestRemoteImporter_downloadCacheFresh_CorruptMetadata verifies that malformed freshness
+// metadata (e.g. from a version skew or partial write) is treated as "not fresh" rather than
+// causing Download to error out -- the same fail-safe/refetch behavior a missing entry gets.
+func TestRemoteImporter_downloadCacheFresh_CorruptMetadata(t *testing.T) {
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{})
+	uri := "https://example.com/config.yaml"
+
+	require.NoError(t, importer.cache.Set(downloadMetaCacheKey(uri), []byte("not valid json")))
+
+	assert.False(t, importer.downloadCacheFresh(uri, "1h"), "corrupt metadata must be treated as not-fresh, not cause a crash or false positive")
+}
+
 func relativeSlashPath(t *testing.T, root, path string) string {
 	t.Helper()
 	rel, err := filepath.Rel(root, path)

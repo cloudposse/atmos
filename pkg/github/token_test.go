@@ -209,6 +209,29 @@ func TestGetGitHubTokenFromCLI(t *testing.T) {
 	})
 }
 
+// TestSetCommanderForTesting verifies the exported test seam both swaps the package-level
+// commander so GetGitHubTokenFromCLI observes the mock, and that the returned restore func
+// puts the exact original commander back afterward -- callers outside this package (e.g.
+// pkg/downloader) depend on both halves of that contract.
+func TestSetCommanderForTesting(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_CLI", "gh")
+	original := commander
+	require.NotNil(t, original, "precondition: package must start with a real default commander")
+
+	ctrl := gomock.NewController(t)
+	mock := execpkg.NewMockCommandExecutor(ctrl)
+	mock.EXPECT().
+		CommandContext(gomock.Any(), "gh", "auth", "token").
+		Return(fakeCLICmd("ghp_from_seam\n", 0))
+
+	restore := SetCommanderForTesting(mock)
+	assert.Same(t, mock, commander, "SetCommanderForTesting must swap in the given commander")
+	assert.Equal(t, "ghp_from_seam", GetGitHubTokenFromCLI(), "the swapped-in mock commander should be used")
+
+	restore()
+	assert.Same(t, original, commander, "restore() must put the exact original commander back")
+}
+
 // TestGetGitHubToken_EnvWinsOverCLI verifies an explicit token short-circuits the CLI fallback.
 func TestGetGitHubToken_EnvWinsOverCLI(t *testing.T) {
 	t.Setenv("ATMOS_GITHUB_TOKEN", "atmos_explicit")
