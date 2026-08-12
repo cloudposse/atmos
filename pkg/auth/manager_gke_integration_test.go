@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	gcpIntegration "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -68,7 +69,7 @@ func TestEnsureIdentityEnvironmentProvisionsGKEAndReturnsKubeconfig(t *testing.T
 	})
 	t.Cleanup(func() { integrations.Register(integrations.KindGCPGKE, gcpIntegration.NewGKEIntegration) })
 
-	authConfig := &schema.AuthConfig{
+	globalAuth := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"example-deployer": {Kind: "gcp/service-account"},
 		},
@@ -89,6 +90,18 @@ func TestEnsureIdentityEnvironmentProvisionsGKEAndReturnsKubeconfig(t *testing.T
 			},
 		},
 	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"require_identity": true,
+			"identities": map[string]any{
+				"example-deployer": map[string]any{"default": true},
+			},
+		},
+	}
+	authConfig, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, authConfig.Integrations, "example-gke")
+
 	creds := &types.GCPCredentials{AccessToken: "example-access-token", TokenExpiry: time.Now().Add(time.Hour)}
 	m := &manager{
 		config: authConfig,

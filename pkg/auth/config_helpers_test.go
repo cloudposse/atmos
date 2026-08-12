@@ -51,6 +51,20 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				Keyring: schema.KeyringConfig{
 					Type: "system",
 				},
+				Console: &schema.AuthConsoleConfig{
+					Isolated: func() *bool { value := true; return &value }(),
+				},
+				Integrations: map[string]schema.Integration{
+					"example-gke": {
+						Kind: "gcp/gke",
+						Via:  &schema.IntegrationVia{Identity: "test-identity"},
+						Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+							Name:      "example-cluster",
+							ProjectID: "example-project",
+							Location:  "us-central1",
+						}},
+					},
+				},
 				IdentityCaseMap: map[string]string{
 					"test": "Test",
 				},
@@ -64,6 +78,11 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				assert.Contains(t, result.Identities, "test-identity")
 				assert.Equal(t, "Info", result.Logs.Level)
 				assert.Equal(t, "system", result.Keyring.Type)
+				require.NotNil(t, result.Console)
+				require.NotNil(t, result.Console.Isolated)
+				assert.True(t, *result.Console.Isolated)
+				require.Contains(t, result.Integrations, "example-gke")
+				assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
 				assert.Len(t, result.IdentityCaseMap, 1)
 			},
 		},
@@ -119,6 +138,9 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 }
 
 func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
+	isolated := true
+	autoProvision := true
+	revokeOnExit := true
 	// Test that modifying the copy doesn't mutate the original.
 	original := &schema.AuthConfig{
 		Realm:       "original-realm",
@@ -132,6 +154,28 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 		IdentityCaseMap: map[string]string{
 			"original": "Original",
 		},
+		Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{
+					AutoProvision: &autoProvision,
+					Registry:      &schema.Registry{Name: "example-registry"},
+					Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+						Kubeconfig: &schema.KubeconfigSettings{
+							Path:   "/tmp/example-kubeconfig",
+							Update: "replace",
+						},
+					},
+					Repos:        []string{"example/repository"},
+					RevokeOnExit: &revokeOnExit,
+				},
+			},
+		},
 	}
 
 	// Create a copy.
@@ -144,6 +188,15 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	copy.Keyring.Spec["new_key"] = "new_value"
 	copy.IdentityCaseMap["original"] = "Modified"
 	copy.IdentityCaseMap["new"] = "New"
+	*copy.Console.Isolated = false
+	copy.Integrations["example-gke"].Via.Identity = "modified-deployer"
+	*copy.Integrations["example-gke"].Spec.AutoProvision = false
+	copy.Integrations["example-gke"].Spec.Registry.Name = "modified-registry"
+	copy.Integrations["example-gke"].Spec.Cluster.ProjectID = "modified-project"
+	copy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/modified-kubeconfig"
+	copy.Integrations["example-gke"].Spec.Repos[0] = "modified/repository"
+	*copy.Integrations["example-gke"].Spec.RevokeOnExit = false
+	copy.Integrations["additional"] = schema.Integration{Kind: "gcp/gke"}
 
 	// Verify original is unchanged.
 	assert.Equal(t, "original-realm", original.Realm)
@@ -154,6 +207,15 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Equal(t, "Original", original.IdentityCaseMap["original"])
 	assert.Len(t, original.IdentityCaseMap, 1)
 	assert.NotContains(t, original.IdentityCaseMap, "new")
+	assert.True(t, *original.Console.Isolated)
+	assert.Equal(t, "example-deployer", original.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *original.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", original.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", original.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", original.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *original.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, original.Integrations, "additional")
 
 	// Verify copy has the modifications.
 	assert.Equal(t, "/modified/path", copy.Keyring.Spec["path"])
@@ -162,6 +224,8 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Equal(t, "Modified", copy.IdentityCaseMap["original"])
 	assert.Equal(t, "New", copy.IdentityCaseMap["new"])
 	assert.Len(t, copy.IdentityCaseMap, 2)
+	assert.False(t, *copy.Console.Isolated)
+	assert.Contains(t, copy.Integrations, "additional")
 }
 
 func TestMergeComponentAuthFromConfig(t *testing.T) {
@@ -281,6 +345,55 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 			tt.verify(t, result, err)
 		})
 	}
+}
+
+func TestMergeComponentAuthFromConfig_IntegrationOverrides(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"example-provider": {Kind: "gcp/adc"},
+		},
+		Identities: map[string]schema.Identity{
+			"example-deployer": {Kind: "gcp/project", Provider: "example-provider"},
+		},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+					Name:      "example-cluster",
+					ProjectID: "example-project",
+					Location:  "us-central1",
+					Alias:     "global-alias",
+				}},
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"integrations": map[string]any{
+				"example-gke": map[string]any{
+					"spec": map[string]any{
+						"cluster": map[string]any{
+							"alias": "component-alias",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Integrations, "example-gke")
+	cluster := mergedAuth.Integrations["example-gke"].Spec.Cluster
+	require.NotNil(t, cluster)
+	assert.Equal(t, "component-alias", cluster.Alias)
+	assert.Equal(t, "example-cluster", cluster.Name)
+	assert.Equal(t, "example-project", cluster.ProjectID)
+	assert.Equal(t, "us-central1", cluster.Location)
+	assert.Equal(t, globalAuth.Providers["example-provider"].Kind, mergedAuth.Providers["example-provider"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Kind, mergedAuth.Identities["example-deployer"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Provider, mergedAuth.Identities["example-deployer"].Provider)
 }
 
 func TestMergeComponentAuthFromConfig_DefaultOnlyUndefinedIdentityIsIgnored(t *testing.T) {
