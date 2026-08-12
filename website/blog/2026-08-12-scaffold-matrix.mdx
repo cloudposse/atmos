@@ -1,0 +1,82 @@
+---
+slug: scaffold-matrix
+title: "One scaffold template, one file per environment, region, or any combination"
+date: 2026-08-12T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+A scaffold template's file list is fixed by design: every declared file renders exactly once, and
+`when:` can skip a file entirely but never multiply it. That's a real limit the moment a golden
+path needs "one stack file per environment" or "one deploy manifest per environment-region pair"
+selected during generation — until now, that meant hand-rolling files outside the template, or
+maintaining a pile of near-duplicate ones inside it.
+
+<!--truncate-->
+
+## The Problem
+
+The number of files a project needs often isn't fixed at all — it depends on what gets selected
+when the project is generated. Three environments picked out of five available ones should mean
+three stack files, not five, and not one file manually copy-pasted three times. Nothing in a
+template's file list could express "generate one of these per selected value" — only "generate
+this file" or "skip this file."
+
+## The Fix
+
+`matrix:` on a file entry expands it into one generated file per combination of one or more axes,
+reusing the exact shape Atmos workflow `matrix:` steps already use, so the shape is one template
+authors likely already know. `when:` prunes combinations that don't apply — the same conditional
+engine that already gates whole files, now scoped to one combination at a time:
+
+```yaml
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, production]
+  files:
+    - path: stacks/deploy/environment.yaml
+      target: "stacks/deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments
+```
+
+Selecting `dev` and `staging` generates exactly `stacks/deploy/dev.yaml` and
+`stacks/deploy/staging.yaml` — nothing more, nothing hand-maintained. Declaring more than one axis
+expands their full combination, and each resolved combination is available as `.matrix.<axis>`
+everywhere a file entry can use it: in the output path, in `when:`, and inside the generated file's
+own content, so a file can both name itself and branch on its own combination.
+
+### Computed axes
+
+Real answers aren't always a flat, pre-selected list. An environment might carry its own set of
+regions, varying per environment — the full list of regions actually used isn't something anyone
+selected directly, it has to be derived. A `keys` function is available anywhere an axis needs
+computing: `keys` on its own returns a map's keys, and given a second argument, it collects that
+key from every value in the map, flattening and deduplicating across all of them:
+
+```yaml
+matrix:
+  environment: '{{ keys answers.environments }}'
+  region: '{{ keys answers.environments "regions" }}'
+when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+`environment` becomes every environment, `region` becomes every region used by any of them, and
+`when:` prunes the full combination back down to each environment's actual regions.
+
+## How to Use It
+
+```shell
+atmos scaffold generate my-template ./my-project --set environments=dev,staging
+```
+
+Add `matrix:` to any `spec.files[]` entry alongside `target:`, using a literal list, a
+`multiselect` answer, or a computed expression for each axis.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) docs for the full reference,
+try it against the [scaffolding example](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding),
+or [open an issue](https://github.com/cloudposse/atmos/issues) with feedback.
