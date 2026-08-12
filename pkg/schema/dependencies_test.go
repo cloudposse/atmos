@@ -2,11 +2,163 @@ package schema
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+func TestUnitDependencies_UnmarshalYAML(t *testing.T) {
+	input := `
+commands:
+  - build
+  - name: test
+    flags:
+      env: dev
+workflows:
+  - build
+  - name: test
+    file: test.yaml
+`
+	var deps Dependencies
+	require.NoError(t, yaml.Unmarshal([]byte(input), &deps))
+
+	require.Len(t, deps.Commands, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Commands[0])
+	assert.Equal(t, "test", deps.Commands[1].Name)
+	assert.Equal(t, map[string]string{"env": "dev"}, deps.Commands[1].Flags)
+
+	require.Len(t, deps.Workflows, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Workflows[0])
+	assert.Equal(t, "test", deps.Workflows[1].Name)
+	assert.Equal(t, "test.yaml", deps.Workflows[1].File)
+}
+
+func TestUnitDependencies_UnmarshalYAML_RejectsBadShape(t *testing.T) {
+	var deps Dependencies
+	err := yaml.Unmarshal([]byte("commands: not-a-list"), &deps)
+	require.Error(t, err)
+}
+
+func TestUnitDependencies_UnmarshalYAML_RejectsBadElement(t *testing.T) {
+	var deps Dependencies
+	err := yaml.Unmarshal([]byte("commands:\n  - [nested, sequence]"), &deps)
+	require.Error(t, err)
+}
+
+func TestUnitDependencyDecodeHook(t *testing.T) {
+	hook := UnitDependencyDecodeHook()
+
+	var deps Dependencies
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:     &deps,
+		DecodeHook: hook,
+	})
+	require.NoError(t, err)
+
+	input := map[string]any{
+		"commands": []any{
+			"build",
+			map[string]any{"name": "test", "flags": map[string]any{"env": "dev"}},
+		},
+		"workflows": []any{
+			"build",
+			map[string]any{"name": "test", "file": "test.yaml"},
+		},
+	}
+	require.NoError(t, decoder.Decode(input))
+
+	require.Len(t, deps.Commands, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Commands[0])
+	assert.Equal(t, "test", deps.Commands[1].Name)
+	assert.Equal(t, map[string]string{"env": "dev"}, deps.Commands[1].Flags)
+
+	require.Len(t, deps.Workflows, 2)
+	assert.Equal(t, UnitDependency{Name: "build"}, deps.Workflows[0])
+	assert.Equal(t, "test.yaml", deps.Workflows[1].File)
+}
+
+func TestUnitDependencyDecodeHook_IgnoresOtherTypes(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+
+	// Wrong target type: pass through unchanged.
+	out, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(""), []any{"build"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"build"}, out)
+
+	// Wrong source kind (not a slice): pass through unchanged.
+	out, err = hook(reflect.TypeOf(""), reflect.TypeOf(UnitDependencies{}), "not-a-slice")
+	require.NoError(t, err)
+	assert.Equal(t, "not-a-slice", out)
+}
+
+func TestUnitDependencyDecodeHook_RejectsBadElement(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+	_, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(UnitDependencies{}), []any{42})
+	require.Error(t, err)
+}
+
+// TestUnitDependencies_UnmarshalYAML_RejectsMappingDecodeError exercises the MappingNode branch's
+// own decode-error path (as opposed to RejectsBadElement, which covers the default/unexpected-kind
+// branch): a mapping element with a field of the wrong shape (flags: expects a map, given a scalar)
+// fails node.Decode itself.
+func TestUnitDependencies_UnmarshalYAML_RejectsMappingDecodeError(t *testing.T) {
+	var deps Dependencies
+	err := yaml.Unmarshal([]byte("commands:\n  - name: test\n    flags: not-a-map"), &deps)
+	require.Error(t, err)
+}
+
+// TestUnitDependencyDecodeHook_ConvertsTypedSlice covers sliceToAnyGeneric's reflect-based
+// fallback (used when mapstructure hands the hook a concrete-typed slice, e.g. []string, rather
+// than []any), which the other decode-hook tests never exercise since they all pass []any.
+func TestUnitDependencyDecodeHook_ConvertsTypedSlice(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+
+	out, err := hook(reflect.TypeOf([]string{}), reflect.TypeOf(UnitDependencies{}), []string{"build", "test"})
+	require.NoError(t, err)
+	assert.Equal(t, UnitDependencies{{Name: "build"}, {Name: "test"}}, out)
+}
+
+// TestUnitDependencyDecodeHook_NonSliceDataPassesThrough covers sliceToAnyGeneric's "not a slice
+// at all" branch: f.Kind() reports Slice (satisfying the hook's own type guard) but the actual
+// data handed to the hook isn't slice-shaped, so it must be returned unchanged rather than erroring.
+func TestUnitDependencyDecodeHook_NonSliceDataPassesThrough(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+
+	out, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(UnitDependencies{}), "not-actually-a-slice")
+	require.NoError(t, err)
+	assert.Equal(t, "not-actually-a-slice", out)
+}
+
+// TestUnitDependencyDecodeHook_RejectsMapDecodeError covers decodeUnitDependencyItem's own
+// mapstructure.Decode error path (as opposed to RejectsBadElement, which covers the default/
+// unsupported-item-type branch): a map item with a field of the wrong shape (flags: expects a
+// map, given a scalar) fails decoder.Decode itself even with WeaklyTypedInput enabled.
+func TestUnitDependencyDecodeHook_RejectsMapDecodeError(t *testing.T) {
+	hook := UnitDependencyDecodeHook().(func(reflect.Type, reflect.Type, any) (any, error))
+
+	_, err := hook(reflect.TypeOf([]any{}), reflect.TypeOf(UnitDependencies{}), []any{
+		map[string]any{"name": "test", "flags": "not-a-map"},
+	})
+	require.Error(t, err)
+}
+
+// TestDependencies_OrEmpty covers both the nil-receiver default and the pass-through of an
+// already-populated Dependencies value.
+func TestDependencies_OrEmpty(t *testing.T) {
+	t.Run("nil receiver returns zero value", func(t *testing.T) {
+		var d *Dependencies
+		assert.Equal(t, Dependencies{}, d.OrEmpty())
+	})
+
+	t.Run("non-nil receiver returns its value unchanged", func(t *testing.T) {
+		d := &Dependencies{Commands: UnitDependencies{{Name: "build"}}}
+		assert.Equal(t, *d, d.OrEmpty())
+	})
+}
 
 func TestComponentDependency_IsFileDependency(t *testing.T) {
 	tests := []struct {
