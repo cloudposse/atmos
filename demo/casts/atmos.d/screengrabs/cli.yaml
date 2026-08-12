@@ -93,6 +93,7 @@ commands:
           atmos aws compliance report --help
           atmos aws eks --help
           atmos aws eks update-kubeconfig --help
+          atmos aws rds token --help
           atmos aws security --help
           atmos aws security analyze --help
           atmos completion --help
@@ -487,6 +488,7 @@ commands:
           atmos aws compliance report --help
           atmos aws eks --help
           atmos aws eks update-kubeconfig --help
+          atmos aws rds token --help
           atmos aws security --help
           atmos aws security analyze --help
           atmos completion --help

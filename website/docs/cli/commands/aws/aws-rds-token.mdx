@@ -7,10 +7,13 @@ id: rds-token
 description: Generate an RDS IAM database authentication token using Atmos identities.
 ---
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Generate a short-lived RDS IAM database authentication token using an Atmos identity. The token is used as the database password over a TLS connection and is valid for approximately 15 minutes — no AWS CLI and no static database password required.
 </Intro>
+
+<CastPlayer title="atmos aws rds token --help" src="/casts/screengrabs/atmos-aws-rds-token--help.cast" static chrome />
 
 ## Usage
 
