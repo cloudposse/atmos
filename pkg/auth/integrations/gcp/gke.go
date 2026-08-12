@@ -28,6 +28,7 @@ var (
 	gkeExpectedServers sync.Map
 )
 
+// init registers the GKE integration factory.
 func init() {
 	integrations.Register(integrations.KindGCPGKE, NewGKEIntegration)
 }
@@ -63,6 +64,7 @@ func NewGKEIntegration(config *integrations.IntegrationConfig) (integrations.Int
 	return &GKEIntegration{name: config.Name, identity: identity, cluster: cluster}, nil
 }
 
+// validateGKECluster validates the cluster and kubeconfig portions of an integration.
 func validateGKECluster(cluster *schema.Cluster, integrationName string) error {
 	if cluster == nil {
 		return fmt.Errorf("%w: integration '%s' has no cluster configured (spec.cluster is required for gcp/gke)", errUtils.ErrIntegrationFailed, integrationName)
@@ -73,6 +75,7 @@ func validateGKECluster(cluster *schema.Cluster, integrationName string) error {
 	return validateGKEKubeconfig(cluster.Kubeconfig, integrationName)
 }
 
+// validateRequiredGKEClusterFields verifies the GKE resource address is complete.
 func validateRequiredGKEClusterFields(cluster *schema.Cluster, integrationName string) error {
 	if cluster.Name == "" {
 		return fmt.Errorf("%w: integration '%s' has no cluster name configured", errUtils.ErrIntegrationFailed, integrationName)
@@ -86,6 +89,7 @@ func validateRequiredGKEClusterFields(cluster *schema.Cluster, integrationName s
 	return nil
 }
 
+// validateGKEKubeconfig verifies supported file modes and update behavior.
 func validateGKEKubeconfig(kubeconfig *schema.KubeconfigSettings, integrationName string) error {
 	if kubeconfig == nil {
 		return nil
@@ -187,10 +191,12 @@ func (g *GKEIntegration) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// expectedServerKey scopes endpoint state to one kubeconfig and GKE resource.
 func (g *GKEIntegration) expectedServerKey(path string) string {
 	return path + "\x00" + gcpCloud.ClusterResourceName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
 }
 
+// resolveKubeconfigSettings returns configured output settings or their zero values.
 func (g *GKEIntegration) resolveKubeconfigSettings() (path, mode, update string) {
 	if g.cluster.Kubeconfig != nil {
 		return g.cluster.Kubeconfig.Path, g.cluster.Kubeconfig.Mode, g.cluster.Kubeconfig.Update

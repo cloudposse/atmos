@@ -22,6 +22,7 @@ var gcpCmd = &cobra.Command{
 	Args:    cobra.NoArgs,
 }
 
+// init registers the GCP command hierarchy with the root command.
 func init() {
 	gcpCmd.AddCommand(gke.GkeCmd)
 	internal.Register(&GCPCommandProvider{})
@@ -30,11 +31,26 @@ func init() {
 // GCPCommandProvider registers the gcp command.
 type GCPCommandProvider struct{}
 
-func (*GCPCommandProvider) GetCommand() *cobra.Command                                 { return gcpCmd }
-func (*GCPCommandProvider) GetName() string                                            { return "gcp" }
-func (*GCPCommandProvider) GetGroup() string                                           { return "Cloud Integration" }
-func (*GCPCommandProvider) GetAliases() []internal.CommandAlias                        { return nil }
-func (*GCPCommandProvider) GetFlagsBuilder() flags.Builder                             { return nil }
-func (*GCPCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder     { return nil }
+// GetCommand returns the root GCP command.
+func (*GCPCommandProvider) GetCommand() *cobra.Command { return gcpCmd }
+
+// GetName returns the command name.
+func (*GCPCommandProvider) GetName() string { return "gcp" }
+
+// GetGroup returns the command group.
+func (*GCPCommandProvider) GetGroup() string { return "Cloud Integration" }
+
+// GetAliases reports that the command has no aliases.
+func (*GCPCommandProvider) GetAliases() []internal.CommandAlias { return nil }
+
+// GetFlagsBuilder reports that the command has no shared flag builder.
+func (*GCPCommandProvider) GetFlagsBuilder() flags.Builder { return nil }
+
+// GetPositionalArgsBuilder reports that the command has no positional arguments.
+func (*GCPCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder { return nil }
+
+// GetCompatibilityFlags reports that the command has no compatibility flags.
 func (*GCPCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag { return nil }
-func (*GCPCommandProvider) IsExperimental() bool                                       { return false }
+
+// IsExperimental reports that the command is stable.
+func (*GCPCommandProvider) IsExperimental() bool { return false }

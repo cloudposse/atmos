@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGeneratedSchemaIncludesGKEClusterFields verifies generated config schema coverage.
 func TestGeneratedSchemaIncludesGKEClusterFields(t *testing.T) {
 	cluster, ok := definitions(t)["Cluster"].(map[string]any)
 	require.True(t, ok)

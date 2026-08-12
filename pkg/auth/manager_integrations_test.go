@@ -308,6 +308,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 	}
 }
 
+// TestIntegrationTargetKeyGKEOutputSettings verifies GKE output settings affect deduplication.
 func TestIntegrationTargetKeyGKEOutputSettings(t *testing.T) {
 	base := schema.Integration{
 		Kind: integrations.KindGCPGKE,

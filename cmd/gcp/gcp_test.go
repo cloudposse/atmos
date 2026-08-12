@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGCPCommandProvider verifies the GCP command provider contract.
 func TestGCPCommandProvider(t *testing.T) {
 	provider := &GCPCommandProvider{}
 	assert.Equal(t, "gcp", provider.GetName())
@@ -19,6 +20,7 @@ func TestGCPCommandProvider(t *testing.T) {
 	assert.Same(t, gcpCmd, provider.GetCommand())
 }
 
+// TestGCPCommandHierarchyAndHelp verifies GCP subcommand discovery and help text.
 func TestGCPCommandHierarchyAndHelp(t *testing.T) {
 	assert.Equal(t, "gcp", gcpCmd.Use)
 	assert.Contains(t, gcpCmd.Short, "GCP-specific")

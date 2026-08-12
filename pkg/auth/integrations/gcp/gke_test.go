@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// validGKEConfig returns a minimal valid integration configuration.
 func validGKEConfig(path string) *integrations.IntegrationConfig {
 	return &integrations.IntegrationConfig{
 		Name: "example-gke",
@@ -39,6 +40,7 @@ func validGKEConfig(path string) *integrations.IntegrationConfig {
 	}
 }
 
+// TestNewGKEIntegrationValidation verifies required cluster and output fields.
 func TestNewGKEIntegrationValidation(t *testing.T) {
 	validCluster := func() *schema.Cluster {
 		return &schema.Cluster{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}
@@ -78,6 +80,7 @@ func TestNewGKEIntegrationValidation(t *testing.T) {
 	}
 }
 
+// TestNewGKEIntegrationSuccess verifies valid configuration creates an integration.
 func TestNewGKEIntegrationSuccess(t *testing.T) {
 	integration, err := NewGKEIntegration(validGKEConfig(filepath.Join(t.TempDir(), "config")))
 	require.NoError(t, err)
@@ -88,6 +91,7 @@ func TestNewGKEIntegrationSuccess(t *testing.T) {
 	assert.Equal(t, "us-central1", gkeIntegration.cluster.Location)
 }
 
+// TestGKEIntegrationRegistration verifies the factory is registered by kind.
 func TestGKEIntegrationRegistration(t *testing.T) {
 	assert.True(t, integrations.IsRegistered(integrations.KindGCPGKE))
 	integration, err := integrations.Create(validGKEConfig(filepath.Join(t.TempDir(), "config")))
@@ -95,6 +99,7 @@ func TestGKEIntegrationRegistration(t *testing.T) {
 	assert.Equal(t, integrations.KindGCPGKE, integration.Kind())
 }
 
+// TestGKEIntegrationEnvironment verifies kubeconfig variables before provisioning.
 func TestGKEIntegrationEnvironment(t *testing.T) {
 	gkeExpectedServers.Clear()
 	t.Cleanup(gkeExpectedServers.Clear)
@@ -108,6 +113,7 @@ func TestGKEIntegrationEnvironment(t *testing.T) {
 	assert.NotContains(t, env, kube.ExpectedServerEnv)
 }
 
+// installGKEExecutionFakes installs test-scoped GKE API dependencies.
 func installGKEExecutionFakes(t *testing.T) {
 	t.Helper()
 	gkeExpectedServers.Clear()
@@ -133,6 +139,7 @@ func installGKEExecutionFakes(t *testing.T) {
 	}
 }
 
+// TestGKEIntegrationExecuteAndCleanup verifies provisioning and endpoint-state cleanup.
 func TestGKEIntegrationExecuteAndCleanup(t *testing.T) {
 	installGKEExecutionFakes(t)
 	path := filepath.Join(t.TempDir(), "config")
@@ -169,6 +176,7 @@ func TestGKEIntegrationExecuteAndCleanup(t *testing.T) {
 	require.NoError(t, integration.Cleanup(t.Context()))
 }
 
+// TestGKEIntegrationExecuteClearsStaleExpectedServerOnDiscoveryFailure verifies fail-closed state.
 func TestGKEIntegrationExecuteClearsStaleExpectedServerOnDiscoveryFailure(t *testing.T) {
 	installGKEExecutionFakes(t)
 	path := filepath.Join(t.TempDir(), "config")
@@ -191,6 +199,7 @@ func TestGKEIntegrationExecuteClearsStaleExpectedServerOnDiscoveryFailure(t *tes
 	assert.NotContains(t, env, kube.ExpectedServerEnv, "failed discovery must clear the endpoint from the previous successful execution")
 }
 
+// TestGKEIntegrationExecuteWrongCredentialType verifies non-GCP credentials are rejected.
 func TestGKEIntegrationExecuteWrongCredentialType(t *testing.T) {
 	integration, err := NewGKEIntegration(validGKEConfig(filepath.Join(t.TempDir(), "config")))
 	require.NoError(t, err)
@@ -200,6 +209,7 @@ func TestGKEIntegrationExecuteWrongCredentialType(t *testing.T) {
 	assert.Contains(t, err.Error(), "expected GCP credentials")
 }
 
+// TestGKEIntegrationExecuteErrors verifies API and kubeconfig failures are wrapped.
 func TestGKEIntegrationExecuteErrors(t *testing.T) {
 	gkeExpectedServers.Clear()
 	t.Cleanup(gkeExpectedServers.Clear)

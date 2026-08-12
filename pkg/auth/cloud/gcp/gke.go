@@ -39,6 +39,7 @@ type gkeClient struct {
 	clusters *container.ProjectsLocationsClustersService
 }
 
+// GetCluster retrieves a GKE cluster by fully qualified resource name.
 func (c *gkeClient) GetCluster(ctx context.Context, resourceName string) (*container.Cluster, error) {
 	return c.clusters.Get(resourceName).Context(ctx).Do()
 }
