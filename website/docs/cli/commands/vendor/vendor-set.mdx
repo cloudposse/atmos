@@ -11,7 +11,9 @@ import CastPlayer from '@site/src/components/CastPlayer'
 <Intro>
 Set the version pinned for a component in your `vendor.yaml` manifest. The source is
 matched by component name (not by index), and the edit preserves comments, anchors,
-and Go templates such as `{{.Version}}` in source URLs.
+and Go templates such as `{{.Version}}` in source URLs. The search covers `vendor.yaml`
+and every manifest it imports via `spec.imports`: the edit lands in whichever file
+actually declares the component, not necessarily `vendor.yaml` itself.
 </Intro>
 
 :::info

@@ -70,7 +70,7 @@ func executeMCPUninstall(cmd *cobra.Command, args []string) error {
 		names = sortedServerNames(atmosConfig.MCP.Servers)
 	}
 	if len(names) == 0 {
-		ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+		ui.Info(noServersConfiguredMessage(atmosConfig.MCP.IsEnabled()))
 		return nil
 	}
 
