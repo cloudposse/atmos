@@ -12,6 +12,18 @@ import (
 	"github.com/cloudposse/atmos/cmd"
 )
 
+// setupJITSourceWorkdirFixture gives each test its own writable fixture.
+func setupJITSourceWorkdirFixture(t *testing.T) {
+	t.Helper()
+
+	fixture, err := filepath.Abs(filepath.Join("fixtures", "scenarios", "source-provisioner-workdir"))
+	require.NoError(t, err)
+
+	sandbox := t.TempDir()
+	require.NoError(t, os.CopyFS(sandbox, os.DirFS(fixture)))
+	t.Chdir(sandbox)
+}
+
 // TestJITSource_WorkdirWithLocalComponent verifies that when:
 // - source.uri is configured
 // - provision.workdir.enabled: true
@@ -26,7 +38,7 @@ import (
 func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 	// Use the source-provisioner-workdir fixture which has vpc-remote-workdir
 	// configured with source.uri and provision.workdir.enabled: true.
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	setupJITSourceWorkdirFixture(t)
 
 	// Create a LOCAL component at components/terraform/vpc-remote-workdir/
 	// This simulates having previously vendored via vendor.yaml with a different version.
@@ -43,11 +55,6 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 		[]byte(localMarker+"\n\nresource \"null_resource\" \"local\" {}\n"),
 		0o644,
 	))
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(localComponent)
-		_ = os.RemoveAll(".workdir")
-	})
 
 	// Run terraform plan with --dry-run to trigger the provisioning flow
 	// without actually running terraform. The dry-run flag skips terraform
@@ -100,7 +107,7 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 // TestJITSource_WorkdirWithLocalComponent_SourcePrecedence is an alternative test
 // that checks the provisioner output messages to verify source provisioning runs.
 func TestJITSource_WorkdirWithLocalComponent_SourcePrecedence(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	setupJITSourceWorkdirFixture(t)
 
 	// Create a LOCAL component to trigger the bug scenario.
 	localComponent := filepath.Join("components", "terraform", "vpc-remote-workdir")
@@ -110,11 +117,6 @@ func TestJITSource_WorkdirWithLocalComponent_SourcePrecedence(t *testing.T) {
 		[]byte("# LOCAL VERSION\n"),
 		0o644,
 	))
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(localComponent)
-		_ = os.RemoveAll(".workdir")
-	})
 
 	// Verify that source describe still works and recognizes the source config.
 	// This confirms the component HAS source configured.
@@ -172,7 +174,7 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 
 	for _, tc := range subcommands {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+			setupJITSourceWorkdirFixture(t)
 
 			// Create a LOCAL component at components/terraform/vpc-remote-workdir/.
 			// This simulates having previously vendored via vendor.yaml with a different version.
@@ -186,11 +188,6 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 				[]byte(localMarker+"\n\nresource \"null_resource\" \"local\" {}\n"),
 				0o644,
 			))
-
-			t.Cleanup(func() {
-				_ = os.RemoveAll(localComponent)
-				_ = os.RemoveAll(".workdir")
-			})
 
 			// Run terraform <subcommand> with --dry-run to trigger the provisioning flow
 			// without actually running terraform.
@@ -243,10 +240,7 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 // TestJITSource_GenerateVarfile verifies that `terraform generate varfile` works
 // with JIT-sourced components. This is a regression test for issue #2019.
 func TestJITSource_GenerateVarfile(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	// vpc-remote-workdir has source.uri configured with workdir enabled.
 	cmd.RootCmd.SetArgs([]string{
@@ -276,10 +270,7 @@ func TestJITSource_GenerateVarfile(t *testing.T) {
 // with "backend_type is missing". The key assertion is that JIT provisioning
 // works (workdir is created) before the backend validation fails.
 func TestJITSource_GenerateBackend(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "generate", "backend", "vpc-remote-workdir",
@@ -310,10 +301,7 @@ func TestJITSource_GenerateBackend(t *testing.T) {
 // TestJITSource_PackerOutput verifies that `packer output` works
 // with JIT-sourced components.
 func TestJITSource_PackerOutput(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	// ami-workdir has source.uri configured with workdir enabled.
 	cmd.RootCmd.SetArgs([]string{
@@ -334,10 +322,7 @@ func TestJITSource_PackerOutput(t *testing.T) {
 // TestJITSource_HelmfileGenerateVarfile verifies that `helmfile generate varfile`
 // works with JIT-sourced components.
 func TestJITSource_HelmfileGenerateVarfile(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	// nginx-workdir has source.uri configured with workdir enabled.
 	cmd.RootCmd.SetArgs([]string{

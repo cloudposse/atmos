@@ -31,6 +31,8 @@ func (h *ClearHandler) Validate(step *schema.WorkflowStep) error {
 func (h *ClearHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ClearHandler.Execute")()
 
-	ui.ClearLine()
+	if !OutputSuppressed(ctx) {
+		ui.ClearLine()
+	}
 	return NewStepResult(""), nil
 }
