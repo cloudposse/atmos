@@ -387,8 +387,45 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, sentinel
 	}
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"}, OperationApply)
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "example-admin"}, OperationTemplate)
 	require.ErrorIs(t, err, sentinel)
+
+	// The opt-in guard resolves a component default even when no CLI identity was supplied.
+	setupComponentAuthForCLI = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		info.Identity = "example-deployer"
+		manager := fakeHelmAuthManager{}
+		info.AuthManager = manager
+		return manager, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		if authManager != nil {
+			assert.Equal(t, "example-deployer", info.Identity, "component identity must resolve before the full processing pass")
+		}
+		return info, nil
+	}
+	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "example-component"}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationApply))
+	assert.Equal(t, "example-deployer", info.Identity)
+	assert.NotNil(t, info.AuthManager)
+
+	// Without a resolvable component default, the opt-in guard fails closed.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		return nil, nil
+	}
+	err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationDelete)
+	require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
+}
+
+func TestRequireIdentityForOperation(t *testing.T) {
+	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationTemplate))
+	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationApply))
+	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
+	}, OperationApply))
+	assert.True(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true},
+	}, OperationDelete))
 }
 
 func TestApplyAuthEnvironment(t *testing.T) {

@@ -2,6 +2,7 @@ package datafetcher
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -148,6 +149,38 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name: "helm component with identity guard",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
+		{
 			name: "component with empty auth",
 			manifest: map[string]interface{}{
 				"components": map[string]interface{}{
@@ -239,7 +272,7 @@ func TestAtmosSchema_ValidGKEIntegration(t *testing.T) {
 							"location":   "us-central1",
 							"alias":      "example",
 							"kubeconfig": map[string]interface{}{
-								"path":   "/tmp/example-kubeconfig",
+								"path":   filepath.Join(t.TempDir(), "example-kubeconfig"),
 								"update": "replace",
 							},
 						},

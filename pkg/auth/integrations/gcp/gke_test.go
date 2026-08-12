@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	gcpCloud "github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -95,6 +96,8 @@ func TestGKEIntegrationRegistration(t *testing.T) {
 }
 
 func TestGKEIntegrationEnvironment(t *testing.T) {
+	gkeExpectedServers.Clear()
+	t.Cleanup(gkeExpectedServers.Clear)
 	path := filepath.Join(t.TempDir(), "config")
 	integration, err := NewGKEIntegration(validGKEConfig(path))
 	require.NoError(t, err)
@@ -102,13 +105,16 @@ func TestGKEIntegrationEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, path, env["KUBECONFIG"])
 	assert.Equal(t, path, env["KUBE_CONFIG_PATH"])
+	assert.NotContains(t, env, kube.ExpectedServerEnv)
 }
 
 func installGKEExecutionFakes(t *testing.T) {
 	t.Helper()
+	gkeExpectedServers.Clear()
 	originalFactory := gkeClientFactory
 	originalDescribe := gkeDescribeCluster
 	t.Cleanup(func() {
+		gkeExpectedServers.Clear()
 		gkeClientFactory = originalFactory
 		gkeDescribeCluster = originalDescribe
 	})
@@ -146,6 +152,9 @@ func TestGKEIntegrationExecuteAndCleanup(t *testing.T) {
 	assert.Empty(t, authInfo.Token)
 	require.NotNil(t, authInfo.Exec)
 	assert.Equal(t, []string{"gcp", "gke", "token", "--identity=example-deployer"}, authInfo.Exec.Args)
+	env, err := integration.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "https://gke.example.invalid", env[kube.ExpectedServerEnv])
 
 	// Re-executing the same integration is a no-op at the shared writer layer.
 	require.NoError(t, integration.Execute(t.Context(), creds))
@@ -167,6 +176,8 @@ func TestGKEIntegrationExecuteWrongCredentialType(t *testing.T) {
 }
 
 func TestGKEIntegrationExecuteErrors(t *testing.T) {
+	gkeExpectedServers.Clear()
+	t.Cleanup(gkeExpectedServers.Clear)
 	config := validGKEConfig(filepath.Join(t.TempDir(), "config"))
 	integration, err := NewGKEIntegration(config)
 	require.NoError(t, err)
@@ -195,4 +206,7 @@ func TestGKEIntegrationExecuteErrors(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGKEIntegrationFailed)
 	assert.Contains(t, err.Error(), "cluster lookup failed")
+	env, envErr := integration.Environment()
+	require.NoError(t, envErr)
+	assert.NotContains(t, env, kube.ExpectedServerEnv, "a failed describe must not authorize a stale kubeconfig endpoint")
 }

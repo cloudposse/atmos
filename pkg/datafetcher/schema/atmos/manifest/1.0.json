@@ -3876,6 +3876,10 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "require_identity": {
+              "type": "boolean",
+              "description": "Require an Atmos Auth identity for cluster-mutating operations and reject ambient kubeconfig access."
+            },
             "realm": {
               "type": "string",
               "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."

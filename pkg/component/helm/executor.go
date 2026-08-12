@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -132,13 +133,31 @@ func executeSingle(
 		return err
 	}
 	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
+	guarded := requireIdentityForOperation(info, operation)
+	internalEnvRestore := func() {}
+	if guarded {
+		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
+	}
 	authEnvRestore, err := applyAuthEnvironment(info)
 	if err != nil {
+		internalEnvRestore()
 		envRestore()
 		return err
 	}
+	guardEnvRestore := func() {}
+	if guarded {
+		if os.Getenv(kube.ExpectedServerEnv) == "" { //nolint:forbidigo // Integration environment was just applied to this process.
+			authEnvRestore()
+			internalEnvRestore()
+			envRestore()
+			return fmt.Errorf("%w: the selected identity did not provision a GKE endpoint", errUtils.ErrKubernetesIdentityRequired)
+		}
+		guardEnvRestore = applyEnvironment(map[string]any{kube.EndpointGuardEnv: "true"}, nil)
+	}
 	defer func() {
+		guardEnvRestore()
 		authEnvRestore()
+		internalEnvRestore()
 		envRestore()
 	}()
 
@@ -400,11 +419,29 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 
 func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
 	var authManager auth.AuthManager
-	if shouldSetupComponentAuth(info, operation) {
+	if hasExplicitIdentity(info) {
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
 			return err
+		}
+	} else if operation == OperationApply || operation == OperationDelete {
+		// Discover the effective component auth block without evaluating templates or
+		// YAML functions. This keeps the ordinary ambient path unchanged while allowing
+		// an opt-in guard to resolve its component default before the full processing pass.
+		discovered, err := processStacks(atmosConfig, *info, true, false, false, nil, nil)
+		if err != nil {
+			return err
+		}
+		if requireIdentityForOperation(&discovered, operation) {
+			*info = discovered
+			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
+				return errUtils.ErrKubernetesIdentityRequired
+			}
+			authManager, err = setupComponentAuthForCLI(atmosConfig, info)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -414,33 +451,29 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 
 	*info = processedInfo
+	if !requireIdentityForOperation(info, operation) {
+		return nil
+	}
+	if authManager == nil || info.Identity == "" {
+		return errUtils.ErrKubernetesIdentityRequired
+	}
 	return nil
 }
 
-// shouldSetupComponentAuth reports whether to resolve component auth (which auto-detects the stack's
-// `default: true` identity) before processing stacks. It runs when an explicit identity was requested,
-// or for any cluster operation (apply/diff/delete) so those resolve the stack's default-identity
-// binding automatically - matching `atmos terraform`, which never needs an explicit --identity for a
-// stack that binds one. The offline template render never triggers auth. When no auth is configured,
-// setupComponentAuthForCLI returns a nil manager and the identity stays empty (ambient KUBECONFIG is
-// used, preserving prior behavior). See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
-func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
-	if info.Identity != "" {
-		return true
-	}
-	return operationRequiresCluster(operation)
+func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
 }
 
-// operationRequiresCluster reports whether an operation contacts the cluster. It uses an explicit
-// allowlist (apply/diff/delete) rather than "not template" so that an unsupported operation does not
-// trigger authentication before runOperation can return ErrHelmUnsupportedOperation.
-func operationRequiresCluster(operation Operation) bool {
-	switch operation {
-	case OperationApply, OperationDiff, OperationDelete:
-		return true
-	default:
+func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation) bool {
+	if operation != OperationApply && operation != OperationDelete {
 		return false
 	}
+	if info != nil && info.ComponentAuthSection != nil {
+		if componentRequired, ok := info.ComponentAuthSection["require_identity"].(bool); ok {
+			return componentRequired
+		}
+	}
+	return false
 }
 
 func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
@@ -637,6 +670,28 @@ func applyEnvironment(componentEnv map[string]any, toolchainEnv []string) func()
 		}
 	}
 
+	return func() {
+		for key, value := range original {
+			if value == nil {
+				_ = os.Unsetenv(key)
+			} else {
+				_ = os.Setenv(key, *value)
+			}
+		}
+	}
+}
+
+func clearEnvironment(keys ...string) func() {
+	original := make(map[string]*string, len(keys))
+	for _, key := range keys {
+		if value, exists := os.LookupEnv(key); exists {
+			valueCopy := value
+			original[key] = &valueCopy
+		} else {
+			original[key] = nil
+		}
+		_ = os.Unsetenv(key)
+	}
 	return func() {
 		for key, value := range original {
 			if value == nil {

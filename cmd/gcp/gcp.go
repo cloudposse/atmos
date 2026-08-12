@@ -1,6 +1,8 @@
 package gcp
 
 import (
+	_ "embed"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/gcp/gke"
@@ -9,11 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
+//go:embed markdown/atmos_gcp_usage.md
+var gcpUsageMarkdown string
+
 var gcpCmd = &cobra.Command{
-	Use:   "gcp",
-	Short: "Run GCP-specific commands for interacting with cloud resources",
-	Long:  "This command allows interaction with Google Cloud resources through native Atmos commands.",
-	Args:  cobra.NoArgs,
+	Use:     "gcp",
+	Short:   "Run GCP-specific commands for interacting with cloud resources",
+	Long:    "This command allows interaction with Google Cloud resources through native Atmos commands.",
+	Example: gcpUsageMarkdown,
+	Args:    cobra.NoArgs,
 }
 
 func init() {

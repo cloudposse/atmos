@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	gcpCloud "github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
@@ -24,6 +25,7 @@ const (
 var (
 	gkeClientFactory   = gcpCloud.NewGKEClient
 	gkeDescribeCluster = gcpCloud.DescribeCluster
+	gkeExpectedServers sync.Map
 )
 
 func init() {
@@ -129,6 +131,7 @@ func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
+	gkeExpectedServers.Store(g.expectedServerKey(mgr.GetPath()), info.Endpoint)
 
 	displayName := g.cluster.Alias
 	if displayName == "" {
@@ -166,12 +169,22 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 
 // Environment returns the kubeconfig variables contributed by this integration.
 func (g *GKEIntegration) Environment() (map[string]string, error) {
+	defer perf.Track(nil, "gcp.GKEIntegration.Environment")()
+
 	path, mode, _ := g.resolveKubeconfigSettings()
 	mgr, err := kube.NewKubeconfigManager(path, mode)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
-	return map[string]string{"KUBECONFIG": mgr.GetPath(), "KUBE_CONFIG_PATH": mgr.GetPath()}, nil
+	env := map[string]string{"KUBECONFIG": mgr.GetPath(), "KUBE_CONFIG_PATH": mgr.GetPath()}
+	if server, ok := gkeExpectedServers.Load(g.expectedServerKey(mgr.GetPath())); ok {
+		env[kube.ExpectedServerEnv] = server.(string)
+	}
+	return env, nil
+}
+
+func (g *GKEIntegration) expectedServerKey(path string) string {
+	return path + "\x00" + gcpCloud.ClusterResourceName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
 }
 
 func (g *GKEIntegration) resolveKubeconfigSettings() (path, mode, update string) {

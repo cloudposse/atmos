@@ -259,7 +259,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 					Cluster: &schema.Cluster{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"},
 				},
 			},
-			want: "gcp/gke:example-project:us-central1:example-cluster",
+			want: "gcp/gke:alias=&location=us-central1&name=example-cluster&project=example-project",
 		},
 		{
 			name:        "GKE without cluster falls back to name",
@@ -304,6 +304,47 @@ func TestIntegrationTargetKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := integrationTargetKey(tt.intName, tt.integration)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIntegrationTargetKeyGKEOutputSettings(t *testing.T) {
+	base := schema.Integration{
+		Kind: integrations.KindGCPGKE,
+		Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+		Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+			Name:      "example-cluster",
+			ProjectID: "example-project",
+			Location:  "us-central1",
+			Alias:     "example",
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path:   "example-kubeconfig",
+				Mode:   "0600",
+				Update: "replace",
+			},
+		}},
+	}
+	baseKey := integrationTargetKey("first", base)
+	assert.Equal(t, baseKey, integrationTargetKey("second", base), "integration names must not affect an identical output target")
+
+	mutations := map[string]func(*schema.Integration){
+		"path":     func(cfg *schema.Integration) { cfg.Spec.Cluster.Kubeconfig.Path = "other-kubeconfig" },
+		"mode":     func(cfg *schema.Integration) { cfg.Spec.Cluster.Kubeconfig.Mode = "0640" },
+		"update":   func(cfg *schema.Integration) { cfg.Spec.Cluster.Kubeconfig.Update = "merge" },
+		"alias":    func(cfg *schema.Integration) { cfg.Spec.Cluster.Alias = "other" },
+		"identity": func(cfg *schema.Integration) { cfg.Via.Identity = "other-deployer" },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			candidate := base
+			cluster := *base.Spec.Cluster
+			settings := *base.Spec.Cluster.Kubeconfig
+			via := *base.Via
+			candidate.Spec = &schema.IntegrationSpec{Cluster: &cluster}
+			candidate.Spec.Cluster.Kubeconfig = &settings
+			candidate.Via = &via
+			mutate(&candidate)
+			assert.NotEqual(t, baseKey, integrationTargetKey("candidate", candidate))
 		})
 	}
 }

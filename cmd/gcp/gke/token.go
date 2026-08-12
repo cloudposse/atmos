@@ -58,7 +58,7 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 	defer perf.Track(&atmosConfig, "gke.executeTokenCommand")()
 
 	identityName := resolveIdentity(cmd)
-	ctx := auth.ContextWithSkipIntegrations(context.Background())
+	ctx := auth.ContextWithSkipIntegrations(cmd.Context())
 	creds, err := authenticateForTokenFn(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrGKETokenGeneration, err)

@@ -22,6 +22,7 @@ func TestGCPCommandProvider(t *testing.T) {
 func TestGCPCommandHierarchyAndHelp(t *testing.T) {
 	assert.Equal(t, "gcp", gcpCmd.Use)
 	assert.Contains(t, gcpCmd.Short, "GCP-specific")
+	assert.Contains(t, gcpCmd.Example, "atmos gcp gke token")
 	gkeCmd, _, err := gcpCmd.Find([]string{"gke"})
 	require.NoError(t, err)
 	assert.Equal(t, "gke", gkeCmd.Name())

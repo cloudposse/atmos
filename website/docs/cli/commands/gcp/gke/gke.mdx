@@ -6,10 +6,25 @@ id: gke
 description: Provision a GKE kubeconfig from an Atmos-managed GCP identity.
 ---
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Configure a GKE kubeconfig whose short-lived access tokens are supplied dynamically by Atmos Auth. No `gcloud`, Application Default Credentials bootstrap, or external GKE authentication plugin is required.
 </Intro>
+
+<CastPlayer src="/casts/screengrabs/atmos-gcp-gke--help.cast" static />
+
+## Usage
+
+```shell
+atmos gcp gke <subcommand> [flags]
+```
+
+## Examples
+
+```shell
+atmos gcp gke token --identity example-deployer
+```
 
 ## Configuration
 
@@ -27,11 +42,10 @@ auth:
           location: us-central1
           alias: example
           kubeconfig:
-            path: /tmp/example-kubeconfig
-            update: replace
+            update: merge
 ```
 
-The cluster `name`, `project_id`, and regional or zonal `location` are required. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`.
+The cluster `name`, `project_id`, and regional or zonal `location` are required. With no custom path, Atmos writes its own kubeconfig under the XDG config directory. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`. Configuring a shared kubeconfig path is explicit opt-in and may update that file's `current-context`.
 
 ## Use the integration
 
@@ -42,7 +56,34 @@ atmos auth exec --identity example-deployer -- kubectl get namespaces
 atmos helm plan example-release --stack example-stack --identity example-deployer
 ```
 
-The same composed identity environment is available to native Helm, Kubernetes, Helmfile, kubectl subprocesses, and workflows. The integration does not add Helm-specific behavior.
+The same composed identity environment is available to native Helm, Kubernetes, Helmfile, kubectl subprocesses, and workflows.
+
+For an opt-in Helm safety guard, set `require_identity: true` and select a default identity in the GKE component's `auth` block:
+
+```yaml
+components:
+  helm:
+    example-release:
+      auth:
+        require_identity: true
+        identities:
+          example-deployer:
+            default: true
+        integrations:
+          example-gke:
+            kind: gcp/gke
+            via:
+              identity: example-deployer
+            spec:
+              cluster:
+                name: example-cluster
+                project_id: example-project
+                location: us-central1
+```
+
+With the guard enabled, Atmos resolves the component default even when `--identity` is omitted, refuses the mutation if no GKE endpoint was provisioned, and verifies that the effective Kubernetes REST endpoint matches the endpoint returned by GKE. The flag is off by default and does not change existing EKS or AKS behavior.
+
+If you use a custom blocking Helm hook instead, set `on_failure: fail`; command hooks otherwise warn and allow execution to continue. Hooks run from the component directory, so resolve repository scripts to an absolute path rather than assuming the repository root is the working directory.
 
 ## How it works
 
@@ -54,7 +95,11 @@ atmos gcp gke token --identity example-deployer
 
 Kubernetes invokes the command whenever it needs a fresh credential. The access token and expiration are returned as Kubernetes `ExecCredential` JSON and are never persisted in kubeconfig.
 
+Cluster discovery is deduplicated per process using the cluster and all kubeconfig output settings. Bulk commands that target the same integration therefore make one describe request, while distinct paths, aliases, update modes, or identities are provisioned separately.
+
 GKE is an Auth integration rather than a Kubernetes identity because the GCP identity remains the source credential and the kubeconfig is derived client configuration. Kubernetes RBAC remains independently required after Google authenticates the caller.
+
+This integration and its endpoint guard cover GKE only. Other cluster types continue to use their existing effective kubeconfig behavior.
 
 ## Permissions
 
