@@ -212,17 +212,30 @@ func (i *Identity) Logout(ctx context.Context) error {
 	return nil
 }
 
-// CredentialsExist returns true (no credentials needed).
+// CredentialsExist reports whether this identity can provide credentials without
+// authenticating an upstream provider or identity. A provider-backed project identity
+// carries only project context locally; treating that context as cached credentials
+// would skip the provider and discard its access token.
 func (i *Identity) CredentialsExist() (bool, error) {
+	if i.hasUpstreamCredentialSource() {
+		return false, nil
+	}
 	return true, nil
 }
 
-// LoadCredentials returns minimal credentials with project info (no stored credentials).
+// LoadCredentials returns minimal credentials only for a standalone project identity.
+// Provider-backed identities must authenticate their chain so the returned GCP
+// credentials include the upstream access token.
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
-	if i.principal == nil {
+	if i.principal == nil || i.hasUpstreamCredentialSource() {
 		return nil, nil
 	}
 	return &types.GCPCredentials{
 		ProjectID: i.principal.ProjectID,
 	}, nil
+}
+
+func (i *Identity) hasUpstreamCredentialSource() bool {
+	return i.config != nil && i.config.Via != nil &&
+		(i.config.Via.Provider != "" || i.config.Via.Identity != "")
 }

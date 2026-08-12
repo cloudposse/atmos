@@ -348,6 +348,13 @@ func TestCredentialsExist(t *testing.T) {
 	exists, err := id.CredentialsExist()
 	require.NoError(t, err)
 	assert.True(t, exists)
+
+	id.SetConfig(&schema.Identity{
+		Via: &schema.IdentityVia{Provider: "gcp-adc"},
+	})
+	exists, err = id.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists)
 }
 
 func TestLoadCredentials(t *testing.T) {
@@ -363,6 +370,19 @@ func TestLoadCredentials(t *testing.T) {
 	gcpCreds, ok := creds.(*types.GCPCredentials)
 	require.True(t, ok)
 	assert.Equal(t, "load-project", gcpCreds.ProjectID)
+}
+
+func TestLoadCredentials_ProviderBacked(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{ProjectID: "load-project"},
+		config: &schema.Identity{
+			Via: &schema.IdentityVia{Provider: "gcp-adc"},
+		},
+	}
+
+	creds, err := id.LoadCredentials(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, creds)
 }
 
 func TestLoadCredentials_NilPrincipal(t *testing.T) {

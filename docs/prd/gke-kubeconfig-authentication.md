@@ -63,3 +63,78 @@ The default kubeconfig path is Atmos-owned under the XDG config directory. `upda
 - Static bearer tokens in kubeconfig.
 - Private endpoint or DNS endpoint selection in the initial implementation.
 - Changing existing EKS or AKS targeting behavior.
+
+## Manual Verification (live GKE cluster)
+
+The `gcp/gke` integration was exercised end-to-end on 2026-08-12 against a real regional GKE
+cluster using an Atmos `gcp/project` identity backed by a `gcp/adc` provider. Project, cluster,
+endpoint, principal, and node names are omitted below; the published aliases are generic. The
+cluster had four nodes running GKE `v1.34.9-gke.1065000`.
+
+**1. What the live run surfaced.** On first use, `atmos auth exec` set `KUBECONFIG` to the
+integration path but did not create the file. The provider-backed `gcp/project` identity's local
+credential loader returned a project-only `GCPCredentials` value with no access token. Because
+that value had no expiry, the Auth manager treated it as a valid cached credential, skipped the
+ADC provider, and never provisioned the linked GKE integration. `kubectl` consequently fell back
+to `http://localhost:8080`.
+
+The project identity now reports no local cached credentials when it has an upstream provider or
+identity. This forces the configured chain to authenticate and preserves the access token. A
+standalone `gcp/project` identity retains its existing project-context-only behavior.
+
+**2. First-use `auth exec` path.** The isolated kubeconfig was deleted before this command; no
+preparatory `atmos auth login` or `gcloud container clusters get-credentials` was run. Atmos
+described the cluster, wrote the kubeconfig, injected its path into the child environment, and
+then allowed `kubectl` to authenticate through the generated exec plugin:
+
+```console
+$ test ! -e /tmp/example-kubeconfig
+$ atmos auth exec --identity example-deployer -- sh -c 'kubectl get nodes -o json | jq <readiness-summary>'
+✓ GKE kubeconfig: example → /tmp/example-kubeconfig
+{
+  "nodeCount": 4,
+  "readyCount": 4,
+  "versions": ["v1.34.9-gke.1065000"]
+}
+```
+
+**3. Generated kubeconfig.** Inspection confirmed that the file contained one HTTPS cluster with
+CA data and one Atmos exec user, with no stored bearer token:
+
+```console
+$ kubectl --kubeconfig=/tmp/example-kubeconfig config view --raw -o json | jq <auth-summary>
+{
+  "currentContext": "example",
+  "serverUsesHTTPS": true,
+  "caDataPresent": true,
+  "execCommand": "atmos",
+  "execArgs": ["gcp", "gke", "token", "--identity=example-deployer"],
+  "storedBearerToken": false
+}
+```
+
+**4. Exec credential.** The token command was also run directly with its secret value reduced to
+a boolean before display:
+
+```console
+$ atmos gcp gke token --identity example-deployer | jq <non-secret-summary>
+{
+  "apiVersion": "client.authentication.k8s.io/v1beta1",
+  "kind": "ExecCredential",
+  "tokenPresent": true,
+  "expirationPresent": true
+}
+```
+
+The GKE integration and exec plugin used the access token supplied by Atmos Auth. A second
+first-use run restricted `PATH` to the locally built `atmos`, `kubectl`, `jq`, and base system
+directories; a preflight check confirmed that neither `gcloud` nor `gke-gcloud-auth-plugin` was
+available, and all four nodes were still reachable and Ready. ADC was used only through the
+configured Atmos GCP provider in this particular verification.
+
+## Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-08-07 | Initial as-built GKE kubeconfig authentication design |
+| 1.1 | 2026-08-12 | Live-cluster verification and provider-backed `gcp/project` credential-loading fix |
