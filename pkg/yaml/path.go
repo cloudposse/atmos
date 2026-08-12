@@ -54,6 +54,20 @@ func DotPathToYqPath(dotPath string) (string, error) {
 		return "", err
 	}
 
+	return yqPathFromSegments(segments), nil
+}
+
+// yqPathFromSegments renders parsed path segments as a yq path expression,
+// the same syntax DotPathToYqPath produces from a raw dot-notation string.
+// An empty segment slice (the document root, e.g. a path's parent when the
+// path has only one segment) renders as ".". Shared with the presence check
+// in edit.go (pathIsExplicitlyPresent), which needs the yq path for a
+// segment's *parent* to run a has() check on the final segment.
+func yqPathFromSegments(segments []pathSegment) string {
+	if len(segments) == 0 {
+		return "."
+	}
+
 	var b strings.Builder
 	for i, seg := range segments {
 		switch {
@@ -78,7 +92,7 @@ func DotPathToYqPath(dotPath string) (string, error) {
 		}
 	}
 
-	return b.String(), nil
+	return b.String()
 }
 
 // pathSegment is a single key or array index in a parsed dot-path.
