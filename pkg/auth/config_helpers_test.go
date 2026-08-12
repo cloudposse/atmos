@@ -226,6 +226,32 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Len(t, copy.IdentityCaseMap, 2)
 	assert.False(t, *copy.Console.Isolated)
 	assert.Contains(t, copy.Integrations, "additional")
+
+	// Verify mutations to the original don't affect a fresh copy.
+	freshCopy := CopyGlobalAuthConfig(original)
+	original.Keyring.Spec["path"] = "/mutated-original/path"
+	original.IdentityCaseMap["original"] = "MutatedOriginal"
+	*original.Console.Isolated = false
+	original.Integrations["example-gke"].Via.Identity = "mutated-original-deployer"
+	*original.Integrations["example-gke"].Spec.AutoProvision = false
+	original.Integrations["example-gke"].Spec.Registry.Name = "mutated-original-registry"
+	original.Integrations["example-gke"].Spec.Cluster.ProjectID = "mutated-original-project"
+	original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/mutated-original-kubeconfig"
+	original.Integrations["example-gke"].Spec.Repos[0] = "mutated-original/repository"
+	*original.Integrations["example-gke"].Spec.RevokeOnExit = false
+	original.Integrations["original-additional"] = schema.Integration{Kind: "gcp/gke"}
+
+	assert.Equal(t, "/original/path", freshCopy.Keyring.Spec["path"])
+	assert.Equal(t, "Original", freshCopy.IdentityCaseMap["original"])
+	assert.True(t, *freshCopy.Console.Isolated)
+	assert.Equal(t, "example-deployer", freshCopy.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", freshCopy.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", freshCopy.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", freshCopy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", freshCopy.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, freshCopy.Integrations, "original-additional")
 }
 
 func TestMergeComponentAuthFromConfig(t *testing.T) {
