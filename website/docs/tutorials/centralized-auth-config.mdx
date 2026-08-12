@@ -16,12 +16,11 @@ keep in sync, no risk of someone hand-typing the wrong account ID.
 The pattern is the same regardless of cloud — Atmos supports AWS, Azure, and GCP as first-class auth
 providers. The example below shows all three side by side.
 
-If you know Atmos as "the tool that wraps Terraform," this might look like an odd use for it. Atmos is
-really a task runner and configuration platform that happens to do infrastructure-as-code exceptionally
-well — auth is one of several things it manages natively (alongside toolchains, secrets, and workflows),
-not something bolted onto an IaC tool. Reach for it here the way you'd reach for `make` or a `Justfile` —
-a general command runner your whole team already has configured — not as a detour through your
-infrastructure tooling.
+If you've only used Atmos in Terraform repositories, using it here may be unexpected. But Atmos isn't a
+Terraform wrapper—it's a general-purpose task runner and configuration platform with best-in-class support
+for Terraform. We recommend using it in every repository to give teams one consistent way to manage
+commands, toolchains, authentication, secrets, and workflows, whether that repository contains
+infrastructure code or not.
 
 ## The Problem
 
@@ -40,7 +39,7 @@ This works, but it doesn't scale or govern well:
 
 - Every developer's `~/.aws/config` is a hand-maintained, ungoverned copy — nothing catches a
   copy-paste mistake like a wrong account ID.
-- Rotating a role name, adding a new account, or revoking access means re-broadcasting the change and
+- Updating a role name, adding a new account, or revoking access means re-broadcasting the change and
   hoping everyone updates their local file.
 - There's no single source of truth to audit or version-control.
 - If your organization is multi-cloud, this ad hoc pattern doesn't generalize — AWS profiles, `az login`
