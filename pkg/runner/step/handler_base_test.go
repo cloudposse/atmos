@@ -3,6 +3,8 @@ package step
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -259,5 +262,187 @@ func TestBaseHandler_ResolveCommand(t *testing.T) {
 		_, err := handler.ResolveCommand(ctx, step, vars)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+}
+
+func TestBaseHandler_ResolveInWorkingDirectory(t *testing.T) {
+	handler := NewBaseHandler("archive", CategoryCommand, false)
+
+	t.Run("empty value short-circuits without resolving working directory", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: "{{ .invalid"}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "", "source")
+		assert.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("relative value joins against working directory", func(t *testing.T) {
+		workDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: workDir}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "sub/file.txt", "source")
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "sub", "file.txt"), result)
+	})
+
+	t.Run("absolute value passes through unchanged", func(t *testing.T) {
+		absValue := filepath.Join(t.TempDir(), "file.txt")
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: t.TempDir()}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, absValue, "source")
+		assert.NoError(t, err)
+		assert.Equal(t, absValue, result)
+	})
+
+	t.Run("empty working directory falls back to process cwd", func(t *testing.T) {
+		workDir := t.TempDir()
+		t.Chdir(workDir)
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: ""}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "rel/file.txt", "source")
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "rel", "file.txt"), result)
+	})
+
+	t.Run("resolves template in value before join", func(t *testing.T) {
+		workDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: workDir}
+		vars := NewVariables()
+		vars.SetEnv("SUBDIR", "sub")
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "{{ .env.SUBDIR }}/file.txt", "source")
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "sub", "file.txt"), result)
+	})
+
+	t.Run("resolves template in working directory before join", func(t *testing.T) {
+		workDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: "{{ .env.WORKDIR }}"}
+		vars := NewVariables()
+		vars.SetEnv("WORKDIR", workDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "file.txt"), result)
+	})
+
+	t.Run("returns error on invalid template in value", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: t.TempDir()}
+		vars := NewVariables()
+
+		_, err := handler.ResolveInWorkingDirectory(step, vars, "{{ .invalid", "source")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+
+	t.Run("returns error on invalid template in working directory", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: "{{ .invalid"}
+		vars := NewVariables()
+
+		_, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+
+	t.Run("resolved-to-empty value is not replaced by working directory", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: t.TempDir()}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "{{ if false }}x{{ end }}", "source")
+		assert.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("relative working directory (no template) is anchored to process cwd", func(t *testing.T) {
+		// WorkingDirectory here is a literal relative string (no template
+		// syntax), so vars.Resolve returns it unchanged and resolveWorkingDirectory
+		// must fall through to the filepath.Abs(workDir) conversion — a distinct
+		// branch from the "already absolute" and "empty" cases exercised above.
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("bare relative working directory anchors to component working directory when set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(componentDir, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("dot-prefixed working directory stays cwd-relative even when a component anchor is set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		// Deliberately not filepath.Join'd: filepath.Join calls Clean and would
+		// strip the "./" prefix, defeating the point of this case.
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: "./relative/workdir"}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("bare-dot-dot working directory stays cwd-relative even when a component anchor is set", func(t *testing.T) {
+		// ".." (not "../x") is the case pkg/component.IsExplicitComponentPath
+		// would miss; this proves the dedicated classifier handles it.
+		cwd := filepath.Join(t.TempDir(), "nested")
+		require.NoError(t, os.MkdirAll(cwd, 0o755))
+		t.Chdir(cwd)
+		componentDir := t.TempDir()
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: ".."}
+		vars := NewVariables()
+		vars.SetComponentWorkingDirectory(componentDir)
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(filepath.Dir(cwd), "file.txt"), result)
+	})
+
+	t.Run("bare relative working directory falls back to process cwd when no component anchor is set", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("relative", "workdir")}
+		vars := NewVariables() // no SetComponentWorkingDirectory call — workflows/custom-commands never call it
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(cwd, "relative", "workdir", "file.txt"), result)
+	})
+
+	t.Run("tilde-prefixed working directory expands to the home directory", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		homedir.Reset()
+		t.Cleanup(homedir.Reset)
+		// Process cwd differs from home, and also has a same-named "scratch"
+		// dir — an unexpanded "~" would be joined as a literal cwd-relative
+		// path segment instead of erroring or resolving to home, so this
+		// proves expansion actually happened rather than merely not erroring.
+		t.Chdir(t.TempDir())
+
+		step := &schema.WorkflowStep{Name: "test", WorkingDirectory: filepath.Join("~", "scratch")}
+		vars := NewVariables()
+
+		result, err := handler.ResolveInWorkingDirectory(step, vars, "file.txt", "source")
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(home, "scratch", "file.txt"), result)
 	})
 }
