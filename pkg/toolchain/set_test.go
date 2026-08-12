@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1056,6 +1057,106 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		assert.Equal(t, 1, attempts, "a deterministic client error must not be retried")
+	})
+
+	t.Run("does not retry a terminal 403 with no rate-limit signal", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a 403 without Retry-After/X-RateLimit-Remaining is a terminal auth failure, not retried")
+	})
+
+	t.Run("recovers from a rate-limited 403 with Retry-After within budget", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts, "Retry-After: 1s signals a genuine rate limit within budget")
+	})
+
+	t.Run("does not retry when Retry-After exceeds the retry budget", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.Header().Set("Retry-After", "120")
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err, "a non-retryable status is returned as a response, not an error, at this layer")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a 2-minute mandated cooldown exceeds our retry budget, so this fails fast instead of blocking the command")
+	})
+
+	t.Run("recovers from a rate-limited 403 signaled via X-RateLimit-Remaining", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts, "X-RateLimit-Remaining: 0 with no other header falls back to the default backoff")
+	})
+
+	t.Run("recovers from 429 using X-RateLimit-Reset when Retry-After is absent", func(t *testing.T) {
+		attempts := 0
+		reset := strconv.FormatInt(time.Now().Add(1*time.Second).Unix(), 10)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.Header().Set("X-RateLimit-Reset", reset)
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts, "X-RateLimit-Reset ~1s in the future is within budget")
 	})
 
 	t.Run("exhausts retries on a persistent outage", func(t *testing.T) {
