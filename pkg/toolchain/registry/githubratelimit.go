@@ -89,12 +89,14 @@ type HTTPStatusError struct {
 	URL        string
 }
 
+// Error returns a description of the failed HTTP response.
 func (e *HTTPStatusError) Error() string {
 	defer perf.Track(nil, "registry.HTTPStatusError.Error")()
 
 	return fmt.Sprintf("%s: HTTP %d: %s", ErrHTTPRequest, e.StatusCode, e.URL)
 }
 
+// Unwrap returns ErrHTTPRequest.
 func (e *HTTPStatusError) Unwrap() error {
 	defer perf.Track(nil, "registry.HTTPStatusError.Unwrap")()
 

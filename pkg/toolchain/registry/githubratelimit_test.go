@@ -80,11 +80,11 @@ func TestGitHubRetryAfter(t *testing.T) {
 	})
 
 	t.Run("falls back to X-RateLimit-Reset when Retry-After absent", func(t *testing.T) {
-		reset := strconv.FormatInt(time.Now().Add(3*time.Second).Unix(), 10)
+		reset := strconv.FormatInt(time.Now().Add(1*time.Minute).Unix(), 10)
 		wait, ok := GitHubRetryAfter(newHeader("X-RateLimit-Reset", reset))
 		require.True(t, ok)
 		assert.Positive(t, wait)
-		assert.LessOrEqual(t, wait, 3*time.Second)
+		assert.LessOrEqual(t, wait, 1*time.Minute)
 	})
 
 	t.Run("X-RateLimit-Reset already in the past resolves to zero wait", func(t *testing.T) {
