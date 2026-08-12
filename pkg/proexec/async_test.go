@@ -49,9 +49,8 @@ func (f *fakeUploadClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error
 func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	client := &fakeUploadClient{}
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
-	atmosConfig := &schema.AtmosConfiguration{}
 
-	uploadExecMetadata(atmosConfig, "atmos version", 0, nil, client, repo)
+	uploadExecMetadata("atmos version", 0, nil, nil, client, repo)
 
 	assert.Equal(t, int32(1), client.uploadCalls.Load())
 	assert.Equal(t, "atmos version", client.lastRequest.Command)

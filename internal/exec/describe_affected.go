@@ -369,7 +369,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		exitCode = 1
 	}
-	if syncErr := proexec.CaptureSync(a.CLIConfig, "describe affected", exitCode, nil); syncErr != nil {
+	if syncErr := proexec.CaptureSync(a.CLIConfig, "describe affected", exitCode, nil, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 

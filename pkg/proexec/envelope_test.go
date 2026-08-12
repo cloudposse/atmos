@@ -11,7 +11,6 @@ import (
 
 	git "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // fakeGitRepo is a minimal GitRepoInterface implementation for tests.
@@ -62,9 +61,7 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 		sha: "deadbeef",
 	}
 
-	atmosConfig := &schema.AtmosConfiguration{}
-
-	req, err := buildRecord(atmosConfig, "atmos version", 0, testMetrics(), nil, repo)
+	req, err := buildRecord("atmos version", 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -81,13 +78,13 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 	assert.NotNil(t, req.Args)
 	assert.Empty(t, req.Args)
 	assert.Nil(t, req.Data)
+	assert.Nil(t, req.DataItems)
 }
 
 func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
-	atmosConfig := &schema.AtmosConfiguration{}
 
-	req, err := buildRecord(atmosConfig, "atmos list components", 0, testMetrics(), nil, repo)
+	req, err := buildRecord("atmos list components", 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -98,17 +95,19 @@ func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 
 	_, hasData := decoded["data"]
 	assert.False(t, hasData, "Data must be entirely absent from the marshaled JSON when nil")
+
+	_, hasDataItems := decoded["data_items"]
+	assert.False(t, hasDataItems, "DataItems must be entirely absent from the marshaled JSON when nil")
 }
 
 func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
-	atmosConfig := &schema.AtmosConfiguration{}
 
 	type sample struct {
 		Foo string `json:"foo"`
 	}
 
-	req, err := buildRecord(atmosConfig, "atmos terraform plan", 0, testMetrics(), sample{Foo: "bar"}, repo)
+	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), sample{Foo: "bar"}, nil, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -124,17 +123,39 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 	assert.Equal(t, "bar", dataMap["foo"])
 }
 
+func TestBuildRecord_DataItemsPresentWhenGiven(t *testing.T) {
+	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	type resourceChange struct {
+		Action  string `json:"action"`
+		Address string `json:"address"`
+	}
+
+	items := []any{
+		resourceChange{Action: "created", Address: "aws_s3_bucket.example"},
+		resourceChange{Action: "updated", Address: "aws_iam_role.example"},
+	}
+
+	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), nil, items, repo)
+	require.NoError(t, err)
+	require.Len(t, req.DataItems, 2)
+
+	var first resourceChange
+	require.NoError(t, json.Unmarshal(req.DataItems[0], &first))
+	assert.Equal(t, "created", first.Action)
+	assert.Equal(t, "aws_s3_bucket.example", first.Address)
+}
+
 func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
-	atmosConfig := &schema.AtmosConfiguration{}
 
 	type sample struct {
 		AWSKey string `json:"aws_key"`
 	}
 
 	// A recognizable AWS access key pattern the Gitleaks-based masker detects.
-	req, err := buildRecord(atmosConfig, "atmos terraform plan", 0, testMetrics(),
-		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, repo)
+	req, err := buildRecord("atmos terraform plan", 0, testMetrics(),
+		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, nil, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 	// Masking is a no-op without an initialized masking context in this unit
@@ -145,14 +166,31 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	assert.Contains(t, decoded, "aws_key")
 }
 
+func TestBuildRecord_SecretMaskingAppliedToDataItems(t *testing.T) {
+	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	type sample struct {
+		AWSKey string `json:"aws_key"`
+	}
+
+	// Same masking-call-path assertion as TestBuildRecord_SecretMaskingAppliedToData,
+	// applied to each DataItems entry independently (FR-010).
+	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), nil,
+		[]any{sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}}, repo)
+	require.NoError(t, err)
+	require.Len(t, req.DataItems, 1)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(req.DataItems[0], &decoded))
+	assert.Contains(t, decoded, "aws_key")
+}
+
 func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
 	repo := &fakeGitRepo{
 		infoErr: assertError("no repo"),
 		shaErr:  assertError("no sha"),
 	}
-	atmosConfig := &schema.AtmosConfiguration{}
 
-	req, err := buildRecord(atmosConfig, "atmos version", 0, testMetrics(), nil, repo)
+	req, err := buildRecord("atmos version", 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 	assert.Equal(t, "", req.GitSHA)
 	assert.Equal(t, "", req.RepoURL)

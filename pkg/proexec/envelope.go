@@ -11,7 +11,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/schema"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -21,15 +20,17 @@ const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 
 // buildRecord assembles the base execution-record envelope (version, OS,
 // arch, command path, ATMOS_PRO_RUN_ID, git info, resource-usage metrics),
-// applies secret masking to Args and Data (FR-010), and truncates the payload
-// when it would exceed the configured max size (FR-011). A nil data argument
-// produces a request with Data entirely absent from the marshaled JSON.
+// and applies secret masking to Args, data, and dataItems (FR-010). A nil
+// data/dataItems argument produces a request with that field entirely absent
+// from the marshaled JSON. Payload-size handling (FR-011) is not performed
+// here — oversized dataItems are split across multiple correlated requests
+// by pro.UploadExecMetadata, never truncated or dropped.
 func buildRecord(
-	atmosConfig *schema.AtmosConfiguration,
 	command string,
 	exitCode int,
 	metrics process.ProcessMetrics,
 	data any,
+	dataItems []any,
 	gitRepo git.GitRepoInterface,
 ) (*dtos.ExecUploadRequest, error) {
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
@@ -58,6 +59,11 @@ func buildRecord(
 		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
 	}
 
+	dataItemsRaw, err := maskedDataItemsJSON(dataItems)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
+	}
+
 	req := &dtos.ExecUploadRequest{
 		AtmosProRunID: atmosProRunID,
 		AtmosVersion:  pkgversion.Version,
@@ -73,9 +79,10 @@ func buildRecord(
 		RepoHost:      repoInfo.RepoHost,
 		Metrics:       toResourceUsageMetrics(metrics),
 		Data:          dataRaw,
+		DataItems:     dataItemsRaw,
 	}
 
-	return truncateIfNeeded(req, atmosConfig)
+	return req, nil
 }
 
 // maskArgs runs the existing secret-masking path over each argument.
@@ -106,6 +113,27 @@ func maskedDataJSON(data any) (json.RawMessage, error) {
 
 	masked := io.MaskString(string(raw))
 	return json.RawMessage(masked), nil
+}
+
+// maskedDataItemsJSON marshals each item in dataItems to JSON and runs the
+// result through the existing secret-masking path before it becomes part of
+// the upload payload (FR-010). A nil/empty dataItems argument returns a nil
+// slice so the DataItems field is omitted entirely from the marshaled
+// request.
+func maskedDataItemsJSON(dataItems []any) ([]json.RawMessage, error) {
+	if len(dataItems) == 0 {
+		return nil, nil
+	}
+
+	out := make([]json.RawMessage, len(dataItems))
+	for i, item := range dataItems {
+		raw, err := json.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = json.RawMessage(io.MaskString(string(raw)))
+	}
+	return out, nil
 }
 
 // toResourceUsageMetrics converts process.ProcessMetrics to the DTO shape.

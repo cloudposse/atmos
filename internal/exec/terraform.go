@@ -220,7 +220,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, info *schem
 		exitCode = 1
 	}
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+info.SubCommand, exitCode, nil); syncErr != nil {
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+info.SubCommand, exitCode, nil, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

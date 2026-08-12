@@ -75,7 +75,7 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		uploadExecMetadata(atmosConfig, commandPath, exitCode, nil, client, git.NewDefaultGitRepo())
+		uploadExecMetadata(commandPath, exitCode, nil, nil, client, git.NewDefaultGitRepo())
 	}()
 
 	done := make(chan struct{})
@@ -97,14 +97,14 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 // is logged at debug level only (FR-009a) and never surfaces to the user or
 // alters the calling command's outcome.
 func uploadExecMetadata(
-	atmosConfig *schema.AtmosConfiguration,
 	commandPath string,
 	exitCode int,
 	data any,
+	dataItems []any,
 	client pro.AtmosProAPIClientInterface,
 	gitRepo git.GitRepoInterface,
 ) {
-	req, buildErr := buildRecord(atmosConfig, commandPath, exitCode, processBaseline.Since(), data, gitRepo)
+	req, buildErr := buildRecord(commandPath, exitCode, processBaseline.Since(), data, dataItems, gitRepo)
 	if buildErr != nil {
 		log.Debug("Skipping exec-metadata upload: failed to build execution record.", "error", buildErr)
 		return

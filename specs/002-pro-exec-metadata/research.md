@@ -175,24 +175,51 @@ implementer to justify it — YAGNI.
 
 **Decision**: `pkg/pro/api_client_exec.go` adds
 `(c *AtmosProAPIClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error`,
-`POST {BaseURL}/{BaseAPIEndpoint}/atmos/exec`, following the exact same shape as
-`UploadInstanceStatus`: `json.Marshal` → `doWithRetry("UploadExecMetadata", ..., c,
-defaultRetryConfig())` → `getAuthenticatedRequest` → `c.HTTPClient.Do` →
-`handleAPIResponse`. Added to `AtmosProAPIClientInterface` alongside the other five
-methods.
+`POST {BaseURL}/{BaseAPIEndpoint}/atmos/exec`. The base envelope (identity, git info,
+`Metrics`, and any small always-present `Data` summary fields) is marshaled and sent via
+the same `doWithRetry("UploadExecMetadata", ..., c, defaultRetryConfig())` →
+`getAuthenticatedRequest` → `c.HTTPClient.Do` → `handleAPIResponse` shape as
+`UploadInstanceStatus` whenever it fits under `MaxPayloadBytes` on its own (the common
+case — most commands have no `Data` at all). When a command's structured data includes a
+large, chunkable array (`dtos.ExecUploadRequest.DataItems []json.RawMessage` — e.g. the
+combined per-resource change list for `terraform plan`/`apply`), `UploadExecMetadata`
+instead calls `pro.sendChunked(dto.DataItems, c.MaxPayloadBytes, overhead, sendFn)`
+exactly like `UploadAffectedStacks`/`UploadInstances` do: the full envelope (identity,
+`Metrics`, small `Data` fields) is repeated on **every** chunk request so each one is
+self-contained and independently retryable, and each request carries `BatchInfo`
+(`batch_id`/`batch_index`/`batch_total`) for server-side reassembly. Added to
+`AtmosProAPIClientInterface` alongside the other five methods.
 
-**Rationale**: Every other Atmos Pro upload in the codebase follows this identical
-pattern; deviating would be inconsistent for no benefit. Reusing `doWithRetry` gets
-401-refresh-and-retry and 5xx-backoff-retry for free, matching FR-012.
+**Rationale**: Clarification (spec.md, Session 2026-08-11) requires that command-specific
+structured data is never truncated or dropped for size — only the (potentially large)
+`DataItems` array is split across correlated requests, reusing the existing
+chunked-upload/`BatchInfo` mechanism (`pkg/pro/chunked_upload.go`) already proven by
+`UploadAffectedStacks` and `UploadInstances`, rather than inventing a second chunking
+implementation. The base envelope and resource-usage metrics are small and bounded, so
+they are always sent in full and never subject to chunking (FR-011). Reusing `doWithRetry`
+per chunk gets 401-refresh-and-retry and 5xx-backoff-retry for free, matching FR-012, for
+every chunk independently — a single failed chunk can be retried without re-sending the
+whole record from scratch.
 
 **Alternatives considered**:
-- `sendChunked` (used by `UploadAffectedStacks`) — rejected: chunking splits a single
-  logical array (`Stacks []schema.Affected`) into independently-postable pieces. An
-  execution record is one indivisible logical unit; splitting it would produce partial,
-  meaningless records. Oversized structured data (FR-011) is instead truncated
-  client-side against `MaxPayloadBytes` before marshaling (large text fields like raw
-  logs/warnings are trimmed with a truncation marker) rather than chunked into multiple
-  requests.
+- Client-side truncation with a `"... truncated"` marker (the original Decision 6) —
+  rejected per clarification: silently dropping resource/output/warning data from the
+  execution record defeats the purpose of User Story 3 (seeing exactly what changed
+  without re-reading raw CI logs); a `terraform plan` touching thousands of resources
+  must still report all of them, not a truncated subset.
+- Chunking the *entire* `ExecutionRecord` (envelope + metrics + data) the way
+  `UploadAffectedStacks` chunks its whole `Stacks` array — rejected: the envelope and
+  metrics are a single indivisible identity for the invocation (there is exactly one
+  exit code, one wall-time, one git SHA), not a repeatable per-item array; only the
+  command-specific structured data can meaningfully be split into independently-postable
+  pieces, per clarification.
+- One `sendChunked` call per resource-action array (`CreatedResources`,
+  `UpdatedResources`, `DeletedResources`, `ReplacedResources` sent as four separate
+  batched uploads) — rejected: four independent batch sequences per record quadruples
+  request count and `batch_id` bookkeeping for no benefit over one flat, chunkable
+  `DataItems` list; `pkg/proexec` maps `TerraformOutputData`'s four/six resource-address
+  slices into one `[]json.RawMessage` of `{action, address}` items before calling
+  `UploadExecMetadata`.
 
 ---
 

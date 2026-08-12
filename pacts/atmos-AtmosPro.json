@@ -4,6 +4,220 @@
   },
   "interactions": [
     {
+      "description": "a chunked request to upload command-execution metadata (chunk 1 of 2)",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "",
+          "atmos_os": "",
+          "atmos_pro_run_id": "",
+          "atmos_version": "",
+          "batch_id": "b3b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+          "batch_index": 0,
+          "batch_total": 2,
+          "command": "atmos terraform plan",
+          "data_items": [
+            {
+              "action": "created",
+              "address": "aws_s3_bucket.example"
+            }
+          ],
+          "exit_code": 0,
+          "git_sha": "",
+          "metrics": {
+            "system_cpu_time_ms": 0,
+            "user_cpu_time_ms": 0,
+            "wall_time_ms": 0
+          },
+          "repo_host": "",
+          "repo_name": "",
+          "repo_owner": "",
+          "repo_url": ""
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.batch_id": {
+            "match": "type"
+          },
+          "$.body.batch_total": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a chunked request to upload command-execution metadata (chunk 2 of 2)",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "",
+          "atmos_os": "",
+          "atmos_pro_run_id": "",
+          "atmos_version": "",
+          "batch_id": "b3b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+          "batch_index": 1,
+          "batch_total": 2,
+          "command": "atmos terraform plan",
+          "data_items": [
+            {
+              "action": "updated",
+              "address": "aws_iam_role.example"
+            }
+          ],
+          "exit_code": 0,
+          "git_sha": "",
+          "metrics": {
+            "system_cpu_time_ms": 0,
+            "user_cpu_time_ms": 0,
+            "wall_time_ms": 0
+          },
+          "repo_host": "",
+          "repo_name": "",
+          "repo_owner": "",
+          "repo_url": ""
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.batch_id": {
+            "match": "type"
+          },
+          "$.body.batch_total": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to create a commit via Atmos Pro GitHub App",
       "providerState": "workspace exists and GitHub App is authorized",
       "request": {
@@ -355,22 +569,22 @@
           "atmos_version": "1.2.3",
           "command": "atmos terraform plan",
           "data": {
-            "created_resources": [
-              "aws_s3_bucket.example"
-            ],
             "resource_counts": {
               "change": 1,
               "create": 2,
               "destroy": 0,
               "replace": 0
             },
-            "updated_resources": [
-              "aws_iam_role.example"
-            ],
             "warnings": [
               "deprecated argument used"
             ]
           },
+          "data_items": [
+            {
+              "action": "created",
+              "address": "aws_s3_bucket.example"
+            }
+          ],
           "exit_code": 0,
           "git_sha": "abc123def456",
           "metrics": {
@@ -410,10 +624,6 @@
           "$.body.command": {
             "match": "type"
           },
-          "$.body.data.created_resources": {
-            "match": "type",
-            "min": 1
-          },
           "$.body.data.resource_counts.change": {
             "match": "type"
           },
@@ -426,13 +636,19 @@
           "$.body.data.resource_counts.replace": {
             "match": "type"
           },
-          "$.body.data.updated_resources": {
-            "match": "type",
-            "min": 1
-          },
           "$.body.data.warnings": {
             "match": "type",
             "min": 1
+          },
+          "$.body.data_items": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data_items[*].action": {
+            "match": "type"
+          },
+          "$.body.data_items[*].address": {
+            "match": "type"
           },
           "$.body.exit_code": {
             "match": "type"

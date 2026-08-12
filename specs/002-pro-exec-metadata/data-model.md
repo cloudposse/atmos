@@ -37,7 +37,11 @@ for `POST /v1/atmos/exec`.
 | `GitSHA` | `string` | |
 | `RepoURL`, `RepoName`, `RepoOwner`, `RepoHost` | `string` | From `git.GitRepoInterface.GetLocalRepoInfo()`, matching `InstanceStatusUploadRequest` |
 | `Metrics` | `ResourceUsageMetrics` | Always present (Unix-only sub-fields `omitempty`) |
-| `Data` | `any` (`json.RawMessage` after marshal) | Command-specific structured data; `nil`/absent for most commands |
+| `Data` | `any` (`json.RawMessage` after marshal) | Command-specific structured *summary* data (bounded/small — e.g. `ResourceCounts`, `Outputs`, `Warnings`); `nil`/absent for most commands. Never chunked. |
+| `DataItems` | `[]json.RawMessage`, `omitempty` | Command-specific structured *bulk* data — the potentially large, chunkable array (e.g. one `{action, address}` entry per created/updated/deleted/replaced/moved/imported resource for `terraform plan`/`apply`); `nil`/absent for most commands. Split across correlated requests via `pro.sendChunked` when it would exceed `MaxPayloadBytes` (FR-011) |
+| `BatchID` | `string`, `omitempty` | Present only on chunked requests — `pro.BatchInfo.BatchID`, correlates all chunks of one `ExecutionRecord`'s `DataItems` |
+| `BatchIndex` | `*int`, `omitempty` | Present only on chunked requests — 0-based chunk index |
+| `BatchTotal` | `*int`, `omitempty` | Present only on chunked requests — total chunk count |
 
 ### ResourceUsageMetrics (embedded in `ExecutionRecord`)
 
@@ -51,13 +55,17 @@ for `POST /v1/atmos/exec`.
 | `InBlockOps`, `OutBlockOps` | `int64` | `omitempty` — Unix only |
 | `VolCtxSwitches`, `InvolCtxSwitches` | `int64` | `omitempty` — Unix only |
 
-### TerraformExecData (one concrete `Data` shape, for `terraform plan`/`apply`)
+### TerraformExecData (one concrete `Data`/`DataItems` shape, for `terraform plan`/`apply`)
 
-Reuses the already-merged `pkg/ci/internal/plugin.TerraformOutputData` structure
-directly as the `Data` payload — no new type. Fields: `ResourceCounts`,
-`CreatedResources`, `UpdatedResources`, `ReplacedResources`, `DeletedResources`,
-`MovedResources`, `ImportedResources`, `Outputs`, `HasOutputChanges`, `ChangedResult`,
-`Warnings`.
+Derived from the already-merged `pkg/ci/internal/plugin.TerraformOutputData` structure,
+split across the two fields by size:
+- `Data` (small, always sent in full): `ResourceCounts`, `Outputs`, `HasOutputChanges`,
+  `ChangedResult`, `Warnings`.
+- `DataItems` (potentially large, chunkable): one `{action, address}` entry per resource
+  in `CreatedResources`, `UpdatedResources`, `ReplacedResources`, `DeletedResources`,
+  `MovedResources`, `ImportedResources` — `action` is the source field name
+  (`"created"`/`"updated"`/`"replaced"`/`"deleted"`/`"moved"`/`"imported"`), `address` is
+  the resource address string.
 
 ### ExecUploadResponse
 
@@ -89,8 +97,8 @@ user setting, consistent with the spec's Assumptions.
 |------|--------|
 | Gate check | `proexec.gateOpen` MUST be evaluated fresh per invocation; never cached across commands within the same process |
 | Secret masking | `Args` and `Data` MUST pass through the existing Gitleaks-based masking (`pkg/io` masking) before marshaling, consistent with FR-010 |
-| Payload size | Marshaled body MUST be compared against `Settings.Pro.MaxPayloadBytes` (falling back to the existing Pro default); when exceeded, large text fields within `Data` (e.g. `Warnings`, raw log text) are truncated with a `"... truncated"` marker before re-marshaling, never chunked |
-| Sync timeout | `CaptureSync` MUST bound its wait to `max(Settings.Pro.Exec.SyncTimeoutSeconds, 10)` seconds |
+| Payload size | Marshaled body (envelope + `Metrics` + `Data`) MUST be compared against `Settings.Pro.MaxPayloadBytes` (falling back to the existing Pro default). When it fits, the record is sent as a single request. When `DataItems` pushes it over the limit, `DataItems` is split across multiple correlated requests via `pro.sendChunked`/`BatchInfo`, each carrying the full envelope/`Metrics`/`Data`; the envelope, `Metrics`, and `Data` themselves are never truncated or chunked (FR-011) |
+| Sync timeout | `CaptureSync` MUST bound its **total** wait — across all chunk requests combined, if `DataItems` required batching — to `max(Settings.Pro.Exec.SyncTimeoutSeconds, 10)` seconds |
 | Async flush ceiling | `CaptureAsync` MUST bound its wait to a fixed 2 seconds, not configurable |
 | Correlation ID | `AtmosProRunID` MUST be sourced identically to `internal/exec/pro.go: uploadStatus` (`os.Getenv("ATMOS_PRO_RUN_ID")`) for consistency across both upload paths |
 

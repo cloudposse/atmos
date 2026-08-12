@@ -21,7 +21,7 @@ output location are unchanged from the existing suite (see `research.md` Decisio
 | Method | `POST` |
 | Path | `/api/v1/atmos/exec` |
 | Request Headers | `Authorization: Bearer <token>`, `Content-Type: application/json` |
-| Request Body Fields | `atmos_pro_run_id` (string), `atmos_version` (string), `atmos_os` (string), `atmos_arch` (string), `command` (string), `args` (array of string, may be empty), `exit_code` (integer), `git_sha` (string), `repo_url`/`repo_name`/`repo_owner`/`repo_host` (strings), `metrics` (object — see below), `data` (object, optional/nullable) |
+| Request Body Fields | `atmos_pro_run_id` (string), `atmos_version` (string), `atmos_os` (string), `atmos_arch` (string), `command` (string), `args` (array of string, may be empty), `exit_code` (integer), `git_sha` (string), `repo_url`/`repo_name`/`repo_owner`/`repo_host` (strings), `metrics` (object — see below), `data` (object, optional/nullable), `data_items` (array of object, optional — see below), `batch_id` (string, optional), `batch_index` (integer, optional), `batch_total` (integer, optional) |
 | Response Status | `200` |
 | Response Body | `{ "success": true }` |
 
@@ -40,22 +40,48 @@ output location are unchanged from the existing suite (see `research.md` Decisio
 | `vol_ctx_switches` | integer, optional | `Like(30)` |
 | `invol_ctx_switches` | integer, optional | `Like(5)` |
 
-#### `data` object (example: `terraform plan`/`apply` structured payload)
+#### `data` object (example: `terraform plan`/`apply` structured summary payload)
 
 Present only for `terraform plan`/`apply` interactions in the pact test; other
 example interactions in the same consumer test file may omit `data` entirely
 (`null`) to cover the "no structured data" case per spec Acceptance Scenario
-US3.4.
+US3.4. Always sent in full — never split across requests.
 
 | Field | Type | Matcher |
 |-------|------|---------|
 | `resource_counts` | object `{create, change, replace, destroy}` (integers) | `Like` per field |
-| `created_resources` | array of string | `EachLike("aws_s3_bucket.example")` |
-| `updated_resources` | array of string | `EachLike(...)` |
-| `replaced_resources` | array of string | `EachLike(...)` |
-| `deleted_resources` | array of string | `EachLike(...)` |
 | `outputs` | object, values `{value, type, sensitive}` | `Like` per key |
 | `warnings` | array of string | `EachLike(...)` |
+
+#### `data_items` array (example: `terraform plan`/`apply` per-resource change list)
+
+The potentially large, chunkable portion of the structured payload — one entry per
+created/updated/deleted/replaced/moved/imported resource. Present only for
+`terraform plan`/`apply` interactions; absent/`null` for commands with no bulk
+structured data.
+
+| Field | Type | Matcher |
+|-------|------|---------|
+| `action` | string, one of `created`/`updated`/`replaced`/`deleted`/`moved`/`imported` | `Like("created")` |
+| `address` | string | `Like("aws_s3_bucket.example")` |
+
+#### Batch correlation fields (`batch_id`, `batch_index`, `batch_total`)
+
+Present only when `data_items` was split across multiple requests because the full
+`ExecutionRecord` (envelope + `metrics` + `data` + that chunk's `data_items`) would
+otherwise exceed the payload size limit — mirrors the existing
+`UploadAffectedStacks`/`UploadInstances` batch-correlation shape
+(`pkg/pro/chunked_upload.go`). Absent/`null` when the whole record fit in a single
+request (the common case for most commands, and for small plans/applies). One example
+interaction in the pact test covers a 2-chunk `terraform plan` to validate the shape;
+the base envelope, `metrics`, and `data` fields are identical (repeated) on both
+chunk requests, only `data_items`/`batch_index` differ.
+
+| Field | Type | Matcher |
+|-------|------|---------|
+| `batch_id` | string (uuid) | `Like("b3b1...-uuid")` |
+| `batch_index` | integer, 0-based | `Like(0)` |
+| `batch_total` | integer | `Like(2)` |
 
 ---
 
@@ -66,5 +92,6 @@ US3.4.
 | Authorization header | MUST be present and match `Bearer <token>` pattern |
 | Content-Type header | MUST be `application/json` |
 | Response `success` field | MUST be `true` in the 200 response body |
-| `data` nullability | The contract MUST cover both a present-`data` interaction (terraform plan) and an absent/`null`-`data` interaction (non-terraform command), since FR-005 requires both to be valid |
+| `data`/`data_items` nullability | The contract MUST cover a present-`data`/`data_items` interaction (terraform plan), an absent/`null` interaction (non-terraform command), and a chunked (`batch_id`/`batch_index`/`batch_total` present) interaction, since FR-005 and FR-011 require all three to be valid |
+| No truncation | `data_items` entries in the contract MUST NOT be marked/expected as truncated or dropped — the contract only ever models full delivery, split across requests when large, never partial data (FR-011) |
 | Numeric metrics | All `metrics` fields MUST use `Like()` (never exact literals) since resource usage is inherently non-deterministic across machines/runs |

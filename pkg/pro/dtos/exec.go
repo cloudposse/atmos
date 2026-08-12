@@ -36,10 +36,22 @@ type ExecUploadRequest struct {
 	RepoOwner     string               `json:"repo_owner"`
 	RepoHost      string               `json:"repo_host"`
 	Metrics       ResourceUsageMetrics `json:"metrics"`
-	// Data is command-specific structured data (e.g. terraform plan/apply
-	// resource changes). Absent (nil) for commands with no structured-data
-	// extension, per FR-005/data-model.md.
+	// Data is command-specific structured *summary* data (e.g. terraform
+	// plan/apply resource counts, outputs, warnings). Small and bounded —
+	// always sent in full, never chunked. Absent (nil) for commands with no
+	// structured-data extension, per FR-005/data-model.md.
 	Data json.RawMessage `json:"data,omitempty"`
+	// DataItems is command-specific structured *bulk* data (e.g. one entry
+	// per terraform plan/apply resource change). Potentially large — split
+	// across multiple correlated requests via chunking rather than truncated
+	// or dropped when it would exceed the payload size limit (FR-011).
+	DataItems []json.RawMessage `json:"data_items,omitempty"`
+	// BatchID/BatchIndex/BatchTotal are present only when DataItems was
+	// split across multiple requests, correlating the chunks for server-side
+	// reassembly (mirrors UploadAffectedStacksRequest/InstancesUploadRequest).
+	BatchID    string `json:"batch_id,omitempty"`
+	BatchIndex *int   `json:"batch_index,omitempty"`
+	BatchTotal *int   `json:"batch_total,omitempty"`
 }
 
 // ExecUploadResponse represents the response from POST /v1/atmos/exec.

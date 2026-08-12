@@ -412,10 +412,12 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 							"replace": matchers.Like(0),
 							"destroy": matchers.Like(0),
 						},
-						"created_resources": matchers.EachLike("aws_s3_bucket.example", 1),
-						"updated_resources": matchers.EachLike("aws_iam_role.example", 1),
-						"warnings":          matchers.EachLike("deprecated argument used", 1),
+						"warnings": matchers.EachLike("deprecated argument used", 1),
 					},
+					"data_items": matchers.EachLike(body{
+						"action":  matchers.Like("created"),
+						"address": matchers.Like("aws_s3_bucket.example"),
+					}, 1),
 				})
 		}).
 		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
@@ -432,9 +434,14 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 					"replace": 0,
 					"destroy": 0,
 				},
-				"created_resources": []string{"aws_s3_bucket.example"},
-				"updated_resources": []string{"aws_iam_role.example"},
-				"warnings":          []string{"deprecated argument used"},
+				"warnings": []string{"deprecated argument used"},
+			})
+			if err != nil {
+				return err
+			}
+			dataItem, err := json.Marshal(map[string]any{
+				"action":  "created",
+				"address": "aws_s3_bucket.example",
 			})
 			if err != nil {
 				return err
@@ -464,7 +471,8 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 					VolCtxSwitches:   30,
 					InvolCtxSwitches: 5,
 				},
-				Data: data,
+				Data:      data,
+				DataItems: []json.RawMessage{dataItem},
 			})
 		})
 	require.NoError(t, err)
@@ -529,6 +537,95 @@ func TestPact_UploadExecMetadata_NoData(t *testing.T) {
 					UserCPUTimeMS:   20,
 					SystemCPUTimeMS: 5,
 				},
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_Chunked verifies the consumer contract for
+// POST /api/v1/atmos/exec when DataItems is split across multiple correlated
+// requests (batch_id/batch_index/batch_total present on each), per
+// contracts/interactions.md's "Batch correlation fields" section and FR-011
+// (structured data is never truncated — only chunked). MaxPayloadBytes is
+// set to 1 to deterministically force one DataItems entry per request,
+// regardless of envelope/overhead size.
+func TestPact_UploadExecMetadata_Chunked(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	chunkRequest := func(index, total int, action, address string) func(b *consumer.V2RequestBuilder) {
+		return func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"atmos_pro_run_id": matchers.Like(""),
+					"atmos_version":    matchers.Like(""),
+					"atmos_os":         matchers.Like(""),
+					"atmos_arch":       matchers.Like(""),
+					"command":          matchers.Like("atmos terraform plan"),
+					"args":             []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like(""),
+					"repo_url":         matchers.Like(""),
+					"repo_name":        matchers.Like(""),
+					"repo_owner":       matchers.Like(""),
+					"repo_host":        matchers.Like(""),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(0),
+						"user_cpu_time_ms":   matchers.Like(0),
+						"system_cpu_time_ms": matchers.Like(0),
+					},
+					// batch_index/action/address are exact (not Like-wrapped) values so
+					// the mock server can distinguish this interaction from the other
+					// chunk's — Like() only asserts JSON type, which would make both
+					// chunk interactions structurally identical and ambiguous to match.
+					"batch_id":    matchers.Like("b3b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d"),
+					"batch_index": index,
+					"batch_total": matchers.Like(total),
+					"data_items": []interface{}{
+						body{
+							"action":  action,
+							"address": address,
+						},
+					},
+				})
+		}
+	}
+
+	mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a chunked request to upload command-execution metadata (chunk 1 of 2)").
+		WithRequest("POST", "/api/v1/atmos/exec", chunkRequest(0, 2, "created", "aws_s3_bucket.example")).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{"success": matchers.Like(true)})
+		})
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a chunked request to upload command-execution metadata (chunk 2 of 2)").
+		WithRequest("POST", "/api/v1/atmos/exec", chunkRequest(1, 2, "updated", "aws_iam_role.example")).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{"success": matchers.Like(true)})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			client.MaxPayloadBytes = 1 // Forces exactly one DataItems entry per chunk.
+
+			item1, err := json.Marshal(map[string]any{"action": "created", "address": "aws_s3_bucket.example"})
+			if err != nil {
+				return err
+			}
+			item2, err := json.Marshal(map[string]any{"action": "updated", "address": "aws_iam_role.example"})
+			if err != nil {
+				return err
+			}
+
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				Command:   "atmos terraform plan",
+				Args:      []string{},
+				ExitCode:  0,
+				DataItems: []json.RawMessage{item1, item2},
 			})
 		})
 	require.NoError(t, err)
