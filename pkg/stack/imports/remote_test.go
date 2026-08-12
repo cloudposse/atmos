@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -981,6 +982,71 @@ func TestCleanRemoteSubdir(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+// TestRemoteImporter_Download_HonorsConfigTTL verifies that Download -- the plain-URL /
+// no-subdirectory cache path, distinct from the git-subdir path Resolve/resolveGitSubdir
+// use -- now also honors atmosConfig.Imports.TTL, instead of caching forever unconditionally.
+// Each importer has its own session, simulating separate atmos invocations against the
+// same on-disk cache dir.
+func TestRemoteImporter_Download_HonorsConfigTTL(t *testing.T) {
+	var requestCount atomic.Int32
+	content := "vars:\n  from_http: true\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("Content-Type", "text/yaml")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(content))
+	}))
+	defer server.Close()
+	uri := server.URL + "/config.yaml"
+
+	baseDir := t.TempDir()
+	newImporter := func(t *testing.T, ttl string) *RemoteImporter {
+		t.Helper()
+		testCache, err := cache.NewFileCache("test", cache.WithBaseDir(baseDir))
+		require.NoError(t, err)
+		importer, err := NewRemoteImporter(&schema.AtmosConfiguration{Imports: schema.ImportsSettings{TTL: ttl}}, WithCache(testCache))
+		require.NoError(t, err)
+		return importer
+	}
+
+	// Run 1: cold cache, ttl configured -> fetch. (The real downloader may issue more
+	// than one HTTP request per logical fetch, e.g. a HEAD check; assert on the delta
+	// changing, not an exact request count, to stay robust to that detail.)
+	_, err := newImporter(t, "1h").Download(uri)
+	require.NoError(t, err)
+	afterCold := requestCount.Load()
+	assert.Positive(t, afterCold, "cold cache must fetch")
+
+	// Run 2: warm cache, fresh ttl -> Download reuses, no new request.
+	_, err = newImporter(t, "1h").Download(uri)
+	require.NoError(t, err)
+	assert.Equal(t, afterCold, requestCount.Load(), "Download should honor atmosConfig.Imports.TTL and reuse the fresh download")
+
+	// Run 3: backdate the freshness metadata past the ttl -> Download refreshes.
+	metaBytes, exists, err := newImporter(t, "1h").cache.Get(downloadMetaCacheKey(uri))
+	require.NoError(t, err)
+	require.True(t, exists)
+	var meta sourceMetadata
+	require.NoError(t, json.Unmarshal(metaBytes, &meta))
+	meta.UpdatedAt = time.Now().Add(-2 * time.Hour)
+	backdated, err := json.Marshal(meta)
+	require.NoError(t, err)
+	testCache, err := cache.NewFileCache("test", cache.WithBaseDir(baseDir))
+	require.NoError(t, err)
+	require.NoError(t, testCache.Set(downloadMetaCacheKey(uri), backdated))
+
+	_, err = newImporter(t, "1h").Download(uri)
+	require.NoError(t, err)
+	afterExpired := requestCount.Load()
+	assert.Greater(t, afterExpired, afterCold, "expired download should be refreshed")
+
+	// Run 4: ttl unset (default) -> preserves historical unconditional/permanent caching,
+	// reusing the still-cached content from run 3 with no new request.
+	_, err = newImporter(t, "").Download(uri)
+	require.NoError(t, err)
+	assert.Equal(t, afterExpired, requestCount.Load(), "unset Imports.TTL must preserve the existing cache-forever behavior")
 }
 
 func relativeSlashPath(t *testing.T, root, path string) string {

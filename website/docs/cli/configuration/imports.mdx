@@ -120,10 +120,16 @@ import:
 
 ### Caching Remote Imports
 
-This applies to `git::` imports that use a subdirectory (e.g. `git::https://github.com/org/repo.git//path?ref=main`).
-By default the source repo is re-cloned on every `atmos` invocation, so mutable refs (e.g. `?ref=main`)
-always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set
-the same `imports.ttl` default used by [remote stack imports](/stacks/imports#caching-remote-imports):
+Two default behaviors apply, depending on the import form. A `git::` import that uses a subdirectory
+(e.g. `git::https://github.com/org/repo.git//path?ref=main`) re-clones the source repo on every `atmos`
+invocation, so mutable refs (e.g. `?ref=main`) always stay current. A plain remote URL (no `git::`
+subdirectory) is cached indefinitely instead — once downloaded, that content is reused until the cache is
+cleared.
+
+Set `imports.ttl` to change either default. When set, it applies to every remote import the same way: a
+`git::` subdirectory import is cached and reused across invocations instead of always re-cloning, and a
+plain URL import expires after `ttl` instead of being cached forever. Use the same setting stack manifest
+imports already support (see [remote stack imports](/stacks/imports#caching-remote-imports)):
 
 ```yaml title="atmos.yaml"
 imports:
@@ -133,10 +139,8 @@ imports:
 This is a single global default; root `import:` entries are plain strings and don't support a per-import
 `ttl` override the way stack manifest imports do. `ttl` accepts durations like `0s` (always re-fetch),
 `5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer
-`ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh.
-
-Plain remote URLs (no `git::` subdirectory) use a separate, non-expiring cache instead — `ttl` has no
-effect on them.
+`ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh. Leave
+`ttl` unset to keep each import form's own default behavior described above.
 
 ## Limitations
 
