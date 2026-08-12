@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -93,6 +94,32 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 				"identities": map[string]schema.Identity{
 					"dev": {Kind: "aws"},
 				},
+			},
+		},
+		{
+			name: "integrations only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Integrations: map[string]schema.Integration{
+						"example-gke": {Kind: "gcp/gke"},
+					},
+				},
+			},
+			expected: map[string]any{
+				"integrations": map[string]schema.Integration{
+					"example-gke": {Kind: "gcp/gke"},
+				},
+			},
+		},
+		{
+			name: "console only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Console: &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
+				},
+			},
+			expected: map[string]any{
+				"console": &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
 			},
 		},
 		{
@@ -236,8 +263,10 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			name: "empty maps are excluded",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
-					Providers:  map[string]schema.Provider{},
-					Identities: map[string]schema.Identity{},
+					Providers:    map[string]schema.Provider{},
+					Identities:   map[string]schema.Identity{},
+					Integrations: map[string]schema.Integration{},
+					Console:      &schema.AuthConsoleConfig{},
 				},
 			},
 			expected: map[string]any{},
@@ -695,6 +724,56 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
+}
+
+func TestGetMergedAuthConfigWithFetcher_PreservesGlobalGKEIntegration(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"example-provider": {Kind: "gcp/adc"},
+			},
+			Identities: map[string]schema.Identity{
+				"example-deployer": {
+					Kind:     "gcp/project",
+					Provider: "example-provider",
+				},
+			},
+			Integrations: map[string]schema.Integration{
+				"example-gke": {
+					Kind: "gcp/gke",
+					Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+					Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+					}},
+				},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "example-stack",
+		ComponentFromArg: "example-release",
+		ComponentType:    cfg.HelmComponentType,
+	}
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"require_identity": true,
+				"identities": map[string]any{
+					"example-deployer": map[string]any{"default": true},
+				},
+			},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	require.NoError(t, err)
+	assert.Equal(t, "gcp/adc", result.Providers["example-provider"].Kind)
+	require.Contains(t, result.Identities, "example-deployer")
+	assert.True(t, result.Identities["example-deployer"].Default)
+	require.Contains(t, result.Integrations, "example-gke")
+	assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
 }
 
 func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {

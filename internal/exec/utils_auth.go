@@ -183,6 +183,12 @@ func buildGlobalAuthSection(atmosConfig *schema.AtmosConfiguration) map[string]a
 	if len(atmosConfig.Auth.Identities) > 0 {
 		globalAuthSection["identities"] = atmosConfig.Auth.Identities
 	}
+	if len(atmosConfig.Auth.Integrations) > 0 {
+		globalAuthSection["integrations"] = atmosConfig.Auth.Integrations
+	}
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		globalAuthSection["console"] = atmosConfig.Auth.Console
+	}
 	if atmosConfig.Auth.Logs.Level != "" || atmosConfig.Auth.Logs.File != "" {
 		globalAuthSection["logs"] = map[string]any{
 			"level": atmosConfig.Auth.Logs.Level,

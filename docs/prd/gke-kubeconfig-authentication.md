@@ -44,6 +44,24 @@ The process cache key also includes kubeconfig path, mode, update behavior, cont
 
 Native Helm preserves its current ambient-kubeconfig behavior by default. A GKE component can opt into fail-closed targeting with `auth.require_identity: true` and a component-level default identity. For guarded apply/deploy/delete operations, Atmos resolves that default when no CLI identity was supplied, requires the GKE integration to provision an expected endpoint, and compares it with the effective Helm REST configuration before contacting the cluster.
 
+A concrete component can disable an inherited guard while retaining the rest of its inherited auth configuration:
+
+```yaml
+auth:
+  require_identity: false
+```
+
+If the component must also deselect an inherited default identity marker, it can override that marker explicitly:
+
+```yaml
+auth:
+  identities:
+    example-deployer:
+      default: false
+```
+
+An empty `identities: {}` map does not clear inherited identities; normal deep-merge behavior intentionally preserves them.
+
 The comparison uses the API server endpoint, not the local context name. Context names are aliases and cannot prove cluster identity. This guard is intentionally GKE-scoped in this change and does not alter existing EKS or AKS behavior.
 
 The default kubeconfig path is Atmos-owned under the XDG config directory. `update: merge` sets `current-context` in that Atmos-owned file. Mutating a shared user kubeconfig happens only when the user explicitly configures that shared path.
@@ -133,9 +151,27 @@ first-use run restricted `PATH` to the locally built `atmos`, `kubectl`, `jq`, a
 directories; a preflight check confirmed that neither `gcloud` nor `gke-gcloud-auth-plugin` was
 available, and all four nodes were still reachable and Ready.
 
+**5. Combined guarded Helm run.** A separate combined integration run declared the GKE integration
+only in global auth configuration. Each Helm component contained the opt-in guard and a default
+marker for the existing global identity; no component duplicated the integration. With ambient
+`KUBECONFIG` unset, Atmos selected the default component identity without `--identity`, provisioned
+the integration, and kept progress output visible. Atmos itself invoked neither `gcloud` nor
+`gke-gcloud-auth-plugin`.
+
+One real guarded apply succeeded. Deliberately mismatched apply and delete targets were both
+rejected before mutation with exit code 1 after Atmos compared the expected and effective API
+server endpoints exactly. The Helm release revision and the target resource's `resourceVersion`
+remained unchanged after both rejected operations.
+
+An `apply --all --dry-run` covered 10 components successfully without mutation. All 10 resolved
+the same GKE target, which was discovered and provisioned once in the process. A subsequent real
+`apply --all` was blocked by a separate native Helm server-side-apply field-manager defect, so this
+run does not establish a successful full rebuild. That Helm defect is outside this GKE auth change.
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-08-07 | Initial as-built GKE kubeconfig authentication design |
 | 1.1 | 2026-08-12 | Live-cluster verification and provider-backed `gcp/project` credential-loading fix |
+| 1.2 | 2026-08-12 | Global integration merge fix, component guard opt-out semantics, and combined guarded Helm evidence |
