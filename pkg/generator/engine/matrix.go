@@ -23,24 +23,44 @@ const answersPrefix = "answers."
 
 // AxisRenderer renders a Go-template matrix-axis expression (e.g. "{{ keys
 // answers.environments }}") against answers into its resolved list of
-// string values. A nil renderer disables template-expression axis support,
+// string values. Delimiters is the two-element left/right delimiter pair
+// (defaulted to "{{"/"}}" by ExpandMatrix when the caller doesn't supply
+// one) a scaffold's own spec.delimiters override uses, so a template
+// expression axis honors the same custom delimiters as the rest of the
+// scaffold. A nil renderer disables template-expression axis support,
 // keeping ExpandMatrix's core algorithm -- and its many existing pure unit
 // tests -- free of any templating engine dependency. See
 // Processor.RenderMatrixAxisExpression in funcs.go for the real
 // implementation.
-type AxisRenderer func(expr string, answers map[string]interface{}) ([]string, error)
+type AxisRenderer func(expr string, answers map[string]interface{}, delimiters []string) ([]string, error)
+
+// defaultAxisDelimiters returns delimiters unchanged when it's a valid
+// two-element pair, otherwise the default Go template delimiters -- so a
+// caller that hasn't wired a scaffold's custom spec.delimiters (e.g.
+// ExpandMatrix's own pure unit tests, which pass nil) still gets the
+// original "{{"/"}}" detection and rendering behavior.
+func defaultAxisDelimiters(delimiters []string) []string {
+	if len(delimiters) != 2 {
+		return []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
+	return delimiters
+}
 
 // ExpandMatrix resolves a FileSpec's Matrix axes against answers and returns
 // their full Cartesian product as one row (map[axis]value) per combination,
 // expanded in a sorted, deterministic order per axis -- the same behavior
 // pkg/workflow's own matrix step expansion has, so regenerating the same
 // answers produces the same file set, in the same order, every time.
-func ExpandMatrix(matrix map[string]any, answers map[string]interface{}, render AxisRenderer) ([]map[string]string, error) {
+// Delimiters is the active scaffold's left/right template delimiter pair
+// (see defaultAxisDelimiters for what an empty/nil value defaults to).
+func ExpandMatrix(matrix map[string]any, answers map[string]interface{}, render AxisRenderer, delimiters []string) ([]map[string]string, error) {
 	defer perf.Track(nil, "engine.ExpandMatrix")()
+
+	delimiters = defaultAxisDelimiters(delimiters)
 
 	resolved := make(map[string][]string, len(matrix))
 	for axis, raw := range matrix {
-		values, err := resolveMatrixAxis(axis, raw, answers, render)
+		values, err := resolveMatrixAxis(axis, raw, answers, render, delimiters)
 		if err != nil {
 			return nil, err
 		}
@@ -51,11 +71,11 @@ func ExpandMatrix(matrix map[string]any, answers map[string]interface{}, render 
 
 // resolveMatrixAxis resolves one axis's declared value into its list of
 // string values: a literal list is used as-is; a string is either a
-// Go-template expression (containing "{{", rendered via render, e.g. to
-// compute a list from nested/structured answer data with keys) or a dot-path
-// into answers.* (validated at load time to require that prefix) that must
-// resolve to an already list-shaped value.
-func resolveMatrixAxis(axis string, raw any, answers map[string]interface{}, render AxisRenderer) ([]string, error) {
+// Go-template expression (containing delimiters[0], rendered via render,
+// e.g. to compute a list from nested/structured answer data with keys) or a
+// dot-path into answers.* (validated at load time to require that prefix)
+// that must resolve to an already list-shaped value.
+func resolveMatrixAxis(axis string, raw any, answers map[string]interface{}, render AxisRenderer, delimiters []string) ([]string, error) {
 	switch v := raw.(type) {
 	case []string:
 		return v, nil
@@ -66,8 +86,8 @@ func resolveMatrixAxis(axis string, raw any, answers map[string]interface{}, ren
 		}
 		return values, nil
 	case string:
-		if strings.Contains(v, "{{") {
-			return resolveMatrixAxisExpression(axis, v, answers, render)
+		if strings.Contains(v, delimiters[0]) {
+			return resolveMatrixAxisExpression(axis, v, answers, render, delimiters)
 		}
 		return resolveMatrixAxisFromAnswers(axis, v, answers)
 	default:
@@ -81,13 +101,13 @@ func resolveMatrixAxis(axis string, raw any, answers map[string]interface{}, ren
 // render. A nil render (e.g. ExpandMatrix's pure unit tests, or any caller
 // that hasn't wired a Processor) is a clear error rather than a silent empty
 // axis.
-func resolveMatrixAxisExpression(axis, expr string, answers map[string]interface{}, render AxisRenderer) ([]string, error) {
+func resolveMatrixAxisExpression(axis, expr string, answers map[string]interface{}, render AxisRenderer, delimiters []string) ([]string, error) {
 	if render == nil {
 		return nil, errUtils.Build(errUtils.ErrScaffoldMatrixExpressionFailed).
 			WithExplanationf("matrix axis %q is a template expression, but no template renderer is available", axis).
 			Err()
 	}
-	return render(expr, answers)
+	return render(expr, answers, delimiters)
 }
 
 // resolveMatrixAxisFromAnswers resolves a dynamic axis source (a dot-path

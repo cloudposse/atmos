@@ -129,7 +129,7 @@ spec:
       matrix:
         environment: [dev, staging, production]
         region: [us-east-1, us-west-2]
-      when: "matrix.region in answers.regions_by_env[matrix.environment]"
+      when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
 `target:` is required whenever `matrix:` is set. The resolved combination is available as

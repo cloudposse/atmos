@@ -57,7 +57,7 @@ func TestRenderMatrixAxisExpression_TopLevelKeys(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers)
+	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
@@ -72,7 +72,7 @@ func TestRenderMatrixAxisExpression_NestedKeysAcrossEnvironments(t *testing.T) {
 		},
 	}
 
-	got, err := p.RenderMatrixAxisExpression(`{{ keys answers.environments "regions" }}`, answers)
+	got, err := p.RenderMatrixAxisExpression(`{{ keys answers.environments "regions" }}`, answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"us-east-1", "us-west-2"}, got)
 }
@@ -81,7 +81,7 @@ func TestRenderMatrixAxisExpression_EmptyResultYieldsEmptySlice(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers)
+	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers, nil)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -89,7 +89,7 @@ func TestRenderMatrixAxisExpression_EmptyResultYieldsEmptySlice(t *testing.T) {
 func TestRenderMatrixAxisExpression_InvalidTemplateErrors(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("{{ keys ", map[string]interface{}{})
+	_, err := p.RenderMatrixAxisExpression("{{ keys ", map[string]interface{}{}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
 }
@@ -99,9 +99,23 @@ func TestRenderMatrixAxisExpression_ExecutionErrorPropagates(t *testing.T) {
 
 	// answers.environments is a string, not a map, so keys must fail at
 	// execution time rather than parse time.
-	_, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", map[string]interface{}{"environments": "dev,staging"})
+	_, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", map[string]interface{}{"environments": "dev,staging"}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+}
+
+// TestRenderMatrixAxisExpression_CustomDelimiters proves a matrix axis
+// expression is detected/rendered using the scaffold's own custom
+// spec.delimiters override (e.g. "[[" / "]]"), not a hardcoded "{{" / "}}",
+// matching how target: and file content rendering already honor it via
+// ProcessTemplateWithDelimiters.
+func TestRenderMatrixAxisExpression_CustomDelimiters(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	got, err := p.RenderMatrixAxisExpression("[[ keys answers.environments ]]", answers, []string{"[[", "]]"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
 func TestParseBracketedList(t *testing.T) {

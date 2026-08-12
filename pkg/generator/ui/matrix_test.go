@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 // matrixScaffoldYAML is a minimal template declaring one matrix file entry:
@@ -197,4 +200,71 @@ spec:
 
 	err := ui.executeWithSetup(embedsConfig, targetDir, false, false, true, "", nil, []string{"{{", "}}"})
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldDuplicateOutputPath), err)
+
+	// "First write wins": the first-resolved combination (dev, declared
+	// first in the environment axis) is written; the later duplicate
+	// (staging) is refused rather than silently overwriting it -- see
+	// checkDuplicateRenderedPath's own comment in pkg/generator/ui/ui.go.
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "deploy.yaml"))
+	require.NoError(t, readErr, "the first combination's write must still have succeeded")
+	assert.Equal(t, "environment: dev\n", string(content))
+}
+
+// TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine proves a matrix entry
+// whose axis resolves to zero values (e.g. an empty multiselect answer)
+// still writes exactly one skip line naming the file, matching
+// processSingleFileEntry's own skip-line behavior, instead of silently
+// producing no output at all for the entry.
+func TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: {{ .matrix.environment }}\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{
+		Path:   "deploy.yaml",
+		Target: "deploy/{{ .matrix.environment }}.yaml",
+		Matrix: map[string]any{"environment": "answers.environments"},
+	}
+	mergedValues := map[string]interface{}{"environments": []interface{}{}}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 0, errorCount)
+	assert.Empty(t, failedPaths)
+	assert.NoError(t, entryErr)
+	assert.Contains(t, ui.output.String(), "deploy.yaml")
+	assert.Contains(t, ui.output.String(), skippedText)
+}
+
+// TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry proves that when
+// more than one combination of the same matrix entry fails to write (here,
+// because target: doesn't vary per combination, so every combination after
+// the first collides), the entry's source file.Path is named once in
+// failedPaths, not once per failed combination -- errorCount still counts
+// every failed combination as its own failed file.
+func TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: {{ .matrix.environment }}\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{
+		Path:   "deploy.yaml",
+		Target: "deploy.yaml",
+		Matrix: map[string]any{"environment": []string{"dev", "staging", "production"}},
+	}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 1, successCount)
+	assert.Equal(t, 2, errorCount, "each colliding combination is still its own failed file")
+	assert.Equal(t, []string{"deploy.yaml"}, failedPaths, "the source entry is named once, not once per failed combination")
+	assert.True(t, errors.Is(entryErr, errUtils.ErrScaffoldDuplicateOutputPath), entryErr)
 }

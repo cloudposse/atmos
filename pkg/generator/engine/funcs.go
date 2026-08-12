@@ -87,7 +87,11 @@ func flattenNestedKeys(m map[string]interface{}, nestedKey string) []string {
 // (e.g. "{{ keys answers.environments }}") against answers and returns its
 // resolved list of string values. Satisfies the AxisRenderer type ExpandMatrix
 // accepts, giving matrix axis expressions the same Gomplate, Sprig, and
-// custom (including keys) FuncMap scaffold templates already use.
+// custom (including keys) FuncMap scaffold templates already use. Delimiters
+// is the scaffold's active left/right template delimiter pair (an
+// invalid/empty value defaults to "{{"/"}}"), so a matrix axis expression
+// honors a scaffold's own spec.delimiters override exactly like target: and
+// file content rendering already do via ProcessTemplateWithDelimiters.
 //
 // Answers is exposed as a zero-arg function, not a data field: Go's template
 // grammar only chains ".field" access off of "." or a "$var", never off a
@@ -97,13 +101,17 @@ func flattenNestedKeys(m map[string]interface{}, nestedKey string) []string {
 // unprefixed "answers.<field>", matching how when: CEL conditions already
 // expose answers.<field>, since an axis expression is a computed derivation
 // from answers, not file content (which instead sees .Config.<field>).
-func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]interface{}) ([]string, error) {
+func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]interface{}, delimiters []string) ([]string, error) {
 	defer perf.Track(nil, "engine.Processor.RenderMatrixAxisExpression")()
+
+	if len(delimiters) != 2 {
+		delimiters = []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
 
 	funcs := buildTemplateFuncMap(answers)
 	funcs["answers"] = func() map[string]interface{} { return answers }
 
-	tmpl, err := template.New("matrix-axis").Funcs(funcs).Parse(expr)
+	tmpl, err := template.New("matrix-axis").Delims(delimiters[0], delimiters[1]).Funcs(funcs).Parse(expr)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrScaffoldMatrixExpressionFailed).
 			WithCause(err).
@@ -129,6 +137,19 @@ func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]i
 // what {{ keys ... }} renders as) as well as a plain whitespace-separated
 // list without brackets, so a template author isn't tied to one specific
 // function's output shape.
+//
+// Known constraint: splitting on whitespace cannot distinguish "one value
+// containing a space" from "two values" -- an individual resolved value with
+// whitespace in it (e.g. a map key with a space) would be split incorrectly.
+// This is accepted rather than worked around: matrix axis values are always
+// identifier-like strings in practice (environment names, region codes --
+// infrastructure taxonomies that don't contain whitespace), and Go's
+// text/template always stringifies a returned []string via this same
+// space-joined %v format, so switching the delimiter here (e.g. to
+// newlines) wouldn't help without also requiring template authors to write
+// {{ range keys answers.environments }}{{ . }}{{ "\n" }}{{ end }} instead of
+// the single-call {{ keys answers.environments }} syntax this feature is
+// designed around (see https://github.com/orgs/cloudposse/discussions/126).
 func parseBracketedList(rendered string) []string {
 	trimmed := strings.TrimSpace(rendered)
 	trimmed = strings.TrimPrefix(trimmed, "[")

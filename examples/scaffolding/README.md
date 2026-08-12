@@ -67,7 +67,7 @@ spec:
       matrix:
         environment: [dev, staging, production]
         region: [us-east-1, us-west-2]
-      when: "matrix.region in answers.regions_by_env[matrix.environment]"
+      when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
 See the [Scaffold Command Documentation](https://atmos.tools/cli/commands/scaffold/generate)

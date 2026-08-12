@@ -21,6 +21,7 @@ package config
 import (
 	"errors"
 
+	invopop "github.com/invopop/jsonschema"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -171,14 +172,16 @@ type FileSpec struct {
 	// resolved combination -- the Cartesian product of every axis's values,
 	// the same map[axis][]values shape the workflow `matrix:` step uses. Each
 	// axis's value is either a literal list of strings, author-declared
-	// directly here (e.g. region: [us-east-1, us-west-2]), or a single string
+	// directly here (e.g. region: [us-east-1, us-west-2]), a single string
 	// dot-path into answers.* referencing an already list-shaped answer (e.g.
 	// environment: answers.environments, where environments is a multiselect
 	// field or a structured value supplied through --set or a
-	// template-declared preset). Requires Target, since Path alone cannot
+	// template-declared preset), or a Go-template expression (e.g.
+	// environment: '{{ keys answers.environments }}') computing the list from
+	// nested/structured answer data. Requires Target, since Path alone cannot
 	// serve as the output path for more than one generated file. See
 	// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)".
-	Matrix map[string]any `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings or a dot-path string into answers.*"`
+	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
 	// Target overrides the rendered output path for this file. Without
 	// Matrix it is optional and rendered once, exactly like Path is rendered
 	// today, letting authors keep Path a plain on-disk name while
@@ -188,6 +191,41 @@ type FileSpec struct {
 	// combination available on the template root as .matrix.<axis> in both
 	// Target and the file's own content.
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
+}
+
+// JSONSchemaExtend adds an if/then rule requiring target: whenever matrix:
+// is set, mirroring the runtime enforcement in validateFileMatrix
+// (pkg/project/config/validation.go), which rejects a matrix without a
+// target at scaffold-load time.
+func (FileSpec) JSONSchemaExtend(schema *invopop.Schema) {
+	defer perf.Track(nil, "config.FileSpec.JSONSchemaExtend")()
+
+	schema.If = &invopop.Schema{Required: []string{"matrix"}}
+	schema.Then = &invopop.Schema{Required: []string{"target"}}
+}
+
+// MatrixAxes is FileSpec.Matrix's map type, named (rather than a bare
+// map[string]any) so its own JSON Schema constraints can be attached via
+// JSONSchemaExtend below -- invopop/jsonschema only calls JSONSchemaExtend
+// on a named type's reflected schema, never on an anonymous map type.
+type MatrixAxes map[string]any
+
+// JSONSchemaExtend constrains matrix: to a non-empty object (at least one
+// axis) whose axis values are each either a string (a dot-path into
+// answers.* or a Go-template expression) or a non-empty array of strings (a
+// literal axis), mirroring the runtime validation in
+// pkg/project/config/validation.go's validateMatrixAxisValue.
+func (MatrixAxes) JSONSchemaExtend(schema *invopop.Schema) {
+	defer perf.Track(nil, "config.MatrixAxes.JSONSchemaExtend")()
+
+	one := uint64(1)
+	schema.MinProperties = &one
+	schema.AdditionalProperties = &invopop.Schema{
+		OneOf: []*invopop.Schema{
+			{Type: "string"},
+			{Type: "array", Items: &invopop.Schema{Type: "string"}, MinItems: &one},
+		},
+	}
 }
 
 // FieldValidation constrains the allowed values for a FieldDefinition.

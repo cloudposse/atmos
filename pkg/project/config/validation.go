@@ -115,10 +115,16 @@ const answersPrefix = "answers."
 // either a non-empty literal list or an `answers.`-prefixed dot-path string.
 // All checkable without real answers (a dynamic axis's resolved values can
 // only be checked once answers are known, at generation time). Note that
-// manifest.Load performs no JSON Schema validation of its own, so this is
-// the real enforcement path for atmos scaffold generate -- atmos scaffold
-// validate additionally checks the JSON Schema, but generate does not
-// consult it.
+// LoadScaffoldConfigFromContent's manifest.Load call already validates the
+// document against the generated JSON Schema (which mirrors most of these
+// same constraints -- see MatrixAxes.JSONSchemaExtend and
+// FileSpec.JSONSchemaExtend in config.go) before this function ever runs, so
+// for atmos scaffold generate a schema-expressible violation (missing
+// target, an empty/wrong-typed axis value) is usually caught there first,
+// surfaced as ErrManifestValidation rather than one of this function's own
+// sentinels. This function remains the real enforcement path for the one
+// constraint the schema can't express -- a dynamic axis's `answers.` prefix
+// requirement -- and stays as a defensive backstop for the rest.
 func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 	for i := range scaffoldConfig.Spec.Files {
 		file := &scaffoldConfig.Spec.Files[i]

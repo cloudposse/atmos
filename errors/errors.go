@@ -1241,7 +1241,7 @@ var (
 	ErrMetadataSave                   = errors.New("failed to save init metadata")
 	ErrScaffoldHookKindUnsupported    = errors.New("scaffold hook kind not supported")
 	ErrScaffoldMatrixTargetRequired   = errors.New("matrix requires target")
-	ErrScaffoldMatrixAxisInvalid      = errors.New("matrix axis must be a non-empty list or a dot-path string into answers")
+	ErrScaffoldMatrixAxisInvalid      = errors.New("matrix axis must be a non-empty list, a dot-path string into answers, or a template expression")
 	ErrScaffoldMatrixSourceNotFound   = errors.New("matrix axis source not found in answers")
 	ErrScaffoldMatrixSourceNotList    = errors.New("matrix axis source did not resolve to a list")
 	ErrScaffoldMatrixExpressionFailed = errors.New("matrix axis expression failed to render")

@@ -573,6 +573,17 @@ which is what lets `answers.environments` parse as "call `answers()`, then selec
 tolerant of Go's default slice-formatting style (`[a b c]`, what `keys` renders as)
 as well as a plain whitespace-separated list without brackets.
 
+**Known constraint**: because the rendered list is parsed by splitting on
+whitespace, an individual resolved value that itself contains whitespace (e.g. a
+map key with a space in it) cannot be distinguished from two separate values.
+Axis expressions are expected to resolve to identifier-like strings (environment
+names, region codes, and similar infrastructure taxonomy) that never contain
+whitespace in practice; this is a deliberate, documented constraint rather than
+a validated one. Working around it in general (e.g. requiring a newline-joined
+`{{ range keys answers.environments }}{{ . }}{{ "\n" }}{{ end }}` form) would
+regress the clean, single-call `{{ keys answers.environments }}` syntax this
+feature is designed around, so it is not attempted.
+
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so
   regenerating the same answers produces the same file set, in the same order,

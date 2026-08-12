@@ -893,7 +893,7 @@ func (ui *InitUI) processFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
-) (successCount, errorCount int, failedPaths []string) {
+) (successCount, errorCount int, failedPaths []string, err error) {
 	outputTemplate := fileOutputPath(file, spec)
 
 	if len(spec.Matrix) == 0 {
@@ -903,7 +903,9 @@ func (ui *InitUI) processFileEntry(
 }
 
 // processSingleFileEntry renders and writes file's one non-matrix output,
-// gated by spec.When.
+// gated by spec.When. Err is the specific underlying failure when
+// errorCount is 1 (nil otherwise), so callers can preserve it (e.g. via
+// errors.Join) alongside the generic "Failed to generate N files" summary.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) processSingleFileEntry(
@@ -916,22 +918,22 @@ func (ui *InitUI) processSingleFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
-) (successCount, errorCount int, failedPaths []string) {
+) (successCount, errorCount int, failedPaths []string, err error) {
 	if !spec.When.Evaluate(condition.Context{Answers: mergedValues}) {
 		ui.writeOutput(fileStatusFormat,
 			ui.grayStyle.Render(bulletSymbol),
 			file.Path,
 			ui.grayStyle.Render(skippedText))
-		return 0, 0, nil
+		return 0, 0, nil, nil
 	}
-	success, failed := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	success, failed, causeErr := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
 	switch {
 	case success:
-		return 1, 0, nil
+		return 1, 0, nil, nil
 	case failed:
-		return 0, 1, []string{file.Path}
+		return 0, 1, []string{file.Path}, causeErr
 	default:
-		return 0, 0, nil
+		return 0, 0, nil, nil
 	}
 }
 
@@ -944,7 +946,10 @@ func (ui *InitUI) processSingleFileEntry(
 // docs/prd/atmos-scaffold.md. An expansion error (e.g. a matrix axis source
 // that doesn't resolve) counts as one failure for the whole entry,
 // consistent with how a single file's own processing error already counts
-// as one failure in processSingleFileEntry.
+// as one failure in processSingleFileEntry. Err is every failed
+// combination's underlying error, joined (via errors.Join) into one --
+// nil when errorCount is 0 -- so callers can preserve the real cause(s)
+// alongside the generic "Failed to generate N files" summary.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) processMatrixedFileEntry(
@@ -957,56 +962,115 @@ func (ui *InitUI) processMatrixedFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
-) (successCount, errorCount int, failedPaths []string) {
-	rows, err := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderMatrixAxisExpression)
-	if err != nil {
+) (successCount, errorCount int, failedPaths []string, err error) {
+	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderMatrixAxisExpression, activeDelimiters)
+	if expandErr != nil {
 		ui.writeOutput(fileStatusFormat,
 			ui.errorStyle.Render(ui.xMark),
 			file.Path,
-			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
-		return 0, 1, []string{file.Path}
+			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", expandErr)))
+		return 0, 1, []string{file.Path}, expandErr
 	}
 
+	// An axis resolved to zero values (e.g. an empty multiselect answer)
+	// means the loop below never runs at all, unlike a pruned row (which
+	// still writes its own skip line inside the loop) -- write the same
+	// single skip line processSingleFileEntry always writes for a skipped
+	// file, rather than silently producing no output at all for this entry.
+	if len(rows) == 0 {
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			file.Path,
+			ui.grayStyle.Render(skippedText))
+		return 0, 0, nil, nil
+	}
+
+	// entryFailed tracks whether any combination of this entry failed to
+	// write, so file.Path is named at most once in the returned
+	// failedPaths -- errorCount below still counts every failed
+	// combination as its own failed file, matching "Failed to generate N
+	// files"'s per-file wording.
+	entryFailed := false
+	var entryErrs []error
 	for _, row := range rows {
-		iterValues := make(map[string]interface{}, len(mergedValues)+1)
-		for k, v := range mergedValues {
-			iterValues[k] = v
-		}
-		iterValues[engine.MatrixKey] = row
-
-		if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
-			renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
-			if pathErr != nil {
-				renderedPath = outputTemplate
-			}
-			ui.writeOutput(fileStatusFormat,
-				ui.grayStyle.Render(bulletSymbol),
-				renderedPath,
-				ui.grayStyle.Render(skippedText))
-			continue
-		}
-
-		success, failed := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
+		success, failed, causeErr := ui.processMatrixRow(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, row, activeDelimiters, seenRenderedPaths)
 		switch {
 		case success:
 			successCount++
 		case failed:
 			errorCount++
-			failedPaths = append(failedPaths, file.Path)
+			entryFailed = true
+			if causeErr != nil {
+				entryErrs = append(entryErrs, causeErr)
+			}
 		}
 	}
-	return successCount, errorCount, failedPaths
+	if entryFailed {
+		failedPaths = []string{file.Path}
+		err = errors.Join(entryErrs...)
+	}
+	return successCount, errorCount, failedPaths, err
+}
+
+// processMatrixRow renders and writes a single matrix combination (row),
+// gated by spec.When -- the per-combination body processMatrixedFileEntry's
+// loop calls once per resolved combination, split out to keep that loop's
+// orchestrating function within this repo's function-length limit. Row is
+// bound into a shallow-cloned copy of mergedValues under the reserved
+// engine.MatrixKey before rendering, exactly as processMatrixedFileEntry's
+// own doc comment describes.
+//
+//nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
+func (ui *InitUI) processMatrixRow(
+	file tmpl.File,
+	spec config.FileSpec,
+	outputTemplate string,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	mergedValues map[string]interface{},
+	row map[string]string,
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (success, failed bool, causeErr error) {
+	iterValues := make(map[string]interface{}, len(mergedValues)+1)
+	for k, v := range mergedValues {
+		iterValues[k] = v
+	}
+	iterValues[engine.MatrixKey] = row
+
+	if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
+		if pathErr != nil {
+			renderedPath = outputTemplate
+		}
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			renderedPath,
+			ui.grayStyle.Render(skippedText))
+		return false, false, nil
+	}
+
+	return ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
 }
 
 // checkDuplicateRenderedPath reports whether renderedPath was already
 // claimed by an earlier file or matrix combination this run, recording it
 // under file.Path if not. A duplicate is a hard failure -- the first write
 // wins, a later one is refused rather than silently overwriting it.
-func (ui *InitUI) checkDuplicateRenderedPath(file tmpl.File, renderedPath string, seenRenderedPaths map[string]string) bool {
+// RenderedPath is normalized with filepath.Clean before use as the map key,
+// matching the join/clean convention ProcessFile itself uses when it
+// resolves the same path for the actual write -- otherwise two
+// differently-formatted-but-equivalent paths (e.g. "deploy/dev.yaml" vs
+// "deploy//dev.yaml" or "./deploy/dev.yaml") could fail to be recognized as
+// the same target.
+func (ui *InitUI) checkDuplicateRenderedPath(file tmpl.File, renderedPath string, seenRenderedPaths map[string]string) (bool, error) {
+	renderedPath = filepath.Clean(renderedPath)
+
 	originalPath, dup := seenRenderedPaths[renderedPath]
 	if !dup {
 		seenRenderedPaths[renderedPath] = file.Path
-		return false
+		return false, nil
 	}
 
 	dupErr := errUtils.Build(errUtils.ErrScaffoldDuplicateOutputPath).
@@ -1017,7 +1081,7 @@ func (ui *InitUI) checkDuplicateRenderedPath(file tmpl.File, renderedPath string
 		ui.errorStyle.Render(ui.xMark),
 		renderedPath,
 		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", dupErr)))
-	return true
+	return true, dupErr
 }
 
 // reportWriteResult renders the UI status line for one ProcessFile outcome
@@ -1066,7 +1130,10 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 // writes it via ProcessFile -- the same pipeline a single (non-matrix) file
 // already went through, just parameterized by outputTemplate/values so
 // processFileEntry can call it once per matrix combination. See
-// reportWriteResult for what success/failed mean.
+// reportWriteResult for what success/failed mean. CauseErr is the specific
+// underlying error when failed is true (nil otherwise), so a caller can
+// preserve it (e.g. via errors.Join) instead of collapsing every failure
+// into a generic message.
 func (ui *InitUI) writeOneOutput(
 	file tmpl.File,
 	outputTemplate string,
@@ -1076,7 +1143,7 @@ func (ui *InitUI) writeOneOutput(
 	values map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
-) (success, failed bool) {
+) (success, failed bool, causeErr error) {
 	// Process the file path as a template first to check if it should be skipped.
 	renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 	if pathErr != nil {
@@ -1090,11 +1157,11 @@ func (ui *InitUI) writeOneOutput(
 			ui.grayStyle.Render(bulletSymbol),
 			file.Path,
 			ui.grayStyle.Render(skippedText))
-		return false, false
+		return false, false, nil
 	}
 
-	if ui.checkDuplicateRenderedPath(file, renderedPath, seenRenderedPaths) {
-		return false, true
+	if dup, dupErr := ui.checkDuplicateRenderedPath(file, renderedPath, seenRenderedPaths); dup {
+		return false, true, dupErr
 	}
 
 	// In dry-run mode, whether the file already exists is the single
@@ -1111,7 +1178,11 @@ func (ui *InitUI) writeOneOutput(
 	engineFile.Path = outputTemplate
 	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
 
-	return ui.reportWriteResult(err, renderedPath, existedBefore)
+	success, failed = ui.reportWriteResult(err, renderedPath, existedBefore)
+	if failed {
+		return success, failed, err
+	}
+	return success, failed, nil
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts.
@@ -1172,6 +1243,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Process each file with rich configuration
 	var successCount, errorCount int
 	var failedFiles []string
+	// failureErrs collects each failed entry's own underlying error (e.g.
+	// ErrScaffoldDuplicateOutputPath, a ProcessFile write error, or a matrix
+	// expansion error), so the final returned error below can preserve the
+	// real cause(s) via errors.Join instead of only carrying the generic
+	// ErrScaffoldGeneration sentinel.
+	var failureErrs []error
 	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
@@ -1195,11 +1272,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		}
 
 		spec := fileSpecs[file.Path]
-		entrySuccess, entryErrors, entryFailedPaths := ui.processFileEntry(
+		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
 			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
 		successCount += entrySuccess
 		errorCount += entryErrors
 		failedFiles = append(failedFiles, entryFailedPaths...)
+		if entryErr != nil {
+			failureErrs = append(failureErrs, entryErr)
+		}
 	}
 
 	// Print summary.
@@ -1216,6 +1296,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			log.Warn("Post-generate hook failed", "error", hookErr)
 		}
 		return errUtils.Build(errUtils.ErrScaffoldGeneration).
+			WithCause(errors.Join(failureErrs...)).
 			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
 			Err()
 	} else {

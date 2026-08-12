@@ -142,9 +142,29 @@
           "description": "Conditional generation overlay keyed by each file's discovered path",
           "items": {
             "additionalProperties": false,
+            "if": {
+              "required": [
+                "matrix"
+              ]
+            },
             "properties": {
               "matrix": {
-                "description": "Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings or a dot-path string into answers.*",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "description": "Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list",
+                "minProperties": 1,
                 "type": "object"
               },
               "path": {
@@ -172,6 +192,11 @@
             "required": [
               "path"
             ],
+            "then": {
+              "required": [
+                "target"
+              ]
+            },
             "type": "object"
           },
           "type": "array"

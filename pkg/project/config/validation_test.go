@@ -280,6 +280,17 @@ func TestLoadScaffoldConfigRejectsInvalidFieldValidation(t *testing.T) {
 	}
 }
 
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix configurations
+// LoadScaffoldConfigFromContent rejects. Most of these are now caught by the
+// generated JSON Schema itself (pkg/datafetcher/schema/scaffold/scaffold-config/1.0.json,
+// regenerated from FileSpec/MatrixAxes's jsonschema tags in config.go) inside
+// manifest.Load, before validateFileMatrix's own Go-level checks ever run --
+// so their expected error is the schema sentinel ErrManifestValidation, not
+// the more specific matrix sentinel that same bad input would have hit if
+// validateFileMatrix were the first (or only) line of defense. A dynamic
+// axis's "answers." prefix requirement is the one constraint the schema
+// can't express (any generic string satisfies the schema), so it's still
+// validateFileMatrix -- via ErrScaffoldMatrixAxisInvalid -- that rejects it.
 func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -291,14 +302,14 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 			name: "matrix without target",
 			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 				"    - path: deploy.yaml\n      matrix:\n        region: [us-east-1]\n",
-			wantErr:  errUtils.ErrScaffoldMatrixTargetRequired,
-			contains: "deploy.yaml",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "target",
 		},
 		{
 			name: "empty literal axis",
 			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: []\n",
-			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			wantErr:  errUtils.ErrManifestValidation,
 			contains: "region",
 		},
 		{
@@ -312,7 +323,19 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 			name: "axis of unsupported type",
 			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: 5\n",
-			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "region",
+		},
+		{
+			// A literal axis list with a non-string element (as opposed to
+			// "axis of unsupported type" above, where the axis itself isn't
+			// a list at all) exercises the schema's array/items branch
+			// (MatrixAxes.JSONSchemaExtend in config.go) rather than its
+			// oneOf/type branch.
+			name: "literal axis list with non-string element",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: [5]\n",
+			wantErr:  errUtils.ErrManifestValidation,
 			contains: "region",
 		},
 	}
