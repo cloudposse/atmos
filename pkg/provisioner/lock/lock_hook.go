@@ -41,6 +41,7 @@ func autoLockProviders(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	_ *schema.AuthContext,
+	_ provisioner.OutputWriters,
 	execCtx *provisioner.TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "lock.autoLockProviders")()
