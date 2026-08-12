@@ -111,8 +111,12 @@ commands:
 	assert.Contains(t, fields, "-t", "configured tag must be applied")
 	assert.Contains(t, fields, "example.invalid/demo:sha-test")
 	assert.Contains(t, fields, "-f", "configured Dockerfile must be applied")
-	assert.Contains(t, fields, "Dockerfile")
-	assert.Contains(t, fields, "app", "configured context must be applied")
+	// context/dockerfile are relative paths in the with: block, resolved
+	// against the step's working directory (#2880) into absolute paths --
+	// docker still receives the same file, just no longer as a bare relative
+	// string a differing subprocess cwd could silently misresolve.
+	assert.Contains(t, fields, filepath.Join(appDir, "Dockerfile"), "configured Dockerfile must be applied")
+	assert.Contains(t, fields, appDir, "configured context must be applied")
 
 	// The exact bug report's symptom: Atmos must not fall back to a bare,
 	// unconfigured `docker build -f Dockerfile .`.
