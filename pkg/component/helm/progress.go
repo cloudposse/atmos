@@ -77,7 +77,7 @@ func newHelmOperationProgress(
 	return progress
 }
 
-func (p *helmOperationProgress) Start() {
+func (p *helmOperationProgress) start() {
 	if p == nil {
 		return
 	}
@@ -93,7 +93,7 @@ func (p *helmOperationProgress) Start() {
 	go p.reportHeartbeats()
 }
 
-func (p *helmOperationProgress) Resolved(operation string, lifecycle releaseLifecycleResolution) {
+func (p *helmOperationProgress) resolved(operation string, lifecycle releaseLifecycleResolution) {
 	if p == nil {
 		return
 	}
@@ -104,7 +104,7 @@ func (p *helmOperationProgress) Resolved(operation string, lifecycle releaseLife
 	p.output.info(p.runningMessage())
 }
 
-func (p *helmOperationProgress) Finish(operationErr error) {
+func (p *helmOperationProgress) finish(operationErr error) {
 	if p == nil {
 		return
 	}
@@ -225,5 +225,5 @@ func reportReleaseProgress(spec *chartSpec, operation string, lifecycle releaseL
 	if spec == nil || spec.Progress == nil {
 		return
 	}
-	spec.Progress.Resolved(operation, lifecycle)
+	spec.Progress.resolved(operation, lifecycle)
 }

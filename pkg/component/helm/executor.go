@@ -59,6 +59,7 @@ var (
 	renderChartManifest      = renderManifest
 	applyHelmRelease         = applyRelease
 	deleteHelmRelease        = deleteRelease
+	newHelmApplyProgress     = newHelmOperationProgress
 	setupRepositories        = setupHelmRepositories
 	// writeStatusLine emits human-readable apply/delete status on the UI channel (stderr) via the ui
 	// layer - not data.Write (stdout), which is reserved for pipeable command data. See
@@ -280,21 +281,16 @@ func runOperation(
 		summary["diff"] = diffText
 		return summary, err
 	case OperationApply:
-		progress := newHelmOperationProgress(info, spec, string(OperationApply), info.DryRun)
-		spec.Progress = progress
-		progress.Start()
 		applySummary, err := deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
-		progress.Finish(err)
-		spec.Progress = nil
 		mergeSummary(summary, applySummary)
 		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
 		progress := newHelmOperationProgress(info, spec, string(OperationDelete), info.DryRun)
-		progress.Start()
-		progress.Resolved(releaseOperationDelete, spec.Lifecycle)
+		progress.start()
+		progress.resolved(releaseOperationDelete, spec.Lifecycle)
 		err := deleteHelmRelease(ctx.GoContext(), spec, info.DryRun)
-		progress.Finish(err)
+		progress.finish(err)
 		summary["release"] = lifecycleSummary(releaseOperationDelete, spec.Lifecycle.Policy)
 		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err

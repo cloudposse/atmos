@@ -61,8 +61,8 @@ func TestHelmOperationProgressReportsResolvedLifecycleAndSuccess(t *testing.T) {
 	progress.interval = 0
 	progress.output = capture.output()
 
-	progress.Start()
-	progress.Resolved(releaseOperationUpgrade, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+	progress.start()
+	progress.resolved(releaseOperationUpgrade, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
 		Operation:    releaseOperationUpgrade,
 		WaitStrategy: kube.StatusWatcherStrategy,
 		WaitForJobs:  true,
@@ -70,7 +70,7 @@ func TestHelmOperationProgressReportsResolvedLifecycleAndSuccess(t *testing.T) {
 		OnFailure:    failurePolicyRollback,
 	}})
 	now = startedAt.Add(42 * time.Second)
-	progress.Finish(nil)
+	progress.finish(nil)
 
 	info := capture.infoMessages()
 	require.Len(t, info, 2)
@@ -95,14 +95,14 @@ func TestHelmOperationProgressReportsDeleteDryRunFailure(t *testing.T) {
 	progress.interval = 0
 	progress.output = capture.output()
 
-	progress.Start()
-	progress.Resolved(releaseOperationDelete, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+	progress.start()
+	progress.resolved(releaseOperationDelete, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
 		Operation:    releaseOperationDelete,
 		WaitStrategy: kube.LegacyStrategy,
 		Timeout:      5 * time.Minute,
 	}})
 	now = startedAt.Add(5 * time.Minute)
-	progress.Finish(errors.New("operation failed"))
+	progress.finish(errors.New("operation failed"))
 
 	info := capture.infoMessages()
 	require.Len(t, info, 2)
@@ -124,8 +124,8 @@ func TestHelmOperationProgressEmitsHeartbeat(t *testing.T) {
 	progress.interval = time.Millisecond
 	progress.output = capture.output()
 
-	progress.Start()
-	progress.Resolved(releaseOperationInstall, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+	progress.start()
+	progress.resolved(releaseOperationInstall, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
 		Operation:    releaseOperationInstall,
 		WaitStrategy: kube.StatusWatcherStrategy,
 		Timeout:      time.Minute,
@@ -138,7 +138,7 @@ func TestHelmOperationProgressEmitsHeartbeat(t *testing.T) {
 		}
 		return false
 	}, time.Second, time.Millisecond)
-	progress.Finish(nil)
+	progress.finish(nil)
 
 	require.Len(t, capture.success, 1)
 }
