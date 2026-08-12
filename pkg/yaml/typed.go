@@ -1,7 +1,10 @@
 package yaml
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,6 +15,12 @@ import (
 // callers coerce a string argument into a typed YAML scalar (or a raw YAML
 // literal) instead of always writing a quoted string.
 const (
+	// TypeAuto infers the type: from the Atmos config schema when the path is
+	// modeled, otherwise from the type of the value already at that path (if
+	// any), otherwise string. This is the default for SetFileWithType callers
+	// (config set, stack set) -- it is never passed through to buildRHS, which
+	// only ever sees a type TypeAuto has already been resolved to.
+	TypeAuto   = "auto"
 	TypeString = "string"
 	TypeInt    = "int"
 	TypeBool   = "bool"
@@ -28,6 +37,77 @@ const (
 	// Bit size used to validate int and float values.
 	bitSize64 = 64
 )
+
+// looksNonStringPattern matches raw CLI values that read as a bool or a
+// number -- the shape a user would plausibly intend as something other than
+// a literal string. The numeric branch covers signed integers/decimals
+// (leading- or trailing-dot forms like ".5" and "5."), underscore-separated
+// digit groups (e.g. "1_000"), scientific notation (e.g. "1e3"), and the
+// literal "nan" -- all shapes strconv.ParseFloat already accepts today (see
+// buildValidatedRHS), so warning for them is accurate.
+//
+// Deliberately NOT matched: hex ("0x1A"), octal ("0o17"), and ".inf"/"-.inf".
+// These are legal YAML 1.1 numeric scalars, but strconv.ParseInt(v, 10, 64)
+// and strconv.ParseFloat(v, 64) both reject them outright (ParseInt only
+// accepts 0x/0o prefixes with base 0, and Go's float grammar requires
+// "inf"/"Inf"/"INF" without a leading dot) -- warning "pass --type=int/float"
+// for these would send a user straight into a parser error, a worse outcome
+// than today's silent string. Extending the parsers to accept them too is a
+// separate, larger behavior change, tracked as a follow-up rather than
+// bundled here.
+var looksNonStringPattern = regexp.MustCompile(`(?i)^(?:true|false|nan|[+-]?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:e[+-]?[0-9]+)?)$`)
+
+// LooksNonString reports whether raw looks like it was meant to be a bool or
+// number (e.g. "true", "42", "3.14") rather than a literal string. Callers use
+// this to warn when a value with this shape is about to be stored as a
+// TypeString because type inference wasn't available or --type wasn't passed
+// -- silently writing `"true"` instead of `true` is easy to miss.
+func LooksNonString(raw string) bool {
+	defer perf.Track(nil, "yaml.LooksNonString")()
+
+	return looksNonStringPattern.MatchString(strings.TrimSpace(raw))
+}
+
+// GuessNumericType reports whether raw parses, via the same validated logic
+// buildValidatedRHS uses, as TypeInt or TypeFloat -- int tried first, then
+// float. Returns ("", false) when raw matches neither, including when the
+// float branch would only succeed as NaN/Infinity: buildValidatedRHS
+// deliberately rejects those (see its doc comment), so the guess fails
+// closed to "no signal" instead of propagating that error to the caller.
+func GuessNumericType(raw string) (string, bool) {
+	defer perf.Track(nil, "yaml.GuessNumericType")()
+
+	trimmed := strings.TrimSpace(raw)
+	if _, err := buildValidatedRHS(trimmed, TypeInt); err == nil {
+		return TypeInt, true
+	}
+	if _, err := buildValidatedRHS(trimmed, TypeFloat); err == nil {
+		return TypeFloat, true
+	}
+	return "", false
+}
+
+// GuessScalarType reports the concrete TypeBool/TypeInt/TypeFloat implied by
+// raw's shape (bool/int/float, per LooksNonString), validated via
+// GuessNumericType so the guess is guaranteed to write successfully.
+// Returns ("", false) for anything LooksNonString rejects, and -- narrowly
+// -- for values LooksNonString accepts but the numeric guess rejects
+// (currently: the bare literal "nan", never a signed or dotted form).
+func GuessScalarType(raw string) (string, bool) {
+	defer perf.Track(nil, "yaml.GuessScalarType")()
+
+	trimmed := strings.TrimSpace(raw)
+	if !LooksNonString(trimmed) {
+		return "", false
+	}
+	// Checked as literal words, not strconv.ParseBool: ParseBool also
+	// accepts "1"/"0"/"t"/"f", which would wrongly steal digit-shaped
+	// values away from the int branch below.
+	if strings.EqualFold(trimmed, "true") || strings.EqualFold(trimmed, "false") {
+		return TypeBool, true
+	}
+	return GuessNumericType(trimmed)
+}
 
 // buildRHS coerces a CLI string value into a yq right-hand-side expression
 // according to valueType. An empty valueType defaults to TypeString. Plain
@@ -47,28 +127,66 @@ func buildRHS(value, valueType string) (string, error) {
 }
 
 // buildValidatedRHS handles value types whose input must be validated before it
-// is inserted verbatim as a typed YAML scalar.
+// is inserted as a typed YAML scalar. The validated int/float value is written
+// back out in its canonical decimal form (via strconv.FormatInt/formatYAMLFloat)
+// rather than verbatim: Go's strconv grammar and yaml.v3's default scalar
+// resolver disagree on some inputs that pass validation here. For example,
+// strconv.ParseInt(v, 10, 64) accepts a leading-zero string like "010" as
+// decimal 10, but yaml.v3 re-parses an unquoted "010" as octal (8) on the next
+// read. Writing verbatim would silently round-trip to a different value than
+// the one just validated; writing the canonical form closes that gap.
 func buildValidatedRHS(value, valueType string) (string, error) {
 	switch valueType {
 	case TypeInt:
-		if _, err := strconv.ParseInt(value, decimalBase, bitSize64); err != nil {
-			return "", fmt.Errorf("%w: %q is not an integer", ErrInvalidYAMLExpression, value)
+		parsed, err := strconv.ParseInt(value, decimalBase, bitSize64)
+		if err != nil {
+			if errors.Is(err, strconv.ErrRange) {
+				return "", fmt.Errorf("%w: %q is out of range for a 64-bit integer; use --type=yaml or --type=string to store it verbatim",
+					ErrInvalidTypedValue, value)
+			}
+			return "", fmt.Errorf("%w: %q is not an integer", ErrInvalidTypedValue, value)
 		}
-		return value, nil
+		return strconv.FormatInt(parsed, decimalBase), nil
 	case TypeFloat:
-		if _, err := strconv.ParseFloat(value, bitSize64); err != nil {
-			return "", fmt.Errorf("%w: %q is not a float", ErrInvalidYAMLExpression, value)
+		parsed, err := strconv.ParseFloat(value, bitSize64)
+		if err != nil {
+			return "", fmt.Errorf("%w: %q is not a float", ErrInvalidTypedValue, value)
 		}
-		return value, nil
+		if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+			// YAML 1.1 spells these ".nan"/".inf"/"-.inf", but that leading
+			// dot collides with the yq expression language's path-navigation
+			// operator when inserted as a raw assignment RHS (SetRaw builds
+			// "path = rhs" and evaluates rhs as an expression, not a literal
+			// scalar) -- ".nan" silently resolves to "look up field nan on
+			// the root document", writing null instead of NaN. There's no
+			// verified-safe way to insert these two values through this
+			// code path today, so refuse rather than silently write the
+			// wrong thing.
+			return "", fmt.Errorf("%w: %q (NaN/Infinity) can't be written through --type=float; use --type=yaml with explicit .nan/.inf/-.inf YAML syntax if you need this value",
+				ErrInvalidTypedValue, value)
+		}
+		return formatYAMLFloat(parsed), nil
 	case TypeBool:
 		b, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
-			return "", fmt.Errorf("%w: %q is not a boolean", ErrInvalidYAMLExpression, value)
+			return "", fmt.Errorf("%w: %q is not a boolean", ErrInvalidTypedValue, value)
 		}
 		return strconv.FormatBool(b), nil
 	default:
-		return "", fmt.Errorf("%w: unknown value type %q", ErrInvalidYAMLExpression, valueType)
+		return "", fmt.Errorf("%w: unknown value type %q", ErrInvalidTypedValue, valueType)
 	}
+}
+
+// formatYAMLFloat renders a finite float in a form yaml.v3's default resolver
+// will read back as the same float. A whole number (e.g. 10) is given an
+// explicit ".0" so it keeps the !!float tag instead of round-tripping as
+// !!int. Callers must not pass NaN or +/-Inf -- see buildValidatedRHS.
+func formatYAMLFloat(f float64) string {
+	s := strconv.FormatFloat(f, 'g', -1, bitSize64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
 }
 
 // SetWithType assigns value at path, coercing it according to valueType, and
