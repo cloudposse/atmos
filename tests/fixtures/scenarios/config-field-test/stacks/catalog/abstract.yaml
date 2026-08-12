@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    abstract-component:
+      metadata:
+        type: abstract
+        component: mock
+      vars:
+        environment: &shared_environment "abstract-env"
+        region: "us-east-1"
+        replicas: 1
+        enabled: true
