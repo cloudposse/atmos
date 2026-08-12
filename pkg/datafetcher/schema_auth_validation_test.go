@@ -149,10 +149,10 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "helm component with identity guard",
+			name: "helmfile component with identity guard",
 			manifest: map[string]interface{}{
 				"components": map[string]interface{}{
-					"terraform": map[string]interface{}{
+					"helmfile": map[string]interface{}{
 						"example-release": map[string]interface{}{
 							"vars": map[string]interface{}{},
 							"auth": map[string]interface{}{
@@ -168,7 +168,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			name: "identity guard rejects non-boolean values",
 			manifest: map[string]interface{}{
 				"components": map[string]interface{}{
-					"terraform": map[string]interface{}{
+					"helmfile": map[string]interface{}{
 						"example-release": map[string]interface{}{
 							"vars": map[string]interface{}{},
 							"auth": map[string]interface{}{

@@ -23,30 +23,34 @@ func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
 	config.Clusters["example-cluster"] = &clientcmdapi.Cluster{Server: "https://example.invalid"}
 	config.Contexts["example"] = &clientcmdapi.Context{Cluster: "example-cluster"}
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
-	t.Setenv("KUBECONFIG", path)
 
-	t.Run("no integration expectation allows ambient kubeconfig", func(t *testing.T) {
-		t.Setenv(authkube.EndpointGuardEnv, "")
-		t.Setenv(authkube.ExpectedServerEnv, "")
-		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
-	})
-	t.Run("expectation is inert without the opt-in guard", func(t *testing.T) {
-		t.Setenv(authkube.EndpointGuardEnv, "")
-		t.Setenv(authkube.ExpectedServerEnv, "https://other.invalid")
-		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
-	})
-	t.Run("matching endpoint proceeds", func(t *testing.T) {
-		t.Setenv(authkube.EndpointGuardEnv, "true")
-		t.Setenv(authkube.ExpectedServerEnv, "https://example.invalid/")
-		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
-	})
-	t.Run("mismatched endpoint fails closed", func(t *testing.T) {
-		t.Setenv(authkube.EndpointGuardEnv, "true")
-		t.Setenv(authkube.ExpectedServerEnv, "https://other.invalid")
-		err := verifyExpectedKubernetesEndpoint(cli.New())
-		require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
-		assert.Contains(t, err.Error(), "https://example.invalid")
-	})
+	tests := []struct {
+		name           string
+		guard          string
+		expectedServer string
+		wantErr        bool
+	}{
+		{name: "no integration expectation allows ambient kubeconfig"},
+		{name: "expectation is inert without the opt-in guard", expectedServer: "https://other.invalid"},
+		{name: "matching endpoint proceeds", guard: "true", expectedServer: "https://example.invalid/"},
+		{name: "mismatched endpoint fails closed", guard: "true", expectedServer: "https://other.invalid", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", path)
+			t.Setenv(authkube.EndpointGuardEnv, tt.guard)
+			t.Setenv(authkube.ExpectedServerEnv, tt.expectedServer)
+
+			err := verifyExpectedKubernetesEndpoint(cli.New())
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
+				assert.Contains(t, err.Error(), "https://example.invalid")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestResolveUpgradeChartRef(t *testing.T) {
