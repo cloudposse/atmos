@@ -182,6 +182,50 @@ func TestExpandMatrix_TemplateExpressionAxisCustomDelimiters(t *testing.T) {
 	assert.Equal(t, "staging", rows[1]["environment"])
 }
 
+// TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault proves a malformed
+// delimiter pair with an empty left side (e.g. ["", "]]"]) is rejected as a
+// custom pair and falls back to the full "{{"/"}}" default, rather than
+// letting an empty delimiters[0] make every axis value match
+// strings.Contains(v, "") in resolveMatrixAxis.
+func TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
+	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	var gotDelimiters []string
+	render := func(expr string, a map[string]interface{}, delimiters []string) ([]string, error) {
+		gotDelimiters = delimiters
+		return []string{"dev", "staging"}, nil
+	}
+
+	rows, err := ExpandMatrix(matrix, answers, render, []string{"", "]]"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"{{", "}}"}, gotDelimiters)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "dev", rows[0]["environment"])
+	assert.Equal(t, "staging", rows[1]["environment"])
+}
+
+// TestExpandMatrix_EmptyRightDelimiterFallsBackToDefault mirrors
+// TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault for an empty right
+// delimiter (e.g. ["[[", ""]).
+func TestExpandMatrix_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
+	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	var gotDelimiters []string
+	render := func(expr string, a map[string]interface{}, delimiters []string) ([]string, error) {
+		gotDelimiters = delimiters
+		return []string{"dev", "staging"}, nil
+	}
+
+	rows, err := ExpandMatrix(matrix, answers, render, []string{"[[", ""})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"{{", "}}"}, gotDelimiters)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "dev", rows[0]["environment"])
+	assert.Equal(t, "staging", rows[1]["environment"])
+}
+
 func TestExpandMatrix_TemplateExpressionAxisWithoutRendererErrors(t *testing.T) {
 	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
 

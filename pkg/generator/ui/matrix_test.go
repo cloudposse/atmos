@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -237,8 +238,12 @@ func TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine(t *testing.T) {
 	assert.Equal(t, 0, errorCount)
 	assert.Empty(t, failedPaths)
 	assert.NoError(t, entryErr)
-	assert.Contains(t, ui.output.String(), "deploy.yaml")
-	assert.Contains(t, ui.output.String(), skippedText)
+	output := ui.output.String()
+	assert.Contains(t, output, "deploy.yaml")
+	// Exactly one skip line, not one per would-be (zero) combination -- a
+	// regression that wrote a duplicate skip line would still pass a plain
+	// assert.Contains check.
+	assert.Equal(t, 1, strings.Count(output, skippedText))
 }
 
 // TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry proves that when

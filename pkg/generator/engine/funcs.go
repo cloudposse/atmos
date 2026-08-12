@@ -104,9 +104,7 @@ func flattenNestedKeys(m map[string]interface{}, nestedKey string) []string {
 func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]interface{}, delimiters []string) ([]string, error) {
 	defer perf.Track(nil, "engine.Processor.RenderMatrixAxisExpression")()
 
-	if len(delimiters) != 2 {
-		delimiters = []string{defaultLeftDelimiter, defaultRightDelimiter}
-	}
+	delimiters = defaultAxisDelimiters(delimiters)
 
 	funcs := buildTemplateFuncMap(answers)
 	funcs["answers"] = func() map[string]interface{} { return answers }

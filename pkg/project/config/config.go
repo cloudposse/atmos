@@ -22,6 +22,7 @@ import (
 	"errors"
 
 	invopop "github.com/invopop/jsonschema"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -193,15 +194,23 @@ type FileSpec struct {
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
 }
 
-// JSONSchemaExtend adds an if/then rule requiring target: whenever matrix:
-// is set, mirroring the runtime enforcement in validateFileMatrix
-// (pkg/project/config/validation.go), which rejects a matrix without a
-// target at scaffold-load time.
+// JSONSchemaExtend adds an if/then rule requiring a non-empty target:
+// whenever matrix: is set, mirroring the runtime enforcement in
+// validateFileMatrix (pkg/project/config/validation.go), which rejects a
+// matrix without a target at scaffold-load time. "required" alone only
+// checks that target is present, not that it's non-empty, so the then
+// branch also constrains target's own schema with minLength: 1 -- without
+// it, target: "" would satisfy the schema even though validateFileMatrix
+// rejects it at the Go level.
 func (FileSpec) JSONSchemaExtend(schema *invopop.Schema) {
 	defer perf.Track(nil, "config.FileSpec.JSONSchemaExtend")()
 
+	one := uint64(1)
+	targetProperties := orderedmap.New[string, *invopop.Schema]()
+	targetProperties.Set("target", &invopop.Schema{Type: "string", MinLength: &one})
+
 	schema.If = &invopop.Schema{Required: []string{"matrix"}}
-	schema.Then = &invopop.Schema{Required: []string{"target"}}
+	schema.Then = &invopop.Schema{Required: []string{"target"}, Properties: targetProperties}
 }
 
 // MatrixAxes is FileSpec.Matrix's map type, named (rather than a bare

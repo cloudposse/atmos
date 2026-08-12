@@ -193,6 +193,12 @@
               "path"
             ],
             "then": {
+              "properties": {
+                "target": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
               "required": [
                 "target"
               ]

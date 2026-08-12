@@ -306,6 +306,18 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 			contains: "target",
 		},
 		{
+			// The schema's if/then rule only checked that target is present
+			// (required), not that it's non-empty -- FileSpec.JSONSchemaExtend
+			// in config.go now also constrains the then branch's target with
+			// minLength: 1, so an empty target is rejected here too, matching
+			// validateFileMatrix's own file.Target == "" check.
+			name: "matrix with empty target",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: \"\"\n      matrix:\n        region: [us-east-1]\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "target",
+		},
+		{
 			name: "empty literal axis",
 			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: []\n",

@@ -118,6 +118,32 @@ func TestRenderMatrixAxisExpression_CustomDelimiters(t *testing.T) {
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
+// TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault
+// proves a malformed delimiter pair with an empty left side (e.g. ["",
+// "]]"]) falls back to the full "{{"/"}}" default rather than producing a
+// mismatched half-custom/half-default pair (text/template.Delims treats an
+// empty argument as "use the default" for that side only).
+func TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers, []string{"", "]]"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dev", "staging"}, got)
+}
+
+// TestRenderMatrixAxisExpression_EmptyRightDelimiterFallsBackToDefault
+// mirrors TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault
+// for an empty right delimiter (e.g. ["[[", ""]).
+func TestRenderMatrixAxisExpression_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	got, err := p.RenderMatrixAxisExpression("{{ keys answers.environments }}", answers, []string{"[[", ""})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dev", "staging"}, got)
+}
+
 func TestParseBracketedList(t *testing.T) {
 	tests := []struct {
 		name string
