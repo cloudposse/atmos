@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -91,6 +93,39 @@ func TestLocalAdapter_SearchConfigError(t *testing.T) {
 	_, err := adapter.Resolve(ctx, nonExistentPath, tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrResolveLocal)
+}
+
+// TestLocalAdapter_ResolveFailureLogSanitized verifies that the production LocalAdapter's
+// Debug log on a resolve failure never leaks credentials embedded in the import path. This
+// exercises pkg/config/adapters.LocalAdapter directly (not the test-only mock adapter that
+// setupTestAdapters wires up in pkg/config's own tests), so a regression in the production
+// log line is actually caught here.
+func TestLocalAdapter_ResolveFailureLogSanitized(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	tempDir := t.TempDir()
+	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	_, err := adapter.Resolve(ctx, credentialedImport, tempDir, tempDir, 1, 10, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrResolveLocal)
+
+	logged := buffer.String()
+	assert.NotContains(t, logged, "super-secret-token", "the resolve-failure log must not leak credentials")
+	assert.NotContains(t, logged, "user:super-secret-token@", "the resolve-failure log must not leak the userinfo segment")
+	assert.Contains(t, logged, "failed to resolve local import path", "the log should still identify the failure")
 }
 
 // TestLocalAdapter_ReadConfigError tests error path for invalid YAML.

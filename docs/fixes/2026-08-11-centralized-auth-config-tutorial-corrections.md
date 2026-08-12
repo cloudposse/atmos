@@ -103,10 +103,16 @@ exit (already corrected in an earlier pass this session, per a CodeRabbit review
   (`pkg/config`, `pkg/downloader`, `pkg/github`, `pkg/stack/imports`), `atmos lint --changed`, and the
   authoritative `./custom-gcl run --new-from-rev=origin/main` CI-equivalent gate (only pre-existing,
   unrelated findings remained, confirmed via zero-diff check against those files).
-- Both the original pre-fix claims and the final fixed behavior were verified live: a real local
-  `git::file://` fixture repo, `atmos auth list`/`atmos auth env` runs before and after each fix, and
-  direct reads of `custom_git_detector.go`/`pkg/config/imports.go`/`pkg/stack/imports/remote.go` — see the
-  field-test and fix-implementation conversation for full repro commands.
+- Findings 2 (silent failures) and 4 (caching) were verified live, both pre- and post-fix: a real local
+  `git::file://` fixture repo, `atmos auth list`/`atmos auth env` runs before and after each fix — see the
+  field-test and fix-implementation conversation for full repro commands. This fixture validates import
+  *resolution* behavior; it does not exercise the GitHub token path (no real private repo/`gh` session
+  involved).
+- Finding 1 (the `gh auth token` CLI fallback) was validated differently: unit tests with a mocked command
+  executor (`TestResolveToken_GitHub` in `pkg/downloader/token_injection_test.go`, mirroring
+  `pkg/github/token_test.go`'s `withCommander`/`fakeCLICmd` pattern) plus direct code inspection of
+  `CustomGitDetector.resolveToken` and `github.GetGitHubTokenFromCLI()` — not live execution against a
+  real `gh` session or private repo.
 
 ## Follow-ups
 
