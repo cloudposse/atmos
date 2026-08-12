@@ -2,8 +2,10 @@ package hooks
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,6 +46,22 @@ func (h *flakyHandler) Execute(context.Context, *schema.WorkflowStep, *runnerste
 type envCaptureHandler struct {
 	runnerstep.BaseHandler
 	captured *map[string]string
+}
+
+type outputSuppressionCaptureHandler struct {
+	runnerstep.BaseHandler
+	suppressed *bool
+	writers    *runnerstep.OutputWriters
+}
+
+func (h *outputSuppressionCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.suppressed = runnerstep.OutputSuppressed(ctx)
+	if h.writers != nil {
+		*h.writers = vars.OutputWriters
+	}
+	return runnerstep.NewStepResult("ok"), nil
 }
 
 type hookEnvState struct {
@@ -353,6 +371,103 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
+	var suppressed bool
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-suppression-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+	})
+
+	tests := []struct {
+		name       string
+		context    *ExecContext
+		run        func(*ExecContext) (*Output, error)
+		setWriter  func(*ExecContext)
+		suppressed bool
+	}{
+		{
+			name:       "step stdout",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stdout = io.Discard },
+			suppressed: true,
+		},
+		{
+			name: "steps stderr",
+			context: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-suppression-capture-test"},
+			}}),
+			run:        stepsEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stderr = io.Discard },
+			suppressed: true,
+		},
+		{
+			name:       "step without writers",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			suppressed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suppressed = false
+			if tt.setWriter != nil {
+				tt.setWriter(tt.context)
+			}
+
+			_, err := tt.run(tt.context)
+			require.NoError(t, err)
+			assert.Equal(t, tt.suppressed, suppressed)
+		})
+	}
+}
+
+func TestStepEnginesForwardOutputWriters(t *testing.T) {
+	var suppressed bool
+	var writers runnerstep.OutputWriters
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-writer-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+		writers:     &writers,
+	})
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		run  func(*ExecContext) (*Output, error)
+	}{
+		{
+			name: "step",
+			ctx:  stepExecContext(&Hook{Kind: stepKindName, Type: "output-writer-capture-test"}),
+			run:  stepEngine{}.Run,
+		},
+		{
+			name: "steps",
+			ctx: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-writer-capture-test"},
+			}}),
+			run: stepsEngine{}.Run,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			tt.ctx.Stdout = &stdout
+			tt.ctx.Stderr = &stderr
+			suppressed = false
+			writers = runnerstep.OutputWriters{}
+
+			_, err := tt.run(tt.ctx)
+
+			require.NoError(t, err)
+			assert.True(t, suppressed)
+			assert.Same(t, &stdout, writers.Stdout)
+			assert.Same(t, &stderr, writers.Stderr)
+		})
+	}
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
