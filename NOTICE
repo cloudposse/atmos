@@ -135,7 +135,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.30/internal/endpoints/v2/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.30/internal/endpoints/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/v4a
     License: Apache-2.0
@@ -904,7 +904,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/evanphx/json-patch/v5
     License: BSD-3-Clause
-    URL: https://github.com/evanphx/json-patch/blob/v5.9.11/v5/LICENSE
+    URL: https://github.com/evanphx/json-patch/blob/v5.9.11/LICENSE
 
   - github.com/extism/go-sdk
     License: BSD-3-Clause
@@ -964,7 +964,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.22.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.22.0/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
@@ -1506,7 +1506,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/blang/semver/v4
     License: MIT
-    URL: https://github.com/blang/semver/blob/v4.0.0/v4/LICENSE
+    URL: https://github.com/blang/semver/blob/v4.0.0/LICENSE
 
   - github.com/bmatcuk/doublestar/v4
     License: MIT
