@@ -43,7 +43,8 @@ toolchain:
   registries:
     - name: aqua
       type: aqua
-      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      source: https://github.com/aquaproj/aqua-registry/pkgs
+      ref: v4.550.0
       priority: 10
 ```
 ```bash

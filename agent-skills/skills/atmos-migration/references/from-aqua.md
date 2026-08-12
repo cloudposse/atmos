@@ -178,13 +178,19 @@ Atmos intentionally does not support the following Aqua schema features. These c
 |---|---|---|
 | `go_build` package type | Not implemented. Atmos does not build tools from source. | Use a pre-built release if the project publishes one. Add it via a `type: atmos` inline registry. |
 | `cargo` package type | Not implemented. Atmos has no Cargo or crates.io installer. | No direct equivalent exists. Source the binary another way. |
-| `version_filter` / `version_prefix` | Atmos does not support version-string manipulation. | Pin an exact version. Or normalize the version with `toolchain.aliases`. |
-| `version_expr` / `version_expr_prefix` | Same as above. | Same as above. |
+| `version_filter` | Atmos does not support this Aqua registry field. Aqua uses it to filter candidate GitHub tags before version resolution. | Pin an exact, already-known-good version in `.tool-versions`. |
+| `version_expr` / `version_expr_prefix` | Atmos does not support version-string manipulation through an expression. | Pin an exact version. |
 | `go_version_file` | Atmos does not support reading a version from a Go source file. | Pin the version explicitly in `.tool-versions`. |
 | `import` | Atmos does not support Aqua's registry-composition mechanism. | Add multiple `toolchain.registries` entries instead of one registry that imports others. |
 | `command_aliases` | Atmos does not support this Aqua field. | Use `toolchain.proxies` in `atmos.yaml` instead. `toolchain.proxies` creates a command-name link, the same role `command_aliases` plays in Aqua. Do not use `toolchain.aliases` for this. `toolchain.aliases` only maps a short tool name to an `owner/repo` registry entry for lookup. It does not change the command name a tool runs under. See the Shell Integration section above. |
 | `tags` | Not supported. | No equivalent exists. Atmos does not filter installs by tag. |
 | `vars` | Atmos does not support Aqua's per-package template variables. | Hard-code the value into the `url` template of a `type: atmos` inline registry entry. |
+
+**`version_prefix` is supported, not a gap.** Atmos reads `version_prefix` directly from an Aqua
+registry package definition. It applies the prefix automatically when it builds the download URL
+and compares versions. A package that already ships from an Aqua registry needs no workaround. Add
+`version_prefix` to a custom `type: atmos` inline registry entry when you define a tool with no
+upstream Aqua registry entry.
 
 ## Worked Example
 
