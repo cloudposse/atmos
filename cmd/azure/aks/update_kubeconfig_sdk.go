@@ -17,12 +17,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// Package-level seams so the orchestration in this file (config load, auth-manager creation, AKS
+// describe) can be unit-tested without a live Azure subscription. Overridden in tests; the same
+// function-var pattern used in pkg/auth/integrations/azure/aks.go and token.go.
+var (
+	initCliConfig   = cfg.InitCliConfig
+	newAuthManager  = auth.NewAuthManager
+	newAKSClient    = azureCloud.NewAKSClient
+	describeCluster = azureCloud.DescribeCluster
+)
+
 // executeAKSUpdateKubeconfigViaIntegration runs AKS kubeconfig update using a named integration.
 func executeAKSUpdateKubeconfigViaIntegration(integrationName string) error {
 	defer perf.Track(nil, "aks.executeAKSUpdateKubeconfigViaIntegration")()
 
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
@@ -34,7 +44,7 @@ func executeAKSUpdateKubeconfigViaIntegration(integrationName string) error {
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
 
-	mgr, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	mgr, err := newAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -61,7 +71,7 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 	defer perf.Track(nil, "aks.executeAKSUpdateKubeconfigDirect")()
 
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
@@ -73,7 +83,7 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
 
-	mgr, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	mgr, err := newAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -84,7 +94,9 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIdentityAuthFailed, err)
 	}
 
-	if whoami.Credentials == nil {
+	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil) return) before
+	// dereferencing Credentials, in addition to the by-design nil-credentials case.
+	if whoami == nil || whoami.Credentials == nil {
 		return fmt.Errorf("%w: no credentials available", errUtils.ErrIdentityAuthFailed)
 	}
 
@@ -102,12 +114,12 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 // the function-length limit.
 func writeAKSKubeconfigDirect(ctx context.Context, creds types.ICredentials, p *aksKubeconfigDirectParams) error {
 	// Create AKS client and describe cluster.
-	client, err := azureCloud.NewAKSClient(ctx, creds, p.subscriptionID)
+	client, err := newAKSClient(ctx, creds, p.subscriptionID)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	info, err := azureCloud.DescribeCluster(ctx, client, p.subscriptionID, p.resourceGroup, p.clusterName)
+	info, err := describeCluster(ctx, client, p.subscriptionID, p.resourceGroup, p.clusterName)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}

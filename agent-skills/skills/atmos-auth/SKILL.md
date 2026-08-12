@@ -4,6 +4,7 @@ description: "Authentication and identity management: providers (SSO/SAML/OIDC/G
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: security
 ---
 
 # Atmos Authentication and Identity Management
@@ -415,8 +416,7 @@ keyring settings.
 Registry login (`aws/ecr`, `azure/acr`) and kubeconfig provisioning (`aws/eks`, `azure/aks`)
 auto-trigger on identity login when `auto_provision: true` (default). `spec.registry` and
 `spec.cluster` are single structs shared across both clouds — each integration's `kind` picks
-which fields matter (`account_id`/`region` vs `name`/`tenant_id`; `name`/`region` vs
-`name`/`resource_group`/`subscription_id`):
+which fields matter (see the per-cloud references below):
 
 ```yaml
 auth:
@@ -427,11 +427,8 @@ auth:
     dev/aks: { kind: azure/aks, via: { identity: azure-dev }, spec: { cluster: { name: dev-cluster, resource_group: dev-rg } } }
 ```
 
-Integration failures are non-blocking during `atmos auth login`; retry with
-`atmos aws ecr login` / `atmos azure acr login` / `atmos aws eks update-kubeconfig` /
-`atmos azure aks update-kubeconfig`. See [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md),
-[atmos-azure-acr](../atmos-azure-acr/SKILL.md), [atmos-aws-eks](../atmos-aws-eks/SKILL.md), and
-[atmos-azure-aks](../atmos-azure-aks/SKILL.md) for command details.
+Integration failures are non-blocking during `atmos auth login`; retry the per-integration login/update command.
+Command details — AWS: [atmos-aws-ecr](../atmos-aws-ecr/SKILL.md), [atmos-aws-eks](../atmos-aws-eks/SKILL.md); Azure: [references/azure-acr-integration.md](references/azure-acr-integration.md), [references/azure-aks-integration.md](references/azure-aks-integration.md).
 
 ## GitHub STS Integration
 
@@ -497,3 +494,5 @@ Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
 
 - [references/providers-and-identities.md](references/providers-and-identities.md) -- Detailed provider and identity configuration patterns
 - [references/commands-reference.md](references/commands-reference.md) -- Complete command reference for all auth subcommands
+- [references/azure-aks-integration.md](references/azure-aks-integration.md) -- `azure/aks` integration: `atmos azure aks update-kubeconfig` / `token` (kubeconfig without `az`/`kubelogin`)
+- [references/azure-acr-integration.md](references/azure-acr-integration.md) -- `azure/acr` integration: `atmos azure acr login` (Docker login without `az`)

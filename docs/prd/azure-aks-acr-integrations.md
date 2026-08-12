@@ -293,8 +293,17 @@ cmd/azure/
     acr.go, login.go
 
 pkg/schema/schema_auth.go      # MODIFIED: EKSCluster → Cluster, ECRRegistry → Registry
+pkg/auth/manager.go            # MODIFIED: blank-import integrations/azure so azure/aks + azure/acr register
 errors/errors.go               # MODIFIED: ErrAKS*, ErrACR* sentinels
 ```
+
+> **Registration note:** the `azure/aks` and `azure/acr` kinds self-register in
+> `pkg/auth/integrations/azure`'s `init()`, but Go only runs that `init()` if the package is
+> imported. `pkg/auth/manager.go` must blank-import it (`_ ".../integrations/azure"`) exactly as it
+> does for the `aws` and `github` integration packages — otherwise the registry lookup for
+> `--integration <name>` fails with `unknown integration kind: azure/aks`. This is easy to miss
+> because the unit tests import the `azure` package directly, so registration looks fine under test
+> even when the production import path is absent (see Manual Verification).
 
 ### Dependency
 
@@ -340,10 +349,10 @@ Same posture as EKS/ECR:
 ## Success Metrics
 
 1. AKS kubeconfig and ACR Docker login generated correctly with valid output.
-2. `kubectl`/`docker` can authenticate using the generated credentials against a real AAD-enabled
-    AKS cluster / ACR registry (not exercised in this sandbox — no live Azure subscription
-    available; verified via unit tests exercising the real `clientcmd`/JWT/kubeconfig-merge code
-    paths against synthetic fixtures).
+2. `kubectl` can authenticate using the generated credentials against a real AAD-enabled AKS
+    cluster — **now exercised end-to-end against a live cluster** (see Manual Verification below),
+    in addition to the unit tests exercising the real `clientcmd`/JWT/kubeconfig-merge code paths
+    against synthetic fixtures. (ACR Docker login against a live registry remains unit-test-only.)
 3. Auto-provisioning triggers both integrations on `atmos auth login`, non-blocking on failure.
 4. Full repository test suite (`go test ./...`) passes with the AWS EKS/ECR regression suite
     unchanged in behavior.
@@ -368,8 +377,59 @@ Same posture as EKS/ECR:
 - [ACR AAD OAuth2 token exchange](https://github.com/Azure/acr/blob/main/docs/AAD-OAuth.md)
 - [Kubernetes client-go exec credentials](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins)
 
+## Manual Verification (live AKS cluster)
+
+The `azure/aks` integration was exercised end-to-end against a real AAD-enabled AKS cluster
+(Azure CNI Overlay + Cilium, AAD + Azure RBAC, local accounts disabled), closing the gap noted in
+Success Metric #2. This is the path unit tests could not cover, and it surfaced the registration
+bug documented above.
+
+**1. What the live run surfaced.** `atmos azure aks update-kubeconfig --integration <name>` failed
+with `unknown integration kind: azure/aks` — the `pkg/auth/integrations/azure` package was never
+blank-imported in `pkg/auth/manager.go`, so its `init()` never ran. The unit suites imported the
+package directly and so registered the kinds incidentally, masking the missing production import.
+Fixed by adding the blank import alongside `aws`/`github`.
+
+**2. Integration mode** — describe the cluster and write kubeconfig via the Go SDK (no `az`, no
+`kubelogin`):
+
+```console
+$ atmos azure aks update-kubeconfig --integration dev/aks
+✓ AKS kubeconfig: dev-aks → ~/.config/atmos/kube/config
+
+$ export KUBECONFIG=~/.config/atmos/kube/config
+$ kubectl config current-context
+dev-aks
+
+$ kubectl get pods -A            # kube-system pods Running (cilium, coredns, metrics-server, …)
+```
+
+The kubeconfig Atmos wrote points its exec plugin at `atmos azure aks token` (not `kubelogin`),
+with the cluster/resource-group/subscription/identity baked in and the `--server-id` discovered
+from the cluster (here the well-known AKS AAD server app):
+
+```console
+$ kubectl config view --raw -o jsonpath='{.users[0].user.exec.command} {.users[0].user.exec.args}'
+atmos [azure aks token --cluster-name aks-dev --resource-group rg-aks-cus --server-id 6dae42f8-4368-4678-94ff-3960e28e3630 --subscription-id <redacted> --identity=dev]
+```
+
+**3. `auth exec` mode** — Atmos injects `KUBECONFIG` into the child process from the integration's
+`Environment()` (works even with `auto_provision: false`, which only suppresses the auto-*write* on
+login, not the env composition), so no manual `export` is needed:
+
+```console
+$ atmos auth exec --identity dev -- kubectl get nodes
+NAME                             STATUS   ROLES    AGE    VERSION
+aks-system-64934532-vmss000000   Ready    <none>   139m   v1.35.6
+aks-system-64934532-vmss000001   Ready    <none>   139m   v1.35.6
+```
+
+Both paths mint bearer tokens through `atmos azure aks token` against the Atmos-managed identity —
+no `az` CLI and no `kubelogin` binary involved.
+
 ## Changelog
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-07-23 | AI Assistant | Initial PRD, documenting the as-built implementation |
+| 1.1 | 2026-08-11 | AI Assistant | Live-cluster verification; fixed missing `integrations/azure` blank import in `manager.go` that left `azure/aks`/`azure/acr` unregistered |

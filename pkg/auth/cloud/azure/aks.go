@@ -258,6 +258,7 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		ID:                       info.ID,
 		Region:                   info.ResourceGroup,
 		UserPrefix:               "aks",
+		AccountID:                info.SubscriptionID,
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}

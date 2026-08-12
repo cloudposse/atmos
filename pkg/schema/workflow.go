@@ -294,6 +294,12 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
+	// and the overall workflow exit status is unaffected (like GitHub Actions'
+	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When
+	// (evaluated before, against the running status). Unset means no forgiveness (today's
+	// fail-stop behavior, unchanged).
+	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -446,6 +452,18 @@ type WorkflowStep struct {
 	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // Executables that must be found on PATH (supports templates).
 	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
 	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
+
+	// Inputs declares this step's freshness sources. See pkg/schema/task.go's Inputs type and
+	// pkg/runner/freshness.
+	Inputs *Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+
+	// Artifacts declares this step's expected output files -- a sibling of Inputs, not nested
+	// inside it. See pkg/schema/task.go's Artifacts type.
+	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
+
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied. See pkg/schema/task.go's Preconditions type.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`

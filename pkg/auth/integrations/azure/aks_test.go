@@ -536,6 +536,97 @@ func TestAKSIntegration_FindClusterID_DisambiguatesResourceGroup(t *testing.T) {
 	assert.Equal(t, wantID, got)
 }
 
+// writeSameNameClustersAcrossSubscriptions writes two kubeconfig entries for a
+// cluster with the same name and resource group in two different
+// subscriptions, as would happen with a landing-zone pattern that reuses
+// resource group names per subscription.
+func writeSameNameClustersAcrossSubscriptions(t *testing.T, mgr *kube.KubeconfigManager, clusterName, resourceGroup string) (idSubA, idSubB string) {
+	t.Helper()
+
+	const subA, subB = "sub-aaa", "sub-bbb"
+	idSubA = "/subscriptions/" + subA + "/resourceGroups/" + resourceGroup + "/providers/Microsoft.ContainerService/managedClusters/" + clusterName
+	idSubB = "/subscriptions/" + subB + "/resourceGroups/" + resourceGroup + "/providers/Microsoft.ContainerService/managedClusters/" + clusterName
+
+	for _, tt := range []struct{ id, subscriptionID string }{
+		{idSubA, subA},
+		{idSubB, subB},
+	} {
+		_, err := mgr.WriteClusterConfig(&kube.ClusterInfo{
+			Name:       clusterName,
+			Endpoint:   "https://example.hcp.eastus.azmk8s.io:443",
+			ID:         tt.id,
+			Region:     resourceGroup,
+			UserPrefix: "aks",
+			AccountID:  tt.subscriptionID,
+			ExecArgs:   []string{"azure", "aks", "token"},
+		}, tt.id, "merge")
+		require.NoError(t, err)
+	}
+
+	return idSubA, idSubB
+}
+
+func TestAKSIntegration_FindClusterID_AmbiguousAcrossSubscriptions(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	const clusterName = "shared-cluster"
+	writeSameNameClustersAcrossSubscriptions(t, mgr, clusterName, "shared-rg")
+
+	// No subscription_id configured: two clusters share the same name and
+	// resource group across subscriptions, so the match is ambiguous rather
+	// than an arbitrary pick.
+	integration := &AKSIntegration{cluster: &schema.Cluster{Name: clusterName, ResourceGroup: "shared-rg"}}
+	_, err = integration.findClusterID(mgr)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAKSClusterAmbiguous)
+}
+
+func TestAKSIntegration_FindClusterID_DisambiguatesSubscription(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	const clusterName = "shared-cluster"
+	idSubA, idSubB := writeSameNameClustersAcrossSubscriptions(t, mgr, clusterName, "shared-rg")
+
+	// With subscription_id configured, the exact ARM resource ID is matched.
+	integration := &AKSIntegration{cluster: &schema.Cluster{Name: clusterName, ResourceGroup: "shared-rg", SubscriptionID: "sub-bbb"}}
+	got, err := integration.findClusterID(mgr)
+	require.NoError(t, err)
+	assert.Equal(t, idSubB, got)
+	assert.NotEqual(t, idSubA, got)
+}
+
+func TestAKSIntegration_Cleanup_SameNameDifferentSubscriptions(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	const clusterName = "shared-cluster"
+	idSubA, idSubB := writeSameNameClustersAcrossSubscriptions(t, mgr, clusterName, "shared-rg")
+
+	// Cleaning up the cluster in subscription B must not remove subscription
+	// A's entries: the exec-plugin username includes the subscription ID, so
+	// the two clusters' AuthInfo entries do not collide.
+	integration := &AKSIntegration{
+		cluster: &schema.Cluster{
+			Name:           clusterName,
+			ResourceGroup:  "shared-rg",
+			SubscriptionID: "sub-bbb",
+			Kubeconfig:     &schema.KubeconfigSettings{Path: kubeconfigPath},
+		},
+	}
+	err = integration.Cleanup(t.Context())
+	require.NoError(t, err)
+
+	ids, err := mgr.ListClusterIDs()
+	require.NoError(t, err)
+	assert.NotContains(t, ids, idSubB)
+	assert.Contains(t, ids, idSubA)
+}
+
 func TestAKSIntegrationRegistration(t *testing.T) {
 	assert.True(t, integrations.IsRegistered(integrations.KindAzureAKS))
 }
