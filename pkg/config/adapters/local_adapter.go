@@ -39,7 +39,7 @@ func (l *LocalAdapter) Resolve(
 	resolvedPath := l.resolveImportPath(importPath, basePath)
 	paths, err := config.SearchAtmosConfig(resolvedPath)
 	if err != nil {
-		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		log.Debug("failed to resolve local import path", "path", config.SanitizeImport(importPath), "err", err)
 		return nil, errUtils.ErrResolveLocal
 	}
 

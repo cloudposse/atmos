@@ -1,12 +1,16 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func setupTestFile(content, tempDir string, filename string) (string, error) {
@@ -216,7 +220,7 @@ func TestSanitizeImport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeImport(tt.input)
+			result := SanitizeImport(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -268,4 +272,33 @@ settings:
 
 	// The import should work despite being outside base directory.
 	// The message is now logged at Trace level, not Warn level.
+}
+
+// TestProcessImports_FailedImportLogSanitized verifies that the Warn log emitted when an
+// import fails to resolve never leaks credentials embedded in the import URL.
+func TestProcessImports_FailedImportLogSanitized(t *testing.T) {
+	setupTestAdapters()
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	// .invalid is a reserved TLD (RFC 2606) that always fails DNS resolution immediately,
+	// so this exercises a real resolve failure without a real network dependency.
+	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
+	tempDir := t.TempDir()
+
+	_, err := processImports(nil, tempDir, []string{credentialedImport}, tempDir, 1, 10)
+
+	require.NoError(t, err, "a failed import must not abort the whole config load")
+	logged := buffer.String()
+	assert.NotContains(t, logged, "super-secret-token", "the failed-import warning must not leak credentials")
+	assert.NotContains(t, logged, "user:super-secret-token@", "the failed-import warning must not leak the userinfo segment")
+	assert.Contains(t, logged, "failed to resolve import", "the warning should still identify the failure")
 }

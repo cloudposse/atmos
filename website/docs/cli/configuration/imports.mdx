@@ -120,9 +120,10 @@ import:
 
 ### Caching Remote Imports
 
-By default, a remote `import:` source is re-cloned on every `atmos` invocation, so mutable refs (e.g.
-`?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI
-cache — set the same `imports.ttl` default used by [remote stack imports](/stacks/imports#caching-remote-imports):
+This applies to `git::` imports that use a subdirectory (e.g. `git::https://github.com/org/repo.git//path?ref=main`).
+By default the source repo is re-cloned on every `atmos` invocation, so mutable refs (e.g. `?ref=main`)
+always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set
+the same `imports.ttl` default used by [remote stack imports](/stacks/imports#caching-remote-imports):
 
 ```yaml title="atmos.yaml"
 imports:
@@ -133,6 +134,9 @@ This is a single global default; root `import:` entries are plain strings and do
 `ttl` override the way stack manifest imports do. `ttl` accepts durations like `0s` (always re-fetch),
 `5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer
 `ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh.
+
+Plain remote URLs (no `git::` subdirectory) use a separate, non-expiring cache instead — `ttl` has no
+effect on them.
 
 ## Limitations
 

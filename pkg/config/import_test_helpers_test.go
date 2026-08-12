@@ -52,7 +52,7 @@ func (l *testLocalAdapter) Resolve(
 	// Search for matching config files.
 	paths, err := SearchAtmosConfig(resolvedPath)
 	if err != nil {
-		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		log.Debug("failed to resolve local import path", "path", SanitizeImport(importPath), "err", err)
 		return nil, errUtils.ErrResolveLocal
 	}
 

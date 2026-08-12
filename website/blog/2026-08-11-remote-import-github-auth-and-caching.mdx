@@ -27,8 +27,9 @@ warning when an import fails, and opt-in caching.
 - **A broken import failed silently.** A typo'd `?ref=`, an unreachable host, or a private repo the
   available credentials couldn't read all produced the same result: the import contributed nothing, no
   error appeared, and the command exited successfully — indistinguishable from having no import at all.
-- **Every command re-fetched the import, every time.** Root `atmos.yaml` imports had no caching, so a
-  command as simple as checking your current identity re-cloned the remote repo over the network first.
+- **Every command re-cloned a `git::` import, every time.** A root `atmos.yaml` import pointing at a
+  subdirectory in a Git repo had no caching, so a command as simple as checking your current identity
+  re-cloned the remote repo over the network first.
 
 ## The Fix
 
@@ -37,9 +38,9 @@ warning when an import fails, and opt-in caching.
   do. If `gh auth login` is already done, there's nothing else to configure.
 - A remote `import:` entry that fails to resolve now prints a warning by default — naming the import path
   and the underlying error — instead of silently continuing with an empty or partial configuration.
-- Setting `imports: { ttl: ... }` once in `atmos.yaml` now also caches root-level `import:` entries across
-  commands, reusing the exact same caching mechanism and cache directory that stack-manifest imports
-  already relied on.
+- Setting `imports: { ttl: ... }` once in `atmos.yaml` now also caches root-level `git::` imports that use
+  a subdirectory across commands, reusing the exact same caching mechanism and cache directory that
+  stack-manifest imports already relied on.
 
 ## How to Use It
 
@@ -55,7 +56,7 @@ If an import does break, you'll see it immediately instead of a mysteriously emp
 WARN  failed to resolve import path="git::https://github.com/acme/config.git//auth.yaml?ref=v1.2.3" error="..."
 ```
 
-To stop re-fetching a stable, pinned import on every command, set a cache TTL:
+To stop re-fetching a stable, pinned `git::` import on every command, set a cache TTL:
 
 ```yaml title="atmos.yaml"
 imports:
@@ -66,7 +67,8 @@ import:
 ```
 
 Unset (the default), behavior is unchanged — imports always refresh. Set it once, and it applies to every
-`import:` entry in the file.
+`git::` import with a subdirectory in the file; plain remote URLs use a separate, non-expiring cache and
+aren't affected by this setting.
 
 ## Get Involved
 
