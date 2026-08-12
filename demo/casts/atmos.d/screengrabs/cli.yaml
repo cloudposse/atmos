@@ -250,6 +250,9 @@ commands:
           atmos azure aks --help
           atmos azure aks token --help
           atmos azure aks update-kubeconfig --help
+          atmos gcp --help
+          atmos gcp gke --help
+          atmos gcp gke token --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help
@@ -649,6 +652,9 @@ commands:
           atmos azure aks --help
           atmos azure aks token --help
           atmos azure aks update-kubeconfig --help
+          atmos gcp --help
+          atmos gcp gke --help
+          atmos gcp gke token --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help

@@ -19,6 +19,12 @@ import (
 )
 
 const (
+	// ExpectedServerEnv is set by cluster integrations to the API endpoint they provisioned.
+	// Cluster clients use it as a post-condition against the effective kubeconfig target.
+	ExpectedServerEnv = "ATMOS_KUBERNETES_EXPECTED_SERVER"
+	// EndpointGuardEnv enables endpoint enforcement for an explicitly guarded operation.
+	EndpointGuardEnv = "ATMOS_KUBERNETES_ENDPOINT_GUARD"
+
 	// defaultFileMode is the default kubeconfig file permission.
 	defaultFileMode = 0o600
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -48,11 +49,29 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		}
 	case integrations.KindGCPGKE:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			cluster := cfg.Spec.Cluster
-			return fmt.Sprintf("gcp/gke:%s:%s:%s", cluster.ProjectID, cluster.Location, cluster.Name)
+			return gkeIntegrationTargetKey(cfg)
 		}
 	}
 	return name
+}
+
+func gkeIntegrationTargetKey(cfg schema.Integration) string {
+	cluster := cfg.Spec.Cluster
+	values := url.Values{
+		"alias":    {cluster.Alias},
+		"location": {cluster.Location},
+		"name":     {cluster.Name},
+		"project":  {cluster.ProjectID},
+	}
+	if cfg.Via != nil {
+		values.Set("identity", cfg.Via.Identity)
+	}
+	if cluster.Kubeconfig != nil {
+		values.Set("mode", cluster.Kubeconfig.Mode)
+		values.Set("path", cluster.Kubeconfig.Path)
+		values.Set("update", cluster.Kubeconfig.Update)
+	}
+	return integrations.KindGCPGKE + ":" + values.Encode()
 }
 
 // triggerIntegrations executes integrations that reference this identity with auto_provision enabled.

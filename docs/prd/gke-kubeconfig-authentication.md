@@ -36,7 +36,17 @@ auth:
 4. When Kubernetes needs credentials, it invokes `atmos gcp gke token`. The command resolves or refreshes the selected identity through the existing Auth manager with integration auto-provisioning suppressed, then emits only a Kubernetes `ExecCredential` JSON document.
 5. The integration contributes both `KUBECONFIG` and `KUBE_CONFIG_PATH`. The existing identity-environment composition makes the generated path available to Helm, Kubernetes, Helmfile, kubectl subprocesses, and workflows that select the identity.
 
-The canonical target key is `gcp/gke:<project_id>:<location>:<name>`. The kubeconfig cluster key uses the fully-qualified GKE resource name, and the generated user includes project and location, preventing collisions across projects.
+The canonical target key is a deterministic `gcp/gke:` query over the project, location, name, and output settings. The kubeconfig cluster key uses the fully-qualified GKE resource name, and the generated user includes project and location, preventing collisions across projects.
+
+The process cache key also includes kubeconfig path, mode, update behavior, context alias, and exec-plugin identity. Bulk commands therefore deduplicate identical GKE discovery/provisioning work without skipping a distinct output configuration.
+
+## Helm Safety Guard
+
+Native Helm preserves its current ambient-kubeconfig behavior by default. A GKE component can opt into fail-closed targeting with `auth.require_identity: true` and a component-level default identity. For guarded apply/deploy/delete operations, Atmos resolves that default when no CLI identity was supplied, requires the GKE integration to provision an expected endpoint, and compares it with the effective Helm REST configuration before contacting the cluster.
+
+The comparison uses the API server endpoint, not the local context name. Context names are aliases and cannot prove cluster identity. This guard is intentionally GKE-scoped in this change and does not alter existing EKS or AKS behavior.
+
+The default kubeconfig path is Atmos-owned under the XDG config directory. `update: merge` sets `current-context` in that Atmos-owned file. Mutating a shared user kubeconfig happens only when the user explicitly configures that shared path.
 
 ## Security and Permissions
 
@@ -52,3 +62,4 @@ The canonical target key is `gcp/gke:<project_id>:<location>:<name>`. The kubeco
 - Helm-specific behavior.
 - Static bearer tokens in kubeconfig.
 - Private endpoint or DNS endpoint selection in the initial implementation.
+- Changing existing EKS or AKS targeting behavior.

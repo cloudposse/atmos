@@ -3,13 +3,51 @@ package helm
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	config := clientcmdapi.NewConfig()
+	config.CurrentContext = "example"
+	config.Clusters["example-cluster"] = &clientcmdapi.Cluster{Server: "https://example.invalid"}
+	config.Contexts["example"] = &clientcmdapi.Context{Cluster: "example-cluster"}
+	require.NoError(t, clientcmd.WriteToFile(*config, path))
+	t.Setenv("KUBECONFIG", path)
+
+	t.Run("no integration expectation allows ambient kubeconfig", func(t *testing.T) {
+		t.Setenv(authkube.EndpointGuardEnv, "")
+		t.Setenv(authkube.ExpectedServerEnv, "")
+		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
+	})
+	t.Run("expectation is inert without the opt-in guard", func(t *testing.T) {
+		t.Setenv(authkube.EndpointGuardEnv, "")
+		t.Setenv(authkube.ExpectedServerEnv, "https://other.invalid")
+		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
+	})
+	t.Run("matching endpoint proceeds", func(t *testing.T) {
+		t.Setenv(authkube.EndpointGuardEnv, "true")
+		t.Setenv(authkube.ExpectedServerEnv, "https://example.invalid/")
+		require.NoError(t, verifyExpectedKubernetesEndpoint(cli.New()))
+	})
+	t.Run("mismatched endpoint fails closed", func(t *testing.T) {
+		t.Setenv(authkube.EndpointGuardEnv, "true")
+		t.Setenv(authkube.ExpectedServerEnv, "https://other.invalid")
+		err := verifyExpectedKubernetesEndpoint(cli.New())
+		require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
+		assert.Contains(t, err.Error(), "https://example.invalid")
+	})
+}
 
 func TestResolveUpgradeChartRef(t *testing.T) {
 	t.Run("explicit repository url wins", func(t *testing.T) {

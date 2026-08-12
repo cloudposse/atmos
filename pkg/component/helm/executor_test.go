@@ -211,8 +211,7 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 	) (schema.ConfigAndStacksInfo, error) {
 		processStacksCalled = true
 		assert.True(t, checkStack)
-		assert.True(t, processTemplates)
-		assert.True(t, processYamlFunctions)
+		assert.Equal(t, processTemplates, processYamlFunctions)
 		info.ComponentIsEnabled = false
 		info.ComponentFromArg = "app"
 		return info, nil

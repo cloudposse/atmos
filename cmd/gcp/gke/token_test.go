@@ -32,6 +32,7 @@ func initTokenTestIO(t *testing.T) {
 
 func newTestTokenCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "token", RunE: executeTokenCommand}
+	cmd.SetContext(context.Background())
 	cmd.Flags().StringP("identity", "i", "", "Atmos GCP identity")
 	return cmd
 }
@@ -130,6 +131,29 @@ func TestExecuteTokenCommandUsesIdentityEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "example-deployer", capturedIdentity)
 	assert.NotContains(t, stdout, "expirationTimestamp")
+}
+
+func TestExecuteTokenCommandPreservesCommandContext(t *testing.T) {
+	initTokenTestIO(t)
+	installTokenCommandFakes(t)
+
+	deadline := time.Now().Add(time.Minute)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	cancel()
+
+	authenticateForTokenFn = func(got context.Context, _ *schema.AuthConfig, _, _ string) (types.ICredentials, error) {
+		gotDeadline, ok := got.Deadline()
+		require.True(t, ok)
+		assert.Equal(t, deadline, gotDeadline)
+		assert.ErrorIs(t, got.Err(), context.Canceled)
+		assert.True(t, auth.IntegrationsSkipped(got))
+		return nil, got.Err()
+	}
+
+	cmd := newTestTokenCommand()
+	cmd.SetContext(ctx)
+	_, err := captureStdout(t, func() error { return executeTokenCommand(cmd, nil) })
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestExecuteTokenCommandErrorsNeverExposeToken(t *testing.T) {

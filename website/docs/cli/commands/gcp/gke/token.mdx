@@ -5,15 +5,24 @@ sidebar_class_name: command
 description: Emit a Kubernetes ExecCredential from an Atmos-managed GCP identity.
 ---
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Resolve or refresh an Atmos GCP identity and emit its short-lived access token as Kubernetes `ExecCredential` JSON.
 </Intro>
 
+<CastPlayer src="/casts/screengrabs/atmos-gcp-gke-token--help.cast" static />
+
 ## Usage
 
 ```shell
 atmos gcp gke token --identity <identity>
+```
+
+## Examples
+
+```shell
+atmos gcp gke token --identity example-deployer
 ```
 
 The generated GKE kubeconfig invokes this command automatically. It writes only JSON to stdout; diagnostics go to stderr. The token is not written to kubeconfig or included in error messages.

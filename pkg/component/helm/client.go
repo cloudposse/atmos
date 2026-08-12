@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
@@ -16,6 +17,7 @@ import (
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -31,6 +33,9 @@ type actionContext struct {
 // the toolchain/auth environment configures before execution.
 var newActionContext = func(namespace string) (*actionContext, error) {
 	settings := newSettings()
+	if err := verifyExpectedKubernetesEndpoint(settings); err != nil {
+		return nil, err
+	}
 
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
@@ -48,6 +53,25 @@ var newActionContext = func(namespace string) (*actionContext, error) {
 	cfg.RegistryClient = registryClient
 
 	return &actionContext{cfg: cfg, settings: settings}, nil
+}
+
+func verifyExpectedKubernetesEndpoint(settings *cli.EnvSettings) error {
+	if os.Getenv(authkube.EndpointGuardEnv) != "true" { //nolint:forbidigo // Internal guard set only for opt-in protected operations.
+		return nil
+	}
+	expected := os.Getenv(authkube.ExpectedServerEnv) //nolint:forbidigo // Set by the selected Atmos Auth cluster integration.
+	if expected == "" {
+		return nil
+	}
+	restConfig, err := settings.RESTClientGetter().ToRESTConfig()
+	if err != nil {
+		return fmt.Errorf("%w: resolve effective kubeconfig: %w", errUtils.ErrKubernetesClientInit, err)
+	}
+	actual := restConfig.Host
+	if strings.TrimRight(actual, "/") != strings.TrimRight(expected, "/") {
+		return fmt.Errorf("%w: expected %q, got %q", errUtils.ErrKubernetesEndpointMismatch, expected, actual)
+	}
+	return nil
 }
 
 // applyRelease installs the release if it does not exist, otherwise upgrades it

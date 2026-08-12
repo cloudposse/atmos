@@ -1545,6 +1545,8 @@ var (
 	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
 	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
 	ErrKubernetesClientInit                 = errors.New("failed to initialize kubernetes client")
+	ErrKubernetesEndpointMismatch           = errors.New("effective Kubernetes API endpoint does not match the identity integration")
+	ErrKubernetesIdentityRequired           = errors.New("an Atmos Auth identity is required for this Kubernetes operation")
 	ErrKubernetesApply                      = errors.New("failed to apply kubernetes object")
 	ErrKubernetesDelete                     = errors.New("failed to delete kubernetes object")
 	ErrKubernetesDiff                       = errors.New("failed to diff kubernetes object")
