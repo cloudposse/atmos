@@ -204,6 +204,26 @@ func TestIsHTTP404(t *testing.T) {
 	})
 }
 
+func TestIsVersionFallbackEligible(t *testing.T) {
+	t.Run("true for a 404", func(t *testing.T) {
+		assert.True(t, isVersionFallbackEligible(ErrHTTP404))
+	})
+
+	t.Run("true for a retry-exhausted transient error", func(t *testing.T) {
+		lastErr := buildDownloadError("https://example.com/asset.tar.gz", http.StatusServiceUnavailable)
+		err := errors.Join(errUtils.ErrDownloadRetryable, buildDownloadRetryError("https://example.com/asset.tar.gz", downloadRetryMaxAttempts, lastErr))
+		assert.True(t, isVersionFallbackEligible(err))
+	})
+
+	t.Run("false for a definitive non-retryable failure", func(t *testing.T) {
+		assert.False(t, isVersionFallbackEligible(buildDownloadError("https://example.com/asset.tar.gz", http.StatusForbidden)))
+	})
+
+	t.Run("false for nil", func(t *testing.T) {
+		assert.False(t, isVersionFallbackEligible(nil))
+	})
+}
+
 func TestDownloadAsset_CacheBehavior(t *testing.T) {
 	t.Run("uses cached file if exists", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -685,6 +705,40 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrHTTP404)
 		assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+	})
+
+	t.Run("falls back when the primary URL exhausts retries on 503s, not just on a clean 404", func(t *testing.T) {
+		// Reproduces the observed CI failure: a wrong version-prefix URL that returns 503
+		// (instead of a clean 404) under load. The primary URL must exhaust its real retry
+		// budget before the fallback engages, so this test is slow by nature (~15s).
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "v1.0.0") {
+				w.Write([]byte("fallback asset data"))
+				return
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer ts.Close()
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+		tool := &registry.Tool{
+			Type:          "http",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         ts.URL + "/tool-{{.Version}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		result, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
+		require.NoError(t, err)
+		assert.Equal(t, "v1.0.0", result.effectiveVersion)
+		assert.Contains(t, result.effectiveURL, "v1.0.0")
 	})
 }
 
