@@ -37,10 +37,11 @@ sso_role_name = ReadOnlyAccess
 
 This works, but it doesn't scale or govern well:
 
-- Every developer's `~/.aws/config` is a hand-maintained, ungoverned copy — nothing catches a
-  copy-paste mistake like a wrong account ID.
-- Updating a role name, adding a new account, or revoking access means re-broadcasting the change and
-  hoping everyone updates their local file.
+- Every developer's `~/.aws/config` is a hand-rolled, ungoverned copy — nothing catches
+  copy-paste mistakes (and it costs your team time supporting it).
+- Every new team member goes through the same onboarding song-and-dance, usually capped off with a
+  Slack message asking how to configure their AWS credentials.
+- Making any changes requires coordinating the updates across the entire team (unsustainable)
 - There's no single source of truth to audit or version-control.
 - If your organization is multi-cloud, this ad hoc pattern doesn't generalize — AWS profiles, `az login`
   conventions, and `gcloud` configurations all look different, so you end up maintaining a separate,
