@@ -566,6 +566,39 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func TestAzureKeyVaultStore_GetRawPreservesPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"type":"service_account","enabled":true}`},
+		{name: "plain text", payload: "example-token"},
+		{name: "quoted string", payload: `"example-token"`},
+		{name: "multiline", payload: "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockClient{
+				getSecretFunc: func(_ context.Context, name string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+					assert.Equal(t, "dev-app-credential", name)
+					value := tt.payload
+					return azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}, nil
+				},
+			}
+			store := &AzureKeyVaultStore{
+				client:         client,
+				vaultURL:       "https://example.vault.azure.net",
+				stackDelimiter: stringPtr("-"),
+			}
+
+			got, err := store.GetRaw("dev", "app", "credential")
+			require.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
+		})
+	}
+}
+
 func TestAzureKeyVaultStore_GetKey(t *testing.T) {
 	tests := []struct {
 		name          string

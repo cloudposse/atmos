@@ -16,7 +16,7 @@ import (
 // secretTag is the YAML tag (with leading bang) for the secret function.
 const secretTag = "!secret"
 
-// Resolve resolves a `!secret NAME [| path ...] [| raw] [| default ...]` expression to a value.
+// Resolve resolves a `!secret NAME [| path ... | raw] [| default ...]` expression to a value.
 //
 // Behavior (in order):
 //  1. It validates that the secret is declared in the component section.
@@ -119,7 +119,7 @@ func componentName(stackInfo *schema.ConfigAndStacksInfo) string {
 	return stackInfo.FinalComponent
 }
 
-// parseSecretArgs parses `!secret NAME [| path "x"] [| raw] [| default "y"]` (or the same
+// parseSecretArgs parses `!secret NAME [| path "x" | raw] [| default "y"]` (or the same
 // without the leading tag) into the secret name and modifiers.
 func parseSecretArgs(input string) (string, ResolveOptions, error) {
 	defer perf.Track(nil, "secrets.parseSecretArgs")()

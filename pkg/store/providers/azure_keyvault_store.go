@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -364,6 +365,8 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 // GetRaw retrieves the original Key Vault secret string without JSON decoding. Empty stack and
 // component segments are valid for stack-scoped and global secrets and are omitted by getKey.
 func (s *AzureKeyVaultStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.AzureKeyVaultStore.GetRaw")()
+
 	if key == "" {
 		return "", store.ErrEmptyKey
 	}
