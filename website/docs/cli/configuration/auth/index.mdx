@@ -93,7 +93,7 @@ Integrations are client-only credential materializations that derive from identi
 **Supported integration kinds:**
 - `aws/ecr` — Login to AWS Elastic Container Registry. See [ECR Authentication Tutorial](/tutorials/ecr-authentication).
 - `aws/eks` — Generate EKS kubeconfig for kubectl access. See [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication).
-- `gcp/gke` — Generate GKE kubeconfig with dynamic Atmos exec credentials. See [GKE Kubeconfig Authentication](/cli/commands/gcp/gke/gke).
+- `gcp/gke` — Generate GKE kubeconfig with dynamic Atmos exec credentials. See [GKE Kubeconfig Authentication](/cli/commands/gcp/gke).
 - `github/sts` — Mint just-in-time, least-privilege GitHub tokens (via Atmos Pro) for private module/source/vendor access in CI. See [GitHub STS](#github-sts-atmos-pro) below.
 
 Integrations may bind to an identity (`via.identity`) or, when the provider itself yields usable credentials (e.g. `atmos/pro`), directly to a provider (`via.provider`). Exactly one of the two must be set.
