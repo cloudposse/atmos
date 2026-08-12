@@ -5,5 +5,4 @@
 # scaffold.yaml's `matrix` entry for environment.yaml, and README.md's
 # "Dynamic File Generation (matrix)" section.
 vars:
-  stage: "{{ .matrix.environment }}"
   environment: "{{ .matrix.environment }}"

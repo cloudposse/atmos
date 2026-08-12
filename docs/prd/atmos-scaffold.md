@@ -433,12 +433,10 @@ pkg/condition also parses is not accepted by the scaffold JSON Schema).
 ### Dynamic File Generation (`matrix`)
 
 **Status**: Implemented and shipped. It reuses the exact axis shape the workflow
-`matrix:` step already has (`pkg/schema.WorkflowStep.Matrix`, see the
-`atmos-workflows` skill / `website/docs/workflows/workflows/workflow/steps/type/matrix.mdx`),
-so template authors reuse a shape they already know, and CEL `when:` stays the only
-place any filtering logic lives. See `pkg/generator/engine/matrix.go` and
-`pkg/generator/ui/ui.go`'s `processFileEntry` for the source of truth on current
-behavior.
+`matrix:` step already has (see the `atmos-workflows` skill /
+`website/docs/workflows/workflows/workflow/steps/type/matrix.mdx`), so template
+authors reuse a shape they already know, and CEL `when:` stays the only place any
+filtering logic lives.
 
 `spec.files[].when:` alone only gates a *statically discovered, fixed-count* file —
 it can skip a file, never multiply one. The only list-producing prompt type,
@@ -486,10 +484,9 @@ entry is matched:
   single file gets a `matrix` variable alongside the existing `answers` one,
   referenced unprefixed the same way `answers.<field>` is (e.g.
   `when: "matrix.region in answers.regions_by_env[matrix.environment]"`).
-  `matrix` was added to `conditionCELEnv()`/`condition.Context`
-  (`pkg/condition/cel.go`) the same way `answers` was added for scaffold; it
-  defaults to an empty map outside a matrix context (e.g. in a plain
-  `spec.fields[].when:`), the same way `answers` defaults to empty.
+  The `matrix` CEL variable was added the same way `answers` was added for
+  scaffold; it defaults to an empty map outside a matrix context (e.g. in a
+  plain `spec.fields[].when:`), the same way `answers` defaults to empty.
 - **The file's own content** — the template body being rendered receives
   `.matrix.<axis>` on the same root data map as `.Config.*`/`answers.*`, so a
   generated file can read and branch on its own combination's values, not just be
@@ -567,13 +564,13 @@ environments:
 Cartesian product is then pruned by `when:` to the three environments' actual
 region pairings, exactly as the literal-list example above does.
 
-An axis expression is rendered once per `ExpandMatrix` call, with `answers`
+An axis expression is rendered once per matrix expansion, with `answers`
 registered as a zero-argument template function rather than a data field — Go's
 template grammar only chains `.field` access off of `.` or a `$var`, never off a
 bare identifier, but it does chain off a bare identifier's function-call result,
 which is what lets `answers.environments` parse as "call `answers()`, then select
 `.environments`." The expression's rendered text is then parsed back into a list:
-tolerant of Go's default `%v` slice formatting (`[a b c]`, what `keys` renders as)
+tolerant of Go's default slice-formatting style (`[a b c]`, what `keys` renders as)
 as well as a plain whitespace-separated list without brackets.
 
 **Behavior**:
@@ -592,19 +589,19 @@ as well as a plain whitespace-separated list without brackets.
   immediately.)
 
 **Validation**: checked at load time, without needing real answers, so
-`atmos scaffold validate` catches these before `generate` ever runs (see
-`validateFileMatrix` in `pkg/project/config/validation.go`): `target:` is required
-whenever `matrix:` is set; a literal axis value must be a non-empty list; a string
-axis value must either start with the `answers.` prefix or contain `{{` (a template
-expression); any other shape is rejected. Whether a dynamic axis's resolved value is
-actually list-shaped, or a template expression renders and parses successfully, can
-only be checked once real answers are available, at generation time (`ExpandMatrix`
-in `pkg/generator/engine/matrix.go`).
+`atmos scaffold validate` catches these before `generate` ever runs: `target:` is
+required whenever `matrix:` is set; a literal axis value must be a non-empty list; a
+string axis value must either start with the `answers.` prefix or contain `{{` (a
+template expression); any other shape is rejected. Whether a dynamic axis's resolved
+value is actually list-shaped, or a template expression renders and parses
+successfully, can only be checked once real answers are available, at generation
+time.
 
 **Non-goals**:
 - No directory-level `matrix` (stamping a whole per-combination subtree from one
   entry). The `path`/`target` split this design is built around should generalize to
   that, but it isn't implemented.
+- No changes to field types or the interactive prompt form.
 
 Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
 `{{ splitList "," answers.environment_csv }}`) and deriving one axis's values from
@@ -613,10 +610,8 @@ computing the full set of regions used across every environment) were both
 originally scoped as non-goals, but fall out of the general computed-axis mechanism
 above for free — any Sprig/Gomplate function is available to an axis expression,
 not just `keys`. `--set` values for a `multiselect` field are still comma-split
-automatically (`CoerceFieldValueTypes` in `pkg/project/config/validation.go`), so a
-multiselect-sourced axis keeps working non-interactively without needing a template
-expression at all.
-- No changes to field types or the interactive prompt form.
+automatically, so a multiselect-sourced axis keeps working non-interactively without
+needing a template expression at all.
 
 ### Update Flow (with 3-Way Merge)
 
