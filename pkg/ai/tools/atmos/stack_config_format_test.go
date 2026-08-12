@@ -99,9 +99,13 @@ func TestStackConfigFormatTool_Execute_FormatsQueryingManifest(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Success)
 
+	// vpc's config is defined across two files (region+foo defaults in the
+	// catalog manifest, foo overridden in the importing manifest), so both
+	// must be formatted, not just the one queried.
+	catalogFile := filepath.Join(stacksDir, "catalog", "vpc.yaml")
 	files, ok := result.Data["files"].([]string)
 	require.True(t, ok)
-	assert.Equal(t, []string{devFile}, files)
+	assert.ElementsMatch(t, []string{catalogFile, devFile}, files)
 
 	got, err := os.ReadFile(devFile)
 	require.NoError(t, err)

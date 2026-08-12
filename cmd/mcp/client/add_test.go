@@ -86,8 +86,9 @@ func TestEnsureMCPEnabledForPreset(t *testing.T) {
 	})
 
 	t.Run("self preset already enabled is a no-op", func(t *testing.T) {
+		enabled := true
 		atmosConfig := &schema.AtmosConfiguration{
-			MCP: schema.MCPSettings{Enabled: true},
+			MCP: schema.MCPSettings{Enabled: &enabled},
 		}
 		err := ensureMCPEnabledForPreset(cmd, atmosConfig, mcpconfig.PresetSelf, true)
 		require.NoError(t, err)
@@ -97,7 +98,7 @@ func TestEnsureMCPEnabledForPreset(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		err := ensureMCPEnabledForPreset(cmd, atmosConfig, mcpconfig.PresetSelf, true)
 		require.Error(t, err)
-		assert.False(t, atmosConfig.MCP.Enabled)
+		assert.False(t, atmosConfig.MCP.IsEnabled())
 	})
 }
 

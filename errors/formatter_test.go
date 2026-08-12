@@ -69,6 +69,23 @@ func TestFormat_ErrorWithHint(t *testing.T) {
 	assert.Contains(t, result, "Try running --help")
 }
 
+// TestFormat_ErrorWithAngleBracketPlaceholderInHint is an end-to-end
+// regression test through the real rendering pipeline: a hint containing a
+// raw "<file>" placeholder used to render as "pass --config ." -- the
+// terminal markdown renderer parsed it as an inline HTML tag and silently
+// stripped it. It must now survive rendering as literal text.
+func TestFormat_ErrorWithAngleBracketPlaceholderInHint(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := Build(errors.New("could not locate an editable atmos.yaml")).
+		WithHint("Run from a directory containing atmos.yaml, or pass --config <file>.").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "pass --config <file>.")
+	assert.NotContains(t, result, "pass --config .")
+}
+
 func TestFormat_ErrorWithMultilineHintList(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
