@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -393,72 +393,6 @@ const (
 	githubBackoffMultiplier = 2
 )
 
-// GitHub REST API rate-limit headers this fetch inspects when deciding
-// whether a 403/429 response is worth retrying, and how long GitHub is
-// asking the caller to wait.
-// See: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api.
-const (
-	githubHeaderRetryAfter         = "Retry-After"
-	githubHeaderRateLimitRemaining = "X-RateLimit-Remaining"
-	githubHeaderRateLimitReset     = "X-RateLimit-Reset"
-
-	// Decimal base used to parse the X-RateLimit-Reset header's integer
-	// epoch-second timestamp.
-	decimalBase = 10
-	// Bit size used to parse the X-RateLimit-Reset header's timestamp.
-	bitSize64 = 64
-)
-
-// isRetryableGitHubStatus reports whether a GitHub API response indicates a
-// transient failure worth retrying, as opposed to a deterministic client
-// error that a retry cannot fix.
-//
-// GitHub returns 403 for both secondary rate limiting and terminal
-// authorization failures (bad token, no access) — only the rate-limit
-// headers distinguish them, so a 403 is retryable only when Retry-After or
-// X-RateLimit-Remaining: 0 signals a genuine rate limit. A 429 always implies
-// rate limiting. How long to wait before retrying either is decided
-// separately by makeGitHubRequest via githubRetryAfter.
-func isRetryableGitHubStatus(statusCode int, header http.Header) bool {
-	switch statusCode {
-	case http.StatusTooManyRequests:
-		return true
-	case http.StatusForbidden:
-		return githubSignalsRateLimit(header)
-	default:
-		return statusCode >= http.StatusInternalServerError
-	}
-}
-
-// githubSignalsRateLimit reports whether a response's headers indicate rate
-// limiting rather than a terminal authorization failure.
-func githubSignalsRateLimit(header http.Header) bool {
-	return header.Get(githubHeaderRetryAfter) != "" || header.Get(githubHeaderRateLimitRemaining) == "0"
-}
-
-// githubRetryAfter reports how long GitHub asks the caller to wait before
-// retrying: Retry-After (relative seconds) takes precedence over
-// X-RateLimit-Reset (a UTC epoch-second reset timestamp), matching GitHub's
-// documented guidance. Returns false when neither header is present or
-// parseable, in which case the caller falls back to its own exponential
-// backoff.
-func githubRetryAfter(header http.Header) (time.Duration, bool) {
-	if v := header.Get(githubHeaderRetryAfter); v != "" {
-		if seconds, err := strconv.Atoi(v); err == nil && seconds >= 0 {
-			return time.Duration(seconds) * time.Second, true
-		}
-	}
-	if v := header.Get(githubHeaderRateLimitReset); v != "" {
-		if resetUnix, err := strconv.ParseInt(v, decimalBase, bitSize64); err == nil {
-			if wait := time.Until(time.Unix(resetUnix, 0)); wait > 0 {
-				return wait, true
-			}
-			return 0, true
-		}
-	}
-	return 0, false
-}
-
 // githubBackoffDelay computes the fixed exponential-backoff delay for the
 // given 1-indexed attempt, used when a retryable response carries no
 // rate-limit wait header.
@@ -509,11 +443,11 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 			continue
 		}
 
-		if !isRetryableGitHubStatus(r.StatusCode, r.Header) {
+		if !registry.IsRetryableGitHubStatus(r.StatusCode, r.Header) {
 			return r, nil
 		}
 
-		wait, hasWait := githubRetryAfter(r.Header)
+		wait, hasWait := registry.GitHubRetryAfter(r.Header)
 		if hasWait && wait > githubRequestRetryMaxDelay {
 			return r, nil
 		}

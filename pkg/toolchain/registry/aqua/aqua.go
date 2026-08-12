@@ -2,6 +2,7 @@ package aqua
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -176,12 +177,31 @@ func (ar *AquaRegistry) getWithContext(ctx context.Context, url string) (*http.R
 	return resp, nil
 }
 
+// isRetryableAquaFetchError reports whether err from a getBytes/
+// getBytesWithLinkHeader attempt is worth retrying: a transient network
+// failure (connection reset, truncated read, timeout), or an HTTP response
+// GitHub itself flags as transient (rate limiting, a server error) per
+// registry.IsRetryableGitHubStatus. A deterministic client error — a
+// terminal 403, a 404 that drives path fallback, a malformed response — is
+// not retried.
+func isRetryableAquaFetchError(err error) bool {
+	if registry.IsTransientNetworkError(err) {
+		return true
+	}
+	var statusErr *registry.HTTPStatusError
+	if errors.As(err, &statusErr) {
+		return registry.IsRetryableGitHubStatus(statusErr.StatusCode, statusErr.Header)
+	}
+	return false
+}
+
 // getBytes performs a GET, validates the status is 200, and reads the full
 // response body — retrying the whole request on transient network failures
-// (e.g. "connection reset by peer", a truncated read) so flaky reads of
-// registry metadata recover. Non-transient failures, including non-200 status
-// codes (such as a 404 that drives path fallback), are returned without
-// retrying.
+// (e.g. "connection reset by peer", a truncated read) and on GitHub
+// responses it flags as transient (429, a rate-limited 403, 5xx) so flaky
+// reads of registry metadata recover. Non-transient failures, including
+// terminal non-200 status codes (such as a 404 that drives path fallback),
+// are returned without retrying.
 func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
 	var data []byte
 	err := retry.WithPredicate(
@@ -195,7 +215,7 @@ func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
+				return &registry.HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header, URL: url}
 			}
 
 			body, rerr := io.ReadAll(resp.Body)
@@ -205,7 +225,7 @@ func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
 			data = body
 			return nil
 		},
-		registry.IsTransientNetworkError,
+		isRetryableAquaFetchError,
 	)
 	if err != nil {
 		return nil, err
@@ -228,7 +248,7 @@ func (ar *AquaRegistry) getBytesWithLinkHeader(ctx context.Context, url string) 
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
+				return &registry.HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header, URL: url}
 			}
 
 			b, rerr := io.ReadAll(resp.Body)
@@ -239,7 +259,7 @@ func (ar *AquaRegistry) getBytesWithLinkHeader(ctx context.Context, url string) 
 			linkHeader = resp.Header.Get("Link")
 			return nil
 		},
-		registry.IsTransientNetworkError,
+		isRetryableAquaFetchError,
 	)
 	if retryErr != nil {
 		return nil, "", retryErr
