@@ -254,6 +254,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 	}
 }
 
+// TestAtmosSchema_ValidGKEIntegration verifies valid and invalid GKE auth manifests.
 func TestAtmosSchema_ValidGKEIntegration(t *testing.T) {
 	fetcher := &atmosFetcher{}
 	schemaData, err := fetcher.FetchData("atmos://schema/atmos/config/1.0")

@@ -30,7 +30,7 @@ auth:
 
 ## Design
 
-1. The integration requires `GCPCredentials` and uses its current OAuth2 access token directly with the Google Kubernetes Engine API. It does not use `gcloud`, Application Default Credentials, or `gke-gcloud-auth-plugin`.
+1. The integration requires `GCPCredentials` and uses its current OAuth2 access token directly with the Google Kubernetes Engine API. It does not invoke `gcloud`, bootstrap Application Default Credentials (ADC) directly, or use `gke-gcloud-auth-plugin`; it can consume credentials obtained by a configured Atmos GCP provider such as `gcp/adc`.
 2. Atmos requests `projects/{project}/locations/{location}/clusters/{name}` and validates the public API endpoint and base64 CA certificate.
 3. The shared cloud-neutral `kube.ClusterInfo` writer from the EKS/AKS implementation writes only the endpoint, CA, context, and Atmos exec plugin. It never persists the access token.
 4. When Kubernetes needs credentials, it invokes `atmos gcp gke token`. The command resolves or refreshes the selected identity through the existing Auth manager with integration auto-provisioning suppressed, then emits only a Kubernetes `ExecCredential` JSON document.
@@ -89,7 +89,7 @@ then allowed `kubectl` to authenticate through the generated exec plugin:
 
 ```console
 $ test ! -e /tmp/example-kubeconfig
-$ atmos auth exec --identity example-deployer -- sh -c 'kubectl get nodes -o json | jq <readiness-summary>'
+$ atmos auth exec --identity example-deployer -- sh -c "kubectl get nodes -o json | jq '{nodeCount: (.items | length), readyCount: ([.items[] | select(any(.status.conditions[]?; .type == \"Ready\" and .status == \"True\"))] | length), versions: ([.items[].status.nodeInfo.kubeletVersion] | unique)}'"
 ✓ GKE kubeconfig: example → /tmp/example-kubeconfig
 {
   "nodeCount": 4,
@@ -102,7 +102,7 @@ $ atmos auth exec --identity example-deployer -- sh -c 'kubectl get nodes -o jso
 CA data and one Atmos exec user, with no stored bearer token:
 
 ```console
-$ kubectl --kubeconfig=/tmp/example-kubeconfig config view --raw -o json | jq <auth-summary>
+$ kubectl --kubeconfig=/tmp/example-kubeconfig config view --raw -o json | jq '{currentContext: .["current-context"], serverUsesHTTPS: (.clusters[0].cluster.server | startswith("https://")), caDataPresent: ((.clusters[0].cluster["certificate-authority-data"] // "") != ""), execCommand: .users[0].user.exec.command, execArgs: .users[0].user.exec.args, storedBearerToken: ((.users[0].user.token // "") != "")}'
 {
   "currentContext": "example",
   "serverUsesHTTPS": true,
@@ -117,7 +117,7 @@ $ kubectl --kubeconfig=/tmp/example-kubeconfig config view --raw -o json | jq <a
 a boolean before display:
 
 ```console
-$ atmos gcp gke token --identity example-deployer | jq <non-secret-summary>
+$ atmos gcp gke token --identity example-deployer | jq '{apiVersion, kind, tokenPresent: ((.status.token // "") != ""), expirationPresent: ((.status.expirationTimestamp // "") != "")}'
 {
   "apiVersion": "client.authentication.k8s.io/v1beta1",
   "kind": "ExecCredential",
@@ -126,11 +126,12 @@ $ atmos gcp gke token --identity example-deployer | jq <non-secret-summary>
 }
 ```
 
-The GKE integration and exec plugin used the access token supplied by Atmos Auth. A second
+The GKE integration and exec plugin did not bootstrap ADC directly; they consumed the access
+token supplied by Atmos Auth. In this verification, Atmos Auth obtained that token through the
+configured `gcp/adc` provider. A second
 first-use run restricted `PATH` to the locally built `atmos`, `kubectl`, `jq`, and base system
 directories; a preflight check confirmed that neither `gcloud` nor `gke-gcloud-auth-plugin` was
-available, and all four nodes were still reachable and Ready. ADC was used only through the
-configured Atmos GCP provider in this particular verification.
+available, and all four nodes were still reachable and Ready.
 
 ## Changelog
 

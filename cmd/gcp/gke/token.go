@@ -50,6 +50,7 @@ type execCredentialStatus struct {
 	Token               string `json:"token"`
 }
 
+// executeTokenCommand authenticates the selected identity and writes an ExecCredential.
 func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 	atmosConfig, err := initCliConfigFn(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
@@ -70,6 +71,7 @@ func executeTokenCommand(cmd *cobra.Command, _ []string) error {
 	return writeExecCredential(token, expiresAt)
 }
 
+// writeExecCredential serializes a token for the Kubernetes exec-plugin protocol.
 func writeExecCredential(token string, expiresAt time.Time) error {
 	status := execCredentialStatus{Token: token}
 	if !expiresAt.IsZero() {
@@ -86,6 +88,7 @@ func writeExecCredential(token string, expiresAt time.Time) error {
 	return data.Write(string(payload))
 }
 
+// resolveIdentity returns the explicit flag or inherited identity selector.
 func resolveIdentity(cmd *cobra.Command) string {
 	identityName, _ := cmd.Flags().GetString("identity")
 	if identityName != "" {
@@ -94,6 +97,7 @@ func resolveIdentity(cmd *cobra.Command) string {
 	return os.Getenv("ATMOS_IDENTITY") //nolint:forbidigo // Exec plugins inherit this explicit identity selector.
 }
 
+// authenticateForToken resolves fresh GCP credentials without re-running integrations.
 func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cliConfigPath, identityName string) (types.ICredentials, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{}}
 	mgr, err := newAuthManagerFn(
@@ -125,6 +129,7 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 	return whoami.Credentials, nil
 }
 
+// resolveDefaultIdentity returns the sole configured identity when selection is unambiguous.
 func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
 	if authConfig == nil || len(authConfig.Identities) != 1 {
 		return ""
@@ -135,6 +140,7 @@ func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
 	return ""
 }
 
+// init registers the token command and its identity flag.
 func init() {
 	tokenCmd.Flags().StringP("identity", "i", "", "Atmos GCP identity to authenticate with")
 	GkeCmd.AddCommand(tokenCmd)

@@ -16,6 +16,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// TestVerifyExpectedKubernetesEndpoint verifies all opt-in endpoint guard outcomes.
 func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "kubeconfig")
 	config := clientcmdapi.NewConfig()

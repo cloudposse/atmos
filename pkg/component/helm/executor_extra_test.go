@@ -402,6 +402,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
 }
 
+// TestRequireIdentityForOperation verifies the GKE guard applies only to mutating operations.
 func TestRequireIdentityForOperation(t *testing.T) {
 	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationTemplate))
 	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationApply))

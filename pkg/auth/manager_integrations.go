@@ -55,6 +55,7 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 	return name
 }
 
+// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior.
 func gkeIntegrationTargetKey(cfg schema.Integration) string {
 	cluster := cfg.Spec.Cluster
 	values := url.Values{

@@ -23,8 +23,10 @@ type fakeManagerGKEIntegration struct {
 	executions *int
 }
 
+// Kind identifies the fake as a GKE integration.
 func (*fakeManagerGKEIntegration) Kind() string { return integrations.KindGCPGKE }
 
+// Execute records the GCP credentials passed by the manager.
 func (f *fakeManagerGKEIntegration) Execute(_ context.Context, creds types.ICredentials) error {
 	*f.executions++
 	cluster := f.config.Config.Spec.Cluster
@@ -45,13 +47,16 @@ func (f *fakeManagerGKEIntegration) Execute(_ context.Context, creds types.ICred
 	return err
 }
 
+// Cleanup satisfies the integration contract for the manager test.
 func (*fakeManagerGKEIntegration) Cleanup(context.Context) error { return nil }
 
+// Environment returns the fake integration environment.
 func (f *fakeManagerGKEIntegration) Environment() (map[string]string, error) {
 	path := f.config.Config.Spec.Cluster.Kubeconfig.Path
 	return map[string]string{"KUBECONFIG": path, "KUBE_CONFIG_PATH": path}, nil
 }
 
+// TestEnsureIdentityEnvironmentProvisionsGKEAndReturnsKubeconfig verifies manager integration wiring.
 func TestEnsureIdentityEnvironmentProvisionsGKEAndReturnsKubeconfig(t *testing.T) {
 	resetProcessIntegrationCache()
 	t.Cleanup(resetProcessIntegrationCache)

@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// initTokenTestIO installs an isolated writer for token command tests.
 func initTokenTestIO(t *testing.T) {
 	t.Helper()
 	ioCtx, err := iolib.NewContext()
@@ -30,6 +31,7 @@ func initTokenTestIO(t *testing.T) {
 	t.Cleanup(data.Reset)
 }
 
+// newTestTokenCommand creates a token command without mutating the global command tree.
 func newTestTokenCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "token", RunE: executeTokenCommand}
 	cmd.SetContext(context.Background())
@@ -37,12 +39,14 @@ func newTestTokenCommand() *cobra.Command {
 	return cmd
 }
 
+// testAtmosConfig returns the minimal auth configuration used by token tests.
 func testAtmosConfig() schema.AtmosConfiguration {
 	return schema.AtmosConfiguration{Auth: schema.AuthConfig{
 		Identities: map[string]schema.Identity{"example-deployer": {Kind: "gcp/service-account"}},
 	}}
 }
 
+// captureStdout captures the ExecCredential payload written by a command invocation.
 func captureStdout(t *testing.T, fn func() error) (string, error) {
 	t.Helper()
 	original := os.Stdout
@@ -60,6 +64,7 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	return string(output), callErr
 }
 
+// installTokenCommandFakes installs test-scoped token command dependencies.
 func installTokenCommandFakes(t *testing.T) {
 	t.Helper()
 	originalInit := initCliConfigFn
@@ -77,6 +82,7 @@ func installTokenCommandFakes(t *testing.T) {
 	}
 }
 
+// TestTokenCommandShape verifies command metadata and identity flag registration.
 func TestTokenCommandShape(t *testing.T) {
 	assert.Equal(t, "token", tokenCmd.Use)
 	assert.Contains(t, tokenCmd.Short, "GKE bearer token")
@@ -89,6 +95,7 @@ func TestTokenCommandShape(t *testing.T) {
 	assert.Error(t, tokenCmd.Args(tokenCmd, []string{"unexpected"}))
 }
 
+// TestExecuteTokenCommandOutputsOnlyExecCredentialJSON verifies the exec-plugin wire format.
 func TestExecuteTokenCommandOutputsOnlyExecCredentialJSON(t *testing.T) {
 	initTokenTestIO(t)
 	installTokenCommandFakes(t)
@@ -114,6 +121,7 @@ func TestExecuteTokenCommandOutputsOnlyExecCredentialJSON(t *testing.T) {
 	assert.Equal(t, "2026-08-07T12:30:00Z", credential.Status.ExpirationTimestamp)
 }
 
+// TestExecuteTokenCommandUsesIdentityEnvironment verifies inherited identity selection.
 func TestExecuteTokenCommandUsesIdentityEnvironment(t *testing.T) {
 	initTokenTestIO(t)
 	installTokenCommandFakes(t)
@@ -133,6 +141,7 @@ func TestExecuteTokenCommandUsesIdentityEnvironment(t *testing.T) {
 	assert.NotContains(t, stdout, "expirationTimestamp")
 }
 
+// TestExecuteTokenCommandPreservesCommandContext verifies cancellation reaches authentication.
 func TestExecuteTokenCommandPreservesCommandContext(t *testing.T) {
 	initTokenTestIO(t)
 	installTokenCommandFakes(t)
@@ -156,6 +165,7 @@ func TestExecuteTokenCommandPreservesCommandContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// TestExecuteTokenCommandErrorsNeverExposeToken verifies failures do not leak credentials.
 func TestExecuteTokenCommandErrorsNeverExposeToken(t *testing.T) {
 	initTokenTestIO(t)
 	installTokenCommandFakes(t)
@@ -178,6 +188,7 @@ func TestExecuteTokenCommandErrorsNeverExposeToken(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGKETokenGeneration)
 }
 
+// TestExecuteTokenCommandConfigAndAuthenticationErrors verifies wrapped setup failures.
 func TestExecuteTokenCommandConfigAndAuthenticationErrors(t *testing.T) {
 	initTokenTestIO(t)
 	installTokenCommandFakes(t)
@@ -202,6 +213,7 @@ func TestExecuteTokenCommandConfigAndAuthenticationErrors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGKETokenGeneration)
 }
 
+// TestAuthenticateForTokenMissingIdentity verifies ambiguous selection fails closed.
 func TestAuthenticateForTokenMissingIdentity(t *testing.T) {
 	_, err := authenticateForToken(t.Context(), &schema.AuthConfig{Identities: map[string]schema.Identity{}}, "", "")
 	require.Error(t, err)
@@ -209,6 +221,7 @@ func TestAuthenticateForTokenMissingIdentity(t *testing.T) {
 	assert.Contains(t, err.Error(), "no identity specified")
 }
 
+// TestAuthenticateForTokenRefreshesThroughAuthManager verifies fresh chained authentication.
 func TestAuthenticateForTokenRefreshesThroughAuthManager(t *testing.T) {
 	installTokenCommandFakes(t)
 	ctrl := gomock.NewController(t)
@@ -234,6 +247,7 @@ func TestAuthenticateForTokenRefreshesThroughAuthManager(t *testing.T) {
 	assert.Same(t, fresh, creds)
 }
 
+// TestAuthenticateForTokenRejectsMissingAndWrongCredentials verifies credential type checks.
 func TestAuthenticateForTokenRejectsMissingAndWrongCredentials(t *testing.T) {
 	for _, tt := range []struct {
 		name  string

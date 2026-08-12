@@ -25,11 +25,13 @@ type fakeGKEClient struct {
 	resourceName string
 }
 
+// GetCluster records the requested resource and returns the configured fake response.
 func (f *fakeGKEClient) GetCluster(_ context.Context, resourceName string) (*container.Cluster, error) {
 	f.resourceName = resourceName
 	return f.cluster, f.err
 }
 
+// validGKEAPICluster returns a minimal valid cluster discovery response.
 func validGKEAPICluster() *container.Cluster {
 	return &container.Cluster{
 		Endpoint:   "203.0.113.10",
@@ -37,6 +39,7 @@ func validGKEAPICluster() *container.Cluster {
 	}
 }
 
+// TestNewGKEClientValidation verifies invalid credentials are rejected before API use.
 func TestNewGKEClientValidation(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Hour)
@@ -60,6 +63,7 @@ func TestNewGKEClientValidation(t *testing.T) {
 	}
 }
 
+// TestNewGKEClientSuccess verifies valid GCP credentials create a client.
 func TestNewGKEClientSuccess(t *testing.T) {
 	client, err := NewGKEClient(t.Context(), &types.GCPCredentials{
 		AccessToken: "example-access-token",
@@ -69,6 +73,7 @@ func TestNewGKEClientSuccess(t *testing.T) {
 	assert.NotNil(t, client)
 }
 
+// TestDescribeCluster verifies resource naming and normalized cluster metadata.
 func TestDescribeCluster(t *testing.T) {
 	client := &fakeGKEClient{cluster: validGKEAPICluster()}
 
@@ -80,6 +85,7 @@ func TestDescribeCluster(t *testing.T) {
 	assert.Equal(t, testCAData, info.CertificateAuthorityData)
 }
 
+// TestDescribeClusterPreservesEndpointScheme verifies explicit endpoint schemes are retained.
 func TestDescribeClusterPreservesEndpointScheme(t *testing.T) {
 	cluster := validGKEAPICluster()
 	cluster.Endpoint = "https://gke.example.invalid"
@@ -88,6 +94,7 @@ func TestDescribeClusterPreservesEndpointScheme(t *testing.T) {
 	assert.Equal(t, "https://gke.example.invalid", info.Endpoint)
 }
 
+// TestDescribeClusterErrors verifies incomplete and failed discovery responses are rejected.
 func TestDescribeClusterErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -114,6 +121,7 @@ func TestDescribeClusterErrors(t *testing.T) {
 	}
 }
 
+// TestBuildKubeClusterInfo verifies kubeconfig exec-plugin metadata and identity selection.
 func TestBuildKubeClusterInfo(t *testing.T) {
 	info := &GKEClusterInfo{
 		Name:                     "example-cluster",
@@ -141,6 +149,7 @@ func TestBuildKubeClusterInfo(t *testing.T) {
 	assert.Equal(t, got.ExecArgs, authInfo.Exec.Args)
 }
 
+// TestGKEKubeconfigUpdateModesAndNoOp verifies shared writer update semantics for GKE.
 func TestGKEKubeconfigUpdateModesAndNoOp(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	mgr, err := kube.NewKubeconfigManager(path, "")
@@ -188,6 +197,7 @@ func TestGKEKubeconfigUpdateModesAndNoOp(t *testing.T) {
 	assert.Contains(t, loaded.Clusters, info.ID)
 }
 
+// TestGKEKubeconfigDistinctProjectsDoNotCollide verifies resource keys include the project.
 func TestGKEKubeconfigDistinctProjectsDoNotCollide(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	mgr, err := kube.NewKubeconfigManager(path, "")
@@ -218,6 +228,7 @@ func TestGKEKubeconfigDistinctProjectsDoNotCollide(t *testing.T) {
 	}
 }
 
+// TestGetToken verifies token validation and expiration propagation.
 func TestGetToken(t *testing.T) {
 	expiry := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	token, gotExpiry, err := GetToken(&types.GCPCredentials{AccessToken: "example-access-token", TokenExpiry: expiry})

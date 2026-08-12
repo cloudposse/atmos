@@ -55,6 +55,7 @@ var newActionContext = func(namespace string) (*actionContext, error) {
 	return &actionContext{cfg: cfg, settings: settings}, nil
 }
 
+// verifyExpectedKubernetesEndpoint enforces the opt-in GKE endpoint guard.
 func verifyExpectedKubernetesEndpoint(settings *cli.EnvSettings) error {
 	if os.Getenv(authkube.EndpointGuardEnv) != "true" { //nolint:forbidigo // Internal guard set only for opt-in protected operations.
 		return nil

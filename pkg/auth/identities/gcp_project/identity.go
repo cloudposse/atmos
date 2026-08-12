@@ -235,6 +235,7 @@ func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, err
 	}, nil
 }
 
+// hasUpstreamCredentialSource reports whether authentication must traverse a configured chain.
 func (i *Identity) hasUpstreamCredentialSource() bool {
 	return i.config != nil && i.config.Via != nil &&
 		(i.config.Via.Provider != "" || i.config.Via.Identity != "")

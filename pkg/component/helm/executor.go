@@ -410,6 +410,7 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
+// processStacksWithAuth resolves component auth settings before full stack processing.
 func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
 	var authManager auth.AuthManager
 	if hasExplicitIdentity(info) {
@@ -453,10 +454,12 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 	return nil
 }
 
+// hasExplicitIdentity reports whether the invocation selected an identity directly.
 func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
 	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
 }
 
+// requireIdentityForOperation reports whether the Helm operation must fail closed.
 func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation) bool {
 	if operation != OperationApply && operation != OperationDelete {
 		return false
@@ -641,6 +644,7 @@ func applyEnvironment(componentEnv map[string]any, toolchainEnv []string) func()
 	}
 }
 
+// clearEnvironment removes keys and returns a function that restores their prior values.
 func clearEnvironment(keys ...string) func() {
 	original := make(map[string]*string, len(keys))
 	for _, key := range keys {
