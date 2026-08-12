@@ -289,7 +289,7 @@ For state stored behind a generic HTTP endpoint, such as [GitLab-managed Terrafo
           lock_method: POST
           unlock_method: DELETE
           username: gitlab-ci-token
-          password: "{{ .env.CI_JOB_TOKEN }}"
+          password: !env CI_JOB_TOKEN
     ```
   </TabItem>
   <TabItem value="json" label="Generated File">
@@ -312,6 +312,13 @@ For state stored behind a generic HTTP endpoint, such as [GitLab-managed Terrafo
     ```
   </TabItem>
 </Tabs>
+
+:::warning
+`backend.tf.json` is generated with credentials expanded in plain text — in the example
+above, the resolved `CI_JOB_TOKEN` value. Never commit this file, log its contents, or
+upload it as a CI artifact. It should be excluded via `.gitignore` (Atmos regenerates it
+on demand when `auto_generate_backend_file` is enabled).
+:::
 
 ## Remote State Backend
 

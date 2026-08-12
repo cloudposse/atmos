@@ -237,36 +237,54 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 }
 
 // TestValidateStacksAllowsHttpBackendType guards against a regression of the schema gap
-// where `backend_type: http` (OpenTofu/Terraform's generic HTTP backend, used e.g. for
-// GitLab-managed Terraform state) failed schema validation even though backend generation
-// itself (generateComponentBackendConfig) has always handled it as a plain passthrough,
-// the same as any backend type other than "cloud".
+// where `backend_type: http` / `remote_state_backend_type: http` (OpenTofu/Terraform's
+// generic HTTP backend, used e.g. for GitLab-managed Terraform state) failed schema
+// validation even though backend generation itself (generateComponentBackendConfig) has
+// always handled it as a plain passthrough, the same as any backend type other than
+// "cloud". Both `backend`/`backend_type` and the separate `remote_state_backend`/
+// `remote_state_backend_type` pair are covered since they're distinct schema definitions.
 func TestValidateStacksAllowsHttpBackendType(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+	httpBlock := func(key string) string {
+		return "      " + key + "_type: http\n" +
+			"      " + key + ":\n" +
+			"        http:\n" +
+			"          address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc\"\n" +
+			"          lock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
+			"          unlock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
+			"          lock_method: POST\n" +
+			"          unlock_method: DELETE\n"
+	}
 
-	atmosYAML := "base_path: \".\"\n" +
-		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
-		"logs:\n  level: \"Warning\"\n"
-	manifest := "vars:\n  stage: dev\n" +
-		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n" +
-		"      backend_type: http\n" +
-		"      backend:\n" +
-		"        http:\n" +
-		"          address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc\"\n" +
-		"          lock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
-		"          unlock_address: \"https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock\"\n" +
-		"          lock_method: POST\n" +
-		"          unlock_method: DELETE\n"
+	cases := []struct {
+		name     string
+		fragment string
+	}{
+		{name: "backend_type", fragment: httpBlock("backend")},
+		{name: "remote_state_backend_type", fragment: httpBlock("remote_state_backend")},
+	}
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
 
-	t.Chdir(dir)
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-	require.NoError(t, err)
+			atmosYAML := "base_path: \".\"\n" +
+				"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+				"logs:\n  level: \"Warning\"\n"
+			manifest := "vars:\n  stage: dev\n" +
+				"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n" +
+				tc.fragment
 
-	require.NoError(t, ValidateStacks(&atmosConfig), "backend_type: http must pass schema validation")
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+			t.Chdir(dir)
+			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+			require.NoError(t, err)
+
+			require.NoError(t, ValidateStacks(&atmosConfig), tc.name+": http must pass schema validation")
+		})
+	}
 }
 
 func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
