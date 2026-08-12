@@ -51,7 +51,7 @@ func TestProvisionWorkdir_NoActivation(t *testing.T) {
 		"component": "test-component",
 	}
 
-	err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify no workdir path was set.
@@ -92,7 +92,7 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+	err = ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify workdir path was set with exact stack-component naming.
@@ -168,7 +168,7 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	// not the mocked FileSystem, so no WriteFile expectation needed.
 
 	ctx := context.Background()
-	err = service.Provision(ctx, atmosConfig, componentConfig)
+	err = service.Provision(ctx, atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify workdir path was set with stack-component naming.
@@ -245,7 +245,7 @@ func TestService_Provision_ErrorPaths(t *testing.T) {
 
 			tt.setupMocks(mockFS, mockHasher, expectedWorkdir, componentPath)
 
-			err := service.Provision(context.Background(), atmosConfig, componentConfig)
+			err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedError)
 		})
@@ -310,7 +310,7 @@ func TestService_Provision_EdgeCases(t *testing.T) {
 				BasePath: t.TempDir(),
 			}
 
-			err := ProvisionWorkdir(ctx, atmosConfig, tt.componentConfig, nil)
+			err := ProvisionWorkdir(ctx, atmosConfig, tt.componentConfig, nil, provisioner.OutputWriters{})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -367,7 +367,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil); err != nil {
+			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{}); err != nil {
 				errors <- fmt.Errorf("component %s: %w", component, err)
 				return
 			}
@@ -474,7 +474,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 			},
 		}
 
-		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 		require.NoError(t, err, "provisioning should succeed for %s", instance.atmosComponent)
 
 		// Verify workdir path was set.
@@ -628,7 +628,7 @@ func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
@@ -667,7 +667,7 @@ func TestAtmosComponentPriority_FallsBackToComponentKey(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
@@ -704,7 +704,7 @@ func TestAtmosComponentPriority_EmptyStringFallback(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
@@ -753,7 +753,7 @@ func TestAtmosComponentPriority_NonStringFallback(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-lambda")
 }
@@ -811,7 +811,7 @@ func TestConcurrentComponentInstances(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil); err != nil {
+			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{}); err != nil {
 				errCh <- fmt.Errorf("instance %s: %w", instanceName, err)
 				return
 			}
@@ -1036,7 +1036,7 @@ func TestProductionFlowWithComponentInfo(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
@@ -1096,7 +1096,7 @@ func TestSourcePathUsesBaseComponentNotInstance(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "should succeed using base component path, not instance name path")
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
@@ -1142,7 +1142,7 @@ func TestSourceComponentFallsBackToWorkdirComponent(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
@@ -1182,7 +1182,7 @@ func TestSourceComponentFallsBackWhenNoComponentKeys(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)

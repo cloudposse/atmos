@@ -50,9 +50,10 @@ func autoProvisionSourceTerraform(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers provisioner.OutputWriters,
 	_ *provisioner.TerraformExecContext,
 ) error {
-	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext)
+	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext, writers)
 }
 
 // AutoProvisionSource automatically vendors component source on first use.
@@ -73,8 +74,10 @@ func AutoProvisionSource(
 	componentType string,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers provisioner.OutputWriters,
 ) (retErr error) {
 	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
+	out := ui.New(writers.Stderr)
 
 	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
 	if err != nil {
@@ -119,9 +122,7 @@ func AutoProvisionSource(
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
-				if !workdir.OutputSuppressed(ctx) {
-					ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
-				}
+				out.Warningf("Failed to update workdir last accessed time: %s", err)
 			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
@@ -129,12 +130,16 @@ func AutoProvisionSource(
 	}
 
 	// Log reason for re-provisioning.
-	if reason != "" && !workdir.OutputSuppressed(ctx) {
-		ui.Info(reason)
+	if reason != "" {
+		if !workdir.OutputSuppressed(ctx) {
+			ui.Info(reason)
+		} else if writers.Stderr != nil {
+			out.Info(reason)
+		}
 	}
 
 	// Vendor the source to target directory.
-	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, targetDir, component); err != nil {
+	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, vendorTarget{path: targetDir, component: component, writers: writers}); err != nil {
 		return err
 	}
 
@@ -142,9 +147,7 @@ func AutoProvisionSource(
 	if isWorkdir {
 		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
-			if !workdir.OutputSuppressed(ctx) {
-				ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
-			}
+			out.Warningf("Failed to write workdir metadata: %s", err)
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
@@ -201,9 +204,16 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 }
 
 // vendorToTarget creates the target directory and vendors the source.
-func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir, component string) error {
-	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", component)
-	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
+type vendorTarget struct {
+	path      string
+	component string
+	writers   provisioner.OutputWriters
+}
+
+func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
+	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
+	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
+	out := ui.New(target.writers.Stderr)
 
 	operation := func() error {
 		// Track whether this attempt creates the target directory so a failed
@@ -212,31 +222,29 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		// but has no code), and a partially populated one is treated as fully
 		// provisioned by needsProvisioning on the next run, silently skipping
 		// re-provisioning.
-		_, statErr := os.Stat(targetDir)
+		_, statErr := os.Stat(target.path)
 		createdTarget := os.IsNotExist(statErr)
 
-		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
+		if err := os.MkdirAll(target.path, DirPermissions); err != nil {
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
 				WithExplanation("Failed to create target directory").
-				WithContext("path", targetDir).
+				WithContext("path", target.path).
 				Err()
 		}
 
-		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+		if err := VendorSource(ctx, atmosConfig, sourceSpec, target.path); err != nil {
 			if createdTarget {
-				if rmErr := os.RemoveAll(targetDir); rmErr != nil {
-					if !workdir.OutputSuppressed(ctx) {
-						ui.Warning(fmt.Sprintf("Failed to clean up target directory after failed provisioning: %s", rmErr))
-					}
+				if rmErr := os.RemoveAll(target.path); rmErr != nil {
+					out.Warningf("Failed to clean up target directory after failed provisioning: %s", rmErr)
 				}
 			}
 			return errUtils.Build(errUtils.ErrSourceProvision).
 				WithCause(err).
 				WithExplanation("Failed to auto-provision component source").
-				WithContext("component", component).
+				WithContext("component", target.component).
 				WithContext("source", sourceSpec.Uri).
-				WithContext("target", targetDir).
+				WithContext("target", target.path).
 				WithHint("Verify source URI is accessible and credentials are valid").
 				Err()
 		}
@@ -244,7 +252,13 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 		return nil
 	}
 	if workdir.OutputSuppressed(ctx) {
-		return operation()
+		if err := operation(); err != nil {
+			return err
+		}
+		if target.writers.Stderr != nil {
+			out.Success(completedMsg)
+		}
+		return nil
 	}
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
 }
