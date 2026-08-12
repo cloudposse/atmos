@@ -614,7 +614,7 @@ func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	gotPath, ok := componentConfig[WorkdirPathKey].(string)
