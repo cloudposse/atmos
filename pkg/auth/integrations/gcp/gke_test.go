@@ -162,8 +162,33 @@ func TestGKEIntegrationExecuteAndCleanup(t *testing.T) {
 	require.NoError(t, integration.Cleanup(t.Context()))
 	_, err = clientcmd.LoadFromFile(path)
 	require.Error(t, err)
+	env, err = integration.Environment()
+	require.NoError(t, err)
+	assert.NotContains(t, env, kube.ExpectedServerEnv)
 	// Cleanup is idempotent.
 	require.NoError(t, integration.Cleanup(t.Context()))
+}
+
+func TestGKEIntegrationExecuteClearsStaleExpectedServerOnDiscoveryFailure(t *testing.T) {
+	installGKEExecutionFakes(t)
+	path := filepath.Join(t.TempDir(), "config")
+	integration, err := NewGKEIntegration(validGKEConfig(path))
+	require.NoError(t, err)
+	creds := &types.GCPCredentials{AccessToken: "example-access-token", TokenExpiry: time.Now().Add(time.Hour)}
+
+	require.NoError(t, integration.Execute(t.Context(), creds))
+	env, err := integration.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "https://gke.example.invalid", env[kube.ExpectedServerEnv])
+
+	gkeDescribeCluster = func(_ context.Context, _ gcpCloud.GKEClient, _, _, _ string) (*gcpCloud.GKEClusterInfo, error) {
+		return nil, errors.New("cluster lookup failed")
+	}
+	err = integration.Execute(t.Context(), creds)
+	require.ErrorIs(t, err, errUtils.ErrGKEIntegrationFailed)
+	env, envErr := integration.Environment()
+	require.NoError(t, envErr)
+	assert.NotContains(t, env, kube.ExpectedServerEnv, "failed discovery must clear the endpoint from the previous successful execution")
 }
 
 func TestGKEIntegrationExecuteWrongCredentialType(t *testing.T) {

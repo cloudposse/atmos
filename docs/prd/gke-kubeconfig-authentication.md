@@ -59,7 +59,7 @@ The default kubeconfig path is Atmos-owned under the XDG config directory. `upda
 
 - GKE cluster lifecycle management.
 - Artifact Registry authentication.
-- Helm-specific behavior.
+- General Helm-specific behavior beyond the documented opt-in GKE Helm safety guard.
 - Static bearer tokens in kubeconfig.
 - Private endpoint or DNS endpoint selection in the initial implementation.
 - Changing existing EKS or AKS targeting behavior.

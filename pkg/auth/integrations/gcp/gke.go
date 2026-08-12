@@ -108,6 +108,14 @@ func (g *GKEIntegration) Kind() string { return integrations.KindGCPGKE }
 func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "gcp.GKEIntegration.Execute")()
 
+	path, mode, update := g.resolveKubeconfigSettings()
+	mgr, err := kube.NewKubeconfigManager(path, mode)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
+	}
+	expectedServerKey := g.expectedServerKey(mgr.GetPath())
+	gkeExpectedServers.Delete(expectedServerKey)
+
 	if _, ok := creds.(*types.GCPCredentials); !ok {
 		return fmt.Errorf("%w: expected GCP credentials", errUtils.ErrGKEIntegrationFailed)
 	}
@@ -122,16 +130,11 @@ func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 
-	path, mode, update := g.resolveKubeconfigSettings()
-	mgr, err := kube.NewKubeconfigManager(path, mode)
-	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
-	}
 	changed, err := mgr.WriteClusterConfig(gcpCloud.BuildKubeClusterInfo(info, g.identity), g.cluster.Alias, update)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
-	gkeExpectedServers.Store(g.expectedServerKey(mgr.GetPath()), info.Endpoint)
+	gkeExpectedServers.Store(expectedServerKey, info.Endpoint)
 
 	displayName := g.cluster.Alias
 	if displayName == "" {
@@ -164,6 +167,7 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
+	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))
 	return nil
 }
 
