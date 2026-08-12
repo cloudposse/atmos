@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -398,7 +399,7 @@ func resolveTfmigrateComponentPath(atmosConfig *schema.AtmosConfiguration, info 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	path, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, basePath)
+	path, _, err := component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, basePath)
 	if err != nil {
 		return "", err
 	}

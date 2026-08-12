@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -35,10 +36,12 @@ var (
 	executeAffectedWithRefCheckout   = e.ExecuteDescribeAffectedWithTargetRefCheckout
 	executeGraph                     = component.ExecuteGraph
 	affectedKubernetesComponentsFunc = affectedKubernetesComponents
-	provisionAndResolveComponentPath = component.ProvisionAndResolveComponentPath
-	dependenciesForComponent         = dependencies.ForComponent
-	getHooks                         = hooks.GetHooks
-	runAllHooks                      = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	provisionAndResolveComponentPath = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, bool, error) {
+		return component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, componentType, fallbackComponentPath)
+	}
+	dependenciesForComponent = dependencies.ForComponent
+	getHooks                 = hooks.GetHooks
+	runAllHooks              = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 		return hookSet.RunAll(event, atmosConfig, info, nil, nil)
 	}
 	runKubernetesCIHooks    = hooks.RunCIHooks
@@ -249,7 +252,11 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
 		// before contacting the cluster or delivering to a provision target.
 		// Component-level `validate: false` opts out explicitly.
-		if resolveComponentValidateEnabled(info.ComponentSection) {
+		validateEnabled, err := resolveComponentValidateEnabled(info.ComponentSection)
+		if err != nil {
+			return nil, err
+		}
+		if validateEnabled {
 			if err := validateObjectsStructural(objects); err != nil {
 				return nil, err
 			}
@@ -259,7 +266,11 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 		return runDelete(objects)
 	case OperationValidate:
 		options := resolveValidateOptions(ctx.Flags)
-		if !resolveComponentValidateEnabled(info.ComponentSection) {
+		validateEnabled, err := resolveComponentValidateEnabled(info.ComponentSection)
+		if err != nil {
+			return nil, err
+		}
+		if !validateEnabled {
 			// `validate: false` opts out of Atmos's own offline structural opinion
 			// only. An explicit --server request still validates against the live
 			// cluster's own API, which is authoritative regardless of this flag.

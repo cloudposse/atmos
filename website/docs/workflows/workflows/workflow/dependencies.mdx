@@ -8,7 +8,7 @@ slug: /workflows/dependencies
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The workflow-level `dependencies` field declares the tool versions a workflow requires, so Atmos can provision them before any step runs.
+The workflow-level `dependencies` field declares the tool versions a workflow requires, and the named commands and workflows that must complete before it runs, so Atmos can provision and order everything before any step runs.
 </Intro>
 
 ```yaml
@@ -38,3 +38,76 @@ Dependency versions support the same toolchain version forms used elsewhere in A
 | `latest` | Latest available version |
 
 Use project-wide `.tool-versions` files for common tool versions and workflow `dependencies` for workflow-specific requirements.
+
+## Named command and workflow dependencies
+
+`dependencies.commands` and `dependencies.workflows` declare other named [custom commands](/cli/configuration/commands) and workflows that must complete before this workflow runs its own steps. They resolve and run through the same generic DAG scheduler that already powers [`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:` and Terraform's `dependencies.components` — **concurrent by default**, like go-task's `deps:`:
+
+```yaml
+workflows:
+  deploy:
+    dependencies:
+      workflows:
+        - build                       # same file, plain name
+        - name: test
+          file: test.yaml              # different file, explicit
+      commands: [lint]
+    steps:
+      - type: atmos
+        command: terraform apply infra -s dev
+```
+
+<dl>
+  <dt>`commands`</dt>
+  <dd>List of custom command names. Entries can be a plain string (`build`) or an object with `flags`/`args` overrides for a parameterized invocation. A command dependency is resolved globally — Atmos already deep-merges every `atmos.d`-imported command definition into one list before anything runs, so there's no file boundary to specify.</dd>
+
+  <dt>`workflows`</dt>
+  <dd>List of workflow names. A plain string (`build`) resolves within the **same file** as the workflow declaring the dependency. An object entry with `file:` resolves in a **different** file, using the exact same resolution as the CLI's `atmos workflow <name> -f <file>`. There is no implicit scanning of `workflows.base_path` to build a global namespace — a cross-file reference always names its file explicitly.</dd>
+</dl>
+
+Two dependency entries that resolve to the same name **and** the same parameters collapse into a single execution, even if two different dependents both declare it:
+
+```yaml
+# release depends on [test, lint]; both test and lint depend on build.
+# build runs exactly once for the whole `atmos workflow deploy` invocation.
+workflows:
+  build:
+    steps: [...]
+  test:
+    dependencies:
+      workflows: [build]
+    steps: [...]
+  lint:
+    dependencies:
+      workflows: [build]
+    steps: [...]
+  deploy:
+    dependencies:
+      workflows: [test, lint]
+    steps: [...]
+```
+
+Entries with **different** parameters are distinct nodes and both run:
+
+```yaml
+workflows:
+  release:
+    dependencies:
+      commands:
+        - name: build
+          flags: { env: dev }
+        - name: build
+          flags: { env: prod }
+    steps: [...]
+```
+
+### Failure propagation
+
+By default (`wait_all`), a failed dependency skips everything that transitively depends on it, and the dependency graph's combined error is returned at the end. `fail` reuses the exact same modes [`parallel`](/workflows/steps/type/parallel#failure-behavior) uses, derived from every **direct** `dependencies.commands`/`dependencies.workflows` entry on this workflow: `best_effort` wins if any direct entry sets it, else `fail_fast` if any direct entry sets it, else `wait_all`. It's a single mode for the whole dependency run, not a per-entry setting, so setting it on one entry affects how every dependency in the graph fails:
+
+```yaml
+dependencies:
+  workflows:
+    - name: test
+      fail: best_effort   # wait_all (default) | fail_fast | best_effort
+```

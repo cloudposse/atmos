@@ -125,8 +125,6 @@ var (
 	ErrVersionEntryExists            = errors.New("version entry already exists")
 	ErrVersionEntryNotFound          = errors.New("version entry not found")
 	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
-	ErrVersionRenderFileRequired     = errors.New("--file is required")
-	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
 	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
@@ -296,6 +294,7 @@ var (
 	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
+	ErrGitTargetSplitInvalid       = errors.New("git target 'split' must be a boolean")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
 	ErrUnsafeForkCheckout          = errors.New("refusing to clone untrusted fork content in an elevated CI event")
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
@@ -776,11 +775,13 @@ var (
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrWorkflowNoSteps               = errors.New("workflow has no steps defined")
 	ErrInvalidWorkflowStepType       = errors.New("invalid workflow step type")
+	ErrInvalidContinueCondition      = errors.New("invalid 'continue' condition")
 	ErrInvalidFromStep               = errors.New("invalid from-step flag")
 	ErrWorkflowStepFailed            = errors.New("workflow step execution failed")
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrResolveExecutablePath         = errors.New("failed to resolve the running atmos executable's own path")
 	ErrUnknownStepType               = errors.New("unknown step type")
 	ErrStepOptionsRequired           = errors.New("options is required for step")
 	ErrStepContentOrOptionsRequired  = errors.New("either content or options is required for step")
@@ -828,6 +829,13 @@ var (
 	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
 	ErrMissingDependencyField    = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
+	// names a command that isn't registered under the custom-command cobra tree.
+	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")
+	// ErrAmbiguousCommandName is returned when a dependencies.commands entry names a command
+	// that more than one declared Command shares (e.g. two unrelated parents each with a nested
+	// child of the same name) -- there is no well-defined "first" match to silently pick.
+	ErrAmbiguousCommandName = errors.New("multiple commands share this name; use a unique name or restructure your commands")
 
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
@@ -1115,6 +1123,20 @@ var (
 	ErrDeleteObjects             = errors.New("failed to delete objects from bucket")
 	ErrDeleteBucket              = errors.New("failed to delete bucket")
 	ErrListObjects               = errors.New("failed to list bucket objects")
+
+	// Azure (azurerm) backend provisioning errors.
+	ErrResourceGroupRequired     = errors.New("backend.resource_group_name is required for azurerm backend provisioning")
+	ErrAzureSubscriptionRequired = errors.New("an Azure subscription id is required for azurerm backend provisioning (set backend.subscription_id or a subscription on the active Azure identity)")
+	ErrAzureLocationRequired     = errors.New("an Azure location is required to create the resource group for azurerm backend provisioning")
+	ErrLoadAzureConfig           = errors.New("failed to build Azure client for backend provisioning")
+	ErrCheckResourceGroupExist   = errors.New("failed to check Azure resource group existence")
+	ErrCreateResourceGroup       = errors.New("failed to create Azure resource group")
+	ErrCheckStorageAccountExist  = errors.New("failed to check Azure storage account existence")
+	ErrCreateStorageAccount      = errors.New("failed to create Azure storage account")
+	ErrApplyBlobDataProtection   = errors.New("failed to apply Azure blob data-protection defaults")
+	ErrCheckContainerExist       = errors.New("failed to check Azure storage container existence")
+	ErrCreateStorageContainer    = errors.New("failed to create Azure storage container")
+	ErrDeleteStorageAccount      = errors.New("failed to delete Azure storage account")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
@@ -1517,6 +1539,7 @@ var (
 	ErrKubernetesValidationFailed           = errors.New("kubernetes manifest validation failed")
 	ErrKubernetesManifestInvalidName        = errors.New("object metadata.name is not a valid DNS-1123 subdomain")
 	ErrKubernetesValidate                   = errors.New("failed to validate kubernetes object")
+	ErrKubernetesValidateSectionInvalid     = errors.New("component 'validate' must be a boolean")
 
 	// Helm-native component errors.
 	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")

@@ -3,6 +3,8 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	// Use yaml.v3 (not v2) so that WorkflowStep.UnmarshalYAML fires when decoding the
 	// hook `with:` block — that custom unmarshaler owns the polymorphic `output`
@@ -80,10 +82,15 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	setDefaultStepWorkingDirectory(ctx, ws)
 
 	executor := runnerstep.NewStepExecutorWithVars(vars)
+	runCtx := context.Background()
+	if ctx.Stdout != nil || ctx.Stderr != nil {
+		runCtx = runnerstep.WithOutputSuppressed(runCtx)
+		executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+	}
 
 	var result *runnerstep.StepResult
 	run := func() error {
-		r, runErr := executor.Execute(context.Background(), ws)
+		r, runErr := executor.Execute(runCtx, ws)
 		result = r
 		return runErr
 	}
@@ -176,6 +183,11 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 		// process environment values from a failed attempt may leak into it.
 		vars := stepVariables(ctx)
 		executor := runnerstep.NewStepExecutorWithVars(vars)
+		runCtx := context.Background()
+		if ctx.Stdout != nil || ctx.Stderr != nil {
+			runCtx = runnerstep.WithOutputSuppressed(runCtx)
+			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+		}
 		for i, rawStep := range rawSteps {
 			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)
 			if resolveErr != nil {
@@ -185,7 +197,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			if step.Name == "" {
 				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
 			}
-			result, runErr := executor.Execute(context.Background(), step)
+			result, runErr := executor.Execute(runCtx, step)
 			lastResult = result
 			if runErr != nil {
 				return runErr
@@ -363,6 +375,12 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	for k, v := range ctx.Hook.Env {
 		vars.SetEnv(k, v)
 	}
+	// Anchor for a bare-relative explicit working_directory (see
+	// isDotPrefixedWorkingDirectory in pkg/runner/step/handler_base.go). Uses
+	// the same ComponentPath resolution setDefaultStepWorkingDirectory already
+	// applies to an unset working_directory, so it stays compatible with
+	// provisioned workdirs and metadata.component aliasing for free.
+	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
 	return vars
 }
 
@@ -374,12 +392,38 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 // under) the project's config root.
 const atmosStepType = "atmos"
 
-// setDefaultStepWorkingDirectory gives lifecycle steps the same component
-// directory as command hooks while preserving an explicit step-level target.
+// setDefaultStepWorkingDirectory gives lifecycle steps the same component directory as command
+// hooks. An empty working_directory defaults to the component directory outright. A non-empty,
+// BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo", "foo/bar") has no anchor of its
+// own, so it's resolved relative to the component directory too, rather than falling through to
+// exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value ("./foo", ".", "..",
+// "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD, matching the "here means
+// CWD" convention runtime sources use elsewhere (docs/prd/base-path-resolution-semantics.md). An
+// absolute value is always left as-is.
 func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
-	if step != nil && step.WorkingDirectory == "" && step.Type != atmosStepType {
-		step.WorkingDirectory = ComponentPath(ctx)
+	if step == nil || step.Type == atmosStepType {
+		return
 	}
+	if step.WorkingDirectory == "" {
+		step.WorkingDirectory = ComponentPath(ctx)
+		return
+	}
+	if isBareRelativePath(step.WorkingDirectory) {
+		step.WorkingDirectory = filepath.Join(ComponentPath(ctx), step.WorkingDirectory)
+	}
+}
+
+// isBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
+// dot-prefixed ("./foo", "../foo", ".", "..") -- per the value classification in
+// docs/prd/base-path-resolution-semantics.md.
+func isBareRelativePath(path string) bool {
+	if filepath.IsAbs(path) {
+		return false
+	}
+	sep := string(filepath.Separator)
+	return path != "." && path != ".." &&
+		!strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "."+sep) &&
+		!strings.HasPrefix(path, "../") && !strings.HasPrefix(path, ".."+sep)
 }
 
 // stepSummary builds a best-effort Output envelope for the step run. The step

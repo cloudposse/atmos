@@ -19,6 +19,7 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
+	"github.com/cloudposse/atmos/pkg/ui"
 
 	// Blank import registers the "cli" git provider (the only v1 backend) so
 	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in.
@@ -86,7 +87,10 @@ type repoSession struct {
 func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) error {
 	defer perf.Track(in.AtmosConfig, "target.git.Deliver")()
 
-	cfg := parseConfig(in.TargetConfig)
+	cfg, err := parseConfig(in.TargetConfig)
+	if err != nil {
+		return err
+	}
 
 	if cfg.PullRequest {
 		return fmt.Errorf("%w: target %q", errUtils.ErrGitPullRequestNotSupported, in.TargetName)
@@ -136,7 +140,10 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 func (g *gitProvisioner) Fetch(ctx context.Context, in *target.FetchInput) (target.ProvisionArtifact, error) {
 	defer perf.Track(in.AtmosConfig, "target.git.Fetch")()
 
-	cfg := parseConfig(in.TargetConfig)
+	cfg, err := parseConfig(in.TargetConfig)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
 
 	resolved, err := atmosgit.ResolveRepository(&in.AtmosConfig.Git, cfg.Repository)
 	if err != nil {
@@ -318,6 +325,7 @@ func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact, spl
 	if err != nil {
 		return err
 	}
+	warnOnSplitModeFlip(absPath, path, split)
 	if err := os.RemoveAll(absPath); err != nil {
 		return fmt.Errorf("%w: clearing managed path %q: %w", errUtils.ErrGitArtifactWrite, path, err)
 	}
@@ -342,6 +350,30 @@ func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact, spl
 	return nil
 }
 
+// warnOnSplitModeFlip surfaces a warning when the existing content at absPath
+// (a file left by a prior split:false delivery, or a directory left by a prior
+// split:true delivery) doesn't match the delivery mode about to be written.
+// writeArtifact always replaces whatever is at path unconditionally (by
+// design: it's the managed path, and the result is git-committed and
+// revertable), but a silent recursive delete of a whole directory tree on a
+// one-line config change is easy to miss without a log line calling it out.
+func warnOnSplitModeFlip(absPath, path string, split bool) {
+	info, err := os.Stat(absPath)
+	if err != nil {
+		// Nothing there yet (or unreadable) -- no prior mode to flip from.
+		return
+	}
+	existingIsDir := info.IsDir()
+	if existingIsDir == split {
+		return
+	}
+	if existingIsDir {
+		ui.Warningf("replacing existing managed directory %q with a single file: split mode changed to false", path)
+	} else {
+		ui.Warningf("replacing existing managed file %q with a directory: split mode changed to true", path)
+	}
+}
+
 // writeSingleArtifactFile merges every artifact file (in deterministic order)
 // into one multi-document YAML stream and writes it to absPath (repo-relative
 // path, for error messages) as a single file.
@@ -363,12 +395,21 @@ func writeSingleArtifactFile(absPath, path string, artifact *target.ProvisionArt
 }
 
 // parseConfig extracts the git target settings from the merged target block.
-func parseConfig(block map[string]any) config {
+// A "split" key present with a non-bool value is a fail-closed error rather
+// than a silent ignore: kubernetes validate/apply/deploy resolve this config
+// directly and never go through the stricter Atmos manifest JSON Schema check
+// that atmos validate stacks/describe stacks run, so this is the only gate
+// that catches a typo'd (e.g. quoted) split value on that path.
+func parseConfig(block map[string]any) (config, error) {
 	cfg := config{
 		Repository: stringField(block, "repository"),
 		Path:       stringField(block, "path"),
 	}
-	if split, ok := block["split"].(bool); ok {
+	if raw, present := block["split"]; present {
+		split, ok := raw.(bool)
+		if !ok {
+			return config{}, fmt.Errorf("%w: got %T", errUtils.ErrGitTargetSplitInvalid, raw)
+		}
 		cfg.Split = &split
 	}
 	if auth, ok := block["auth"].(map[string]any); ok {
@@ -381,7 +422,7 @@ func parseConfig(block map[string]any) config {
 	if pr, ok := block["pull_request"].(map[string]any); ok {
 		cfg.PullRequest, _ = pr["enabled"].(bool)
 	}
-	return cfg
+	return cfg, nil
 }
 
 // identityFor resolves the auth identity: the target override, else the repository default.
