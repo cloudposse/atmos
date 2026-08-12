@@ -240,7 +240,7 @@ func TestUpdate_DefaultVersionSetterUnchanged(t *testing.T) {
 	require.NotNil(t, vpc)
 	assert.Equal(t, StatusUpdated, vpc.Status)
 
-	v, err := ComponentVersionPath(file, "vpc")
+	v, _, err := ComponentVersionPath(file, "vpc")
 	require.NoError(t, err)
 	assert.Equal(t, "spec.sources[0].version", v)
 }
