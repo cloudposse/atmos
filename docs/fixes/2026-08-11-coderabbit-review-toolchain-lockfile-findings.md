@@ -120,7 +120,7 @@ documented below as skipped rather than silently ignored.
 - `go vet ./...` -- clean.
 - `go test ./pkg/toolchain/... ./cmd/toolchain/... ./pkg/sbom/...` -- all packages pass, including
   every new regression test above.
-- `gofmt -l` -- clean on every touched Go file.
+- `gofumpt -l` -- clean on every touched Go file.
 - `./custom-gcl run --new-from-rev=<merge-base>` -- 0 issues (fixed one cyclomatic-complexity
   finding via the `lookupLockedChecksum` extraction, and one `godot` false-positive caused by a
   lowercase Go identifier immediately following a sentence-ending period, same class as prior

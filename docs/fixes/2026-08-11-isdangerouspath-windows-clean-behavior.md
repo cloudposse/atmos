@@ -41,9 +41,11 @@ surfaced on the Windows CI leg and passed cleanly on Linux/macOS.
 ## Validation
 
 - `go test ./pkg/toolchain/ -run TestIsDangerousPath -v` — all 7 subtests pass (previously 2
-  failed on Windows CI; reproduced and fixed the same root cause on macOS by tracing
-  `filepath.Clean`'s actual Windows-specific behavior in the Go standard library source, since a
-  live Windows runner wasn't available for this session).
+  failed on Windows CI). No live Windows runner was available for this session, so the root
+  cause was diagnosed by tracing `filepath.Clean`'s actual Windows-specific behavior in the Go
+  standard library source (see Context above), not by reproducing the Windows failure directly;
+  the fix was then validated by running the platform-independent test suite on macOS, which
+  exercises the same code paths without depending on the host OS.
 - `go test ./pkg/toolchain/...` — full package tree passes.
 - `go build ./...` — clean.
 - `./custom-gcl run --new-from-rev=<merge-base>` — 0 issues.

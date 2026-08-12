@@ -49,6 +49,10 @@ var (
 
 	// ErrPlatformEntryNil indicates a platform entry in the lock file is nil.
 	ErrPlatformEntryNil = errors.New("platform entry is nil")
+
+	// ErrLegacyLockFileMigrationFailed indicates a pre-v2 lock file's raw bytes could not be
+	// re-parsed during the v1-to-v2 migration Load performs (see migrateLegacyTools).
+	ErrLegacyLockFileMigrationFailed = errors.New("failed to migrate legacy lock file")
 )
 
 // LockFile represents the toolchain.lock.yaml structure.
@@ -143,7 +147,7 @@ func Load(filePath string) (*LockFile, error) {
 	// Verify's own explicit check for that below rather than being silently "fixed" here.
 	if lockFile.Metadata.LockFileVersion == 1 {
 		if err := migrateLegacyTools(data, &lockFile); err != nil {
-			return nil, fmt.Errorf("failed to migrate legacy lock file: %w", err)
+			return nil, fmt.Errorf("%w: %w", ErrLegacyLockFileMigrationFailed, err)
 		}
 	}
 
