@@ -1,7 +1,6 @@
 package toolchain
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,8 +18,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/retry"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -391,24 +388,15 @@ const (
 	githubRequestRetryMaxAttempts  = 3
 	githubRequestRetryInitialDelay = 300 * time.Millisecond
 	githubRequestRetryMaxDelay     = 2 * time.Second
+	// Exponential-backoff growth factor applied between attempts when no
+	// rate-limit header supplies a precise wait.
+	githubBackoffMultiplier = 2
 )
-
-func defaultGitHubRequestRetryConfig() *schema.RetryConfig {
-	maxAttempts := githubRequestRetryMaxAttempts
-	initialDelay := githubRequestRetryInitialDelay
-	maxDelay := githubRequestRetryMaxDelay
-	return &schema.RetryConfig{
-		MaxAttempts:     &maxAttempts,
-		BackoffStrategy: schema.BackoffExponential,
-		InitialDelay:    &initialDelay,
-		MaxDelay:        &maxDelay,
-	}
-}
 
 // GitHub REST API rate-limit headers this fetch inspects when deciding
 // whether a 403/429 response is worth retrying, and how long GitHub is
 // asking the caller to wait.
-// See: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+// See: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api.
 const (
 	githubHeaderRetryAfter         = "Retry-After"
 	githubHeaderRateLimitRemaining = "X-RateLimit-Remaining"
@@ -429,20 +417,14 @@ const (
 // authorization failures (bad token, no access) — only the rate-limit
 // headers distinguish them, so a 403 is retryable only when Retry-After or
 // X-RateLimit-Remaining: 0 signals a genuine rate limit. A 429 always implies
-// rate limiting. For both, when Retry-After/X-RateLimit-Reset asks for a wait
-// longer than our retry budget (githubRequestRetryMaxDelay), this gives up
-// rather than retries — blocking the caller's command for a cooldown that can
-// run to tens of minutes would be worse than the existing graceful "no
-// available versions" degradation this fetch already falls back to on
-// failure. A short header-driven wait is not honored to the exact second
-// either: in practice GitHub's real cooldowns are never sub-budget, so the
-// existing fixed exponential backoff is used whenever a retry is allowed.
+// rate limiting. How long to wait before retrying either is decided
+// separately by makeGitHubRequest via githubRetryAfter.
 func isRetryableGitHubStatus(statusCode int, header http.Header) bool {
 	switch statusCode {
 	case http.StatusTooManyRequests:
-		return githubRetryWaitWithinBudget(header)
+		return true
 	case http.StatusForbidden:
-		return githubSignalsRateLimit(header) && githubRetryWaitWithinBudget(header)
+		return githubSignalsRateLimit(header)
 	default:
 		return statusCode >= http.StatusInternalServerError
 	}
@@ -454,22 +436,12 @@ func githubSignalsRateLimit(header http.Header) bool {
 	return header.Get(githubHeaderRetryAfter) != "" || header.Get(githubHeaderRateLimitRemaining) == "0"
 }
 
-// githubRetryWaitWithinBudget reports whether GitHub's documented wait time
-// (if any) fits within our retry budget. Absent a usable header, the
-// caller's own exponential backoff applies.
-func githubRetryWaitWithinBudget(header http.Header) bool {
-	wait, ok := githubRetryAfter(header)
-	if !ok {
-		return true
-	}
-	return wait <= githubRequestRetryMaxDelay
-}
-
 // githubRetryAfter reports how long GitHub asks the caller to wait before
 // retrying: Retry-After (relative seconds) takes precedence over
 // X-RateLimit-Reset (a UTC epoch-second reset timestamp), matching GitHub's
 // documented guidance. Returns false when neither header is present or
-// parseable.
+// parseable, in which case the caller falls back to its own exponential
+// backoff.
 func githubRetryAfter(header http.Header) (time.Duration, bool) {
 	if v := header.Get(githubHeaderRetryAfter); v != "" {
 		if seconds, err := strconv.Atoi(v); err == nil && seconds >= 0 {
@@ -487,17 +459,41 @@ func githubRetryAfter(header http.Header) (time.Duration, bool) {
 	return 0, false
 }
 
+// githubBackoffDelay computes the fixed exponential-backoff delay for the
+// given 1-indexed attempt, used when a retryable response carries no
+// rate-limit wait header.
+func githubBackoffDelay(attempt int) time.Duration {
+	multiplier := 1
+	for i := 1; i < attempt; i++ {
+		multiplier *= githubBackoffMultiplier
+	}
+	delay := githubRequestRetryInitialDelay * time.Duration(multiplier)
+	if delay > githubRequestRetryMaxDelay {
+		delay = githubRequestRetryMaxDelay
+	}
+	return delay
+}
+
+// makeGitHubRequest fetches apiURL, retrying transient failures up to
+// githubRequestRetryMaxAttempts times. When a retryable response carries a
+// Retry-After or X-RateLimit-Reset header, the next attempt waits exactly
+// that long (not a generic fixed backoff) — sending a request before GitHub's
+// own indicated wait would just exhaust the retry budget against the same
+// rate limit. When that wait exceeds githubRequestRetryMaxDelay, this gives
+// up immediately rather than blocking the caller's command for a cooldown
+// that can run to tens of minutes; this fetch already degrades gracefully to
+// "no available versions" on failure.
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
 	client := &http.Client{
 		Timeout: defaultHTTPTimeout,
 	}
 
-	var resp *http.Response
-	err := retry.Do(context.Background(), defaultGitHubRequestRetryConfig(), func() error {
+	var lastErr error
+	for attempt := 1; attempt <= githubRequestRetryMaxAttempts; attempt++ {
 		req, err := http.NewRequest("GET", apiURL, nil)
 		if err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
 		}
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -505,19 +501,34 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 
 		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
 		if err != nil {
-			return fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
+			lastErr = fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
+			if attempt == githubRequestRetryMaxAttempts {
+				break
+			}
+			time.Sleep(githubBackoffDelay(attempt))
+			continue
 		}
-		if isRetryableGitHubStatus(r.StatusCode, r.Header) {
-			r.Body.Close()
-			return fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, r.StatusCode)
+
+		if !isRetryableGitHubStatus(r.StatusCode, r.Header) {
+			return r, nil
 		}
-		resp = r
-		return nil
-	})
-	if err != nil {
-		return nil, err
+
+		wait, hasWait := githubRetryAfter(r.Header)
+		if hasWait && wait > githubRequestRetryMaxDelay {
+			return r, nil
+		}
+
+		r.Body.Close()
+		lastErr = fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, r.StatusCode)
+		if attempt == githubRequestRetryMaxAttempts {
+			break
+		}
+		if !hasWait {
+			wait = githubBackoffDelay(attempt)
+		}
+		time.Sleep(wait)
 	}
-	return resp, nil
+	return nil, lastErr
 }
 
 type release struct {

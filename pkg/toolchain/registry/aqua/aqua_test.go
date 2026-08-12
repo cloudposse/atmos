@@ -3,12 +3,15 @@ package aqua
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -522,6 +525,60 @@ func TestAquaRegistry_GetLatestVersion_RetriesUnauthenticatedAfterForbidden(t *t
 	require.NoError(t, err)
 	assert.Equal(t, "v1.5.0", version)
 	assert.Equal(t, 2, calls)
+}
+
+// flakyThenOKClient implements httpClient.Client, failing the first call with
+// a transient network error (a connection reset by peer, the same class of
+// failure a CI runner hit and turned into a flaky golden-snapshot mismatch —
+// see docs/fixes/2026-08-11-coderabbit-toolchain-retry-static-errors-and-rate-limits.md)
+// and succeeding on every call after.
+type flakyThenOKClient struct {
+	calls int
+	body  string
+}
+
+func (f *flakyThenOKClient) Do(_ *http.Request) (*http.Response, error) {
+	f.calls++
+	if f.calls == 1 {
+		return nil, &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(f.body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+// TestAquaRegistry_FetchVersionFromPage_RecoversFromTransientNetworkError is
+// the regression guard for the CI failure this fix addresses: GetLatestVersion
+// (via fetchVersionFromPage) previously made a single, un-retried request, so
+// a transient connection reset on the CI runner silently produced an
+// unresolved "latest" version instead of the expected concrete one.
+func TestAquaRegistry_FetchVersionFromPage_RecoversFromTransientNetworkError(t *testing.T) {
+	mock := &flakyThenOKClient{body: `[{"tag_name":"v1.5.0","prerelease":false,"draft":false}]`}
+	ar := NewAquaRegistry(WithGitHubBaseURL("https://api.github.com"))
+	ar.client = mock
+
+	version, nextURL, err := ar.fetchVersionFromPage("https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
+	require.NoError(t, err)
+	assert.Equal(t, "1.5.0", version)
+	assert.Empty(t, nextURL)
+	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
+}
+
+// TestAquaRegistry_FetchVersionsFromPage_RecoversFromTransientNetworkError
+// mirrors the above for the context-aware, paginated variant used by
+// GetAvailableVersionsContext.
+func TestAquaRegistry_FetchVersionsFromPage_RecoversFromTransientNetworkError(t *testing.T) {
+	mock := &flakyThenOKClient{body: `[{"tag_name":"v1.5.0","prerelease":false,"draft":false}]`}
+	ar := NewAquaRegistry(WithGitHubBaseURL("https://api.github.com"))
+	ar.client = mock
+
+	versions, nextURL, err := ar.fetchVersionsFromPage(context.Background(), "https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.5.0"}, versions)
+	assert.Empty(t, nextURL)
+	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
 }
 
 func TestAquaRegistry_GetLatestVersion_NoVersionPrefixPreservesTag(t *testing.T) {

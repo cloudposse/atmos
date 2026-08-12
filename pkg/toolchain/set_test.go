@@ -1022,10 +1022,12 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		assert.Equal(t, 2, attempts, "expected exactly one retry after the transient 503")
 	})
 
-	t.Run("recovers after rate limiting (429)", func(t *testing.T) {
+	t.Run("recovers after rate limiting (429) with no rate-limit header, using default backoff", func(t *testing.T) {
 		attempts := 0
+		var requestTimes []time.Time
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			attempts++
+			requestTimes = append(requestTimes, time.Now())
 			if attempts == 1 {
 				w.WriteHeader(http.StatusTooManyRequests)
 				return
@@ -1040,7 +1042,9 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, 2, attempts)
+		require.Equal(t, 2, attempts)
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), githubBackoffDelay(1),
+			"no Retry-After/X-RateLimit-Reset header present, so the fixed exponential backoff applies")
 	})
 
 	t.Run("does not retry a deterministic 404", func(t *testing.T) {
@@ -1075,10 +1079,12 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		assert.Equal(t, 1, attempts, "a 403 without Retry-After/X-RateLimit-Remaining is a terminal auth failure, not retried")
 	})
 
-	t.Run("recovers from a rate-limited 403 with Retry-After within budget", func(t *testing.T) {
+	t.Run("recovers from a rate-limited 403 with Retry-After within budget, honoring the exact wait", func(t *testing.T) {
 		attempts := 0
+		var requestTimes []time.Time
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			attempts++
+			requestTimes = append(requestTimes, time.Now())
 			if attempts == 1 {
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusForbidden)
@@ -1094,7 +1100,12 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, 2, attempts, "Retry-After: 1s signals a genuine rate limit within budget")
+		require.Equal(t, 2, attempts, "Retry-After: 1s signals a genuine rate limit within budget")
+		// Regression guard: the retry must wait the full Retry-After duration
+		// (1s), not the shorter default backoff (300ms) — retrying sooner
+		// than GitHub's indicated wait would just hit the same rate limit
+		// again and waste the retry budget.
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), 1*time.Second)
 	})
 
 	t.Run("does not retry when Retry-After exceeds the retry budget", func(t *testing.T) {
@@ -1114,10 +1125,12 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		assert.Equal(t, 1, attempts, "a 2-minute mandated cooldown exceeds our retry budget, so this fails fast instead of blocking the command")
 	})
 
-	t.Run("recovers from a rate-limited 403 signaled via X-RateLimit-Remaining", func(t *testing.T) {
+	t.Run("recovers from a rate-limited 403 signaled via X-RateLimit-Remaining, using default backoff", func(t *testing.T) {
 		attempts := 0
+		var requestTimes []time.Time
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			attempts++
+			requestTimes = append(requestTimes, time.Now())
 			if attempts == 1 {
 				w.Header().Set("X-RateLimit-Remaining", "0")
 				w.WriteHeader(http.StatusForbidden)
@@ -1133,14 +1146,23 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, 2, attempts, "X-RateLimit-Remaining: 0 with no other header falls back to the default backoff")
+		require.Equal(t, 2, attempts, "X-RateLimit-Remaining: 0 with no other header falls back to the default backoff")
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), githubBackoffDelay(1),
+			"X-RateLimit-Remaining alone carries no wait duration, so the fixed exponential backoff applies")
 	})
 
-	t.Run("recovers from 429 using X-RateLimit-Reset when Retry-After is absent", func(t *testing.T) {
+	t.Run("recovers from 429 using X-RateLimit-Reset when Retry-After is absent, honoring the exact wait", func(t *testing.T) {
 		attempts := 0
-		reset := strconv.FormatInt(time.Now().Add(1*time.Second).Unix(), 10)
+		var requestTimes []time.Time
+		// X-RateLimit-Reset has whole-second precision (a Unix epoch-second
+		// timestamp per GitHub's docs), so "now + 1s" can truncate to almost
+		// no wait at all depending on where `now` falls within the current
+		// second. Target 2s ahead so the truncated remaining wait is
+		// guaranteed to still be well above the buggy 300ms default backoff.
+		reset := strconv.FormatInt(time.Now().Add(2*time.Second).Unix(), 10)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			attempts++
+			requestTimes = append(requestTimes, time.Now())
 			if attempts == 1 {
 				w.Header().Set("X-RateLimit-Reset", reset)
 				w.WriteHeader(http.StatusTooManyRequests)
@@ -1156,7 +1178,10 @@ func TestMakeGitHubRequestRetry(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, 2, attempts, "X-RateLimit-Reset ~1s in the future is within budget")
+		require.Equal(t, 2, attempts, "X-RateLimit-Reset ~1s in the future is within budget")
+		// Regression guard: waits until (close to) the reset timestamp, not
+		// the shorter default backoff.
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), 900*time.Millisecond)
 	})
 
 	t.Run("exhausts retries on a persistent outage", func(t *testing.T) {

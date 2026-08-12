@@ -213,6 +213,40 @@ func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
 	return data, nil
 }
 
+// getBytesWithLinkHeader is getBytes plus the GitHub API pagination Link
+// header, for the paginated release-listing endpoints that need it to walk
+// to the next page.
+func (ar *AquaRegistry) getBytesWithLinkHeader(ctx context.Context, url string) (body []byte, linkHeader string, err error) {
+	retryErr := retry.WithPredicate(
+		ctx,
+		registry.TransientRetryConfig(),
+		func() error {
+			resp, derr := ar.getWithContext(ctx, url)
+			if derr != nil {
+				return fmt.Errorf("%w: failed to fetch %s: %w", registry.ErrHTTPRequest, url, derr)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
+			}
+
+			b, rerr := io.ReadAll(resp.Body)
+			if rerr != nil {
+				return fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, rerr)
+			}
+			body = b
+			linkHeader = resp.Header.Get("Link")
+			return nil
+		},
+		registry.IsTransientNetworkError,
+	)
+	if retryErr != nil {
+		return nil, "", retryErr
+	}
+	return body, linkHeader, nil
+}
+
 func (ar *AquaRegistry) shouldRetryUnauthenticated(url string, resp *http.Response) bool {
 	if resp == nil || resp.StatusCode != http.StatusForbidden || ar.githubToken == "" {
 		return false
