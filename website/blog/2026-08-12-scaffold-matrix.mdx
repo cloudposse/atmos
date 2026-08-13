@@ -50,6 +50,29 @@ expands their full combination, and each resolved combination is available as `.
 everywhere a file entry can use it: in the output path, in `when:`, and inside the generated file's
 own content, so a file can both name itself and branch on its own combination.
 
+### Free-text answers
+
+The intro's "typed in by hand" case works too — an axis doesn't need a `multiselect` at all. A
+plain free-text answer is just a string; split it into a list with any Sprig function,
+`splitList` included:
+
+```yaml
+spec:
+  fields:
+    - name: environments_csv
+      type: input
+      label: Comma-separated list of environments
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: '{{ splitList "," answers.environments_csv }}'
+```
+
+Typing `dev,staging,production` at the prompt generates the same three files the `multiselect`
+example above does — except now the values aren't limited to options a template author had to
+list ahead of time.
+
 ### Computed axes
 
 Real answers aren't always a flat, pre-selected list. An environment might carry its own set of

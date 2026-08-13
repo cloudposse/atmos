@@ -519,6 +519,30 @@ spec:
       when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
+**Free-text axes**: an axis doesn't have to come from a `multiselect` at all — any
+Sprig/Gomplate function is available to an axis expression, so a plain free-text
+answer becomes list-shaped by running it through a splitting function like Sprig's
+`splitList`:
+
+```yaml
+spec:
+  fields:
+    - name: environments_csv
+      type: input
+      label: Comma-separated list of environments
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: '{{ splitList "," answers.environments_csv }}'
+```
+
+Typing `dev,staging,production` at the prompt generates the same three files a
+`multiselect` with those three options would — but the values themselves aren't
+constrained to a fixed, template-author-declared list. This is what makes a
+computed axis more than a convenience: its values can be genuinely unbounded,
+known only once the user answers, not enumerable when the template is authored.
+
 **Computed axes**: when an axis's values aren't already list-shaped anywhere in
 `answers` — e.g. `answers.environments` is itself a map of environment name to a
 struct that includes its own `regions` map, as it would be for a nested/structured
@@ -605,15 +629,10 @@ time.
   entry. The `path`/`target` split could extend to this, but doesn't today.
 - Changes to field types or the interactive prompt form.
 
-Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
-`{{ splitList "," answers.environment_csv }}`) and deriving one axis's values from
-nested/structured answer data (e.g. `{{ collectKeys answers.environments "regions" }}`,
-computing the full set of regions used across every environment) both work through
-the same general computed-axis mechanism described above — any Sprig/Gomplate
-function is available to an axis expression, not just `collectKeys`. `--set` values
-for a `multiselect` field are still comma-split automatically, so a
+`--set` values for a `multiselect` field are still comma-split automatically, so a
 multiselect-sourced axis keeps working non-interactively without needing a template
-expression at all.
+expression at all — free-text and computed axes are for the cases a fixed
+`options:` list can't cover.
 
 ### Update Flow (with 3-Way Merge)
 
