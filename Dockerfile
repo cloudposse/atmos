@@ -2,12 +2,20 @@
 # trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
 # Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
 # frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
-FROM --platform=$BUILDPLATFORM debian:trixie-slim
+FROM debian:trixie-slim
 
 # Define the arguments for Atmos version and platforms
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG ATMOS_VERSION
+ARG TARGETARCH
+ARG TARGETOS
+
+# Fail the build if the base userland does not match the build target (for
+# example if the FROM above is ever pinned to $BUILDPLATFORM again). geodesic
+# uses the same assertion in os/debian/Dockerfile.debian.
+RUN a="$(dpkg --print-architecture)"; [ "$a" = "$TARGETARCH" ] || { \
+      echo "FATAL: base userland is $a but build target is $TARGETOS/$TARGETARCH" >&2; exit 1; }
 
 # Check if ATMOS_VERSION is set
 RUN if [ -z "$ATMOS_VERSION" ]; then echo "ERROR: ATMOS_VERSION argument must be set" && exit 1; fi
