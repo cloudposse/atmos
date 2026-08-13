@@ -11,8 +11,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -31,7 +33,7 @@ func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	_, exists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
 		return errors.Join(errUtils.ErrInvalidTerraformComponent, err)
@@ -107,6 +109,12 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 	// Display the varfile path relative to the current working directory.
 	displayPath := relativeToCwd(varFilePath)
 
+	// Varfile generation is an execution handoff, not an inspection surface: a
+	// degraded `(computed)` value must never be serialized for Terraform.
+	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+		return err
+	}
+
 	// Write the variables to a file.
 	log.Debug("Writing the variables to file", "file", displayPath)
 
@@ -153,6 +161,12 @@ func varfileVarsToWrite(info *schema.ConfigAndStacksInfo, withSecrets bool, varF
 		if len(info.TerraformSecretVarKeys) > 0 {
 			log.Debug("Writing resolved secret values to the varfile in plaintext (--with-secrets)",
 				"file", varFilePath, "count", len(info.TerraformSecretVarKeys))
+		}
+		// `--with-secrets` preserves its existing opt-in behavior for masker-derived
+		// values, but it must not override a Terraform `sensitive = true` declaration.
+		// Terraform receives those values through TF_VAR_* during execution instead.
+		if atmosio.MaskingEnabled() {
+			return varsWithoutKeys(info.ComponentVarsSection, terraformSensitiveVarKeys(info))
 		}
 		return info.ComponentVarsSection
 	}

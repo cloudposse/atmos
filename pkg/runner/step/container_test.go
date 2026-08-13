@@ -111,6 +111,7 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 	handler := &ContainerHandler{}
 	vars := NewVariables()
 	vars.Set("tag", NewStepResult("app:test"))
+	vars.Set("cache", NewStepResult("registry.example.com/app:buildcache"))
 
 	buildCfg, err := handler.buildBuildConfig(&schema.WorkflowStep{
 		Name:   "build",
@@ -125,6 +126,15 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 			Target:     "runtime",
 			NoCache:    true,
 			Pull:       true,
+			Driver: &schema.ContainerDriverConfig{
+				Name:     "atmos-build",
+				Provider: "docker-container",
+				Opts:     map[string]string{"image": "{{ .steps.tag.value }}-buildkit"},
+			},
+			Cache: &schema.ContainerCacheConfig{
+				From: []map[string]string{{"type": "registry", "ref": "{{ .steps.cache.value }}"}},
+				To:   []map[string]string{{"type": "registry", "ref": "{{ .steps.cache.value }}", "mode": "max"}},
+			},
 			Bake: &schema.ContainerBuildBakeStep{
 				File:    "docker-bake.hcl",
 				Files:   []string{"docker-bake.override.hcl"},
@@ -139,17 +149,26 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 		},
 	}, vars)
 	require.NoError(t, err)
-	assert.Equal(t, ".", buildCfg.Context)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, cwd, buildCfg.Context)
 	assert.Equal(t, "buildx", buildCfg.Engine)
-	assert.Equal(t, "Dockerfile", buildCfg.Dockerfile)
+	assert.Equal(t, filepath.Join(cwd, "Dockerfile"), buildCfg.Dockerfile)
 	assert.Equal(t, []string{"app:test"}, buildCfg.Tags)
 	assert.Equal(t, map[string]string{"VERSION": "1.0.0"}, buildCfg.Args)
 	assert.Equal(t, "runtime", buildCfg.Target)
 	assert.True(t, buildCfg.NoCache)
 	assert.True(t, buildCfg.Pull)
+	require.NotNil(t, buildCfg.Driver)
+	assert.Equal(t, "atmos-build", buildCfg.Driver.Name)
+	assert.Equal(t, "docker-container", buildCfg.Driver.Provider)
+	assert.Equal(t, "app:test-buildkit", buildCfg.Driver.Opts["image"])
+	require.NotNil(t, buildCfg.Cache)
+	assert.Equal(t, []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}}, buildCfg.Cache.From)
+	assert.Equal(t, []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}}, buildCfg.Cache.To)
 	require.NotNil(t, buildCfg.Bake)
-	assert.Equal(t, "docker-bake.hcl", buildCfg.Bake.File)
-	assert.Equal(t, []string{"docker-bake.override.hcl"}, buildCfg.Bake.Files)
+	assert.Equal(t, filepath.Join(cwd, "docker-bake.hcl"), buildCfg.Bake.File)
+	assert.Equal(t, []string{filepath.Join(cwd, "docker-bake.override.hcl")}, buildCfg.Bake.Files)
 	assert.Equal(t, "app:test", buildCfg.Bake.Target)
 	assert.Equal(t, []string{"worker"}, buildCfg.Bake.Targets)
 	assert.Equal(t, []string{"*.tags=app:test"}, buildCfg.Bake.Set)
@@ -240,6 +259,24 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 		Action: "build",
 		Build: &schema.ContainerBuildStep{
 			Engine: "buildkit",
+		},
+	}))
+	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "driver-without-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Driver:   &schema.ContainerDriverConfig{Provider: "docker-container"},
+		},
+	}))
+	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "cache-without-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Cache:    &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}},
 		},
 	}))
 }

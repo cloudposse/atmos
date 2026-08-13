@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -45,6 +46,8 @@ type componentExecContext struct {
 // OPA/JSON-schema validation, auth pre-hook, config file generation, and env assembly.
 // Extracting this reduces ExecuteTerraform's cyclomatic complexity by ~10 decision points.
 func prepareComponentExecution(
+	ctx context.Context,
+	writers provisioner.OutputWriters,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
@@ -53,7 +56,7 @@ func prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := resolveAndProvisionComponentPath(atmosConfig, info)
+	componentPath, err := resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +105,12 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// `(computed)` is an inspection-only degradation marker. Never permit it to
+	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
+	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+		return err
+	}
+
 	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
 	// assembling env vars (and before the auth pre-hook registers credentials with the
 	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
@@ -179,7 +188,7 @@ func executeCommandPipeline(
 	logTerraformContext(info, execCtx.workingDir)
 	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
-	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
+	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath, opts...)
 	if err != nil {
 		return err
 	}
@@ -209,6 +218,10 @@ func executeCommandPipeline(
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
 }
+
+// dispatchAfterInitFn is a seam for testing the explicit-init path. Implicit
+// init dispatches the same provisioners in executeTerraformInitCommand.
+var dispatchAfterInitFn = dispatchAfterInit
 
 // runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
 // phase-level CI log group. The group is emitted only when workspace setup will
@@ -431,6 +444,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		},
 		opts...,
 	)
+
+	// An explicit `atmos terraform init` reaches this main-command path rather
+	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an
+	// implicit init so post-init provisioners can complete and persist provider
+	// locks for workdir and vendored components.
+	if err == nil && info.SubCommand == subcommandInit {
+		dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
+	}
 
 	exitCode := resolveExitCode(err)
 

@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -428,6 +429,8 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		cmd.PersistentFlags().StringP("file", "f", "", "Workflow file")
 		cmd.PersistentFlags().Bool("dry-run", false, "Dry run")
 		cmd.PersistentFlags().StringP("stack", "s", "", "Stack")
+		cmd.PersistentFlags().StringSlice("tags", nil, "Tags")
+		cmd.PersistentFlags().String("labels", "", "Labels")
 		cmd.PersistentFlags().String("from-step", "", "From step")
 		cmd.PersistentFlags().String("identity", "", "Identity")
 
@@ -724,4 +727,45 @@ workflows:
 		formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 		assert.Contains(t, formattedErr, "Multiple workflow files")
 	})
+}
+
+// TestLoadWorkflowConfig_InvalidYAML verifies LoadWorkflowConfig surfaces the underlying
+// u.UnmarshalYAML parse error (rather than silently producing a zero-value manifest) when a
+// workflow file exists and is readable but contains syntactically-invalid YAML.
+func TestLoadWorkflowConfig_InvalidYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "broken.yaml")
+	// Unbalanced flow-mapping brace makes this unparsable YAML, not merely a schema mismatch.
+	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows: {deploy: [1, 2"), 0o644))
+
+	config, err := LoadWorkflowConfig(workflowPath)
+
+	require.Error(t, err)
+	assert.Nil(t, config)
+}
+
+// TestLoadWorkflowConfig_UnreadableFile verifies LoadWorkflowConfig propagates the os.ReadFile
+// error (rather than a nil-content, nil-error success) when a workflow file exists but the
+// process lacks read permission on it. Chmod-based permission denial is not meaningful on
+// Windows (its ACL model doesn't map onto Unix mode bits the same way, and the test process may
+// run elevated), so this is skipped there -- the ReadFile-error branch is exercised on the
+// platforms where it is actually reachable this way.
+func TestLoadWorkflowConfig_UnreadableFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-based permission denial is not meaningful on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "unreadable.yaml")
+	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows:\n  deploy:\n    steps: []\n"), 0o644))
+	require.NoError(t, os.Chmod(workflowPath, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(workflowPath, 0o644) }) // Restore so t.TempDir() cleanup can remove it.
+
+	config, err := LoadWorkflowConfig(workflowPath)
+
+	require.Error(t, err)
+	assert.Nil(t, config)
 }

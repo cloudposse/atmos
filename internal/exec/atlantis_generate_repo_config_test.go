@@ -38,11 +38,10 @@ func TestExecuteAtlantisGenerateRepoConfigWithStackNameTemplate(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~21 seconds due to Git operations)
-	tests.SkipIfShort(t)
-
-	// Check for Git repository with valid remotes precondition
-	tests.RequireGitRemoteWithValidURL(t)
+	// This test compares the checkout with itself via --repo-path. Cloning the
+	// GitHub remote makes the test depend on network availability and has caused
+	// intermittent CI failures despite exercising no additional Atlantis logic.
+	tests.RequireGitRepository(t)
 
 	stacksPath := "../../tests/fixtures/scenarios/atlantis-generate-repo-config"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -64,10 +63,10 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 		"project-1",
 		"",
 		"",
+		"../../",
 		"",
 		"",
-		"",
-		true,
+		false,
 		"",
 	)
 

@@ -22,56 +22,70 @@ func applyS3Options(opts []func(*s3.Options)) s3.Options {
 func TestS3ClientOptions(t *testing.T) {
 	tests := []struct {
 		name             string
+		config           *s3Config
 		authContext      *schema.AuthContext
-		usePathStyle     bool
 		wantBaseEndpoint string
 		wantPathStyle    bool
 	}{
 		{
-			name:         "nil auth context and no path-style produces no options",
-			authContext:  nil,
-			usePathStyle: false,
+			name:        "nil auth context and no path-style produces no options",
+			config:      &s3Config{},
+			authContext: nil,
 		},
 		{
-			name:         "auth context without AWS section produces no options",
-			authContext:  &schema.AuthContext{},
-			usePathStyle: false,
+			name:        "auth context without AWS section produces no options",
+			config:      &s3Config{},
+			authContext: &schema.AuthContext{},
 		},
 		{
-			name: "empty endpoint URL produces no BaseEndpoint option",
+			name:   "empty endpoint URL produces no BaseEndpoint option",
+			config: &s3Config{},
 			authContext: &schema.AuthContext{
 				AWS: &schema.AWSAuthContext{EndpointURL: ""},
 			},
-			usePathStyle: false,
 		},
 		{
-			name: "endpoint URL set produces BaseEndpoint option",
+			name:   "identity endpoint URL produces BaseEndpoint option",
+			config: &s3Config{},
 			authContext: &schema.AuthContext{
 				AWS: &schema.AWSAuthContext{EndpointURL: "http://127.0.0.1:4566"},
 			},
-			usePathStyle:     false,
 			wantBaseEndpoint: "http://127.0.0.1:4566",
 		},
 		{
 			name:          "usePathStyle true produces UsePathStyle option",
+			config:        &s3Config{usePathStyle: true},
 			authContext:   nil,
-			usePathStyle:  true,
 			wantPathStyle: true,
 		},
 		{
-			name: "endpoint URL and usePathStyle both produce both options",
+			name:   "identity endpoint URL and usePathStyle both produce both options",
+			config: &s3Config{usePathStyle: true},
 			authContext: &schema.AuthContext{
 				AWS: &schema.AWSAuthContext{EndpointURL: "http://127.0.0.1:4566"},
 			},
-			usePathStyle:     true,
 			wantBaseEndpoint: "http://127.0.0.1:4566",
 			wantPathStyle:    true,
+		},
+		{
+			name:   "explicit backend config endpoint takes priority over identity endpoint",
+			config: &s3Config{endpoint: "http://localhost:9000"},
+			authContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{EndpointURL: "http://127.0.0.1:4566"},
+			},
+			wantBaseEndpoint: "http://localhost:9000",
+		},
+		{
+			name:             "explicit backend config endpoint used with nil auth context",
+			config:           &s3Config{endpoint: "http://localhost:9000"},
+			authContext:      nil,
+			wantBaseEndpoint: "http://localhost:9000",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := s3ClientOptions(tt.authContext, tt.usePathStyle)
+			opts := s3ClientOptions(tt.config, tt.authContext)
 			got := applyS3Options(opts)
 
 			if tt.wantBaseEndpoint == "" {

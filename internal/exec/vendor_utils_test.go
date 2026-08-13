@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,8 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 func TestReadAndProcessComponentVendorConfigFile(t *testing.T) {
@@ -660,7 +665,7 @@ func TestProcessTargets_BackwardCompatible(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -668,17 +673,17 @@ func TestProcessTargets_BackwardCompatible(t *testing.T) {
 	require.Len(t, pkgs, 2)
 
 	// Both packages should use the source-level URI and version.
-	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[0].uri)
-	assert.Equal(t, "1.398.0", pkgs[0].version)
-	assert.Equal(t, "vpc", pkgs[0].name)
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[0].URI())
+	assert.Equal(t, "1.398.0", pkgs[0].Version)
+	assert.Equal(t, "vpc", pkgs[0].Name)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc")
 
-	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[1].uri)
-	assert.Equal(t, "1.398.0", pkgs[1].version)
-	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "components/terraform/vpc-backup")
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[1].URI())
+	assert.Equal(t, "1.398.0", pkgs[1].Version)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[1].PkgType())
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "components/terraform/vpc-backup")
 }
 
 func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
@@ -702,7 +707,7 @@ func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -710,16 +715,16 @@ func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// URI should be re-resolved with the target's version.
-	assert.Contains(t, pkgs[0].uri, "ref=2.0.0")
-	assert.NotContains(t, pkgs[0].uri, "ref=1.398.0")
+	assert.Contains(t, pkgs[0].URI(), "ref=2.0.0")
+	assert.NotContains(t, pkgs[0].URI(), "ref=1.398.0")
 	// Version should be the target override.
-	assert.Equal(t, "2.0.0", pkgs[0].version)
+	assert.Equal(t, "2.0.0", pkgs[0].Version)
 	// Target path should use the target's version.
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "vpc/2.0.0")
-	assert.Equal(t, "vpc", pkgs[0].name)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "vpc/2.0.0")
+	assert.Equal(t, "vpc", pkgs[0].Name)
 	// Package type should be recomputed as remote.
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
 }
 
 func TestProcessTargets_MixedTargets(t *testing.T) {
@@ -747,7 +752,7 @@ func TestProcessTargets_MixedTargets(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  resolvedURI,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -755,20 +760,20 @@ func TestProcessTargets_MixedTargets(t *testing.T) {
 	require.Len(t, pkgs, 3)
 
 	// First target: plain string, uses source-level URI and version.
-	assert.Equal(t, resolvedURI, pkgs[0].uri)
-	assert.Equal(t, "2.1.0", pkgs[0].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+	assert.Equal(t, resolvedURI, pkgs[0].URI())
+	assert.Equal(t, "2.1.0", pkgs[0].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc")
 
 	// Second target: per-target version override, URI re-resolved with 3.0.0.
-	assert.Contains(t, pkgs[1].uri, "ref=3.0.0")
-	assert.NotContains(t, pkgs[1].uri, "ref=2.1.0")
-	assert.Equal(t, "3.0.0", pkgs[1].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/3.0.0")
+	assert.Contains(t, pkgs[1].URI(), "ref=3.0.0")
+	assert.NotContains(t, pkgs[1].URI(), "ref=2.1.0")
+	assert.Equal(t, "3.0.0", pkgs[1].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/3.0.0")
 
 	// Third target: plain string, uses source-level URI and version.
-	assert.Equal(t, resolvedURI, pkgs[2].uri)
-	assert.Equal(t, "2.1.0", pkgs[2].version)
-	assert.Contains(t, filepath.ToSlash(pkgs[2].targetPath), "components/terraform/vpc-legacy")
+	assert.Equal(t, resolvedURI, pkgs[2].URI())
+	assert.Equal(t, "2.1.0", pkgs[2].Version)
+	assert.Contains(t, filepath.ToSlash(pkgs[2].Target()), "components/terraform/vpc-legacy")
 }
 
 func TestProcessTargets_TargetPathTemplating(t *testing.T) {
@@ -792,7 +797,7 @@ func TestProcessTargets_TargetPathTemplating(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -800,7 +805,7 @@ func TestProcessTargets_TargetPathTemplating(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Path should have templates expanded.
-	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc/1.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "components/terraform/vpc/1.0.0")
 }
 
 func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
@@ -824,7 +829,7 @@ func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  uri,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -832,7 +837,7 @@ func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Name should be the URI since Component is empty.
-	assert.Equal(t, uri, pkgs[0].name)
+	assert.Equal(t, uri, pkgs[0].Name)
 }
 
 func TestProcessTargets_LocalFileTarget(t *testing.T) {
@@ -864,7 +869,7 @@ func TestProcessTargets_LocalFileTarget(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  localFile,
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeLocal,
+		PkgType:              install.PkgTypeLocal,
 		SourceIsLocalFile:    true,
 	})
 
@@ -872,8 +877,8 @@ func TestProcessTargets_LocalFileTarget(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	// Source classification should detect the local file.
-	assert.Equal(t, pkgTypeLocal, pkgs[0].pkgType)
-	assert.True(t, pkgs[0].sourceIsLocalFile)
+	assert.Equal(t, install.PkgTypeLocal, pkgs[0].PkgType())
+	assert.True(t, pkgs[0].SourceIsLocalFile())
 }
 
 func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
@@ -902,7 +907,7 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 		VendorConfigFilePath: "",
 		URI:                  "github.com/org/terraform-aws-vpc.git//modules/vpc?ref=1.0.0",
 		SourceTemplate:       source.Source,
-		PkgType:              pkgTypeRemote,
+		PkgType:              install.PkgTypeRemote,
 		SourceIsLocalFile:    false,
 	})
 
@@ -910,16 +915,222 @@ func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
 	require.Len(t, pkgs, 2)
 
 	// First target: uses source-level defaults.
-	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
-	assert.False(t, pkgs[0].sourceIsLocalFile)
-	assert.Equal(t, "1.0.0", pkgs[0].version)
+	assert.Equal(t, install.PkgTypeRemote, pkgs[0].PkgType())
+	assert.False(t, pkgs[0].SourceIsLocalFile())
+	assert.Equal(t, "1.0.0", pkgs[0].Version)
 
 	// Second target: version override, classification recomputed (still remote in this case).
-	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
-	assert.False(t, pkgs[1].sourceIsLocalFile)
-	assert.Equal(t, "2.0.0", pkgs[1].version)
-	assert.Contains(t, pkgs[1].uri, "ref=2.0.0")
-	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
+	assert.Equal(t, install.PkgTypeRemote, pkgs[1].PkgType())
+	assert.False(t, pkgs[1].SourceIsLocalFile())
+	assert.Equal(t, "2.0.0", pkgs[1].Version)
+	assert.Contains(t, pkgs[1].URI(), "ref=2.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/2.0.0")
+}
+
+// fakeTagLister is a version.RemoteLister returning canned tags for unit tests, letting
+// vendor_utils_test.go exercise a semver-range `version:`'s end-to-end resolution (source-URI and
+// target-path templating alike) without any real network access.
+type fakeTagLister struct {
+	tags []string
+}
+
+func (f *fakeTagLister) ListTags(context.Context, string) ([]string, error) {
+	return f.tags, nil
+}
+
+// TestProcessAtmosVendorSourceEntry_SemverRangeResolvesAndTemplatesConcreteVersion is the positive
+// end-to-end counterpart to the non-Git-source error tests below: a source-level `version:` that is
+// a semver range resolves (via the injected fakeTagLister, so no real network access) to a concrete
+// version, that concrete version -- not the literal range string -- is what's templated into both
+// the source URI and the target path, and the resolution is recorded in vendor.lock.yaml.
+func TestProcessAtmosVendorSourceEntry_SemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	lister := &fakeTagLister{tags: []string{"v1.0.0", "v1.2.3", "v1.5.0", "v2.0.0"}}
+
+	params := &vendorSourceParams{
+		atmosConfig: atmosConfig,
+		sources: []schema.AtmosVendorSource{
+			{
+				Component: "vpc",
+				Source:    "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref={{.Version}}",
+				Version:   "^1.0.0",
+				Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc/{{.Version}}"}},
+			},
+		},
+		vendorConfigFileName: "vendor.yaml",
+		lister:               lister,
+	}
+
+	pkgs, skip, err := processAtmosVendorSourceEntry(params, 0)
+
+	require.NoError(t, err)
+	require.False(t, skip)
+	require.Len(t, pkgs, 1)
+	assert.Equal(t, "v1.5.0", pkgs[0].Version)
+	assert.Equal(t, "^1.0.0", pkgs[0].RawVersion)
+	assert.Contains(t, pkgs[0].URI(), "ref=v1.5.0")
+	assert.NotContains(t, pkgs[0].URI(), "^1.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[0].Target()), "vpc/v1.5.0")
+
+	// The resolution is recorded in vendor.lock.yaml, so a second call with an unchanged range
+	// reuses it (proven at the pkg/vendoring/install layer's dedicated cache-reuse test; here we
+	// only confirm the entry lands as expected).
+	lock, err := lockfile.Load(atmosConfig)
+	require.NoError(t, err)
+	found := false
+	for _, artifact := range lock.Artifacts {
+		if artifact.Source.VersionConstraint == "^1.0.0" {
+			found = true
+			assert.Equal(t, "v1.5.0", artifact.Source.ResolvedVersion)
+		}
+	}
+	assert.True(t, found, "expected a version-range resolution artifact in vendor.lock.yaml")
+}
+
+// TestProcessTargets_PerTargetSemverRangeResolvesAndTemplatesConcreteVersion proves a per-target
+// `targets[].version` override that is a semver range resolves independently of the source-level
+// version and templates its own resolved concrete version into that target's URI/path.
+func TestProcessTargets_PerTargetSemverRangeResolvesAndTemplatesConcreteVersion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	lister := &fakeTagLister{tags: []string{"v1.0.0", "v1.5.0", "v2.0.0", "v2.5.0"}}
+
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref={{.Version}}",
+		Version:   "v1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc"},
+			{Path: "components/terraform/vpc/{{.Version}}", Version: "^2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "v1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/cloudposse/terraform-aws-vpc.git//modules/vpc?ref=v1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              install.PkgTypeRemote,
+		SourceIsLocalFile:    false,
+		Lister:               lister,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	// First target: no override, source-level exact pin unaffected.
+	assert.Equal(t, "v1.0.0", pkgs[0].Version)
+	assert.Empty(t, pkgs[0].RawVersion)
+
+	// Second target: range override resolves independently to the highest tag satisfying ^2.0.0.
+	assert.Equal(t, "v2.5.0", pkgs[1].Version)
+	assert.Equal(t, "^2.0.0", pkgs[1].RawVersion)
+	assert.Contains(t, pkgs[1].URI(), "ref=v2.5.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[1].Target()), "vpc/v2.5.0")
+}
+
+// TestProcessTargets_PerTargetSemverRangeOnNonGitSourceReturnsClearError proves a per-target
+// version override that is a semver range (e.g. "^2.0.0") on a source with no tag-listing
+// mechanism (a local file here) fails resolveTargetOverride with a clear, wrapped error instead of
+// silently templating the literal range string into the URI or hanging on a network call.
+func TestProcessTargets_PerTargetSemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	localFile := filepath.Join(t.TempDir(), "module.tar.gz")
+	require.NoError(t, os.WriteFile(localFile, []byte("fake-archive"), 0o644))
+
+	source := schema.AtmosVendorSource{
+		Component: "local-mod",
+		Source:    localFile,
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/local-mod", Version: "^2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"local-mod", "1.0.0"}
+
+	_, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  localFile,
+		SourceTemplate:       source.Source,
+		PkgType:              install.PkgTypeLocal,
+		SourceIsLocalFile:    true,
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
+}
+
+// TestProcessAtmosVendorSourceEntry_SemverRangeOnNonGitSourceReturnsClearError proves the
+// source-level (not per-target) semver-range resolution path -- exercised earlier, inside
+// processAtmosVendorSourceEntry, before any URI templating -- surfaces the same clear error for a
+// non-Git source, network-free (ResolveDeclaredVersion never reaches the Lister for a non-Git
+// source, so this never touches the network despite using the real, unmocked default Lister).
+func TestProcessAtmosVendorSourceEntry_SemverRangeOnNonGitSourceReturnsClearError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	localFile := filepath.Join(t.TempDir(), "module.tar.gz")
+	require.NoError(t, os.WriteFile(localFile, []byte("fake-archive"), 0o644))
+
+	params := &vendorSourceParams{
+		atmosConfig: atmosConfig,
+		sources: []schema.AtmosVendorSource{
+			{
+				Component: "local-mod",
+				Source:    localFile,
+				Version:   "^1.0.0",
+				Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/local-mod"}},
+			},
+		},
+		vendorConfigFileName: "vendor.yaml",
+		vendorConfigFilePath: "",
+	}
+
+	_, _, err := processAtmosVendorSourceEntry(params, 0)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, install.ErrVersionRangeRequiresGitSource)
+}
+
+// TestValidateSourceFields_SemverRangeConflictsWithConstraintsVersion proves a vendor.yaml source
+// combining a semver-range version: with a constraints.version ceiling is rejected at
+// validateSourceFields -- before URI templating, resolution, or any network access is attempted.
+func TestValidateSourceFields_SemverRangeConflictsWithConstraintsVersion(t *testing.T) {
+	s := &schema.AtmosVendorSource{
+		Component:   "vpc",
+		Source:      "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+		Version:     "^1.0.0",
+		Targets:     schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+		Constraints: &schema.VendorConstraints{Version: "<2.0.0"},
+	}
+
+	err := validateSourceFields(s, "vendor.yaml")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrVersionRangeConflictsWithConstraints)
+}
+
+// TestValidateSourceFields_SemverRangeWithExcludedVersionsAndNoPrereleasesIsAccepted proves
+// constraints.excluded_versions/no_prereleases (unlike constraints.version) remain valid alongside
+// a range-declared version:.
+func TestValidateSourceFields_SemverRangeWithExcludedVersionsAndNoPrereleasesIsAccepted(t *testing.T) {
+	s := &schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-vpc.git?ref={{.Version}}",
+		Version:   "^1.0.0",
+		Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+		Constraints: &schema.VendorConstraints{
+			ExcludedVersions: []string{"1.9.0"},
+			NoPrereleases:    true,
+		},
+	}
+
+	require.NoError(t, validateSourceFields(s, "vendor.yaml"))
 }
 
 func TestValidateTagsAndComponents(t *testing.T) {
@@ -976,4 +1187,352 @@ func TestValidateTagsAndComponents(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+// resolvedTempDir returns a fresh t.TempDir(), chdir'd into (matching testing.T.Chdir's real
+// $PWD-setting behavior, which can leave $PWD as an unresolved/logical path -- e.g. macOS's
+// /var/folders under the /var -> /private/var symlink), alongside its filepath.EvalSymlinks-
+// resolved (physical) form. Config-derived absolute paths in production (VendorDirAbsolutePath,
+// WorkflowsDirAbsolutePath) are always physical, resolved via git-root discovery -- so path-leak
+// tests must build their file arguments from the resolved form to accurately reproduce the
+// logical-cwd-vs-physical-file mismatch displayPath() has to handle.
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	resolved, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	return resolved
+}
+
+// TestGetVendorDirToUse covers both branches: the precomputed VendorDirAbsolutePath (set by
+// AtmosConfigAbsolutePaths in real callers) taking precedence, and the raw BasePath/Vendor.BasePath
+// join fallback for hand-built AtmosConfiguration values (e.g. in tests) that skip that step.
+func TestGetVendorDirToUse(t *testing.T) {
+	t.Run("uses precomputed VendorDirAbsolutePath when set", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath:              "/base",
+			VendorDirAbsolutePath: "/precomputed/vendor",
+			Vendor:                schema.Vendor{BasePath: "vendor"},
+		}
+		assert.Equal(t, "/precomputed/vendor", getVendorDirToUse(atmosConfig))
+	})
+
+	t.Run("falls back to joining BasePath and Vendor.BasePath", func(t *testing.T) {
+		base := filepath.Join(string(filepath.Separator), "base")
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: base,
+			Vendor:   schema.Vendor{BasePath: "vendor"},
+		}
+		assert.Equal(t, u.JoinPath(base, "vendor"), getVendorDirToUse(atmosConfig))
+	})
+}
+
+// TestResolveVendorConfigFilePath_CheckGlobalConfig covers resolveVendorConfigFilePath's
+// checkGlobalConfig branch: an absolute Vendor.BasePath is returned as-is, while a relative one
+// resolves via getVendorDirToUse (the precomputed-path case exercised here; the fallback-join
+// case is already covered by TestGetVendorDirToUse above).
+func TestResolveVendorConfigFilePath_CheckGlobalConfig(t *testing.T) {
+	t.Run("absolute Vendor.BasePath returned as-is", func(t *testing.T) {
+		// filepath.IsAbs uses platform semantics -- a hardcoded "/abs/vendor" string literal is
+		// absolute on POSIX but NOT on Windows (which needs a drive letter or UNC path), so this
+		// must use an OS-native absolute path (t.TempDir() already returns one) to actually
+		// exercise the intended branch on every platform.
+		absVendorDir := filepath.Join(t.TempDir(), "vendor")
+		atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{BasePath: absVendorDir}}
+		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
+		assert.Equal(t, absVendorDir, got)
+	})
+
+	t.Run("relative Vendor.BasePath resolves via getVendorDirToUse", func(t *testing.T) {
+		precomputed := filepath.Join(t.TempDir(), "precomputed-vendor")
+		atmosConfig := &schema.AtmosConfiguration{
+			VendorDirAbsolutePath: precomputed,
+			Vendor:                schema.Vendor{BasePath: "./vendor.yaml"},
+		}
+		got := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
+		assert.Equal(t, precomputed, got)
+	})
+}
+
+// TestValidateTagsAndComponents_PathLeak guards against a bug found during a field-test pass on
+// cloudposse/atmos#2867/#2868: these error messages interpolated the raw (possibly absolute,
+// machine-specific) vendorConfigFileName directly, right next to the "Vendoring from" log line
+// that was already fixed with displayPath() in the same PR -- a classic half-fixed pattern.
+func TestValidateTagsAndComponents_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	vendorConfigFileName := filepath.Join(resolvedDir, "vendor.yaml")
+
+	sources := []schema.AtmosVendorSource{
+		{Component: "vpc", Tags: []string{"network"}},
+	}
+
+	tests := []struct {
+		name      string
+		sources   []schema.AtmosVendorSource
+		component string
+		tags      []string
+	}{
+		{name: "ErrNoComponentsWithTags", sources: sources, tags: []string{"nonexistent"}},
+		{name: "ErrDuplicateComponents", sources: []schema.AtmosVendorSource{{Component: "dup"}, {Component: "dup"}}},
+		{name: "ErrComponentNotDefined", sources: sources, component: "missing"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTagsAndComponents(tt.sources, vendorConfigFileName, tt.component, tt.tags)
+			require.Error(t, err)
+			assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+			assert.Contains(t, err.Error(), "vendor.yaml", "error should still name the file, just shortened")
+		})
+	}
+}
+
+// TestFilterMaterializedVendorPackages_SkipsMaterializedPackage proves a package with an existing,
+// matching vendor lock receipt is filtered out (skipped), while a sibling package with no receipt
+// yet is kept pending.
+func TestFilterMaterializedVendorPackages_SkipsMaterializedPackage(t *testing.T) {
+	base := t.TempDir()
+	sourceDir := filepath.Join(base, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("resource"), 0o644))
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	materialized := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+		Name: "vpc-materialized", URI: sourceDir, TargetPath: filepath.Join(base, "target"), PkgType: install.PkgTypeLocal,
+	})
+	result, err := install.Install(config, materialized, install.InstallOptions{})
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
+
+	pending := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+		Name: "vpc-pending", URI: sourceDir, TargetPath: filepath.Join(base, "pending-target"), PkgType: install.PkgTypeLocal,
+	})
+
+	filtered, err := install.FilterPending(config, []install.VendorPackage{materialized, pending}, install.InstallOptions{})
+
+	require.NoError(t, err)
+	require.Len(t, filtered, 1, "only the not-yet-materialized package should remain")
+	assert.Equal(t, "vpc-pending", filtered[0].Name)
+}
+
+// TestFilterMaterializedVendorPackages_PropagatesError proves a package whose targetPath can't be
+// related back to the project's BasePath surfaces the vendor lock verification error, naming the
+// failing package, instead of silently treating it as pending.
+func TestFilterMaterializedVendorPackages_PropagatesError(t *testing.T) {
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	pkgs := []install.VendorPackage{
+		install.NewAtmosVendorPackage(&install.AtmosPackageParams{Name: "vpc", URI: "source", TargetPath: t.TempDir(), PkgType: install.PkgTypeLocal}),
+	}
+
+	result, err := install.FilterPending(config, pkgs, install.InstallOptions{})
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "verify vendor lock for vpc")
+}
+
+// TestExecuteAtmosVendorInternal_PropagatesMaterializationCheckError proves ExecuteAtmosVendorInternal
+// surfaces the vendor lock verification error (rather than swallowing it or proceeding to install)
+// when a resolved target can't be related back to the project's BasePath.
+func TestExecuteAtmosVendorInternal_PropagatesMaterializationCheckError(t *testing.T) {
+	vendorDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// atmosConfig.BasePath deliberately points elsewhere from vendorDir, so the resolved target
+	// (joined against vendorDir) can't be related back to it.
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+	opts := &executeVendorOptions{
+		vendorConfigFileName: filepath.Join(vendorDir, "vendor.yaml"),
+		atmosConfig:          atmosConfig,
+		atmosVendorSpec: schema.AtmosVendorSpec{
+			Sources: []schema.AtmosVendorSource{
+				{
+					Component: "vpc",
+					Source:    sourceDir,
+					Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+				},
+			},
+		},
+	}
+
+	err := ExecuteAtmosVendorInternal(opts)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verify vendor lock for vpc")
+}
+
+// TestExecuteAtmosVendorInternal_AllMaterialized_NoOp proves a vendor.yaml whose only source is
+// already vendored and unchanged filters down to zero packages and returns without error, instead
+// of calling executeVendorModel with an empty list or re-copying the source.
+func TestExecuteAtmosVendorInternal_AllMaterialized_NoOp(t *testing.T) {
+	vendorDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: vendorDir}
+	newOpts := func() *executeVendorOptions {
+		return &executeVendorOptions{
+			vendorConfigFileName: filepath.Join(vendorDir, "vendor.yaml"),
+			atmosConfig:          atmosConfig,
+			atmosVendorSpec: schema.AtmosVendorSpec{
+				Sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    sourceDir,
+						Targets:   schema.AtmosVendorTargets{{Path: "components/terraform/vpc"}},
+					},
+				},
+			},
+		}
+	}
+
+	require.NoError(t, ExecuteAtmosVendorInternal(newOpts()))
+	target := filepath.Join(vendorDir, "components", "terraform", "vpc")
+	assert.FileExists(t, filepath.Join(target, "main.tf"))
+
+	// Add a new file to the source after the first pull; if the second call re-pulls instead of
+	// skipping the already-materialized source, this file would show up too.
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "extra.tf"), []byte("# added later\n"), 0o644))
+
+	err := ExecuteAtmosVendorInternal(newOpts())
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(target, "extra.tf"), "an already-materialized source must be skipped, not re-copied")
+}
+
+// TestExecuteAtmosVendorInternal_PathLeak guards against a bug found during a field-test pass on
+// cloudposse/atmos#2867/#2868: ErrMissingVendorConfigDefinition interpolated the raw (possibly
+// absolute) vendorConfigFileName directly, unlike the "Vendoring from" log line one statement
+// earlier in the same function, which was already fixed with displayPath().
+//
+// ErrEmptySources (fmt.Errorf("%w %s", ErrEmptySources, displayPath(...)), a few lines below the
+// case tested here) is NOT covered by an equivalent case: processVendorImports requires every
+// import in the chain to have non-empty sources or imports, so any input that would make the
+// final merged sources list empty hits ErrMissingVendorConfigDefinition somewhere in the
+// recursion first (confirmed empirically) -- ErrEmptySources is unreachable via this function's
+// public entry point given the current control flow.
+func TestExecuteAtmosVendorInternal_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	vendorConfigFileName := filepath.Join(resolvedDir, "vendor.yaml")
+	atmosConfig := &schema.AtmosConfiguration{BasePath: resolvedDir}
+
+	tests := []struct {
+		name string
+		opts *executeVendorOptions
+	}{
+		{
+			name: "ErrMissingVendorConfigDefinition",
+			opts: &executeVendorOptions{
+				vendorConfigFileName: vendorConfigFileName,
+				atmosConfig:          atmosConfig,
+				atmosVendorSpec:      schema.AtmosVendorSpec{},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteAtmosVendorInternal(tt.opts)
+			require.Error(t, err)
+			assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+		})
+	}
+}
+
+// TestGetConfigFiles_PathLeak guards against the same class of bug for ErrNoYAMLConfigFiles.
+func TestGetConfigFiles_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	emptyDir := filepath.Join(resolvedDir, "empty")
+	require.NoError(t, os.MkdirAll(emptyDir, 0o755))
+
+	_, err := getConfigFiles(emptyDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoYAMLConfigFiles)
+	assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+}
+
+// TestValidateSourceFields_PathLeak guards against the same class of bug for ErrSourceMissing and
+// ErrTargetsMissing, whose messages interpolate s.File (defaulted from vendorConfigFileName).
+func TestValidateSourceFields_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	vendorConfigFileName := filepath.Join(resolvedDir, "vendor.yaml")
+
+	t.Run("ErrSourceMissing", func(t *testing.T) {
+		err := validateSourceFields(&schema.AtmosVendorSource{}, vendorConfigFileName)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrSourceMissing)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+
+	t.Run("ErrTargetsMissing", func(t *testing.T) {
+		err := validateSourceFields(&schema.AtmosVendorSource{Source: "./somewhere"}, vendorConfigFileName)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrTargetsMissing)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+}
+
+// TestProcessVendorImports_PathLeak guards against the same class of bug for
+// ErrVendorConfigSelfImport and ErrMissingVendorConfigDefinition (the import-chain variant).
+func TestProcessVendorImports_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	atmosConfig := &schema.AtmosConfiguration{BasePath: resolvedDir}
+
+	t.Run("ErrVendorConfigSelfImport", func(t *testing.T) {
+		importFile := filepath.Join(resolvedDir, "self-import.yaml")
+		content := "apiVersion: atmos/v1\nkind: AtmosVendorConfig\nspec:\n  imports:\n    - " + importFile + "\n"
+		require.NoError(t, os.WriteFile(importFile, []byte(content), 0o644))
+
+		_, _, err := processVendorImports(atmosConfig, filepath.Join(resolvedDir, "vendor.yaml"), []string{importFile}, nil, nil)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrVendorConfigSelfImport)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+
+	t.Run("ErrMissingVendorConfigDefinition", func(t *testing.T) {
+		importFile := filepath.Join(resolvedDir, "empty-import.yaml")
+		require.NoError(t, os.WriteFile(importFile, []byte("apiVersion: atmos/v1\nkind: AtmosVendorConfig\nspec: {}\n"), 0o644))
+
+		_, _, err := processVendorImports(atmosConfig, filepath.Join(resolvedDir, "vendor.yaml"), []string{importFile}, nil, nil)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrMissingVendorConfigDefinition)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+
+	t.Run("ErrDuplicateImport", func(t *testing.T) {
+		importFile := filepath.Join(resolvedDir, "dup-import.yaml")
+		require.NoError(t, os.WriteFile(importFile, []byte(
+			"apiVersion: atmos/v1\nkind: AtmosVendorConfig\nspec:\n  sources:\n    - component: vpc\n      source: ./a\n",
+		), 0o644))
+
+		// The same file listed twice: the second occurrence is already in allImports by the
+		// time it's processed, so it must be rejected as a duplicate rather than silently
+		// re-processed.
+		_, _, err := processVendorImports(atmosConfig, filepath.Join(resolvedDir, "vendor.yaml"), []string{importFile, importFile}, nil, nil)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateImport)
+		assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	})
+}
+
+// TestMergeVendorConfigFiles_PathLeak guards against the same class of bug for
+// ErrDuplicateComponentsFound.
+func TestMergeVendorConfigFiles_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+	configFile := filepath.Join(resolvedDir, "vendor.yaml")
+	content := "apiVersion: atmos/v1\nkind: AtmosVendorConfig\nspec:\n  sources:\n    - component: vpc\n      source: ./a\n" +
+		"    - component: vpc\n      source: ./b\n"
+	require.NoError(t, os.WriteFile(configFile, []byte(content), 0o644))
+
+	_, err := mergeVendorConfigFiles([]string{configFile})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDuplicateComponentsFound)
+	assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
 }

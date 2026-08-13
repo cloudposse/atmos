@@ -10,6 +10,12 @@ const crypto = require('crypto');
 
 const matter = require('gray-matter');
 
+// File names recognized as an item's primary content — the ones treated as
+// its "readme" for description/title/tags extraction and index-page preview.
+// SKILL.md is the Agent Skills open standard's fixed file name (skills don't
+// ship a README.md), so it's recognized alongside the usual README variants.
+const PRIMARY_CONTENT_FILENAMES = new Set(['readme.md', 'readme.mdx', 'skill.md']);
+
 // Default patterns to exclude from scanning.
 const DEFAULT_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
@@ -128,6 +134,33 @@ const TAGS_MAP = {
   mcp: ['DX'],
   'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
+  scaffolding: ['Scaffold', 'Init'],
+};
+
+// Display labels for the `metadata.category` slug used by SKILL.md front matter
+// (see agent-skills/skills/*/SKILL.md). Content with no top-level `tags:` front
+// matter and a recognized category slug is tagged with this label instead of
+// falling through to TAGS_MAP, which has no entries for skill directory names.
+const CATEGORY_LABELS = {
+  'core-config': 'Core Configuration & Architecture',
+  orchestrators: 'Orchestration Engines',
+  security: 'Auth, Secrets & Compliance',
+  aws: 'AWS Integrations',
+  'ci-automation': 'CI/CD & Automation',
+  'state-versioning': 'State, Versioning & Provenance',
+  'dev-tooling': 'Developer Tooling',
+  'templating-data': 'Templates & Data',
+  ai: 'AI & MCP',
+  scaffolding: 'Scaffolding & Init',
+};
+
+// Cast recordings for examples whose README.md doubles as copied scaffold
+// template output (`atmos scaffold generate` copies the whole source
+// directory verbatim) — Docusaurus front matter in that README would leak
+// into every generated project, so the cast is registered here instead. A
+// README front matter `cast:` block still wins when present.
+const CAST_MAP = {
+  scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
 };
 
 // Documentation pages mapping for examples.
@@ -209,6 +242,10 @@ const DOCS_MAP = {
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
   ],
+  scaffolding: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
   ],
@@ -224,6 +261,14 @@ const DOCS_MAP = {
     { label: 'Packer Components', url: '/components/packer' },
     { label: 'Packer Build', url: '/cli/commands/packer/build' },
     { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+  ],
+  init: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
+  scaffolds: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
   ],
 };
 
@@ -412,8 +457,10 @@ function scanDirectory(dirPath, relativePath, options) {
         githubUrl: generateGitHubUrl(entryRelativePath, options),
       };
 
-      // Track README files.
-      if (entry.name.toLowerCase() === 'readme.md' || entry.name.toLowerCase() === 'readme.mdx') {
+      // Track README files. SKILL.md is recognized alongside README.md/README.mdx
+      // as primary content — it's the file name mandated by the Agent Skills
+      // open standard (https://agentskills.io), which the skills gallery instance uses.
+      if (PRIMARY_CONTENT_FILENAMES.has(entry.name.toLowerCase())) {
         readme = fileNode;
       }
 
@@ -534,15 +581,23 @@ function scanExamples(sourceDir, options) {
       frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '')
     );
     // Guard against a scalar `cast:` value so a malformed README can't break the build.
+    // Front matter wins; otherwise fall back to CAST_MAP (see its comment for why).
     const castMeta = readmeMetadata.data.cast;
-    const cast = castMeta && typeof castMeta === 'object' ? castMeta : {};
+    const cast = castMeta && typeof castMeta === 'object' ? castMeta : CAST_MAP[entry.name] || {};
 
-    // Tags: README front matter wins so examples can self-categorize; fall back
-    // to the hand-maintained map. The first tag is the example's index section.
+    // Tags: README front matter wins so examples can self-categorize; next, a
+    // recognized SKILL.md `metadata.category` slug (see CATEGORY_LABELS); then
+    // fall back to the hand-maintained map. The first tag is the index section.
     const frontmatterTags = Array.isArray(readmeMetadata.data.tags)
       ? readmeMetadata.data.tags.filter((tag) => typeof tag === 'string')
       : [];
-    const tags = frontmatterTags.length > 0 ? frontmatterTags : TAGS_MAP[entry.name] || [];
+    const categorySlug = readmeMetadata.data.metadata && readmeMetadata.data.metadata.category;
+    const categoryLabel = typeof categorySlug === 'string' ? CATEGORY_LABELS[categorySlug] : undefined;
+    const tags = frontmatterTags.length > 0
+      ? frontmatterTags
+      : categoryLabel
+        ? [categoryLabel]
+        : TAGS_MAP[entry.name] || [];
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
@@ -651,6 +706,88 @@ function collectDirectories(node, basePath) {
   return dirs;
 }
 
+// Binary extensions skipped when concatenating Markdown context — mirrors
+// isBinaryFile() in website/src/components/FileBrowser/utils.ts.
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'pdf', 'zip', 'tar',
+  'gz', 'exe', 'dll', 'so', 'dylib', 'bin', 'dat',
+]);
+
+/**
+ * Wraps content in a fenced code block using a fence longer than any
+ * backtick run already in the content, so a nested file containing its own
+ * ``` doesn't close the wrapping fence early and corrupt the document.
+ * Mirrors codeFence() in website/src/components/FileBrowser/utils.ts.
+ * @param {string} content - File content (already trimmed by caller).
+ * @param {string} language - Syntax-highlighting language hint.
+ * @returns {string} - Fenced code block.
+ */
+function codeFence(content, language) {
+  const longestRun = Math.max(0, ...(content.match(/`+/g) || []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+
+/**
+ * Recursively concatenates every readable file under a directory into one
+ * Markdown document — the whole item, nested reference files included, as a
+ * single block of context. Mirrors collectMarkdownContext() in
+ * website/src/components/FileBrowser/utils.ts (used by the client-side "Copy
+ * as Markdown" button); this build-time twin backs the per-page `.md` files
+ * written by generatePerPageMarkdown() below. Keep both in sync.
+ * @param {object} root - Directory node (an example's `root`).
+ * @returns {string} - Concatenated Markdown.
+ */
+function collectMarkdownContext(root) {
+  const sections = [];
+  const readmePath = root.readme ? root.readme.path : undefined;
+
+  const addFile = (node) => {
+    if (node.content == null || BINARY_EXTENSIONS.has((node.extension || '').toLowerCase())) return;
+    const ext = (node.extension || '').toLowerCase();
+    const trimmed = node.content.trim();
+    const body = ext === 'md' || ext === 'mdx' ? trimmed : codeFence(trimmed, node.language);
+    sections.push(`## ${node.path}\n\n${body}`);
+  };
+
+  const visit = (node) => {
+    if (node.type === 'directory') {
+      node.children.forEach(visit);
+    } else if (node.path !== readmePath) {
+      addFile(node);
+    }
+  };
+
+  if (root.readme) addFile(root.readme);
+  visit(root);
+
+  return sections.join('\n\n---\n\n');
+}
+
+/**
+ * Writes a raw `.md` file for each example, mirroring the sitewide
+ * "append `.md` to any URL for raw Markdown" convention that
+ * docusaurus-plugin-llms-txt provides for regular docs/blog pages — those
+ * pages are invisible to that plugin since file-browser routes aren't
+ * docs/blog content, so this instance has to generate its own.
+ * @param {object} tree - The scanned examples tree (see scanExamples()).
+ * @param {string} outDir - Docusaurus build output directory.
+ * @param {string} routeBasePath - This instance's route base path.
+ * @param {string} id - Plugin instance id, for logging.
+ */
+async function generatePerPageMarkdown(tree, outDir, routeBasePath, id) {
+  let written = 0;
+  for (const example of tree.examples) {
+    const heading = `# ${example.title || example.name}\n\n${example.description ? `${example.description}\n\n` : ''}`;
+    const body = heading + collectMarkdownContext(example.root);
+    const outPath = path.join(outDir, routeBasePath, `${example.name}.md`);
+    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.promises.writeFile(outPath, body, 'utf-8');
+    written += 1;
+  }
+  console.log(`[file-browser:${id}] Wrote ${written} per-page .md files`);
+}
+
 module.exports = function fileBrowserPlugin(context, options) {
   const {
     id = 'default',
@@ -665,6 +802,33 @@ module.exports = function fileBrowserPlugin(context, options) {
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
     tagOrder = DEFAULT_TAG_ORDER,
+    // Shows a free-text search box on the index page. Defaults to false so the
+    // existing examples/gists instances render unchanged unless opted in.
+    searchable = false,
+    // Card icon and CTA label, see ICON_MAP in IndexPage.tsx. Default to the
+    // folder icon and "Open" so examples/gists render unchanged.
+    cardIcon = 'folder',
+    cardCtaLabel = 'Open',
+    // Shows a "Copy as Markdown" button on each item's root page, which
+    // concatenates the item's readme and every nested file into one
+    // clipboard-ready document. Defaults to false so existing instances
+    // render unchanged unless opted in.
+    enableCopyMarkdown = false,
+    // Writes a raw `.md` file for each item's root page at build time (e.g.
+    // /ai/skills/atmos-terraform.md), so it's fetchable the same way any
+    // docs/blog page is via docusaurus-plugin-llms-txt's `<url>.md`
+    // convention. Defaults to false so existing instances are unaffected.
+    enablePerPageMarkdown = false,
+    // Renders each item's title as a code-formatted `/name` (e.g. `/atmos-terraform`)
+    // instead of plain text, signaling how it's invoked. Defaults to false —
+    // examples/gists have friendly English titles this wouldn't suit.
+    titleAsCode = false,
+    // Label and command template for a per-item install command box, rendered at
+    // the top of each item's root page (e.g. "Use this skill" / "atmos ai skill
+    // install {name}"). `{name}` is replaced with the item's directory name.
+    // Default to '' so existing instances render unchanged unless opted in.
+    installCommandLabel = '',
+    installCommandTemplate = '',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -702,6 +866,13 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubBranch,
           githubPath,
           disclaimer,
+          searchable,
+          cardIcon,
+          cardCtaLabel,
+          enableCopyMarkdown,
+          titleAsCode,
+          installCommandLabel,
+          installCommandTemplate,
         },
       };
     },
@@ -792,6 +963,12 @@ module.exports = function fileBrowserPlugin(context, options) {
     getPathsToWatch() {
       // Watch the source directory for changes during development.
       return [absoluteSourceDir];
+    },
+
+    async postBuild({ content, outDir }) {
+      if (!enablePerPageMarkdown) return;
+      const { tree, options: pluginOptions } = content;
+      await generatePerPageMarkdown(tree, outDir, pluginOptions.routeBasePath, id);
     },
   };
 };

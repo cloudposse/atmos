@@ -147,10 +147,12 @@ func TestCommandEngine_Run_WritesSummaryToCIStepSummary(t *testing.T) {
 		Args:    []string{"-test.run", "^$"},
 		Env:     map[string]string{"_ATMOS_TEST_WRITE_OUTPUT": "1", "_ATMOS_TEST_OUTPUT_BODY": "raw"},
 	}
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "c"), 0o755))
 	ctx := &ExecContext{
 		Hook:        kind.ResolveDefaults(hook),
 		Kind:        kind,
-		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir(), CI: schema.CIConfig{Enabled: true}},
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformDir, CI: schema.CIConfig{Enabled: true}},
 		Info:        &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "c"},
 	}
 

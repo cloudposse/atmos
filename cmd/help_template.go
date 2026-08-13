@@ -204,13 +204,15 @@ func printSubcommandAliases(ctx *helpRenderContext, cmd *cobra.Command) {
 		if !c.IsAvailableCommand() || len(c.Aliases) == 0 {
 			continue
 		}
-		name := ctx.styles.commandName.Render(fmt.Sprintf("%-15s", c.Aliases[0]))
 
 		// Render description as Markdown (like command descriptions) with backticks instead of quotes.
 		desc := fmt.Sprintf("Alias of `%s %s` command", cmd.Name(), c.Name())
 		desc = renderMarkdownDescription(desc)
 
-		fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
+		for _, alias := range c.Aliases {
+			name := ctx.styles.commandName.Render(fmt.Sprintf("%-15s", alias))
+			fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
+		}
 	}
 	fmt.Fprintln(ctx.writer)
 }
@@ -583,8 +585,8 @@ func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest
 	configureEarlyColorProfile(cmd)
 
 	// Bind a renderer to the help writer using the globally detected profile.
-	// The --cast tee (root.go SetHelpFunc) wraps cmd's output before help renders,
-	// so recorded help flows through the same writer.
+	// The root help function starts explicit cast recording before help renders;
+	// cmd's normal masked output writer records the rendered help.
 	renderer := ui.NewRenderer(cmd.OutOrStdout())
 	log.Debug("Help renderer configured", "profile", renderer.ColorProfile())
 

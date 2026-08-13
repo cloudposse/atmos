@@ -27,6 +27,12 @@ type Manager struct {
 	runtime     container.Runtime // injected for tests; detected per call when nil.
 	runtimePref string
 	autoStart   bool
+	// noRecovery disables Podman auto-recovery outright, regardless of autoStart
+	// or the ATMOS_CONTAINER_RUNTIME_AUTO_START env flag. Set by
+	// NewManagerNoRecovery for read-only lookups (identity/profile resolution,
+	// `emulator ps`/`list`) where recovering the container runtime cannot make
+	// the target emulator container itself appear.
+	noRecovery bool
 }
 
 var stdinIsTerminal = func() bool {
@@ -41,16 +47,56 @@ func NewManager(runtimePref string, autoStart bool) *Manager {
 	return &Manager{runtimePref: runtimePref, autoStart: autoStart}
 }
 
+// NewManagerNoRecovery returns a Manager that detects the container runtime
+// using the given preference but never attempts Podman auto-recovery (machine
+// init/start), even when `container.runtime.auto_start` (or
+// ATMOS_CONTAINER_RUNTIME_AUTO_START) is enabled. Use this for read-only
+// lookups — finding an already-running emulator to resolve its connection
+// profile or list its status — where booting a Podman machine cannot make the
+// target emulator container appear and would only block the caller (e.g.
+// Terraform preflight resolving an emulator-bound identity) on a slow or
+// hung VM boot before still reporting the emulator as not running.
+func NewManagerNoRecovery(runtimePref string) *Manager {
+	defer perf.Track(nil, "emulator.NewManagerNoRecovery")()
+
+	return &Manager{runtimePref: runtimePref, noRecovery: true}
+}
+
+// NoRecoveryEnabled reports whether this Manager was constructed via
+// NewManagerNoRecovery and therefore routes runtimeFor to
+// container.DetectRuntimeWithPreference, never attempting Podman
+// auto-recovery. Exposed so callers wiring construction (and tests
+// exercising that wiring, e.g. from other packages) can confirm which
+// detection path a Manager uses without requiring a live container runtime.
+func (m *Manager) NoRecoveryEnabled() bool {
+	defer perf.Track(nil, "emulator.Manager.NoRecoveryEnabled")()
+
+	return m.noRecovery
+}
+
 // newManagerWithRuntime injects an explicit runtime (used in tests).
 func newManagerWithRuntime(runtime container.Runtime) *Manager {
 	return &Manager{runtime: runtime}
 }
 
+// detectRuntimeWithPreference and detectRuntimeWithPreferenceAndRecovery are
+// var-wrapped indirections over the container package's detection functions.
+// Tests override these to observe which detection path runtimeFor takes
+// (e.g. to prove noRecovery managers never reach the Podman-recovery branch)
+// without requiring a live container runtime.
+var (
+	detectRuntimeWithPreference            = container.DetectRuntimeWithPreference
+	detectRuntimeWithPreferenceAndRecovery = container.DetectRuntimeWithPreferenceAndRecovery
+)
+
 func (m *Manager) runtimeFor(ctx context.Context) (container.Runtime, error) {
 	if m.runtime != nil {
 		return m.runtime, nil
 	}
-	return container.DetectRuntimeWithPreferenceAndRecovery(ctx, m.runtimePref, m.autoStart)
+	if m.noRecovery {
+		return detectRuntimeWithPreference(ctx, m.runtimePref)
+	}
+	return detectRuntimeWithPreferenceAndRecovery(ctx, m.runtimePref, m.autoStart)
 }
 
 // Up reconciles the emulator's long-lived container and returns its live endpoint.
@@ -235,7 +281,7 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		Command:          command,
 		RunArgs:          runArgs,
 		Ports:            portBindings(ports),
-		Env:              mergeEnv(defaultEnv, env),
+		Env:              mergeEnv(defaultEnv, specContainerEnv(spec), env),
 		Mounts:           mounts,
 		Privileged:       privileged,
 		Host:             spec.HostRuntime(),
@@ -245,6 +291,13 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		RuntimeName:      m.runtimePref,
 		RuntimeAutoStart: m.autoStart,
 	}, nil
+}
+
+func specContainerEnv(spec *Spec) map[string]string {
+	if spec == nil || spec.Container == nil {
+		return nil
+	}
+	return spec.Container.Env
 }
 
 // emulatorNetworkName is the per-stack user network emulators join so containers
@@ -329,15 +382,14 @@ func (m *Manager) resolveRootlessRun(spec *Spec, command []string, rootless bool
 	return nil, command, nil
 }
 
-// mergeEnv layers the component/profile env over the driver defaults so an explicit
-// value wins, while driver-required vars (e.g. K3S_TOKEN) remain present.
-func mergeEnv(defaults, overrides map[string]string) map[string]string {
-	merged := make(map[string]string, len(defaults))
-	for k, v := range defaults {
-		merged[k] = v
-	}
-	for k, v := range overrides {
-		merged[k] = v
+// mergeEnv layers env maps from lowest to highest precedence. Driver defaults
+// come first, then container.env, then resolved component/profile env.
+func mergeEnv(envs ...map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for _, env := range envs {
+		for k, v := range env {
+			merged[k] = v
+		}
 	}
 	return merged
 }
@@ -378,6 +430,11 @@ func (m *Manager) Resolve(ctx context.Context, spec *Spec, stack, name string) (
 		return Endpoint{}, Profile{}, err
 	}
 	profile := driver.Profile(&endpoint)
+	if driver.Target() == TargetAzure {
+		if err := addAzureTrustEnv(&profile, stack, name); err != nil {
+			return Endpoint{}, Profile{}, err
+		}
+	}
 
 	// Kubernetes profiles are harvested from the running container (the kubeconfig IS
 	// the credential) rather than built from the endpoint, so the driver's Profile leaves

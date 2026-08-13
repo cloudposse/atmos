@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -33,12 +34,16 @@ var (
 // editTarget holds the resolved file and in-file path for an edit, plus the
 // effective merged value and where it currently resolves from.
 type editTarget struct {
-	file       string // manifest file to edit
-	inFilePath string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
-	yqPath     string // escaped dot-path used to address the YAML node safely
-	value      string // effective merged value of the path
-	provFile   string // file provenance attributes the value to
-	provLine   int    // line within provFile
+	file               string // manifest file to edit
+	inFilePath         string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
+	yqPath             string // escaped dot-path used to address the YAML node safely
+	value              string // effective merged value of the path
+	provFile           string // file provenance attributes the value to
+	provLine           int    // line within provFile
+	mergedType         string // type of the effective merged value (e.g. inherited from an abstract component), if any
+	mergedTypeResolved bool   // whether mergedType reflects a real, present value (see atmosyaml.GetType)
+	sharedFile         bool   // true when file is reached only via import, not the stack's own top-level manifest -- see warnIfSharedFile
+	terraformVarType   string // raw HCL type text declared for vars.<name> in variables.tf, "" if no signal (see effectiveStackValueType)
 }
 
 var stackGetCmd = &cobra.Command{
@@ -100,8 +105,10 @@ func init() {
 	registerStackEditFlags(stackSetCmd)
 	registerStackEditFlags(stackDeleteCmd)
 	registerStackEditFlags(stackFormatCmd)
-	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal)")
+	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeAuto,
+		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
+			"auto infers from the component's declared Terraform variable type (for vars.* paths), "+
+			"then from the existing value at the path, then from the new value's own shape, falling back to string.")
 }
 
 func registerStackEditFlags(c *cobra.Command) {
@@ -128,11 +135,177 @@ func runStackSet(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType); err != nil {
+	warnIfSharedFile(tgt)
+	typeResult, err := effectiveStackValueType(tgt, args[1])
+	if err != nil {
 		return err
 	}
-	ui.Successf("Updated %s for %s in %s", args[0], flagComponent, tgt.file)
+	if !typeResult.resolved {
+		warnIfSilentlyStoredAsString(args[1])
+	}
+	created, err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], typeResult.valType)
+	if err != nil {
+		return err
+	}
+	if typeResult.retypedFrom != "" {
+		ui.Infof("Retyped `%s` from %s to %s, per variables.tf", args[0], typeResult.retypedFrom, typeResult.valType)
+	}
+	if created {
+		ui.Successf("Created `%s` = `%s` for `%s` in `%s`", args[0], args[1], flagComponent, atmosyaml.DisplayPath(tgt.file))
+		return nil
+	}
+	ui.Successf("Updated `%s` for `%s` in `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
 	return nil
+}
+
+// stackValueTypeResult is effectiveStackValueType's return value, bundled
+// into a struct to stay within this repo's function-result-limit convention
+// (max 3 return values).
+type stackValueTypeResult struct {
+	valType     string
+	resolved    bool
+	retypedFrom string // non-empty when a Terraform-declared type retyped an already-stored value
+}
+
+// effectiveStackValueType resolves --type=auto (the default) to a concrete
+// type, trying signals in order of authority:
+//
+//  1. Terraform's own declared type for a vars.<name> path (tgt.terraformVarType,
+//     from the component's variables.tf, via terraform-config-inspect). This is
+//     the most authoritative signal available and wins even over an already-stored
+//     value of a different type -- retypedFrom is set (non-empty) in that case
+//     so the caller can tell the user their existing value's type just changed.
+//  2. The type of the value already at tgt.yqPath in tgt.file, if any.
+//  3. tgt.mergedType, the type of the effective (post-inheritance) merged value,
+//     for a --file target that doesn't itself define the path (e.g. the only
+//     way to set a value inherited from an abstract/base component).
+//  4. A shape-guess from rawValue itself (atmosyaml.GuessScalarType) -- e.g. "5"
+//     looks like an int, "true" looks like a bool -- when nothing above resolved
+//     anything at all.
+//
+// Resolved is false only when none of the above have anything to infer from and
+// atmosyaml.TypeString was used as a bare default (a brand-new key with a value
+// that doesn't even look like a bool/int/float) -- as opposed to a genuinely
+// inferred string. An explicit (non-auto) --type is always returned unchanged,
+// with resolved true.
+//
+// An existing value of TypeNull is deliberately not treated as a resolved
+// inference for signals 2/3: buildRHS's TypeNull case always writes the
+// literal `null`, ignoring the value argument, which makes sense for an
+// explicit `--type=null` but would silently discard the new value being set
+// if auto-inference forced it here. So a null-typed existing value falls
+// through to the next signal.
+//
+// Any signal can also land on TypeYAML -- a declared list/map/object type, or
+// the target file's own value or the merged/inherited value being a list or
+// map -- which means "there's a typed answer, but it isn't a scalar auto can
+// coerce a plain CLI string argument into." That returns a non-nil error
+// instead of silently falling through to TypeString, which would otherwise
+// replace the list/map with a plain string with no indication anything
+// destructive happened.
+func effectiveStackValueType(tgt *editTarget, rawValue string) (stackValueTypeResult, error) {
+	if flagType != atmosyaml.TypeAuto {
+		return stackValueTypeResult{valType: flagType, resolved: true}, nil
+	}
+
+	existingType, existingResolved := existingStackValueType(tgt)
+
+	if result, ok, err := terraformDeclaredValueType(tgt, rawValue, existingType, existingResolved); ok || err != nil {
+		return result, err
+	}
+
+	if existingResolved {
+		if existingType == atmosyaml.TypeYAML {
+			return stackValueTypeResult{}, newNonScalarInferenceError(tgt.inFilePath)
+		}
+		return stackValueTypeResult{valType: existingType, resolved: true}, nil
+	}
+
+	if guessed, ok := atmosyaml.GuessScalarType(rawValue); ok {
+		return stackValueTypeResult{valType: guessed, resolved: true}, nil
+	}
+	return stackValueTypeResult{valType: atmosyaml.TypeString, resolved: false}, nil
+}
+
+// terraformDeclaredValueType is effectiveStackValueType's Terraform-declared-
+// type tier, split into its own flat-nesting function so the parent stays
+// within this repo's cyclomatic-complexity limit. The bool return is false
+// when tgt.terraformVarType gives no signal (not declared, or the value
+// doesn't parse for a "number"-typed var), meaning the caller should fall
+// through to its next tier; the error return is non-nil only for a
+// non-scalar declared type (list/map/object), which always terminates
+// resolution.
+func terraformDeclaredValueType(tgt *editTarget, rawValue, existingType string, existingResolved bool) (stackValueTypeResult, bool, error) {
+	if tgt.terraformVarType == "" {
+		return stackValueTypeResult{}, false, nil
+	}
+	inferred, ok := pkgstack.InferVarType(tgt.terraformVarType, rawValue)
+	if !ok {
+		return stackValueTypeResult{}, false, nil
+	}
+	if inferred == atmosyaml.TypeYAML {
+		return stackValueTypeResult{}, true, newNonScalarInferenceError(tgt.inFilePath)
+	}
+	if existingResolved && existingType != inferred {
+		return stackValueTypeResult{valType: inferred, resolved: true, retypedFrom: existingType}, true, nil
+	}
+	return stackValueTypeResult{valType: inferred, resolved: true}, true, nil
+}
+
+// existingStackValueType returns the type of the value already stored for
+// tgt -- tgt.file's own value if it has one, else tgt.mergedType -- treating
+// TypeNull as "nothing to infer from" (see effectiveStackValueType's doc
+// comment). This is the signal a Terraform-declared type is compared against
+// to decide whether a "retyped from X" notice is warranted.
+func existingStackValueType(tgt *editTarget) (string, bool) {
+	if inferred, ok := atmosyaml.GetFileType(tgt.file, tgt.yqPath); ok && inferred != atmosyaml.TypeNull {
+		return inferred, true
+	}
+	if tgt.mergedTypeResolved && tgt.mergedType != atmosyaml.TypeNull {
+		return tgt.mergedType, true
+	}
+	return "", false
+}
+
+// newNonScalarInferenceError builds the actionable error returned when
+// --type=auto resolves to a path whose existing (or merged/inherited) value
+// is a list or map.
+func newNonScalarInferenceError(dotPath string) error {
+	return errUtils.Build(fmt.Errorf("%w: %q", atmosyaml.ErrTypeInferenceNonScalar, dotPath)).
+		WithHint("Pass --type=yaml with a full replacement literal (e.g. --type=yaml '[\"a\",\"b\"]'), " +
+			"or --type=string to intentionally overwrite it with a string.").
+		Err()
+}
+
+// warnIfSilentlyStoredAsString warns when --type=auto couldn't infer anything
+// (effectiveStackValueType's resolved was false) and a value that looks like
+// a bool or number is about to be written as a literal string anyway. Since
+// GuessScalarType now handles the ordinary case (e.g. "5" on a brand-new key
+// infers TypeInt directly, never reaching here), this fires only for the one
+// case GuessScalarType itself deliberately fails closed on: a bare "nan"
+// literal, which looks numeric but can't be safely written as a float (see
+// pkg/yaml.GuessNumericType) -- otherwise it would silently store the string
+// "nan" with no indication a numeric interpretation was attempted and
+// rejected.
+func warnIfSilentlyStoredAsString(value string) {
+	if !atmosyaml.LooksNonString(value) {
+		return
+	}
+	ui.Warningf("%q looks like it could be a number, but NaN/Infinity values aren't currently writable as int or float through this command, so it's being stored as a literal string. Pass --type=string to make that explicit, or edit the manifest directly if you need a literal NaN/Infinity value.", value)
+}
+
+// warnIfSharedFile warns before a set/delete edits a manifest that isn't one
+// of the stack's own top-level files (i.e. it's reached only through
+// import:), since editing it changes the effective value for every other
+// stack/component that imports the same file too -- not just the one
+// selected by -s/-c. See resolveEditTarget for how tgt.sharedFile is
+// computed.
+func warnIfSharedFile(tgt *editTarget) {
+	if !tgt.sharedFile {
+		return
+	}
+	ui.Warningf("`%s` is defined in `%s`, which may be imported by other stacks or components -- this change affects all of them, not just `%s` in stack `%s`.",
+		flagComponent, atmosyaml.DisplayPath(tgt.file), flagComponent, flagStack)
 }
 
 func runStackDelete(args []string) error {
@@ -140,10 +313,16 @@ func runStackDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath); err != nil {
+	warnIfSharedFile(tgt)
+	existed, err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath)
+	if err != nil {
 		return err
 	}
-	ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
+	if !existed {
+		ui.Successf("Nothing to delete — `%s` for `%s` is not set in `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
+		return nil
+	}
+	ui.Successf("Deleted `%s` for `%s` from `%s`", args[0], flagComponent, atmosyaml.DisplayPath(tgt.file))
 	return nil
 }
 
@@ -231,16 +410,28 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 		yqPath:     pkgstack.BuildComponentYqPath(componentType, flagComponent, dotPath),
 	}
 
-	// Effective merged value (best-effort; used by get and for messaging).
+	// Effective merged value (best-effort; used by get and for messaging), plus
+	// its type -- this is the only place a --file target's type inference can
+	// draw on an *inherited* value, since GetFileType only ever sees the
+	// literal target file's own bytes.
 	if sectionYAML, convErr := u.ConvertToYAML(result.ComponentSection); convErr == nil {
 		if v, getErr := atmosyaml.Get([]byte(sectionYAML), dotPath); getErr == nil {
 			tgt.value = v
 		}
+		tgt.mergedType, tgt.mergedTypeResolved = atmosyaml.GetType([]byte(sectionYAML), dotPath)
+	}
+
+	// Terraform's own declared variable type, when dotPath addresses a
+	// top-level vars.<name> value -- the authoritative signal effectiveStackValueType
+	// prefers over an existing/merged value (see its doc comment).
+	if varName, ok := pkgstack.VarNameFromRelPath(dotPath); ok {
+		tgt.terraformVarType, _ = exec.TerraformDeclaredVarType(result.ComponentSection, varName)
 	}
 
 	// Explicit file override bypasses provenance resolution.
 	if flagFile != "" {
 		tgt.file = flagFile
+		tgt.sharedFile = !isTopLevelStackFile(&atmosConfig, tgt.file)
 		// For read-only get, reflect the value actually stored in the explicit
 		// file rather than the merged value.
 		if !requireEditable {
@@ -252,6 +443,24 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 	}
 
 	return resolveTargetByProvenance(&atmosConfig, result, tgt, dotPath, requireEditable)
+}
+
+// isTopLevelStackFile reports whether file is one of the stack's own
+// top-level manifests (the files matched directly by stacks.included_paths),
+// as opposed to a file reached only through import. StackConfigFilesAbsolutePaths
+// on atmosConfig lists exactly the former, so anything not in it is shared
+// with -- and edited on behalf of -- every stack or component that imports it.
+func isTopLevelStackFile(atmosConfig *schema.AtmosConfiguration, file string) bool {
+	abs, err := filepath.Abs(file)
+	if err != nil {
+		return false
+	}
+	for _, f := range atmosConfig.StackConfigFilesAbsolutePaths {
+		if f == abs {
+			return true
+		}
+	}
+	return false
 }
 
 // describeComponentForEdit initializes a config with stacks processed (the root
@@ -325,5 +534,6 @@ func resolveTargetByProvenance(atmosConfig *schema.AtmosConfiguration, result *e
 			Err()
 	}
 	tgt.file = absFile
+	tgt.sharedFile = !isTopLevelStackFile(atmosConfig, tgt.file)
 	return tgt, nil
 }

@@ -138,24 +138,25 @@ profiles:
 **FR1.2**: Profile discovery MUST search multiple locations in precedence order:
 
 1. **Configurable profile directory** (highest precedence):
-   - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
-   - Example: `profiles.base_path: "./custom-profiles"`
-   - If relative, resolved from `atmos.yaml` directory
+    - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
+    - Example: `profiles.base_path: "./custom-profiles"`
+    - If relative, resolved from the declaring source's directory (see FR1.9 when `--config`/
+      `--config-path` selects more than one source)
 
 2. **Project-local hidden profiles**:
-   - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
-   - Example: `/infrastructure/atmos/.atmos/profiles/`
-   - Higher precedence than non-hidden `profiles/` directory
+    - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
+    - Example: `/infrastructure/atmos/.atmos/profiles/`
+    - Higher precedence than non-hidden `profiles/` directory
 
 3. **XDG user profiles** (follows XDG Base Directory Specification):
-   - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
-   - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
-   - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
+    - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
+    - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
+    - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
 
 4. **Project-local non-hidden profiles** (lowest precedence):
-   - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
-   - Example: `/infrastructure/atmos/profiles/`
-   - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
+    - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
+    - Example: `/infrastructure/atmos/profiles/`
+    - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
 
 **FR1.3**: Profile discovery MUST search all locations and merge profiles with same name (later locations override earlier)
 
@@ -168,6 +169,19 @@ profiles:
 **FR1.7**: Profiles SHOULD support organizing configuration by domain (e.g., `auth.yaml`, `terraform.yaml`, `logging.yaml`)
 
 **FR1.8**: Profile inheritance MUST be supported via the existing `import:` mechanism in profile YAML files
+
+**FR1.9**: When `--config`/`--config-path` selects more than one config source, a relative
+`profiles.base_path` MUST resolve against **the directory of whichever specific source declared
+it**, not always the first source. `--config file1.yaml,file2.yaml` and
+`--config-path dir1,dir2` both merge multiple directories into one config; the single-`atmos.yaml`
+assumption elsewhere in this document ("resolved from `atmos.yaml` directory") does not by itself
+say which of several directories that means. Precedent/implementation:
+`AtmosConfiguration.ProfilesBasePathConfigDir` tracks the directory of whichever source most
+recently declared `profiles.base_path` (files merged before directories — cloudposse/atmos#2867),
+falling back to the first source's directory if none declared it. This generalizes the same "where
+the config is defined" anchor rule FR10 of the
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) establishes for
+`base_path` itself.
 
 Example structure:
 ```text
@@ -243,16 +257,21 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 
 #### FR3: Configuration Merging and Precedence
 
-**FR3.1**: Configuration loading order MUST be:
-1. Embedded defaults (built into Atmos binary)
-2. System directory (`/usr/local/etc/atmos` or `%LOCALAPPDATA%\atmos`)
-3. Home directory (`~/.atmos/atmos.yaml`)
-4. Working directory (`./atmos.yaml`)
-5. Environment variables (`ATMOS_*`)
-6. CLI config path (`ATMOS_CLI_CONFIG_PATH` or `--config-dir`)
-7. `.atmos.d/` directories (lexicographic order)
-8. **Active profiles** (left-to-right for multiple profiles, lexicographic within each profile)
-9. Local `atmos.yaml` (final override)
+**FR3.1**: Configuration loading order MUST be (see
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) FR8 for the
+authoritative `atmos.yaml` search order underlying steps 2-8):
+1. Embedded defaults (built into the Atmos binary; always the base layer)
+2. `--config`/`--config-path` CLI flags — when given, these select the config source(s) directly;
+    steps 3-8 (env var / directory search) are then skipped entirely rather than merged on top
+3. `ATMOS_CLI_CONFIG_PATH` environment variable
+4. Current directory (`./atmos.yaml`, CWD only, no parent search)
+5. Git repository root (`repo-root/atmos.yaml`)
+6. Parent directory search (walks up from CWD)
+7. Home directory (`~/.atmos/atmos.yaml`)
+8. System directory (`/usr/local/etc/atmos` or `%LOCALAPPDATA%\atmos`)
+9. `.atmos.d/` directories (lexicographic order)
+10. **Active profiles** (left-to-right for multiple profiles, lexicographic within each profile)
+11. Local `atmos.yaml` (final override)
 
 **FR3.2**: Profile configuration files within a profile directory MUST be loaded in lexicographic order
 
@@ -292,7 +311,7 @@ Available Profiles
 └──────────────┴─────────────────────────────────────────────┴───────────┘
 
 Tip: View profile details with 'atmos profile show <profile>'
-     Use a profile with 'atmos <command> --profile <profile>'
+      Use a profile with 'atmos <command> --profile <profile>'
 ```text
 
 **FR5.2.1**: Table styling MUST use lipgloss with:
@@ -457,7 +476,8 @@ When this feature is implemented, the following tasks must be completed:
 
 **TR1.4**: Profile configuration MUST be loaded into Viper before final configuration unmarshaling
 
-**TR1.5**: Profile path resolution MUST support both absolute and relative paths from the config directory
+**TR1.5**: Profile path resolution MUST support both absolute and relative paths from the
+declaring source's directory (see FR1.9 for the multi-source `--config`/`--config-path` case)
 
 #### TR2: Schema and Validation
 
@@ -629,11 +649,12 @@ describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. Load Base Configuration Chain                                │
 │    • Embedded defaults                                           │
-│    • System directory (/usr/local/etc/atmos)                     │
+│    • --config / --config-path CLI flags (skips the rest below   │
+│      when given -- see base-path-resolution-semantics.md FR8)   │
+│    • ATMOS_CLI_CONFIG_PATH environment variable                  │
+│    • Working directory, git root, parent search (./atmos.yaml)  │
 │    • Home directory (~/.atmos/atmos.yaml)                        │
-│    • Working directory (./atmos.yaml)                            │
-│    • Environment variables (ATMOS_*)                             │
-│    • CLI config path (--config-dir)                              │
+│    • System directory (/usr/local/etc/atmos)                     │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -692,25 +713,8 @@ profiles:
 
 **Profile location precedence:**
 
-1. **Configurable profile directory** (highest precedence):
-   - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
-   - Example: `profiles.base_path: "./custom-profiles"`
-   - If relative, resolved from `atmos.yaml` directory
-
-2. **Project-local hidden profiles**:
-   - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
-   - Example: `/infrastructure/atmos/.atmos/profiles/`
-   - Higher precedence than non-hidden `profiles/` directory
-
-3. **XDG user profiles** (follows XDG Base Directory Specification):
-   - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
-   - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
-   - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
-
-4. **Project-local non-hidden profiles** (lowest precedence):
-   - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
-   - Example: `/infrastructure/atmos/profiles/`
-   - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
+See FR1.2 (and FR1.9 for the `--config file1.yaml,file2.yaml` / `--config-path dir1,dir2`
+multi-source case) for the full precedence list and resolution rule.
 
 **Note:** Profile configuration is meta - if a profile sets `profiles.base_path`, it affects subsequent profile loading. This is intentional to allow profiles to configure the system.
 
@@ -734,7 +738,7 @@ Available Profiles
 └──────────────┴─────────────────────────────────────────────┴───────────┘
 
 Tip: View profile details with 'atmos profile show <profile>'
-     Use a profile with 'atmos <command> --profile <profile>'
+      Use a profile with 'atmos <command> --profile <profile>'
 ```text
 
 JSON output format:
@@ -1355,78 +1359,81 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 **Tasks:**
 
 1. **Add `--profile` flag to global flags:**
-   - Update `pkg/flags/global/flags.go` to add `Profile []string` field
-   - Register flag in `pkg/flags/global_builder.go`:
-     ```go
-     b.options = append(b.options, func(cfg *parserConfig) {
-         cfg.registry.Register(&StringSliceFlag{
-             Name:        "profile",
-             Shorthand:   "",
-             Default:     []string{},
-             Description: "Activate configuration profiles (comma-separated or repeated)",
-             EnvVars:     []string{"ATMOS_PROFILE"},
-         })
-     })
-     ```
-   - Automatic Viper binding handles precedence: CLI flag > ENV var > config > defaults
-   - Flag will be available globally across all commands
+    - Update `pkg/flags/global/flags.go` to add `Profile []string` field
+    - Register flag in `pkg/flags/global_builder.go`:
+      ```go
+      b.options = append(b.options, func(cfg *parserConfig) {
+          cfg.registry.Register(&StringSliceFlag{
+              Name:        "profile",
+              Shorthand:   "",
+              Default:     []string{},
+              Description: "Activate configuration profiles (comma-separated or repeated)",
+              EnvVars:     []string{"ATMOS_PROFILE"},
+          })
+      })
+      ```
+    - Automatic Viper binding handles precedence: CLI flag > ENV var > config > defaults
+    - Flag will be available globally across all commands
 
 2. **Add top-level `Profiles` configuration to schema:**
-   - Add `ProfilesConfig` struct to `pkg/schema/schema.go`:
-     ```go
-     type ProfilesConfig struct {
-         BasePath string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-         Enabled  bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-     }
-     ```
-   - Add `Profiles` field to `AtmosConfiguration`:
-     ```go
-     type AtmosConfiguration struct {
-         // ... existing fields ...
-         Profiles ProfilesConfig `yaml:"profiles" json:"profiles" mapstructure:"profiles"`
-     }
-     ```
-   - Update JSON schemas in `pkg/datafetcher/schema/`
+    - Add `ProfilesConfig` struct to `pkg/schema/schema.go`:
+      ```go
+      type ProfilesConfig struct {
+          BasePath string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+          Enabled  bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+      }
+      ```
+    - Add `Profiles` field to `AtmosConfiguration`:
+      ```go
+      type AtmosConfiguration struct {
+          // ... existing fields ...
+          Profiles ProfilesConfig `yaml:"profiles" json:"profiles" mapstructure:"profiles"`
+      }
+      ```
+    - Update JSON schemas in `pkg/datafetcher/schema/`
 
 3. **Create shared config directory loading function:**
-   - Add `loadAtmosConfigsFromDirectory(searchPattern, dst, source)` to `pkg/config/load.go`
-   - Reuses existing `SearchAtmosConfig()` and `mergeConfigFile()` infrastructure
-   - Refactor `.atmos.d/` loading to use this shared function (see `.scratch/profiles-loading-refactor.md`)
-   - Benefits: Single source of truth, consistent behavior, better error messages
+    - Add `loadAtmosConfigsFromDirectory(searchPattern, dst, source)` to `pkg/config/load.go`
+    - Reuses existing `SearchAtmosConfig()` and `mergeConfigFile()` infrastructure
+    - Refactor `.atmos.d/` loading to use this shared function (see `.scratch/profiles-loading-refactor.md`)
+    - Benefits: Single source of truth, consistent behavior, better error messages
 
 4. **Implement profile discovery and loading in `pkg/profile/`:**
-   - `pkg/profile/profile.go` - Core profile logic:
-     - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)` - Find all available profiles
-     - `GetProfileDetails(atmosConfig, profileName) (*ProfileDetails, error)` - Get details for specific profile
-     - `MergeProfileConfiguration(atmosConfig, profileName) (map[string]interface{}, error)` - Load and merge profile
-   - `pkg/profile/interface.go` - Define `ProfileLoader` interface for testability
-   - Generate mocks with `//go:generate mockgen` for testing
+    - `pkg/profile/profile.go` - Core profile logic:
+      - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)` - Find all available profiles
+      - `GetProfileDetails(atmosConfig, profileName) (*ProfileDetails, error)` - Get details for specific profile
+      - `MergeProfileConfiguration(atmosConfig, profileName) (map[string]interface{}, error)` - Load and merge profile
+    - `pkg/profile/interface.go` - Define `ProfileLoader` interface for testability
+    - Generate mocks with `//go:generate mockgen` for testing
 
 5. **Integrate profile loading into config system:**
-   - Add `LoadProfiles(v *viper.Viper, profileNames []string, atmosConfig)` to `pkg/config/profiles.go`
-   - Uses `loadAtmosConfigsFromDirectory()` for consistent loading behavior
-   - Inject profiles after `.atmos.d/` but before local `atmos.yaml` in config loading chain
+    - Add `LoadProfiles(v *viper.Viper, profileNames []string, atmosConfig)` to `pkg/config/profiles.go`
+    - Uses `loadAtmosConfigsFromDirectory()` for consistent loading behavior
+    - Inject profiles after `.atmos.d/` but before local `atmos.yaml` in config loading chain
 
 6. **Implement XDG profile location support:**
-   - Use `pkg/xdg.GetXDGConfigDir("profiles", 0o755)` for user-global profiles
-   - Respect `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables
+    - Use `pkg/xdg.GetXDGConfigDir("profiles", 0o755)` for user-global profiles
+    - Respect `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables
 
 7. **Profile file loading behavior:**
-   - Lexicographic ordering of files within profile directory (via `SearchAtmosConfig()`)
-   - Deep merge semantics for configuration values (via `mergeConfigFile()`)
-   - Recursive directory support with depth-based sorting
-   - Priority file handling (atmos.yaml loaded first)
-   - **Cross-platform path handling:**
-     - All path operations use `filepath.Join` for OS-agnostic path construction
-     - Respect platform-specific separators (Windows `\`, Unix/macOS `/`)
-     - XDG directories on Unix/macOS (`~/.config`, `$XDG_CONFIG_HOME`)
-     - AppData directories on Windows (`%APPDATA%`)
-     - Path normalization via `filepath.Clean` for consistent behavior
+    - Lexicographic ordering of files within profile directory (via `SearchAtmosConfig()`)
+    - Deep merge semantics for configuration values (via `mergeConfigFile()`)
+    - Recursive directory support with depth-based sorting
+    - Priority file handling (atmos.yaml loaded first)
+    - **Cross-platform path handling:**
+      - All path operations use `filepath.Join` for OS-agnostic path construction
+      - Respect platform-specific separators (Windows `\`, Unix/macOS `/`)
+      - XDG directories on Unix/macOS (`~/.config`, `$XDG_CONFIG_HOME`)
+      - AppData directories on Windows (`%APPDATA%`)
+      - Path normalization via `filepath.Clean` for consistent behavior
 
 8. **Profile precedence logic:**
-   - Multiple profiles: left-to-right (first profile lowest precedence)
-   - Multiple locations: configurable > project-local hidden > XDG > project-local non-hidden
-   - Configuration loading chain: embedded defaults → system → home → working dir → env vars → config path → `.atmos.d/` → **profiles** → local `atmos.yaml`
+    - Multiple profiles: left-to-right (first profile lowest precedence)
+    - Multiple locations: configurable > project-local hidden > XDG > project-local non-hidden
+    - Configuration loading chain: see FR3.1 for the authoritative order (embedded defaults →
+      `--config`/`--config-path` CLI flags, which skip the rest of discovery when given →
+      `ATMOS_CLI_CONFIG_PATH` → current dir → git root → parent search → home → system →
+      `.atmos.d/` → **profiles** → local `atmos.yaml`)
 
 **Deliverables:**
 - Shared config directory loading function in `pkg/config/load.go`
@@ -1442,83 +1449,83 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 **Tasks:**
 
 1. **Create command registry provider in `cmd/profile/` directory:**
-   - Follow `cmd/theme/` pattern as reference implementation
-   - `cmd/profile/profile.go` - Main profile command with `CommandProvider` interface:
-     ```go
-     type ProfileCommandProvider struct{}
-     func (p *ProfileCommandProvider) GetCommand() *cobra.Command { return profileCmd }
-     func (p *ProfileCommandProvider) GetName() string { return "profile" }
-     func (p *ProfileCommandProvider) GetGroup() string { return "Other Commands" }
-     ```
-   - Register with command registry in `init()`:
-     ```go
-     func init() {
-         internal.Register(&ProfileCommandProvider{})
-     }
-     ```
-   - Add blank import to `cmd/root.go`: `_ "github.com/cloudposse/atmos/cmd/profile"`
+    - Follow `cmd/theme/` pattern as reference implementation
+    - `cmd/profile/profile.go` - Main profile command with `CommandProvider` interface:
+      ```go
+      type ProfileCommandProvider struct{}
+      func (p *ProfileCommandProvider) GetCommand() *cobra.Command { return profileCmd }
+      func (p *ProfileCommandProvider) GetName() string { return "profile" }
+      func (p *ProfileCommandProvider) GetGroup() string { return "Other Commands" }
+      ```
+    - Register with command registry in `init()`:
+      ```go
+      func init() {
+          internal.Register(&ProfileCommandProvider{})
+      }
+      ```
+    - Add blank import to `cmd/root.go`: `_ "github.com/cloudposse/atmos/cmd/profile"`
 
 2. **Implement `atmos profile list` subcommand:**
-   - `cmd/profile/list.go` - Command implementation with modern table rendering
-   - Calls `profile.DiscoverAllProfiles(atmosConfigPtr)` from `pkg/profile/`
-   - **Modern Design** (follows `cmd/version/list.go` pattern):
-     - Green dot (●) indicator for active profiles
-     - Clean lipgloss table with only header border (no borders around table)
-     - Gray text for secondary information (location column)
-     - Minimal, modern aesthetic matching `atmos version list`
-   - **Table columns:**
-     - Empty column with green dot (●) for active profiles
-     - PROFILE - Profile name
-     - DESCRIPTION - From `_metadata.yaml` or "-"
-     - LOCATION - Gray text showing "Project", "User", or "Custom"
-   - **Output handling:**
-     - Structured output: `--format json|yaml` using `data.WriteJSON()` / `data.WriteYAML()`
-     - Human output: lipgloss table to stderr, summary with `ui.Info()`
-   - **Active profile detection:**
-     - Check `--profile` flag or `ATMOS_PROFILE` env var
-     - Show green dot for currently active profiles
-     - Display count of active profiles in footer
+    - `cmd/profile/list.go` - Command implementation with modern table rendering
+    - Calls `profile.DiscoverAllProfiles(atmosConfigPtr)` from `pkg/profile/`
+    - **Modern Design** (follows `cmd/version/list.go` pattern):
+      - Green dot (●) indicator for active profiles
+      - Clean lipgloss table with only header border (no borders around table)
+      - Gray text for secondary information (location column)
+      - Minimal, modern aesthetic matching `atmos version list`
+    - **Table columns:**
+      - Empty column with green dot (●) for active profiles
+      - PROFILE - Profile name
+      - DESCRIPTION - From `_metadata.yaml` or "-"
+      - LOCATION - Gray text showing "Project", "User", or "Custom"
+    - **Output handling:**
+      - Structured output: `--format json|yaml` using `data.WriteJSON()` / `data.WriteYAML()`
+      - Human output: lipgloss table to stderr, summary with `ui.Info()`
+    - **Active profile detection:**
+      - Check `--profile` flag or `ATMOS_PROFILE` env var
+      - Show green dot for currently active profiles
+      - Display count of active profiles in footer
 
 3. **Implement `atmos profile show <profile>` subcommand:**
-   - `cmd/profile/show.go` - Command implementation for profile details
-   - Calls `profile.GetProfileDetails(atmosConfigPtr, profileName)` and `profile.MergeProfileConfiguration()` from `pkg/profile/`
-   - **UI/Theme integration:**
-     - Tables via lipgloss (follow `cmd/theme/show.go` pattern)
-     - YAML syntax highlighting via `u.GetHighlightedYAML()`
-     - Theme-aware styling adapts to terminal theme
-   - **Flags:**
-     - `--format json|yaml` - Structured output
-     - `--files` - Show file list only
-     - `--provenance` - Show configuration value origins (future)
-   - **Output channels:**
-     - Data (stdout): `data.WriteYAML()`, `data.WriteJSON()`
-     - UI (stderr): `ui.Info()`, `ui.Success()`, `ui.Write()`
-   - **Terminal capability handling:**
-     - Automatic color degradation
-     - Respects `--color`, `--no-color`, `--force-color`, `NO_COLOR`
-     - Width adapts to terminal or config `max_width`
-   - Show all locations where profile is found
-   - Display file merge order
+    - `cmd/profile/show.go` - Command implementation for profile details
+    - Calls `profile.GetProfileDetails(atmosConfigPtr, profileName)` and `profile.MergeProfileConfiguration()` from `pkg/profile/`
+    - **UI/Theme integration:**
+      - Tables via lipgloss (follow `cmd/theme/show.go` pattern)
+      - YAML syntax highlighting via `u.GetHighlightedYAML()`
+      - Theme-aware styling adapts to terminal theme
+    - **Flags:**
+      - `--format json|yaml` - Structured output
+      - `--files` - Show file list only
+      - `--provenance` - Show configuration value origins (future)
+    - **Output channels:**
+      - Data (stdout): `data.WriteYAML()`, `data.WriteJSON()`
+      - UI (stderr): `ui.Info()`, `ui.Success()`, `ui.Write()`
+    - **Terminal capability handling:**
+      - Automatic color degradation
+      - Respects `--color`, `--no-color`, `--force-color`, `NO_COLOR`
+      - Width adapts to terminal or config `max_width`
+    - Show all locations where profile is found
+    - Display file merge order
 
 4. **Implement `atmos list profiles` alias command:**
-   - `cmd/list_profiles.go` - Alias for consistency with other list commands
-   - Delegates to `cmd/profile/list.go` implementation
-   - Both commands produce identical output
-   - Help text cross-references the alias
+    - `cmd/list_profiles.go` - Alias for consistency with other list commands
+    - Delegates to `cmd/profile/list.go` implementation
+    - Both commands produce identical output
+    - Help text cross-references the alias
 
 5. **Error handling with error builder pattern:**
-   - Add profile-specific sentinel errors to `errors/errors.go`:
-     - `ErrProfileNotFound`
-     - `ErrProfileDirNotExist`
-     - `ErrProfileInvalid`
-   - Use `errUtils.Build()` pattern with `WithHintf()`, `WithContext()`, `WithExitCode()`
-   - Clear, actionable error messages with context
+    - Add profile-specific sentinel errors to `errors/errors.go`:
+      - `ErrProfileNotFound`
+      - `ErrProfileDirNotExist`
+      - `ErrProfileInvalid`
+    - Use `errUtils.Build()` pattern with `WithHintf()`, `WithContext()`, `WithExitCode()`
+    - Clear, actionable error messages with context
 
 6. **Debug logging:**
-   - Structured logging via `log` package
-   - Log profile discovery process at `log.Debug()` level
-   - Log file merge order at `log.Trace()` level
-   - Log configuration precedence decisions
+    - Structured logging via `log` package
+    - Log profile discovery process at `log.Debug()` level
+    - Log file merge order at `log.Trace()` level
+    - Log configuration precedence decisions
 
 **Deliverables:**
 - Profile command implementation in `cmd/profile/` (profile.go, list.go, show.go)
@@ -1535,9 +1542,9 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 
 **Tasks:**
 1. Create profile configuration examples for:
-   - CI/CD environments (GitHub Actions, GitLab CI, CircleCI)
-   - Developer roles (developer, platform-engineer, audit)
-   - Debug scenarios (trace logging, profiling)
+    - CI/CD environments (GitHub Actions, GitLab CI, CircleCI)
+    - Developer roles (developer, platform-engineer, audit)
+    - Debug scenarios (trace logging, profiling)
 2. Document precedence rules with diagrams
 3. Create migration guide for environment-specific configurations
 4. Document provenance usage for debugging profile configurations
@@ -1727,16 +1734,16 @@ atmos terraform plan --profile developer,ci
 ## Open Questions
 
 1. **Should profile location precedence be configurable?**
-   - **Decision**: Fixed precedence order (configurable > project-local > XDG > legacy) for predictability
+    - **Decision**: Fixed precedence order (configurable > project-local > XDG > legacy) for predictability
 
 2. **Should profiles support environment-specific auto-activation?**
-   - **Decision**: No, explicit activation only. Use wrapper scripts or aliases if needed
+    - **Decision**: No, explicit activation only. Use wrapper scripts or aliases if needed
 
 3. **Should profiles support conditional loading?** (e.g., `if: ${CI} == "true"`)
-   - **Decision**: No, profiles are static. Use shell logic to select profile: `atmos --profile ${CI:+ci}`
+    - **Decision**: No, profiles are static. Use shell logic to select profile: `atmos --profile ${CI:+ci}`
 
 4. **How should profile name conflicts across locations be handled?**
-   - **Decision**: Merge profiles with same name (later locations override earlier), document clearly in error messages
+    - **Decision**: Merge profiles with same name (later locations override earlier), document clearly in error messages
 
 ## Design Decisions
 

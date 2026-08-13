@@ -25,9 +25,7 @@ import Experimental from "@site/src/components/Experimental";
   stack should deploy with `chart`, `version`, `repositories`, `values`,
   `values_files`, `namespace`, `env`, hooks, and dependencies.
   <div>
-    <PrimaryCTA to="/stacks/components/helm">
-      Stack Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/helm">Stack Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -44,6 +42,9 @@ atmos helm delete <component> --stack <stack>
 atmos helm template --all --stack <stack>
 atmos helm apply --affected --base origin/main
 atmos helm deploy <component> --stack <stack> --ci
+
+atmos helm apply --affected --tags production
+atmos helm apply --all --labels cost-center=platform
 ```
 
 The native Helm component renders charts in-process with the Helm Go SDK

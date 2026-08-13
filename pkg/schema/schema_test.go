@@ -23,6 +23,19 @@ schemas:
 	assert.Equal(t, "some/random/path", resourcePath.BasePath)
 }
 
+func TestConfigSourcesStackDependencyYAMLOrder(t *testing.T) {
+	dependency := ConfigSourcesStackDependency{
+		StackFile:        "catalog/mock/defaults",
+		StackFileSection: "components.terraform.vars",
+		DependencyType:   "import",
+		VariableValue:    true,
+	}
+
+	output, err := yaml.Marshal(dependency)
+	require.NoError(t, err)
+	assert.Equal(t, "dependency_type: import\nstack_file: catalog/mock/defaults\nstack_file_section: components.terraform.vars\nvariable_value: true\n", string(output))
+}
+
 func TestAtmosConfigurationWithSchemas(t *testing.T) {
 	yamlString := `
 schemas:

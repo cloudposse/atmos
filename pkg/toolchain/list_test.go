@@ -783,9 +783,17 @@ func TestBuildToolRow(t *testing.T) {
 	err = os.WriteFile(binaryPath, []byte("mock"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
+	// InstallPath must be isolated to a per-test temp dir: NewInstaller() resolves
+	// its binDir from GetInstallPath(), which falls back to the real, shared XDG
+	// toolchain cache dir when InstallPath is empty -- the same directory CI's
+	// "atmos toolchain install --default" step populates for the whole acceptance
+	// suite.
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			ToolsDir: toolsDir,
+			ToolsDir:    toolsDir,
+			InstallPath: tempDir,
 		},
 	})
 
@@ -812,9 +820,17 @@ func TestBuildToolRow(t *testing.T) {
 func TestBuildToolRow_NotInstalled(t *testing.T) {
 	tempDir := t.TempDir()
 
+	// InstallPath must be isolated to a per-test temp dir: NewInstaller() resolves
+	// its binDir from GetInstallPath(), which falls back to the real, shared XDG
+	// toolchain cache dir when InstallPath is empty -- the same directory CI's
+	// "atmos toolchain install --default" step populates for the whole acceptance
+	// suite.
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			ToolsDir: tempDir,
+			ToolsDir:    tempDir,
+			InstallPath: tempDir,
 		},
 	})
 

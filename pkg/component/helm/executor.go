@@ -20,6 +20,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -47,14 +48,16 @@ var (
 	executeAffectedWithRefCheckout   = e.ExecuteDescribeAffectedWithTargetRefCheckout
 	executeGraph                     = component.ExecuteGraph
 	affectedHelmComponentsFunc       = affectedHelmComponents
-	provisionAndResolveComponentPath = component.ProvisionAndResolveComponentPath
-	dependenciesForComponent         = dependencies.ForComponent
-	getHooks                         = hooks.GetHooks
-	runCIHooks                       = hooks.RunCIHooks
-	renderChartManifest              = renderManifest
-	applyHelmRelease                 = applyRelease
-	deleteHelmRelease                = deleteRelease
-	setupRepositories                = setupHelmRepositories
+	provisionAndResolveComponentPath = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, bool, error) {
+		return component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, componentType, fallbackComponentPath)
+	}
+	dependenciesForComponent = dependencies.ForComponent
+	getHooks                 = hooks.GetHooks
+	runCIHooks               = hooks.RunCIHooks
+	renderChartManifest      = renderManifest
+	applyHelmRelease         = applyRelease
+	deleteHelmRelease        = deleteRelease
+	setupRepositories        = setupHelmRepositories
 )
 
 // renderTimeout bounds a single chart render/locate (which may download remote charts).
@@ -80,7 +83,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 	}
 	normalizeGlobalConfig(&atmosConfig)
 
-	if info.All || info.Affected {
+	if info.All || info.Affected || len(info.Tags) > 0 || len(info.Labels) > 0 {
 		return executeBulk(ctx, &atmosConfig, &info, operation)
 	}
 

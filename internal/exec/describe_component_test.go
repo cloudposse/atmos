@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
@@ -175,7 +176,6 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				assert.Equal(t, "", file)
 				assert.Equal(t, map[string]any{
 					"component": "component-1",
-					"stack":     "nonprod",
 				}, data)
 				return nil
 			}
@@ -198,6 +198,135 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				"printOrWriteToFile call expectation mismatch for pager setting: %s", test.pagerSetting)
 		})
 	}
+}
+
+func TestExecuteDescribeComponentCmd_ErrorModeSilentEnablesDegradation(t *testing.T) {
+	called := false
+	d := &DescribeComponentExec{
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			return nil
+		},
+		executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+			called = true
+			assert.Equal(t, OnErrorWarn, params.ErrorOptions.OnError)
+			require.NotNil(t, params.ErrorOptions.OnWarning)
+			return map[string]any{"component": params.Component}, nil
+		},
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component: "component-1",
+		Stack:     "nonprod",
+		Format:    "yaml",
+		ErrorMode: "silent",
+	})
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+// TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext covers the
+// ExecuteDescribeComponentCmd provenance==true dispatch branch, which calls
+// ExecuteDescribeComponentWithContext directly (not through the mockable
+// d.executeDescribeComponent field) and renders the result via
+// d.renderProvenance instead of the normal print/pager path. Writing to a
+// file (rather than stdout) keeps the assertion self-contained. ErrorMode
+// "warn" also exercises processStacks' onWarning != nil branch (routed
+// through ProcessStacksWithDegradation → ProcessCustomYamlTagsLenient),
+// which only ExecuteDescribeComponentWithContext's ErrorOptions plumbing
+// reaches.
+func TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	tmpFile := filepath.Join(t.TempDir(), "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 tmpFile,
+		ErrorMode:            "warn",
+	})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(tmpFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "vars:", "provenance-annotated YAML should contain the vars section")
+}
+
+// TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates covers the
+// provenance render error branch: when d.renderProvenance fails (here, because the
+// destination directory does not exist), ExecuteDescribeComponentCmd must surface
+// that error to the caller rather than swallow it.
+func TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// A file path under a directory that doesn't exist makes the underlying
+	// os.WriteFile call in writeOutputToFile fail, which is what renderProvenance
+	// propagates.
+	invalidFile := filepath.Join(t.TempDir(), "does-not-exist", "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 invalidFile,
+		ErrorMode:            "warn",
+	})
+	require.Error(t, err)
+
+	_, statErr := os.Stat(invalidFile)
+	assert.True(t, os.IsNotExist(statErr), "no output should have been written when the render failed")
 }
 
 func TestDescribeComponentWithOverridesSection(t *testing.T) {
@@ -562,7 +691,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	filtered := FilterComputedFields(result.ComponentSection)
 
 	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision"}
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision", "component", "hooks"}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
@@ -655,6 +784,8 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
 			},
 			expected: map[string]any{
 				"vars":      map[string]any{"enabled": true},
@@ -664,6 +795,8 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
 			},
 		},
 		{
@@ -684,6 +817,17 @@ func TestFilterComputedFields(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestDescribeComponentFilter(t *testing.T) {
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(nil))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{}))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: "unexpected"}},
+	}))
+	assert.Equal(t, describeComponentFilterFull, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: describeComponentFilterFull}},
+	}))
 }
 
 func TestFilterAbstractComponents(t *testing.T) {

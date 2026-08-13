@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // errRuntimeBoom is a sentinel runtime error used to drive the manager's error paths.
@@ -410,7 +411,13 @@ func init() {
 
 func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	m := newManagerWithRuntime(nil)
-	spec := &Spec{Driver: rootlessTestDriverName}
+	spec := &Spec{
+		Driver: rootlessTestDriverName,
+		Container: &schema.ContainerRunStep{Env: map[string]string{
+			"K3S_TOKEN":     "container",
+			"CONTAINER_ENV": "1",
+		}},
+	}
 
 	cfgRootless, err := m.namedConfig(spec, "dev", "k8s",
 		map[string]string{"K3S_TOKEN": "override", "EXTRA": "1"}, true)
@@ -422,6 +429,7 @@ func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	assert.True(t, cfgRootless.Privileged)
 	// Component env overrides the driver default; other driver defaults survive.
 	assert.Equal(t, "override", cfgRootless.Env["K3S_TOKEN"])
+	assert.Equal(t, "1", cfgRootless.Env["CONTAINER_ENV"])
 	assert.Equal(t, "1", cfgRootless.Env["EXTRA"])
 	assert.Len(t, cfgRootless.Ports, 1)
 	assert.Equal(t, 6443, cfgRootless.Ports[0].ContainerPort)
@@ -432,7 +440,8 @@ func TestManager_namedConfig_RootlessOverrideAndMerge(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, cfgRootful.RunArgs)
 	assert.Equal(t, []string{"server"}, cfgRootful.Command)
-	assert.Equal(t, "secret", cfgRootful.Env["K3S_TOKEN"])
+	assert.Equal(t, "container", cfgRootful.Env["K3S_TOKEN"])
+	assert.Equal(t, "1", cfgRootful.Env["CONTAINER_ENV"])
 }
 
 func TestManager_namedConfig_UnknownDriverErrors(t *testing.T) {
@@ -460,4 +469,47 @@ func TestNewManager_DetectsRuntime(t *testing.T) {
 	require.NotNil(t, m)
 	_, err := m.Ps(context.Background(), "dev")
 	require.Error(t, err)
+}
+
+func TestNewManagerNoRecovery_SkipsRecoveryDetection(t *testing.T) {
+	// NewManagerNoRecovery sets noRecovery=true, so runtimeFor must call
+	// detectRuntimeWithPreference (no Podman auto-recovery), never
+	// detectRuntimeWithPreferenceAndRecovery, regardless of autoStart. An
+	// invalid runtime preference is not enough to prove this on its own: both
+	// container.DetectRuntimeWithPreference and
+	// container.DetectRuntimeWithPreferenceAndRecovery fail identically for an
+	// unsatisfiable preference without ever reaching Podman recovery, so
+	// detection erroring doesn't distinguish the two branches. Stub the
+	// package-level detection seams instead so the recovery-aware function can
+	// be asserted as never invoked.
+	origNoRecovery, origRecovery := detectRuntimeWithPreference, detectRuntimeWithPreferenceAndRecovery
+	t.Cleanup(func() {
+		detectRuntimeWithPreference = origNoRecovery
+		detectRuntimeWithPreferenceAndRecovery = origRecovery
+	})
+
+	var recoveryCalled, noRecoveryCalled bool
+	detectRuntimeWithPreferenceAndRecovery = func(_ context.Context, _ string, _ bool) (container.Runtime, error) {
+		recoveryCalled = true
+		return nil, errRuntimeBoom
+	}
+	detectRuntimeWithPreference = func(_ context.Context, preferred string) (container.Runtime, error) {
+		noRecoveryCalled = true
+		assert.Equal(t, "podman", preferred)
+		return nil, errRuntimeBoom
+	}
+
+	// Use a "podman" preference (rather than an invalid one) so that, were the
+	// recovery-aware branch mistakenly taken, it would be observable: Podman is
+	// exactly the preference that triggers auto-recovery in
+	// container.DetectRuntimeWithPreferenceAndRecovery.
+	m := NewManagerNoRecovery("podman")
+	require.NotNil(t, m)
+	assert.True(t, m.noRecovery)
+	assert.False(t, m.autoStart)
+
+	_, err := m.Ps(context.Background(), "dev")
+	require.ErrorIs(t, err, errRuntimeBoom)
+	assert.True(t, noRecoveryCalled, "expected detectRuntimeWithPreference to be invoked")
+	assert.False(t, recoveryCalled, "Podman auto-recovery must never be invoked when noRecovery is set")
 }

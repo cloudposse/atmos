@@ -18,6 +18,7 @@ import (
 	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -175,6 +176,43 @@ func (ar *AquaRegistry) getWithContext(ctx context.Context, url string) (*http.R
 	return resp, nil
 }
 
+// getBytes performs a GET, validates the status is 200, and reads the full
+// response body — retrying the whole request on transient network failures
+// (e.g. "connection reset by peer", a truncated read) so flaky reads of
+// registry metadata recover. Non-transient failures, including non-200 status
+// codes (such as a 404 that drives path fallback), are returned without
+// retrying.
+func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
+	var data []byte
+	err := retry.WithPredicate(
+		context.Background(),
+		registry.TransientRetryConfig(),
+		func() error {
+			resp, derr := ar.get(url)
+			if derr != nil {
+				return fmt.Errorf("%w: failed to fetch %s: %w", registry.ErrHTTPRequest, url, derr)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
+			}
+
+			body, rerr := io.ReadAll(resp.Body)
+			if rerr != nil {
+				return fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, rerr)
+			}
+			data = body
+			return nil
+		},
+		registry.IsTransientNetworkError,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func (ar *AquaRegistry) shouldRetryUnauthenticated(url string, resp *http.Response) bool {
 	if resp == nil || resp.StatusCode != http.StatusForbidden || ar.githubToken == "" {
 		return false
@@ -303,7 +341,8 @@ type versionOverride struct {
 	RepoOwner                  string                              `yaml:"repo_owner"`
 	RepoName                   string                              `yaml:"repo_name"`
 	Asset                      string                              `yaml:"asset"`
-	URL                        string                              `yaml:"url"` // Alternative to Asset for http type tools.
+	URL                        string                              `yaml:"url"`  // Alternative to Asset for http type tools.
+	Path                       string                              `yaml:"path"` // Source path within the repo for github_content type.
 	Format                     string                              `yaml:"format"`
 	FormatOverrides            []registry.FormatOverride           `yaml:"format_overrides"`
 	VersionPrefix              string                              `yaml:"version_prefix"`
@@ -342,6 +381,9 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 		tool.Asset = override.Asset
 	} else if override.URL != "" {
 		tool.Asset = override.URL
+	}
+	if override.Path != "" {
+		tool.Path = override.Path
 	}
 	if override.Format != "" {
 		tool.Format = override.Format
@@ -417,12 +459,24 @@ func hasGitHubArtifactAttestations(g *registry.GitHubArtifactAttestations) bool 
 // This matches upstream aquaproj/aqua behavior where switching types (e.g., github_release -> http)
 // resets type-specific fields to avoid stale configuration.
 func resetByPkgType(tool *registry.Tool, newType string) {
+	// Path is github_content-specific; clear it unless we're switching TO github_content.
+	if newType != "github_content" {
+		tool.Path = ""
+	}
 	switch newType {
 	case "http":
 		// HTTP type uses URL, not github_release-specific fields.
 		tool.Asset = ""
 	case "github_release":
 		// GitHub release type uses Asset, not http-specific URL.
+		tool.URL = ""
+	case "github_archive":
+		// GitHub archive type derives its URL from repo + version; neither Asset nor URL applies.
+		tool.Asset = ""
+		tool.URL = ""
+	case "github_content":
+		// GitHub content type uses repo + path + version; Asset and URL do not apply.
+		tool.Asset = ""
 		tool.URL = ""
 	}
 }
@@ -436,6 +490,7 @@ type registryPackage struct {
 	RepoName                   string                              `yaml:"repo_name"`
 	Asset                      string                              `yaml:"asset"` // Used by github_release types.
 	URL                        string                              `yaml:"url"`   // Used by http types.
+	Path                       string                              `yaml:"path"`  // Used by github_content (path within repo) and go_install (Go module path).
 	Format                     string                              `yaml:"format"`
 	FormatOverrides            []registry.FormatOverride           `yaml:"format_overrides"`
 	BinaryName                 string                              `yaml:"binary_name"`
@@ -490,6 +545,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		RepoOwner:                  pkgDef.RepoOwner,
 		RepoName:                   pkgDef.RepoName,
 		Asset:                      asset,
+		Path:                       pkgDef.Path,
 		Format:                     pkgDef.Format,
 		FormatOverrides:            pkgDef.FormatOverrides,
 		BinaryName:                 pkgDef.BinaryName,
@@ -570,19 +626,9 @@ func computeSemVer(version, prefix string) string {
 
 // fetchRegistryPackage fetches and parses a registry file, returning the first package.
 func (ar *AquaRegistry) fetchRegistryPackage(registryURL string) (*registryPackage, error) {
-	resp, err := ar.get(registryURL)
+	data, err := ar.getBytes(registryURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch registry file: %w", registry.ErrHTTPRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, registryURL)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read registry file: %w", registry.ErrHTTPRequest, err)
+		return nil, err
 	}
 
 	var registryFile struct {
@@ -642,21 +688,10 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*registry.Tool, error) {
 		return tool, nil
 	}
 
-	// Fetch from remote
-	resp, err := ar.get(url)
+	// Fetch from remote (retries transient network failures).
+	data, err := ar.getBytes(url)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch %s: %w", registry.ErrHTTPRequest, url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d: %s", registry.ErrHTTPRequest, resp.StatusCode, url)
-	}
-
-	// Read response
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response: %w", registry.ErrHTTPRequest, err)
+		return nil, err
 	}
 
 	// Cache the response
@@ -691,6 +726,7 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 			RepoOwner:                  pkg.RepoOwner,
 			RepoName:                   pkg.RepoName,
 			Asset:                      asset,
+			Path:                       pkg.Path,
 			Format:                     pkg.Format,
 			FormatOverrides:            pkg.FormatOverrides,
 			Type:                       pkg.Type,

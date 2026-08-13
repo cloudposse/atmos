@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -117,7 +118,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
 	)
 	if err != nil {
 		return err
@@ -416,21 +417,36 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 				log.Warn(rmErr.Error())
 			}
 		}()
+
+		if info.NodeHooks != nil {
+			if beforeErr := info.NodeHooks.Before(context.Background(), &info); beforeErr != nil {
+				return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, beforeErr)
+			}
+		}
+
 		rendered, deliverErr := deliverHelmfileToTarget(&atmosConfig, &info, helmfileTargetDelivery{
 			varFile:       varFile,
 			componentPath: componentPath,
 			envVars:       envVars,
 			flagTarget:    flagTarget,
 		})
-		if info.PerComponentHook != nil {
-			info.PerComponentHook(&info, rendered, deliverErr)
+		if info.NodeHooks != nil {
+			if afterErr := info.NodeHooks.After(context.Background(), &info, rendered, deliverErr); afterErr != nil && deliverErr == nil {
+				deliverErr = afterErr
+			}
 		}
 		return deliverErr
 	}
 
+	if info.NodeHooks != nil {
+		if beforeErr := info.NodeHooks.Before(context.Background(), &info); beforeErr != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, beforeErr)
+		}
+	}
+
 	var stdoutBuf, stderrBuf bytes.Buffer
 	shellOpts := []ShellCommandOption{WithEnvironment(info.SanitizedEnv)}
-	if info.PerComponentHook != nil {
+	if info.NodeHooks != nil {
 		shellOpts = append(shellOpts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 	}
 
@@ -448,8 +464,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		info.RedirectStdErr,
 		shellOpts...,
 	)
-	if info.PerComponentHook != nil {
-		info.PerComponentHook(&info, stdoutBuf.String()+stderrBuf.String(), err)
+	if info.NodeHooks != nil {
+		if afterErr := info.NodeHooks.After(context.Background(), &info, stdoutBuf.String()+stderrBuf.String(), err); afterErr != nil && err == nil {
+			err = afterErr
+		}
 	}
 	if err != nil {
 		return err

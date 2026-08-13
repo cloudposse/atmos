@@ -1618,13 +1618,13 @@ func TestTerminalWidth(t *testing.T) {
 	}
 
 	// After initialization, the global terminal supplies the width. Stdout is
-	// a pipe here, so COLUMNS is ignored and callers apply their own defaults.
+	// a pipe here, so COLUMNS provides an explicit deterministic fallback.
 	t.Setenv("COLUMNS", "97")
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 	defer Reset()
-	if width := TerminalWidth(); width != 0 {
-		t.Errorf("TerminalWidth() = %d, want 0 for non-TTY COLUMNS fallback", width)
+	if width := TerminalWidth(); width != 97 {
+		t.Errorf("TerminalWidth() = %d, want 97 for non-TTY COLUMNS fallback", width)
 	}
 }
 

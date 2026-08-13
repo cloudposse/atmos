@@ -263,6 +263,31 @@ func chdirToValidAtmosProject(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 }
 
+// chdirToConfigFieldTestProject is chdirToValidAtmosProject's sibling for the
+// config-field-test fixture, which (unlike "basic") has a component that
+// inherits a typed value via metadata.inherits with no local override
+// anywhere -- needed to regression-test type inference on the --file path.
+func chdirToConfigFieldTestProject(t *testing.T) {
+	t.Helper()
+
+	exec.ClearBaseComponentConfigCache()
+	exec.ClearMergeContexts()
+	exec.ClearLastMergeContext()
+	exec.ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	src := filepath.Join(wd, "..", "..", "tests", "fixtures", "scenarios", "config-field-test")
+	dst := t.TempDir()
+	require.NoError(t, copyDirRecursive(src, dst))
+
+	t.Chdir(dst)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+}
+
 // copyDirRecursive copies a directory tree (files and subdirectories) from
 // src to dst, preserving each file's permissions. Used to give each test its
 // own disposable copy of a checked-in fixture rather than mutating the
@@ -371,6 +396,581 @@ func TestRunStackSet_ExplicitFile(t *testing.T) {
 	assert.Equal(t, "us-west-2", got)
 }
 
+func TestRunStackSet_ExplicitFile_CreatesNewPath(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeString
+
+	// vars.az does not exist yet -- exercises the "created" branch.
+	require.NoError(t, runStackSet([]string{"vars.az", "a"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.az")
+	require.NoError(t, err)
+	assert.Equal(t, "a", got)
+}
+
+func TestRunStackSet_ExplicitFile_AutoInfersFromExistingValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+        replicas: 1
+        enabled: false
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+	require.NoError(t, runStackSet([]string{"vars.enabled", "true"}))
+
+	// Both must be written as unquoted YAML scalars (int/bool), not strings,
+	// because auto inferred their type from the existing values.
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "replicas: 5")
+	assert.NotContains(t, content, `replicas: "5"`)
+	assert.Contains(t, content, "enabled: true")
+	assert.NotContains(t, content, `enabled: "true"`)
+}
+
+// TestRunStackSet_ExplicitFile_AutoInfersFromInheritedValue reproduces a
+// field-test finding: mycomponent inherits vars.replicas (int 1) from
+// abstract-component via metadata.inherits and never overrides it locally
+// anywhere, so the only way to set it is --file. Type inference used to
+// bypass the merged/inherited value entirely on the --file path (it only
+// consulted the literal target file's own bytes via GetFileType), storing
+// "3" as a quoted string with a warning inaccurately claiming there was
+// nothing to infer from. It must now fall back to the inherited value's type.
+func TestRunStackSet_ExplicitFile_AutoInfersFromInheritedValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join("stacks", "deploy", "nonprod.yaml")
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "3"}))
+
+	raw, err := os.ReadFile(flagFile)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "replicas: 3")
+	assert.NotContains(t, content, `replicas: "3"`)
+}
+
+// TestRunStackSet_ExplicitFile_AutoGuessesTypeForNewNumericLookingKey is a
+// regression test for the "auto nag" fix: --type=auto used to fall all the
+// way back to a plain string for a brand-new key, only warning that the
+// value looked like it could've been a bool/int/float without ever acting on
+// that judgment. This fixture's variables.tf doesn't declare vars.replicas
+// (no Terraform-declared-type signal), and there's no existing value
+// anywhere in this file, so this exercises the shape-guess fallback tier
+// specifically: "5" must now be inferred as TypeInt, not written as a
+// literal string.
+func TestRunStackSet_ExplicitFile_AutoGuessesTypeForNewNumericLookingKey(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got)
+
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "replicas: 5")
+	assert.NotContains(t, content, `replicas: "5"`)
+}
+
+// TestRunStackSet_ExplicitFile_AutoFallsBackToStringForGenuineNewStringKey
+// keeps real string-fallback coverage alive: a brand-new key whose value
+// doesn't look like a bool/int/float at all must still land on TypeString,
+// with no change in behavior from before the "auto nag" fix.
+func TestRunStackSet_ExplicitFile_AutoFallsBackToStringForGenuineNewStringKey(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.greeting", "hello"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.greeting")
+	require.NoError(t, err)
+	assert.Equal(t, "hello", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "components.terraform.mycomponent.vars.greeting")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ)
+}
+
+// TestRunStackSet_ExplicitFile_AutoWithExistingNull_DoesNotForceNull is a
+// regression test: GetType now correctly reports (TypeNull, true) for an
+// explicit YAML null (see pkg/yaml.TestGetType_ExplicitNull), but --type=auto
+// must not treat that as "the inferred type", since buildRHS's TypeNull case
+// always writes the literal `null` and would silently discard the value
+// being set. A path whose existing value is null must fall back to the same
+// unresolved/string-fallback behavior as a brand-new key.
+func TestRunStackSet_ExplicitFile_AutoWithExistingNull_DoesNotForceNull(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        replicas: null
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
+}
+
+// TestRunStackSet_ExplicitFile_AutoRejectsExistingList is a regression test
+// for a field-test finding: --type=auto used to fall through GetType's
+// default case to TypeString for a !!seq/!!map existing value, silently
+// collapsing a list into a plain string with no warning. GetType now reports
+// TypeYAML for a non-scalar existing value, and effectiveStackValueType must
+// refuse rather than silently coerce.
+func TestRunStackSet_ExplicitFile_AutoRejectsExistingList(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        taglist:
+          - a
+          - b
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	err := runStackSet([]string{"vars.taglist", "x"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	// The list must survive untouched -- the whole point of refusing.
+	raw, readErr := os.ReadFile(file)
+	require.NoError(t, readErr)
+	content := string(raw)
+	assert.Contains(t, content, "- a")
+	assert.Contains(t, content, "- b")
+	assert.NotContains(t, content, "taglist: x")
+}
+
+// TestRunStackSet_ExplicitFile_AutoRejectsExistingMap is TestRunStackSet_
+// ExplicitFile_AutoRejectsExistingList's map counterpart.
+func TestRunStackSet_ExplicitFile_AutoRejectsExistingMap(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        tagmap:
+          team: platform
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	err := runStackSet([]string{"vars.tagmap", "oops"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	raw, readErr := os.ReadFile(file)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), "team: platform")
+	assert.NotContains(t, string(raw), "tagmap: oops")
+}
+
+// TestRunStackSet_AnchorOwner_RejectedThroughCLI and its _AnchorUser sibling
+// exercise the config-field-test fixture's mycomponent-anchor-owner/
+// mycomponent-anchor-user components through the actual CLI command layer --
+// a field-test finding noted these fixture components were purpose-built to
+// prove the anchor guard but were never exercised by any test, only manually
+// verified once by hand.
+func TestRunStackSet_AnchorOwner_RejectedThroughCLI(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent-anchor-owner"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeString
+
+	err := runStackSet([]string{"vars.region", "us-west-2"})
+	require.ErrorIs(t, err, atmosyaml.ErrYAMLAnchorAltered)
+
+	raw, readErr := os.ReadFile(flagFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), `region: &shared_region "us-east-1"`)
+}
+
+func TestRunStackSet_AnchorUser_RejectedThroughCLI(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent-anchor-user"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeString
+
+	err := runStackSet([]string{"vars.region", "us-west-2"})
+	require.ErrorIs(t, err, atmosyaml.ErrYAMLAnchorAltered)
+
+	raw, readErr := os.ReadFile(flagFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), "region: *shared_region")
+}
+
+// TestResolveEditTarget_SharedFile_CatalogImport is a regression test for a
+// field-test finding: editing a value that resolves (via provenance or an
+// explicit --file) to a manifest reached only through import silently
+// affects every other stack/component that imports the same file, with no
+// indication to the user. The editTarget.sharedFile field is the signal
+// warnIfSharedFile acts on; this asserts it's computed correctly for both an
+// imported catalog file and the stack's own top-level manifest.
+func TestResolveEditTarget_SharedFile_CatalogImport(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+
+	// vars.baz is only defined in the imported catalog file.
+	tgt, err := resolveEditTarget("vars.baz", true)
+	require.NoError(t, err)
+	assert.True(t, tgt.sharedFile, "a value resolving to an imported catalog file must be flagged as shared")
+
+	// vars.foo is overridden directly in the stack's own top-level manifest.
+	tgt, err = resolveEditTarget("vars.foo", true)
+	require.NoError(t, err)
+	assert.False(t, tgt.sharedFile, "a value resolving to the stack's own top-level manifest must not be flagged as shared")
+}
+
+// TestRunStackSet_TerraformDeclaredType_NewIntKey is a regression test for
+// the "auto nag" fix's Terraform-declared-type tier: instance_count is
+// declared `type = number` in the config-field-test fixture's variables.tf
+// (see components/terraform/mock/main.tf), has no existing/merged value, so
+// --type=auto must infer TypeInt straight from that declaration -- an
+// int-shaped value, not the number-vs-string ambiguity a plain shape-guess
+// alone would face.
+func TestRunStackSet_TerraformDeclaredType_NewIntKey(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.instance_count", "7"}))
+
+	raw, err := os.ReadFile(flagFile)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "instance_count: 7")
+	assert.NotContains(t, content, `instance_count: "7"`)
+}
+
+// TestRunStackSet_TerraformDeclaredType_NewFloatShapedNumber covers the
+// "number" HCL type's int-vs-float disambiguation: a decimal-shaped value
+// for a number-typed var must land on TypeFloat, not TypeInt.
+func TestRunStackSet_TerraformDeclaredType_NewFloatShapedNumber(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.instance_count", "2.5"}))
+
+	raw, err := os.ReadFile(flagFile)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "instance_count: 2.5")
+	assert.NotContains(t, content, `instance_count: "2.5"`)
+}
+
+// TestRunStackSet_TerraformDeclaredType_NewBoolKey mirrors
+// TestRunStackSet_TerraformDeclaredType_NewIntKey for a bool-typed var.
+func TestRunStackSet_TerraformDeclaredType_NewBoolKey(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.feature_flag", "true"}))
+
+	raw, err := os.ReadFile(flagFile)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "feature_flag: true")
+	assert.NotContains(t, content, `feature_flag: "true"`)
+}
+
+// TestRunStackSet_TerraformDeclaredType_NonScalarErrors covers a
+// Terraform-declared list/map/object type: allowed_cidrs is declared
+// `type = list(string)`, so auto must refuse rather than silently write a
+// plain string, matching the existing non-scalar handling for tiers 3/4
+// (TestRunStackSet_ExplicitFile_AutoRejectsExistingList/Map).
+func TestRunStackSet_TerraformDeclaredType_NonScalarErrors(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join("stacks", "catalog", "mock.yaml")
+	flagType = atmosyaml.TypeAuto
+
+	err := runStackSet([]string{"vars.allowed_cidrs", `["a","b"]`})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	raw, readErr := os.ReadFile(flagFile)
+	require.NoError(t, readErr)
+	assert.NotContains(t, string(raw), "allowed_cidrs")
+}
+
+// TestRunStackSet_TerraformDeclaredType_OverridesExistingStringValue is the
+// load-bearing regression test for the "Terraform wins" decision: quota is
+// already stored as the quoted string "5" in the fixture's catalog/mock.yaml
+// (deliberately, to simulate a value written before variables.tf declared a
+// type, or via an old explicit --type=string), even though variables.tf
+// declares `quota` as `type = number`. --type=auto must retype it to an
+// unquoted number rather than leaving the existing string alone.
+func TestRunStackSet_TerraformDeclaredType_OverridesExistingStringValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToConfigFieldTestProject(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = ""
+	flagType = atmosyaml.TypeAuto
+
+	// quota already resolves via provenance (it's a direct override, not
+	// inherited), so no --file is needed.
+	require.NoError(t, runStackSet([]string{"vars.quota", "10"}))
+
+	raw, err := os.ReadFile(filepath.Join("stacks", "catalog", "mock.yaml"))
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "quota: 10")
+	assert.NotContains(t, content, `quota: "10"`)
+	assert.NotContains(t, content, `quota: "5"`)
+}
+
+// TestEffectiveStackValueType_TerraformDeclaredType_OverridesExistingStringValue
+// is a fast, isolated unit test of the same "Terraform wins" tier-priority
+// decision as TestRunStackSet_TerraformDeclaredType_OverridesExistingStringValue,
+// operating directly on a synthetic editTarget instead of the full
+// describe-component pipeline, so it can also assert on the retypedFrom
+// return value directly (not observable through file contents alone).
+func TestEffectiveStackValueType_TerraformDeclaredType_OverridesExistingStringValue(t *testing.T) {
+	resetEditFlags(t)
+	flagType = atmosyaml.TypeAuto
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        quota: "5"
+`), 0o644))
+
+	tgt := &editTarget{
+		file:             file,
+		yqPath:           "components.terraform.mycomponent.vars.quota",
+		inFilePath:       "components.terraform.mycomponent.vars.quota",
+		terraformVarType: "number",
+	}
+
+	result, err := effectiveStackValueType(tgt, "10")
+	require.NoError(t, err)
+	assert.True(t, result.resolved)
+	assert.Equal(t, atmosyaml.TypeInt, result.valType)
+	assert.Equal(t, atmosyaml.TypeString, result.retypedFrom,
+		"the existing value was a quoted string; Terraform declares number, so a retype occurred and must be reported")
+}
+
+// TestEffectiveStackValueType_TerraformDeclaredType_NewKey_NoRetypeNotice is
+// TestEffectiveStackValueType_TerraformDeclaredType_OverridesExistingStringValue's
+// counterpart for a brand-new key: nothing existing/merged means there's
+// nothing to retype, so retypedFrom must stay empty -- only a genuine type
+// change gets a notice, not every successful Terraform-tier inference.
+func TestEffectiveStackValueType_TerraformDeclaredType_NewKey_NoRetypeNotice(t *testing.T) {
+	resetEditFlags(t)
+	flagType = atmosyaml.TypeAuto
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        other: "x"
+`), 0o644))
+
+	tgt := &editTarget{
+		file:             file,
+		yqPath:           "components.terraform.mycomponent.vars.instance_count",
+		inFilePath:       "components.terraform.mycomponent.vars.instance_count",
+		terraformVarType: "number",
+	}
+
+	result, err := effectiveStackValueType(tgt, "7")
+	require.NoError(t, err)
+	assert.True(t, result.resolved)
+	assert.Equal(t, atmosyaml.TypeInt, result.valType)
+	assert.Empty(t, result.retypedFrom, "a brand-new key must not trigger a retype notice")
+}
+
+// TestRunStackSet_ShapeGuess_NonVarsPath proves the shape-guess fallback
+// tier applies outside vars.* too -- Terraform variable declarations only
+// ever cover vars.*, so a non-vars path like settings.* must skip that tier
+// entirely and still benefit from shape-guessing.
+func TestRunStackSet_ShapeGuess_NonVarsPath(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"settings.retry_count", "5"}))
+
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	content := string(raw)
+	assert.Contains(t, content, "retry_count: 5")
+	assert.NotContains(t, content, `retry_count: "5"`)
+}
+
+// TestRunStackSet_ShapeGuess_NaNFailsClosed is a regression test for the one
+// narrow case where GuessScalarType still fails closed: a brand-new key
+// whose value is the bare "nan" literal must land on TypeString, not error
+// out and not silently coerce to a numeric type it can't safely write (see
+// pkg/yaml.TestBuildValidatedRHS_FloatRejectsNaNAndInf). Asserted via
+// GetFile's resolved value, not a specific quote style: pkg/yaml.GetType and
+// yaml.v3 (Atmos's actual config loader) both already resolve an unquoted
+// "nan" as a plain string -- unlike ".nan", the bare form was never
+// ambiguous on read, so either quoting is a correct, safe result here.
+func TestRunStackSet_ShapeGuess_NaNFailsClosed(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "prod.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(`components:
+  terraform:
+    mycomponent:
+      vars:
+        region: us-east-1
+`), 0o644))
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = file
+	flagType = atmosyaml.TypeAuto
+
+	require.NoError(t, runStackSet([]string{"vars.threshold", "nan"}))
+
+	got, err := atmosyaml.GetFile(file, "components.terraform.mycomponent.vars.threshold")
+	require.NoError(t, err)
+	assert.Equal(t, "nan", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "components.terraform.mycomponent.vars.threshold")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ, "must resolve back as a string, not a numeric type")
+}
+
 func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)
@@ -390,7 +990,9 @@ func TestRunStackSet_ExplicitFile_InvalidType(t *testing.T) {
 	flagType = "not-a-real-type"
 
 	err := runStackSet([]string{"vars.region", "us-west-2"})
-	require.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+	require.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	require.NotErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression,
+		"an unknown --type value is a type problem, not a path/expression problem -- must not share a headline with those")
 }
 
 func TestRunStackDelete_ExplicitFile(t *testing.T) {
@@ -588,4 +1190,48 @@ func TestRunStackSet_ProvenanceBranch(t *testing.T) {
 	got, err := atmosyaml.GetFile("stacks/deploy/nonprod.yaml", "components.terraform.mycomponent.vars.foo")
 	require.NoError(t, err)
 	assert.Equal(t, "updated-value", got)
+}
+
+// TestRunStackSet_ProvenanceBranch_ImportOnlyValue reproduces a field-test
+// finding: "baz" is defined only in the imported catalog/mock.yaml, never
+// overridden in deploy/nonprod.yaml. PickProvenanceFile used to pick the
+// current stack file's own phantom Line:0 provenance entry over the real one
+// in the catalog file, so this previously failed with "resolves from
+// deploy/nonprod.yaml:0, but its key there is not ...". It must now resolve
+// to and edit the catalog file directly.
+func TestRunStackSet_ProvenanceBranch_ImportOnlyValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	flagComponent = "mycomponent"
+	flagStack = "nonprod"
+	flagFile = ""
+	flagType = atmosyaml.TypeString
+
+	require.NoError(t, runStackSet([]string{"vars.baz", "updated-baz"}))
+
+	got, err := atmosyaml.GetFile("stacks/catalog/mock.yaml", "components.terraform.mycomponent.vars.baz")
+	require.NoError(t, err)
+	assert.Equal(t, "updated-baz", got)
+
+	// deploy/nonprod.yaml must remain untouched -- it never defined baz.
+	_, err = atmosyaml.GetFile("stacks/deploy/nonprod.yaml", "components.terraform.mycomponent.vars.baz")
+	require.Error(t, err)
+}
+
+// TestRunStackDelete_ProvenanceBranch_ImportOnlyValue is the delete-verb
+// counterpart of TestRunStackSet_ProvenanceBranch_ImportOnlyValue -- delete via
+// provenance (no --file) for an import-only value had zero prior coverage.
+func TestRunStackDelete_ProvenanceBranch_ImportOnlyValue(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+
+	flagComponent = "mycomponent"
+	flagStack = "nonprod"
+	flagFile = ""
+
+	require.NoError(t, runStackDelete([]string{"vars.baz"}))
+
+	_, err := atmosyaml.GetFile("stacks/catalog/mock.yaml", "components.terraform.mycomponent.vars.baz")
+	require.Error(t, err)
 }

@@ -55,6 +55,43 @@ var (
 	ErrTaskUnexpectedNodeKind = errors.New("unexpected task node kind")
 )
 
+// Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:
+// with fields that feed CEL facts consumed via the existing `when:` condition engine rather
+// than a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes
+// these facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general
+// container (not narrowed to just file globs) since sources are one kind of input among others
+// that may be added later.
+type Inputs struct {
+	// Sources lists glob patterns for files whose content determines checksum.changed /
+	// contributes to timestamp.changed. Exposed to `when:` as the resolved match list (`sources`).
+	Sources []string `yaml:"sources,omitempty" json:"sources,omitempty" mapstructure:"sources"`
+}
+
+// Artifacts declares a step's expected output files -- a sibling of Inputs, not nested inside
+// it (sources are inputs; artifacts are outputs, and the two must not be conflated under one
+// container). A missing Artifacts path always forces checksum.changed/timestamp.changed to true,
+// regardless of Inputs.Sources. Exposed to `when:` as the resolved match list (`artifacts`).
+type Artifacts struct {
+	// Paths lists glob patterns for this step's expected output files. Named Paths, not Files,
+	// since artifacts aren't always known file-by-file (e.g. a directory glob).
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+}
+
+// Preconditions declares tools that must already be on PATH for this step's work to be considered
+// already satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert
+// step's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately
+// not named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the
+// type: http step's post-hoc success criteria), and even without that collision, expect: is
+// established elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas
+// this is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/
+// Dependencies: the block can hold multiple check kinds (currently Tools; more may follow).
+type Preconditions struct {
+	// Tools lists executable names resolved via exec.LookPath (no shell, so no
+	// which-vs-where cross-platform mismatch). preconditions.success is true iff every entry
+	// resolves without error.
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+}
+
 // Task represents a unit of work that can be executed.
 // This type unifies workflow steps and custom command steps,
 // supporting both simple string syntax and structured syntax.
@@ -83,6 +120,12 @@ type Task struct {
 	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// When controls whether the task runs.
 	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+	// Continue controls whether a failure of this task is forgiven: subsequent tasks still run
+	// and the overall command/workflow exit status is unaffected (like GitHub Actions'
+	// continue-on-error). Evaluated against this task's own outcome after it runs, unlike When
+	// (evaluated before, against the running status). Unset means no forgiveness (today's
+	// fail-stop behavior, unchanged).
+	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -107,7 +150,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only).
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -150,8 +193,15 @@ type Task struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
-	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+	Vars   map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`       // Variables to set for env step type.
+	Export *bool             `yaml:"export,omitempty" json:"export,omitempty" mapstructure:"export"` // Whether env-step values reach later child processes (default true).
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
@@ -196,8 +246,23 @@ type Task struct {
 	Run              *ContainerRunStep     `yaml:"-" json:"run,omitempty" mapstructure:"run"`
 	Inspect          *ContainerInspectStep `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
 	RuntimeAutoStart bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
+
+	// Archive step fields (type: archive). Action reuses the container step's
+	// Action field (create | extract | update | replace); Source reuses the
+	// workdir step's Source field (archive requires it to be a string path).
+	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
+	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
+	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
+	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
+	// Mtime controls the modification-time metadata stamped into each archive entry
+	// (not the source files on disk, not the archive file's own OS-level mtime):
+	// filesystem (default, same as omitting the field) | epoch (one shared timestamp
+	// for the whole archive) | git (per-entry timestamps). epoch/git also normalize
+	// permission bits. See docs/prd/archive-step.md.
+	Mtime string `yaml:"mtime,omitempty" json:"mtime,omitempty" mapstructure:"mtime"`
 
 	// Require step type fields (type: require; also accepts the alias type: assert).
 	// The step is a read-only preconditions gate: it never mutates PATH or the environment.
@@ -205,6 +270,23 @@ type Task struct {
 	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Paths that must exist (supports templates).
 	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
 	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
+
+	// Inputs declares this step's freshness sources, exposing checksum.changed/timestamp.changed/
+	// sources as `when:` CEL facts. See pkg/runner/freshness. An unset `when:` alongside a non-nil
+	// Inputs or Artifacts implicitly means `when: checksum.changed`, mirroring the existing
+	// implicit-success default for `when:`.
+	Inputs *Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+
+	// Artifacts declares this step's expected output files -- a sibling of Inputs, not nested
+	// inside it. See the Artifacts type doc for why.
+	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
+
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied, exposing preconditions.success as a `when:` CEL fact. An unset `when:`
+	// alongside a non-nil Preconditions (and no Inputs/Artifacts) implicitly means
+	// `when: "!preconditions.success"` -- note the negation: success means already-satisfied,
+	// i.e. skip, the opposite polarity from checksum.changed. See the Preconditions type doc.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -234,6 +316,8 @@ type Task struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	type plain Task
 	// Decode into a zero-value temp first so a reused receiver does not retain
@@ -255,6 +339,7 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		color:     &task.Background,
 		forList:   &task.For,
 		steps:     &task.Steps,
+		generic:   &task.With,
 		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 	})
 }
@@ -318,6 +403,8 @@ func (t *Tasks) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // ToWorkflowStep converts a Task to a WorkflowStep for backward compatibility.
+//
+//nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func (task *Task) ToWorkflowStep() WorkflowStep {
 	// Convert time.Duration to string for WorkflowStep.
 	var timeoutStr string
@@ -338,6 +425,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Identity:         task.Identity,
 		Needs:            task.Needs,
 		When:             task.When,
+		Continue:         task.Continue,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
@@ -402,8 +490,15 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Environment variables.
 		Env: task.Env,
 
+		// Command/scanner step arguments.
+		Args: task.Args,
+
+		// Type-specific step parameters.
+		With: task.With,
+
 		// Env step type fields.
-		Vars: task.Vars,
+		Vars:   task.Vars,
+		Export: task.Export,
 
 		// Exit step type fields.
 		Code: task.Code,
@@ -443,11 +538,23 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Provider:         task.Provider,
 		Container:        task.Container,
 
+		// Archive step fields.
+		Format:      task.Format,
+		Destination: task.Destination,
+		Subpath:     task.Subpath,
+		Include:     task.Include,
+		Exclude:     task.Exclude,
+		Mtime:       task.Mtime,
+
 		// Require step fields.
 		Tools: task.Tools,
 		Files: task.Files,
 		Dirs:  task.Dirs,
 		Hint:  task.Hint,
+
+		Inputs:        task.Inputs,
+		Artifacts:     task.Artifacts,
+		Preconditions: task.Preconditions,
 
 		Outputs: task.Outputs,
 
@@ -467,6 +574,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 }
 
 // TaskFromWorkflowStep creates a Task from a WorkflowStep.
+//
+//nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func TaskFromWorkflowStep(step *WorkflowStep) Task {
 	// Parse timeout string to time.Duration.
 	var timeout time.Duration
@@ -489,6 +598,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Identity:         step.Identity,
 		Needs:            step.Needs,
 		When:             step.When,
+		Continue:         step.Continue,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
@@ -554,7 +664,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Env: step.Env,
 
 		// Env step type fields.
-		Vars: step.Vars,
+		Vars:   step.Vars,
+		Export: step.Export,
 
 		// Exit step type fields.
 		Code: step.Code,
@@ -594,11 +705,23 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Provider:         step.Provider,
 		Container:        step.Container,
 
+		// Archive step fields.
+		Format:      step.Format,
+		Destination: step.Destination,
+		Subpath:     step.Subpath,
+		Include:     step.Include,
+		Exclude:     step.Exclude,
+		Mtime:       step.Mtime,
+
 		// Require step fields.
 		Tools: step.Tools,
 		Files: step.Files,
 		Dirs:  step.Dirs,
 		Hint:  step.Hint,
+
+		Inputs:        step.Inputs,
+		Artifacts:     step.Artifacts,
+		Preconditions: step.Preconditions,
 
 		Outputs: step.Outputs,
 
@@ -889,53 +1012,60 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error
 	case string:
 		return m, nil
 	case map[string]any:
-		if m["type"] == TaskTypeCast {
-			var cfg CastOutput
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				Result:           &cfg,
-				TagName:          "mapstructure",
-				WeaklyTypedInput: true,
-			})
-			if err != nil {
-				return nil, err
-			}
-			if err := decoder.Decode(v); err != nil {
-				return nil, err
-			}
-			task.CastOutput = &cfg
-			task.Output = cfg.Mode
-			copied := make(map[string]any, len(m)-1)
-			for key, val := range m {
-				if key == "output" {
-					continue
-				}
-				copied[key] = val
-			}
-			return copied, nil
-		}
-		var cfg ParallelOutputConfig
-		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-			Result:           &cfg,
-			TagName:          "mapstructure",
-			WeaklyTypedInput: true,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := decoder.Decode(v); err != nil {
-			return nil, err
-		}
-		task.Output = cfg.Mode
-		task.ParallelOutput = &cfg
-		copied := make(map[string]any, len(m)-1)
-		for key, val := range m {
-			if key == "output" {
-				continue
-			}
-			copied[key] = val
-		}
-		return copied, nil
+		return normalizeStructuredTaskOutput(m, task, v)
 	default:
 		return m, nil
 	}
+}
+
+func normalizeStructuredTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	if m["type"] == TaskTypeCast {
+		return normalizeCastTaskOutput(m, task, output)
+	}
+	return normalizeParallelTaskOutput(m, task, output)
+}
+
+func normalizeCastTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	var cfg CastOutput
+	if err := decodeTaskOutput(output, &cfg); err != nil {
+		return nil, err
+	}
+	task.CastOutput = &cfg
+	task.Output = cfg.Mode
+	return withoutTaskMapKey(m, "output"), nil
+}
+
+func normalizeParallelTaskOutput(m map[string]any, task *Task, output map[string]any) (map[string]any, error) {
+	var cfg ParallelOutputConfig
+	if err := decodeTaskOutput(output, &cfg); err != nil {
+		return nil, err
+	}
+	task.Output = cfg.Mode
+	task.ParallelOutput = &cfg
+	return withoutTaskMapKey(m, "output"), nil
+}
+
+func decodeTaskOutput(input map[string]any, output any) error {
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           output,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create decoder: %w", err)
+	}
+	if err := decoder.Decode(input); err != nil {
+		return fmt.Errorf("failed to decode task output: %w", err)
+	}
+	return nil
+}
+
+func withoutTaskMapKey(m map[string]any, key string) map[string]any {
+	copied := make(map[string]any, len(m)-1)
+	for mapKey, value := range m {
+		if mapKey != key {
+			copied[mapKey] = value
+		}
+	}
+	return copied
 }

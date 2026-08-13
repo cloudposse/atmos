@@ -28,6 +28,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentTest = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentMocks = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
 	}
@@ -234,6 +235,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentProvider = baseComponentConfig.BaseComponentProvider
 	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
 	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
+	result.BaseComponentValidate = baseComponentConfig.BaseComponentValidate
 	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
 	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
 	// BaseComponentRetry flows from the inheritance chain through to merge — see
@@ -247,6 +249,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
 		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
 		result.BaseComponentTest = baseComponentConfig.BaseComponentTest
+		result.BaseComponentMocks = baseComponentConfig.BaseComponentMocks
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType

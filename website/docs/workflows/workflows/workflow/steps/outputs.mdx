@@ -33,6 +33,30 @@ steps:
 
 Later steps can read declared outputs with `{{ .steps.<name>.outputs.<key> }}`.
 
+## Command Output
+
+Successful named `shell` and `atmos` steps expose their captured output to later steps. The primary `value` is trimmed, while `metadata.stdout` and `metadata.stderr` preserve the captured streams.
+
+Declared outputs are evaluated once after the command succeeds. A failed command attempt can be retried, but an invalid output template fails the step without running the successful command again.
+
+```yaml
+steps:
+  - name: discover
+    type: shell
+    command: printf 'vpc\n'
+    outputs:
+      component: "{{ .value }}"
+
+  - name: summary
+    type: markdown
+    content: |
+      Component: `{{ .steps.discover.value }}`
+      Raw stdout: `{{ .steps.discover.metadata.stdout }}`
+      Declared output: `{{ .steps.discover.outputs.component }}`
+```
+
+Shell steps with `tty` or `interactive` attach directly to the terminal. They complete with an empty command result because terminal session output cannot be captured.
+
 ## Step Result Context
 
 Templates can access prior step results:

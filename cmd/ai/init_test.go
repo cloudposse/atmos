@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -38,9 +39,9 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 		AI: schema.AISettings{
 			Tools: schema.AIToolSettings{
 				Enabled:             true,
-				AllowedTools:        []string{"read_file"},
-				RestrictedTools:     []string{"execute_bash_command"},
-				BlockedTools:        []string{"dangerous_tool"},
+				Allowed:             []string{"read_file"},
+				Restricted:          []string{"execute_bash_command"},
+				Blocked:             []string{"dangerous_tool"},
 				YOLOMode:            false,
 				RequireConfirmation: boolPtr(true),
 			},
@@ -86,34 +87,34 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 		{
 			name: "with allowed tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:      true,
-				AllowedTools: []string{"read_file", "list_files"},
+				Enabled: true,
+				Allowed: []string{"read_file", "list_files"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with restricted tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:         true,
-				RestrictedTools: []string{"execute_bash_command"},
+				Enabled:    true,
+				Restricted: []string{"execute_bash_command"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with blocked tools only",
 			toolConfig: schema.AIToolSettings{
-				Enabled:      true,
-				BlockedTools: []string{"dangerous_tool"},
+				Enabled: true,
+				Blocked: []string{"dangerous_tool"},
 			},
 			shouldError: false,
 		},
 		{
 			name: "with all tool lists",
 			toolConfig: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{"read_file"},
-				RestrictedTools: []string{"write_file"},
-				BlockedTools:    []string{"delete_file"},
+				Enabled:    true,
+				Allowed:    []string{"read_file"},
+				Restricted: []string{"write_file"},
+				Blocked:    []string{"delete_file"},
 			},
 			shouldError: false,
 		},
@@ -544,7 +545,7 @@ func TestIsCLIProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isCLIProvider(tt.provider))
+			assert.Equal(t, tt.expected, ai.IsCLIProvider(tt.provider))
 		})
 	}
 }
@@ -572,6 +573,62 @@ func TestSelectManualServers(t *testing.T) {
 	t.Run("all unknown", func(t *testing.T) {
 		result := selectManualServers(servers, []string{"fake1", "fake2"})
 		assert.Empty(t, result)
+	})
+}
+
+// TestClientConfigForMCP verifies the --mcp filtering fix for CLI providers:
+// clientConfigForMCP filters MCP.Servers on a config COPY when the provider is
+// a CLI provider and --mcp was given, leaves non-CLI providers alone (their
+// filtering already happens via registerMCPServerTools), leaves the config
+// alone when --mcp wasn't given, and never mutates the caller's original
+// atmosConfig.MCP.Servers map either way.
+func TestClientConfigForMCP(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws": {Command: "aws-mcp"},
+		"gcp": {Command: "gcp-mcp"},
+	}
+
+	t.Run("CLI provider with --mcp filters to the requested subset", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI: schema.AISettings{DefaultProvider: "claude-code"},
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+
+		result := clientConfigForMCP(&original, []string{"aws"})
+
+		assert.Len(t, result.MCP.Servers, 1)
+		assert.Contains(t, result.MCP.Servers, "aws")
+		assert.NotContains(t, result.MCP.Servers, "gcp")
+		// The original, unfiltered map must be untouched.
+		assert.Len(t, original.MCP.Servers, 2)
+		assert.Contains(t, original.MCP.Servers, "gcp")
+	})
+
+	t.Run("CLI provider without --mcp is unchanged", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI:  schema.AISettings{DefaultProvider: "claude-code"},
+			MCP: schema.MCPSettings{Servers: servers},
+		}
+
+		result := clientConfigForMCP(&original, nil)
+
+		assert.Len(t, result.MCP.Servers, 2)
+	})
+
+	t.Run("non-CLI provider with --mcp is left to registerMCPServerTools", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI:  schema.AISettings{DefaultProvider: "anthropic"},
+			MCP: schema.MCPSettings{Servers: servers},
+		}
+
+		result := clientConfigForMCP(&original, []string{"aws"})
+
+		// Unfiltered here: API-provider clients don't read MCP.Servers directly,
+		// and registerMCPServerTools (called separately) already applies this
+		// same filtering for the tool-registration path.
+		assert.Len(t, result.MCP.Servers, 2)
 	})
 }
 

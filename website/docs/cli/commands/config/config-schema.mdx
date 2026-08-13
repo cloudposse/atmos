@@ -1,0 +1,60 @@
+---
+title: atmos config schema
+sidebar_label: schema
+sidebar_class_name: command
+id: config-schema
+description: Print the JSON Schema Atmos uses to validate atmos.yaml.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Print the embedded JSON Schema for the Atmos CLI configuration (`atmos.yaml`) — the same
+schema `atmos validate schema` uses for `atmos.yaml` by default — to stdout, or write it
+to a file.
+</Intro>
+
+<CastPlayer title="atmos config schema --help" src="/casts/screengrabs/atmos-config-schema--help.cast" static chrome />
+
+The schema is generated from the Atmos configuration code itself, so it always matches
+what the version of Atmos you are running actually reads — including every section,
+YAML function alternatives (like `logs: !include shared.yaml`), and descriptions sourced
+from the code documentation. It covers `atmos.yaml`, `atmos.d` fragments, and
+[profile](/cli/configuration/profiles) files, none of which require any specific fields,
+so partial configuration fragments validate standalone.
+
+## Usage
+
+```shell
+atmos config schema [output-path]
+```
+
+## Examples
+
+```shell
+# Print the schema to stdout.
+atmos config schema
+
+# Write the schema to a file, creating parent directories as needed.
+atmos config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
+```
+
+## Arguments
+
+<dl>
+  <dt>`[output-path]` (optional)</dt>
+  <dd>Write the schema to this file instead of stdout. Parent directories are created as needed.</dd>
+</dl>
+
+## Editor Integration
+
+Point your editor's YAML language server at the published schema to get auto-completion
+and inline validation while editing `atmos.yaml`:
+
+```yaml
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json
+base_path: "./"
+```
+
+See [CLI Configuration Schemas](/cli/configuration/schemas) for the floating and
+version-pinned schema URLs.

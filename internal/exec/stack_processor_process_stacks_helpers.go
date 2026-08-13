@@ -31,6 +31,7 @@ type ComponentProcessorOptions struct {
 	GlobalAuth         map[string]any
 	GlobalSecrets      map[string]any
 	GlobalDependencies map[string]any
+	GlobalMetadata     map[string]any
 	GlobalCommand      string
 	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
 
@@ -52,6 +53,7 @@ type ComponentProcessorOptions struct {
 	GlobalKubernetesPaths     any
 	GlobalKubernetesManifests any
 	GlobalKubernetesRender    map[string]any
+	GlobalKubernetesValidate  any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -69,6 +71,7 @@ type ComponentProcessorResult struct {
 	ComponentProvider     string
 	ComponentPaths        any
 	ComponentManifests    any
+	ComponentValidate     any
 	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
 	ComponentPlugins any
 	ComponentRender  map[string]any
@@ -93,6 +96,7 @@ type ComponentProcessorResult struct {
 	BaseComponentProvider      string
 	BaseComponentPaths         any
 	BaseComponentManifests     any
+	BaseComponentValidate      any
 	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any
@@ -107,6 +111,7 @@ type ComponentProcessorResult struct {
 	ComponentRequiredVersion   string
 	ComponentHooks             map[string]any
 	ComponentTest              map[string]any
+	ComponentMocks             map[string]any
 	// ComponentSecrets holds the component-level `secrets:` declaration section.
 	ComponentSecrets          map[string]any
 	ComponentOverridesSecrets map[string]any
@@ -129,6 +134,7 @@ type ComponentProcessorResult struct {
 	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
 	BaseComponentTest                      map[string]any
+	BaseComponentMocks                     map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any

@@ -169,6 +169,16 @@ func (p *oidcProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies authTypes.AmbientProvider. The federated token is re-read from
+// ambient state on every call (token_file_path, AZURE_FEDERATED_TOKEN_FILE, or the
+// GitHub Actions OIDC endpoint) and exchanged for a short-lived access token.
+// Persisting the result would let the auth manager replay a principal whose source token
+// has since been rotated, so the manager must never cache credentials for chains rooted
+// at this provider.
+func (p *oidcProvider) IsAmbient() bool {
+	return true
+}
+
 // getHTTPClient returns the HTTP client to use for requests.
 func (p *oidcProvider) getHTTPClient() httpClient.Client {
 	if p.httpClient != nil {
@@ -194,7 +204,8 @@ func (p *oidcProvider) getTokenEndpoint() string {
 func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.oidcProvider.Authenticate")()
 
-	log.Debug("Authenticating with Azure OIDC",
+	log.Debug(
+		"Authenticating with Azure OIDC",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"client", p.clientID,
@@ -235,13 +246,15 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		TokenFilePath:      tokenFilePath,
 		FederatedToken:     federatedToken,  // Store for Azure CLI service_principal_entries.json.
 		CloudEnvironment:   p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
+		AuthMethod:         authTypes.AzureAuthMethodOIDC,
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.
 	// These are acquired in parallel for efficiency.
 	p.acquireAdditionalTokens(ctx, federatedToken, creds)
 
-	log.Debug("Successfully authenticated with Azure OIDC",
+	log.Debug(
+		"Successfully authenticated with Azure OIDC",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", p.subscriptionID,
@@ -466,7 +479,8 @@ func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken, scope 
 		return nil, fmt.Errorf("%w: empty access token in Azure AD response", errUtils.ErrAuthenticationFailed)
 	}
 
-	log.Debug("Successfully exchanged federated token for Azure access token",
+	log.Debug(
+		"Successfully exchanged federated token for Azure access token",
 		"scope", scope,
 		"tokenType", tokenResp.TokenType,
 		"expiresIn", tokenResp.ExpiresIn,
@@ -513,18 +527,18 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "azure.oidcProvider.PrepareEnvironment")()
 
-	// Use shared Azure environment preparation.
+	// Use shared Azure environment preparation in OIDC mode. It sets ARM_USE_OIDC (not
+	// ARM_USE_CLI) and exports the tenant — which OIDC (service-principal / federated) auth needs
+	// and which, unlike the CLI path, does not conflict with the azurerm backend's Azure CLI
+	// credential (no `az account get-access-token --subscription … --tenant …` shell-out).
 	result := azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
 		Environ:          environ,
 		SubscriptionID:   p.subscriptionID,
 		TenantID:         p.tenantID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		UseOIDC:          true,
 	})
-
-	// Override ARM_USE_CLI to use OIDC instead.
-	delete(result, "ARM_USE_CLI")
-	result["ARM_USE_OIDC"] = "true"
 
 	// Set client ID for Terraform providers.
 	if p.clientID != "" {
@@ -538,7 +552,8 @@ func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[strin
 		result["AZURE_FEDERATED_TOKEN_FILE"] = tokenFile
 	}
 
-	log.Debug("Azure OIDC environment prepared",
+	log.Debug(
+		"Azure OIDC environment prepared",
 		"ARM_USE_OIDC", "true",
 		"ARM_CLIENT_ID", p.clientID,
 		"subscription", p.subscriptionID,

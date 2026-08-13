@@ -26,6 +26,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
@@ -88,6 +89,31 @@ func WithProcessStreams(streams process.Streams) ShellCommandOption {
 func WithProcessContext(ctx context.Context) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.ctx = ctx
+	}
+}
+
+func shellCommandContext(opts ...ShellCommandOption) context.Context {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.ctx == nil {
+		return context.Background()
+	}
+	return cfg.ctx
+}
+
+func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.streams == nil {
+		return provisioner.OutputWriters{}
+	}
+	return provisioner.OutputWriters{
+		Stdout: cfg.streams.Stdout,
+		Stderr: cfg.streams.Stderr,
 	}
 }
 

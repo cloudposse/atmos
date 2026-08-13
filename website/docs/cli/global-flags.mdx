@@ -136,8 +136,8 @@ These flags are available for every Atmos command:
     <dd>
         Record an Atmos command as an asciicast. Use bare `--cast` to write a generated `.cast` file, or pass an output file. The file extension determines the output type:
         - `.cast` writes the asciicast recording directly
-        - `.gif` records to a temporary cast and renders a GIF (requires `agg`)
-        - `.mp4` records to a temporary cast and renders an MP4 (requires `agg` and `ffmpeg`)
+        - `.gif` records to a temporary cast and renders a GIF (Atmos installs the managed `agg` renderer automatically on first use)
+        - `.mp4` records to a temporary cast and renders an MP4 (Atmos installs managed `agg` and FFmpeg renderers automatically on first use; MP4 is GIF-derived and can retain GIF palette constraints)
         - `.html` renders a static HTML fragment of the final terminal content (native, no external tools)
         - `.ascii` renders the final terminal content as plain text with no ANSI codes (native)
         - `.png` / `.jpg` render a static image of the final terminal content (native)
@@ -227,6 +227,25 @@ These flags are available for every Atmos command:
         <Note>
             Profiles are loaded early in Atmos initialization (before stack processing) and can override any configuration setting including logging, terminal settings, and authentication.
         </Note>
+    </dd>
+
+    <dt>`--edition`</dt>
+    <dd>
+        Pin defaults to a date-anchored [edition](/cli/configuration/edition) for this invocation.
+
+        - Accepts `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`; partial dates round to the end of the period they name
+        - Defaults that changed after the anchor keep their pre-change values; explicit configuration always wins
+        - Takes precedence over the `ATMOS_EDITION` environment variable and the top-level `edition` setting in `atmos.yaml`
+
+        ```bash
+        # Preview the effect of a pin without changing configuration
+        atmos --edition=2026-01 describe edition
+
+        # Run a command with defaults as they stood at the end of September 2025
+        atmos --edition=2025-09 helmfile apply demo --stack=dev
+        ```
+
+        See the [edition configuration reference](/cli/configuration/edition) for details.
     </dd>
 
     <dt>`--logs-level`</dt>
@@ -601,6 +620,14 @@ All global flags can be set using environment variables. The precedence order is
         - CLI flag takes precedence over this environment variable
         - Supports multiple profiles: `ATMOS_PROFILE="developer,debug"`
         - Example: `ATMOS_PROFILE=ci atmos terraform plan vpc -s prod`
+    </dd>
+
+    <dt>`ATMOS_EDITION`</dt>
+    <dd>
+        Pin defaults to a date-anchored [edition](/cli/configuration/edition).
+        - Equivalent to the `--edition` flag
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_EDITION=2026-01 atmos describe edition`
     </dd>
 
     <dt>`ATMOS_LOGS_LEVEL`</dt>

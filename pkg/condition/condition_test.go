@@ -3,6 +3,7 @@ package condition
 import (
 	"encoding/json"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -127,6 +128,36 @@ func TestConditionUnmarshalYAML(t *testing.T) {
 			ctx:  Context{Status: PredicateSuccess, Env: map[string]string{"DEPLOY_ENV": "prod"}},
 			want: true,
 		},
+		{
+			name: "cel answers list membership",
+			yaml: "when: \"'dev' in answers.environments\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev", "staging"}}},
+			want: true,
+		},
+		{
+			name: "cel answers list membership false",
+			yaml: "when: \"'prod' in answers.environments\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev", "staging"}}},
+			want: false,
+		},
+		{
+			name: "cel answers bool flag",
+			yaml: "when: \"answers.deploy_multi_env == true\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"deploy_multi_env": true}},
+			want: true,
+		},
+		{
+			name: "cel answers size",
+			yaml: "when: \"size(answers.environments) > 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: map[string]any{"environments": []string{"dev"}}},
+			want: true,
+		},
+		{
+			name: "cel answers nil map defaults to empty",
+			yaml: "when: \"size(answers) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Answers: nil},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -206,6 +237,156 @@ func TestConditionEvaluateWithImplicitSuccess(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConditionEvaluateContinueE(t *testing.T) {
+	tests := []struct {
+		name string
+		cont any
+		want bool
+	}{
+		{
+			name: "unset never forgives",
+			cont: nil,
+			want: false,
+		},
+		{
+			name: "always forgives a failure",
+			cont: PredicateAlways,
+			want: true,
+		},
+		{
+			name: "explicit failure forgives a failure",
+			cont: PredicateFailure,
+			want: true,
+		},
+		{
+			name: "success does not forgive a failure",
+			cont: PredicateSuccess,
+			want: false,
+		},
+		{
+			name: "never does not forgive a failure",
+			cont: PredicateNever,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cond Condition
+			if tt.cont != nil {
+				var err error
+				cond, err = New(tt.cont)
+				require.NoError(t, err)
+			}
+			got, err := cond.EvaluateContinueE(Context{Status: PredicateFailure})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConditionEvaluateContinueEPropagatesMalformedCEL(t *testing.T) {
+	// Bypasses New's compile-time validation (which would normally catch this at config-load
+	// time) to exercise EvaluateContinueE's own error propagation for a runtime CEL failure —
+	// same technique as TestConditionEvaluateEReturnsRuntimeError.
+	cond := Condition{node: &Node{Kind: kindCEL, Expr: "unknown"}}
+	_, evalErr := cond.EvaluateContinueE(Context{Status: PredicateFailure})
+	require.Error(t, evalErr, "malformed continue: CEL must hard-fail, never be silently forgiven")
+	assert.True(t, errors.Is(evalErr, ErrInvalidWhenCondition))
+}
+
+func TestConditionEvaluate_PlatformFacts(t *testing.T) {
+	ctx := Context{
+		Status:   PredicateSuccess,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+	}
+
+	matchOS, err := New("!cel os == '" + runtime.GOOS + "'")
+	require.NoError(t, err)
+	assert.True(t, matchOS.Evaluate(ctx))
+
+	mismatchOS, err := New("!cel os == 'not-a-real-os'")
+	require.NoError(t, err)
+	assert.False(t, mismatchOS.Evaluate(ctx))
+
+	combined, err := New("!cel os == '" + runtime.GOOS + "' && arch == '" + runtime.GOARCH + "'")
+	require.NoError(t, err)
+	assert.True(t, combined.Evaluate(ctx))
+
+	platform, err := New("!cel platform == '" + runtime.GOOS + "/" + runtime.GOARCH + "'")
+	require.NoError(t, err)
+	assert.True(t, platform.Evaluate(ctx))
+}
+
+func TestConditionEvaluate_PreconditionsFact(t *testing.T) {
+	success, err := New("!cel preconditions.success")
+	require.NoError(t, err)
+	assert.True(t, success.Evaluate(Context{PreconditionsSuccess: true}))
+	assert.False(t, success.Evaluate(Context{PreconditionsSuccess: false}))
+
+	negated, err := New("!cel !preconditions.success")
+	require.NoError(t, err)
+	assert.False(t, negated.Evaluate(Context{PreconditionsSuccess: true}))
+	assert.True(t, negated.Evaluate(Context{PreconditionsSuccess: false}))
+}
+
+func TestConditionEvaluate_StructuredSourcesArtifactsFacts(t *testing.T) {
+	ctx := Context{
+		Sources:   []FileFact{{Path: "a.go", Mtime: 200, Checksum: "hash-a"}},
+		Artifacts: []FileFact{{Path: "bin/app", Mtime: 100, Checksum: "hash-b"}},
+	}
+
+	stale, err := New("!cel sources.exists(s, artifacts.all(a, s.mtime > a.mtime))")
+	require.NoError(t, err)
+	assert.True(t, stale.Evaluate(ctx), "a source newer than every artifact must report stale")
+
+	notStale, err := New("!cel sources.exists(s, artifacts.all(a, s.mtime < a.mtime))")
+	require.NoError(t, err)
+	assert.False(t, notStale.Evaluate(ctx))
+
+	pathAccess, err := New("!cel sources[0].path == 'a.go' && artifacts[0].checksum == 'hash-b'")
+	require.NoError(t, err)
+	assert.True(t, pathAccess.Evaluate(ctx))
+
+	sizeCheck, err := New("!cel size(sources) > 0")
+	require.NoError(t, err)
+	assert.True(t, sizeCheck.Evaluate(ctx))
+}
+
+func TestConditionMentionsCELIdentifier(t *testing.T) {
+	cond, err := New("!cel checksum.changed && preconditions.success")
+	require.NoError(t, err)
+
+	assert.True(t, cond.MentionsCELIdentifier("checksum"))
+	assert.True(t, cond.MentionsCELIdentifier("preconditions"))
+	assert.False(t, cond.MentionsCELIdentifier("timestamp"))
+	assert.False(t, Condition{}.MentionsCELIdentifier("checksum"), "a zero-value condition mentions nothing")
+}
+
+func TestConditionMentionsCELIdentifier_RecursesThroughCompoundChildren(t *testing.T) {
+	// A single bare CEL condition never exercises mentionsCELIdentifier's recursive branch --
+	// only a compound (all/any/not) condition wrapping a CEL child does, since only those Kinds
+	// populate Node.Children (see mentionsCELIdentifier's `for _, child := range n.Children`).
+	cond, err := New(map[string]any{
+		"all": []any{"ci", "!cel checksum.changed"},
+	})
+	require.NoError(t, err)
+
+	assert.True(t, cond.MentionsCELIdentifier("checksum"), "must find checksum in a nested CEL child")
+	assert.False(t, cond.MentionsCELIdentifier("timestamp"), "must not falsely match an identifier absent from every child")
+}
+
+func TestConditionEvaluate_EmptySourcesArtifactsActivateCleanly(t *testing.T) {
+	// A step with no inputs.sources/artifacts.paths declared must still evaluate a `when:`
+	// expression that references sources/artifacts (as an empty list), not panic or error --
+	// CEL's list adapter rejects a nil slice, so the zero Context must produce non-nil empties.
+	cond, err := New("!cel sources == [] && artifacts == []")
+	require.NoError(t, err)
+	assert.True(t, cond.Evaluate(Context{}))
 }
 
 func TestConditionInvalidYAML(t *testing.T) {

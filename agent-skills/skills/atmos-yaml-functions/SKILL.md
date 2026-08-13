@@ -4,6 +4,7 @@ description: "YAML functions: !terraform.state, !terraform.output, !store, !stor
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 references:
   - references/yaml-functions.md
 ---
@@ -79,14 +80,28 @@ vars:
   db_host: !terraform.state config .config_map.username
 
   # Default values for unprovisioned components
-  vpc_id: !terraform.state vpc ".vpc_id // ""default-vpc"""
+  vpc_id: !terraform.state vpc .vpc_id // "default-vpc"
 
   # YQ string concatenation
-  url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+  url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
 
   # Bracket notation for keys with special characters
   key: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
+
+### Cold State and `terraform plan --all`
+
+`!terraform.state` resolves configuration before Terraform plans a component. On a first aggregate
+plan, an upstream component may therefore have no state yet. Use a YQ `//` default for values that
+must exist at plan time, with a deterministic, provider-valid mock value:
+
+```yaml
+vars:
+  kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000"'
+```
+
+The deployed upstream output supersedes the fallback automatically. Dependency metadata controls
+deployment order; it does not create state before an aggregate plan.
 
 ## `!terraform.output` -- Remote State Access
 
@@ -286,7 +301,7 @@ vars:
 2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
 3. **All YAML functions cache results** per execution for repeated calls
 4. **Cold-start errors** -- `!terraform.output` and `!store` fail if the referenced component
-   is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
+    is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
 
 ## Additional Resources
 

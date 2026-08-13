@@ -281,6 +281,8 @@ atmos workflow [workflow_name] [flags]
 |------|-------|-------------|
 | `--file` | `-f` | Workflow file (relative to `workflows.base_path`) |
 | `--stack` | `-s` | Override stack for all Atmos-type steps |
+| `--tags` | | Component tag selector forwarded to all Atmos-type steps (matches any provided tag) |
+| `--labels` | | Component label selector forwarded to all Atmos-type steps (matches all provided key-value pairs) |
 | `--from-step` | | Start execution from the named step |
 | `--dry-run` | | Preview steps without executing |
 | `--identity` | | Default identity for steps without explicit identity |

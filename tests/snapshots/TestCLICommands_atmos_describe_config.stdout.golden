@@ -25,6 +25,7 @@
       "plan": {
         "skip_planfile": false
       },
+      "lint": {},
       "planfiles": {
         "default": ""
       },
@@ -35,7 +36,7 @@
     },
     "helmfile": {
       "base_path": "",
-      "use_eks": true,
+      "use_eks": false,
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
@@ -77,13 +78,15 @@
     "excluded_paths": [
       "**/_defaults.yaml"
     ],
-    "name_pattern": "{stage}",
-    "name_template": "",
+    "name_pattern": "",
+    "name_template": "{{.vars.stage}}",
     "list": {
       "format": "",
       "columns": null
     },
-    "inherit": {}
+    "inherit": {
+      "metadata": true
+    }
   },
   "imports": {},
   "workflows": {
@@ -143,6 +146,9 @@
       "no_color": false,
       "mask": {
         "enabled": false
+      },
+      "help": {
+        "filter": true
       }
     },
     "yaml": {
@@ -213,7 +219,12 @@
   },
   "describe": {
     "settings": {},
-    "affected": {}
+    "affected": {},
+    "error_mode": "warn",
+    "provenance": true,
+    "component": {
+      "filter": "schema"
+    }
   },
   "secrets": {},
   "vendor": {
@@ -221,7 +232,16 @@
     "list": {
       "format": "",
       "columns": null
-    }
+    },
+    "update": {
+      "execution": {},
+      "batching": {}
+    },
+    "ci": {
+      "pull_request": {},
+      "summary": {}
+    },
+    "lock": {}
   },
   "initialized": true,
   "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
@@ -238,6 +258,8 @@
   "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "vendorDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
@@ -272,7 +294,9 @@
     "identities": null
   },
   "container": {
-    "runtime": {}
+    "runtime": {
+      "auto_start": true
+    }
   },
   "profiler": {
     "enabled": false,
@@ -306,7 +330,8 @@
     "stacks": {
       "format": "",
       "columns": null
-    }
+    },
+    "error_mode": "warn"
   },
   "ci": {
     "output": {},
