@@ -258,6 +258,8 @@
   "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "vendorDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},

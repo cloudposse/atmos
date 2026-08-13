@@ -63,7 +63,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.1
 	github.com/elewis787/boa v0.1.3
-	github.com/epiclabs-io/diff3 v0.0.0-20241115194849-280ec18688b6
+	github.com/epiclabs-io/diff3 v0.0.0-20260520111523-3b1669897fb1
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -88,7 +88,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20260224005459-813a97530220
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20260709150029-2fb54c236733
 	github.com/hashicorp/terraform-exec v0.25.2
 	github.com/hashicorp/terraform-json v0.27.2
 	github.com/hexops/gotextdiff v1.0.3
@@ -146,7 +146,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v4 v4.2.1
-	k8s.io/client-go v0.36.2
+	k8s.io/client-go v0.36.3
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -457,7 +457,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
-	k8s.io/apimachinery v0.36.2
+	k8s.io/apimachinery v0.36.3
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
@@ -479,6 +479,8 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.2.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/minamijoyo/hcledit v0.2.18
@@ -593,7 +595,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
-	k8s.io/api v0.36.2 // indirect
+	k8s.io/api v0.36.3 // indirect
 	k8s.io/apiextensions-apiserver v0.36.1 // indirect
 	k8s.io/apiserver v0.36.1 // indirect
 	k8s.io/cli-runtime v0.36.2 // indirect
