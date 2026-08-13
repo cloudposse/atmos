@@ -612,10 +612,10 @@ jobs:
         # start/info attempts 10m each + bounded diagnostics and intermediate
         # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
         # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
-        # A pass surviving one full attempt timeout, a full second attempt, and
-        # one failed pull (~33m) still fits, so anything past 40 is treated as
-        # pathological. The job-level 60m cap stays, leaving room for the two
-        # 15-minute test attempts.
+        # The recovery path fits when the final image pull completes normally;
+        # anything past 40 is treated as pathological. The job-level 60m cap
+        # preserves fail-fast behavior; the observed healthy setup leaves ample
+        # time for both 15-minute test attempts.
         timeout-minutes: 40
         uses: ./.github/actions/setup-colima
 
