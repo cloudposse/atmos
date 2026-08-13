@@ -56,10 +56,11 @@ components:
         environment: "dev-ecs-cluster-subnet"
 
     # Path-traversal probe: a component name containing ".." segments, under
-    # source-based provisioning (pkg/provisioner/source/provision_hook.go's
-    # determineSourceTargetDirectory has NO containment guard, unlike the
-    # backend/output resolvers). Investigation only -- do not expect this to
-    # be "fixed"; just observe where files actually land.
+    # source-based provisioning with workdir enabled. determineSourceTargetDirectory
+    # (pkg/provisioner/source/provision_hook.go) routes this case through
+    # workdir.BuildPath, which now sanitizes ".." into a literal, harmless path
+    # segment (e.g. "dev-..-escape-test") rather than letting it resolve as
+    # real traversal -- expect a safe, sanitized workdir, not an actual escape.
     "../escape-test":
       source:
         uri: "./source-modules/mock"
@@ -72,14 +73,12 @@ components:
     # LOCAL (non-source) nested component with workdir enabled -- exercises a
     # DIFFERENT code path than "ecs/cluster" above: pkg/provisioner/workdir/
     # workdir.go's Service.Provision -> createWorkdirDirectory, the "workdir"
-    # provisioner registered for local components with no source:. This is
-    # NOT workdir.BuildPath -- it reimplements the same
-    # `fmt.Sprintf("%s-%s", stack, component)` + filepath.Join formula
-    # inline (see createWorkdirDirectory, pkg/provisioner/workdir/workdir.go
-    # ~line 222) and does NOT call the fixed BuildPath function at all, so it
-    # was not touched by this fix. Investigation target: does this local,
-    # non-source nested component's workdir land as a sibling of the others,
-    # or does it reproduce the original bug?
+    # provisioner registered for local components with no source:.
+    # createWorkdirDirectory now delegates to the same workdir.BuildPath
+    # formula instead of reimplementing it (see
+    # docs/fixes/2026-08-07-createworkdirdirectory-duplicate-unsanitized-formula.md),
+    # so this nested component's workdir lands as a sibling of the others,
+    # not one level too deep.
     "app/local-nested":
       metadata:
         component: mock
@@ -130,11 +129,13 @@ components:
 
     # Path-traversal probe #2: same idea, but WITHOUT workdir enabled -- this
     # exercises DetermineTargetDirectory's non-workdir fallback branch
-    # (pkg/provisioner/source/source.go), which is `filepath.Join(componentBasePath, component)`
-    # with NO sanitization at all (not even the incidental "/"->"-" protection
-    # that workdir.BuildPath provides). This is the DEFAULT source-vendoring
-    # path (provision.workdir.enabled is opt-in), so it is far more commonly
-    # hit than the workdir-enabled probe above.
+    # (pkg/provisioner/source/source.go), which now calls
+    # validateWithinComponentBasePath after filepath.Join(componentBasePath,
+    # component) and rejects an escaping result with ErrPathTraversal instead
+    # of silently vendoring outside components/terraform/. This is the
+    # DEFAULT source-vendoring path (provision.workdir.enabled is opt-in), so
+    # it is far more commonly hit than the workdir-enabled probe above --
+    # expect `atmos terraform source pull` to fail with ErrPathTraversal.
     "../escape-test-nowd":
       source:
         uri: "./source-modules/mock"
