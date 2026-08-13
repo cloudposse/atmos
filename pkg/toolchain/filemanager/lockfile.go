@@ -114,6 +114,18 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 		if !exists {
 			return nil
 		}
+		if existingTool == nil {
+			// A hand-edited or corrupted toolchain.lock.yaml can have an explicit YAML null
+			// under an existing tool key (the map key is present, but the value isn't).
+			// existingTool.Versions below would panic on that; surface the same structured
+			// nil-entry error lockfile.Verify already uses for this exact malformed state.
+			return errUtils.Build(lockfile.ErrToolEntryNil).
+				WithExplanationf("Cannot remove tool `%s`: lockfile entry is corrupted (null)", tool).
+				WithHint("Run `atmos toolchain lock` to regenerate the lockfile").
+				WithContext("tool", tool).
+				WithContext("lockfile", m.filePath).
+				Err()
+		}
 		if version == "" {
 			lock.RemoveTool(tool)
 			return lockfile.Save(m.filePath, lock)

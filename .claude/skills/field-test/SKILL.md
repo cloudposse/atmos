@@ -135,7 +135,9 @@ plausibly do:
     line, not just plain text with a Unicode glyph. Piping is fine here since this check only cares
     about styling, not live-rendering behavior.
 - Any "N -> M" / diff-style report line — construct a case where N and M are the *same value in
-  different string forms* (e.g. `v1.2.3` vs `1.2.3`, differing casing, trailing metadata). A raw
+  different string forms* (e.g. `v1.2.3` vs `1.2.3`, the one equivalence `normalizeVersion`
+  actually handles by stripping a leading `v` — don't test casing or trailing-metadata variants
+  unless the specific normalizer under test explicitly documents supporting them). A raw
   string-equality comparison will misreport a no-op as a change, which also tends to corrupt
   whatever summary/count line tallies outcomes — check the tally against the individual lines
   above it, don't just trust it.

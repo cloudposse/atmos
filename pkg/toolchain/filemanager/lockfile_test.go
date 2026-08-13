@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 )
 
 func TestLockFileManager_Enabled(t *testing.T) {
@@ -357,6 +358,41 @@ func TestLockFileManager_RemoveTool_ToolNotInLockfile(t *testing.T) {
 	content, err := os.ReadFile(tmpFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "hashicorp/terraform")
+}
+
+// TestLockFileManager_RemoveTool_NullToolEntryReturnsErrorInsteadOfPanicking reproduces a panic
+// risk: a hand-edited or corrupted toolchain.lock.yaml can have an explicit YAML null under an
+// existing tool key (the map key is present in lock.Tools, but the value is a nil *Tool).
+// RemoveTool used to dereference existingTool.Versions unconditionally once the key existed,
+// which panics on a nil pointer dereference when removing a specific (non-empty) version.
+func TestLockFileManager_RemoveTool_NullToolEntryReturnsErrorInsteadOfPanicking(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	content := `version: 1
+tools:
+  hashicorp/terraform:
+metadata:
+  lock_file_version: 2
+`
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	var err error
+	require.NotPanics(t, func() {
+		err = mgr.RemoveTool(ctx, "hashicorp/terraform", "1.13.4")
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, lockfile.ErrToolEntryNil)
 }
 
 func TestLockFileManager_RemoveTool_VersionMismatch(t *testing.T) {
