@@ -560,25 +560,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		}
 		info.ComponentSection = componentSection
 
-		// Stage 3: resolve deferred YAML functions and deep-merge their results against any
-		// concrete override at the same path. Without this, a section that only survived
-		// Stage 2's structural merge as an unresolved function string (or a placeholder) would
-		// silently lose that function's contribution — the same #2888 data-loss bug the main
-		// describe-component/plan path (processStacks in utils.go) fixes via this same call.
-		if compDctx, ok := p.deferredContexts[stackFileName][typeName][componentName]; ok {
-			info.DeferredMergeContexts = compDctx
-			var settingsSectionStruct schema.Settings
-			if err := mapstructure.Decode(secs.settings, &settingsSectionStruct); err != nil {
-				return err
-			}
-			componentTemplateContext := make(map[string]any, len(info.ComponentSection))
-			for k, v := range info.ComponentSection {
-				componentTemplateContext[k] = v
-			}
-			if err := resolveDeferredYamlFunctions(p.atmosConfig, &info, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
-				return err
-			}
-			componentSection = info.ComponentSection
+		componentSection, err = p.resolveDeferredForComponent(&info, secs.settings, stackFileName, typeName, componentName, componentSection, skip)
+		if err != nil {
+			return err
 		}
 	}
 	if hasLiteralMocks {
@@ -599,6 +583,42 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	addSectionsToComponentEntry(destMap, componentSection, p.sections, includeEmpty)
 
 	return nil
+}
+
+// resolveDeferredForComponent runs Stage 3 (resolveDeferredYamlFunctions) for a single component
+// when a deferred-merge context was recorded for it during FindStacksMap, deep-merging the result
+// against any concrete override at the same path. Without this, a section that only survived
+// Stage 2's structural merge as an unresolved function string (or a placeholder) would silently
+// lose that function's contribution — the same #2888 data-loss bug the main describe-component/plan
+// path (processStacks in utils.go) fixes via this same call. Returns componentSection unchanged
+// when no deferred context was recorded for this component.
+func (p *describeStacksProcessor) resolveDeferredForComponent(
+	info *schema.ConfigAndStacksInfo,
+	settings map[string]any,
+	stackFileName, typeName, componentName string,
+	componentSection map[string]any,
+	skip []string,
+) (map[string]any, error) {
+	compDctx, ok := p.deferredContexts[stackFileName][typeName][componentName]
+	if !ok {
+		return componentSection, nil
+	}
+
+	info.DeferredMergeContexts = compDctx
+	var settingsSectionStruct schema.Settings
+	if err := mapstructure.Decode(settings, &settingsSectionStruct); err != nil {
+		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
+	}
+
+	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
+	for k, v := range info.ComponentSection {
+		componentTemplateContext[k] = v
+	}
+	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
+		return nil, err
+	}
+
+	return info.ComponentSection, nil
 }
 
 // ---------------------------------------------------------------------------

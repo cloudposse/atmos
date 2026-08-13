@@ -103,7 +103,31 @@ function that both passes resolved.
   (a function override sitting above a concrete base value, or two functions competing at the same
   path), the surviving function is still resolved once by `ProcessCustomYamlTags` and again by
   Stage 3's merge. These `len > 1` cases are far rarer than the no-collision case fixed here and
-  still produce correct output. Fully deduplicating them would mean having Stage 3 reuse the
-  highest-precedence surviving value from the section map rather than re-invoking the processor;
-  deferred because it interacts with the ancestor/descendant write ordering and warrants its own
-  focused change if it proves to matter in practice.
+  still produce correct output — this is a wasted-execution/side-effect concern, not a correctness
+  one. No tracking issue has been opened yet; needs one (or a completed fix) before this PR merges,
+  per review feedback.
+
+- **Attempted and reverted (2026-08-13, same day):** generalized the single-contribution guard to
+  also skip re-resolution whenever a *speculative* raw merge — `MergeDeferredValues` called on the
+  still-unresolved `deferredValues`, mirroring what `mergeComponentConfigurations`'s nil-processor
+  pass already computed — picked exactly one contributor's still-unresolved function string as the
+  outright "winner" (the same `mergeDeferredMaps`/`MergeDeferredValues` early-return that fires on
+  any type mismatch). This is unsound and was caught by
+  `tests/yaml_functions_integration_test.go`'s `TestYAMLFunctionsDeferredMerge/deep_merges_with_yaml_function_at_higher_precedence_(mirror_of_Test_Case_5)`:
+  for `test-mirror-precedence` (an abstract base's **concrete map** deep-merged with a
+  **higher-precedence `!template` override**), the speculative raw check sees the override's
+  raw function string as the sole winner (since a raw, not-yet-executed function is always a plain
+  `string`, so `mergeDeferredMaps` bails as soon as it hits the override during the ascending-precedence
+  walk) and — WRONGLY — skips Stage 3 entirely, leaving `result` at the FUNCTION's OWN resolved value
+  only (`{new_key: "new_value"}`) instead of the correct deep merge with the base map
+  (`{base_only: "yes", enabled: true, new_key: "new_value"}`). The bug: `MergeDeferredValues` behaves
+  completely differently depending on whether it runs *before* (raw strings, always scalar-typed) or
+  *after* (resolved values, possibly map-typed) `processYAMLFunctions` — a function's resolved TYPE is
+  unknown until it actually runs, so a pre-execution speculative check can never sound-ly predict
+  whether a real map/slice merge would occur post-resolution. It can only be safe when there is
+  exactly one contributing layer (nothing else to possibly merge with, regardless of type) — i.e.
+  exactly the original `len == 1` guard's scope. A correct fix for the collision case would need
+  Stage 3 to resolve each function at least once (there is no way around executing it to learn its
+  type) but track "already resolved this invocation" per `DeferredValue` so a *later* pass in the
+  same call doesn't re-run it — a different, more invasive shape than a cheap pre-check. Left for a
+  focused follow-up.

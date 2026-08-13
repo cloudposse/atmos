@@ -1080,10 +1080,14 @@ components:
 
 	stackSection, ok := stacks["dev"].(map[string]any)
 	require.True(t, ok, "expected a 'dev' stack in the describe output")
-	components := stackSection["components"].(map[string]any)
-	terraform := components["terraform"].(map[string]any)
-	vpc := terraform["vpc"].(map[string]any)
-	vars := vpc["vars"].(map[string]any)
+	components, ok := stackSection["components"].(map[string]any)
+	require.True(t, ok, "components should be a map")
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "components.terraform should be a map")
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "components.terraform.vpc should be a map")
+	vars, ok := vpc["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
 	tags, ok := vars["tags"].(map[string]any)
 	require.True(t, ok, "vars.tags must be a resolved map, not a leftover function string")
 

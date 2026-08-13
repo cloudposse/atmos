@@ -274,6 +274,9 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		templateConfig, ok := vars["template_config"].(map[string]interface{})
 		require.True(t, ok, "vars.template_config should be a map")
 
+		// Built via json.Unmarshal, not a Go map literal: !template decodes its result through
+		// encoding/json, so numeric values come back as float64. A map literal's `int` values
+		// would fail assert.Equal's type-sensitive comparison against the actual float64s.
 		var expectedTemplateConfig map[string]interface{}
 		require.NoError(t, json.Unmarshal(
 			[]byte(`{"enabled":false,"timeout":30,"retries":3,"new_key":"new_value"}`),
@@ -511,11 +514,12 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 	})
 
 	t.Run("an override still clobbers an untracked (non-deferred) function", func(t *testing.T) {
-		// !git.root is deliberately NOT in the deferred-function allowlist (pkg/merge's
-		// postMergeFunctions) — only 11 specific functions get the #2888 deep-merge protection.
-		// This pins the known, by-design limitation: a concrete override at the same path as an
-		// untracked function still replaces it outright, the original #2888 failure mode, rather
-		// than deep-merging.
+		// !git.root is deliberately NOT in the deferred-function allowlist: pkg/merge's
+		// isAtmosYAMLFunction only recognizes the canonical Atmos*Yaml* function constants
+		// declared in pkg/utils/yaml_utils.go, and !git.root is not one of them, so it gets no
+		// #2888 deep-merge protection. This pins the known, by-design limitation: a concrete
+		// override at the same path as an untracked function still replaces it outright, the
+		// original #2888 failure mode, rather than deep-merging.
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component:            "test-untracked-function-override",
@@ -534,12 +538,13 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 			"an untracked function's contribution is not protected: the override replaces it outright")
 	})
 
-	t.Run("resolves and deep-merges a deferred function inside the backend section", func(t *testing.T) {
+	t.Run("resolves a Stage 2 function in the backend section and structurally merges non-colliding keys", func(t *testing.T) {
 		// base-component-backend sets backend.s3.bucket to a !template expression and
 		// backend.s3.key to a literal; the component adds backend.s3.region. backend is not one of
 		// the sections resolveDeferredYamlFunctions is wired to, but since nothing overrides
 		// `bucket` itself here, the document-wide Stage 2 pass (ProcessCustomYamlTags) alone
-		// resolves it, and the ordinary structural merge combines the non-colliding keys.
+		// resolves it, and the ordinary structural merge combines the non-colliding keys — no
+		// Stage 3 deferred-merge collision is exercised by this fixture.
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component:            "test-backend-override",
