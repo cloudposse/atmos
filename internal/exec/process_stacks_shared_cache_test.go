@@ -50,7 +50,7 @@ func TestProcessStacksDoesNotMutateSharedStacksMapCache(t *testing.T) {
 	atmosConfig := setupSharedCacheFixture(t)
 
 	// Warm the cache and snapshot the shared tree.
-	stacksMap, _, err := FindStacksMap(&atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(&atmosConfig, false)
 	require.NoError(t, err)
 	snapshot, err := m.DeepCopyMap(stacksMap)
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestProcessStacksDoesNotMutateSharedStacksMapCache(t *testing.T) {
 	_, err = ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
 	require.NoError(t, err)
 
-	after, _, err := FindStacksMap(&atmosConfig, false)
+	after, _, _, err := FindStacksMap(&atmosConfig, false)
 	require.NoError(t, err)
 	// Normalize the "after" tree through the same deep copy as the snapshot so the
 	// comparison is insensitive to DeepCopyMap's type normalization (e.g. []string
@@ -87,7 +87,7 @@ func TestProcessStacksConcurrentSharedCacheAccess(t *testing.T) {
 
 	// Warm the cache once so every goroutine below gets a cache hit and shares
 	// the same map tree, exactly as concurrent DAG workers do.
-	_, _, err := FindStacksMap(&atmosConfig, false)
+	_, _, _, err := FindStacksMap(&atmosConfig, false)
 	require.NoError(t, err)
 
 	// Two stacks that both define the `vpc` component.
