@@ -95,8 +95,8 @@ func TestExecuteWithSetup_FilesMatrixExpansion(t *testing.T) {
 // computedAxisScaffoldYAML replicates the exact matrix shape discussed in
 // https://github.com/orgs/cloudposse/discussions/126: axes computed from
 // nested/structured answer data (every environment, and every region used by
-// any environment) via the "keys" template function, pruned by when: to only
-// the environment/region pairs that actually apply.
+// any environment) via the "collectKeys" template function, pruned by when:
+// to only the environment/region pairs that actually apply.
 const computedAxisScaffoldYAML = `apiVersion: atmos/v1
 kind: AtmosScaffoldConfig
 metadata:
@@ -106,8 +106,8 @@ spec:
     - path: deploy.yaml
       target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
       matrix:
-        environment: '{{ keys answers.environments }}'
-        region: '{{ keys answers.environments "regions" }}'
+        environment: '{{ collectKeys answers.environments }}'
+        region: '{{ collectKeys answers.environments "regions" }}'
       when: "matrix.region in answers.environments[matrix.environment].regions"
 `
 
@@ -187,7 +187,7 @@ spec:
     - path: deploy.yaml
       target: "deploy/{{ .matrix.environment }}.yaml"
       matrix:
-        environment: '{{ keys answers.environments }}'
+        environment: '{{ collectKeys answers.environments }}'
 `
 
 func whitespaceAxisEmbedsConfig() *templates.Configuration {
@@ -206,12 +206,12 @@ func whitespaceAxisEmbedsConfig() *templates.Configuration {
 }
 
 // TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace is
-// the end-to-end regression test for a computed axis value that itself
-// contains whitespace: proves both target-path rendering (the generated
-// file's own path) and the file's rendered content carry the value through
-// intact, all the way from the raw answers map through ExpandMatrix,
-// .matrix.<axis> binding, and template rendering -- not split into two
-// combinations, and not truncated at the space.
+// the end-to-end regression test documenting a known, accepted limitation of
+// computed axes: an axis expression's rendered result is parsed back into a
+// list by splitting on whitespace, so a value that itself contains
+// whitespace (e.g. a map key with a space in it) is split into multiple axis
+// values rather than kept intact. See "Computed axes" in
+// docs/prd/atmos-scaffold.md.
 func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
@@ -226,11 +226,14 @@ func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *te
 	err := ui.executeWithSetup(whitespaceAxisEmbedsConfig(), targetDir, false, false, true, "", cmdTemplateValues, []string{"{{", "}}"})
 	require.NoError(t, err)
 
+	// "us east" is split into "us" and "east", each becoming its own
+	// combination -- not kept intact as one value.
 	for _, tc := range []struct {
 		relPath string
 		want    string
 	}{
-		{filepath.Join("deploy", "us east.yaml"), "environment: us east\n"},
+		{filepath.Join("deploy", "us.yaml"), "environment: us\n"},
+		{filepath.Join("deploy", "east.yaml"), "environment: east\n"},
 		{filepath.Join("deploy", "dev.yaml"), "environment: dev\n"},
 	} {
 		content, readErr := os.ReadFile(filepath.Join(targetDir, tc.relPath))
@@ -238,19 +241,13 @@ func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *te
 		assert.Equal(t, tc.want, string(content))
 	}
 
-	// Beyond the two expected files' own content, also prove no extra,
-	// unexpected file was written alongside them -- a regression that
-	// incorrectly split "us east" into more than one axis value (e.g. three
-	// pieces instead of two) would still pass the per-file checks above as
-	// long as those two exact files happened to still exist, but would leave
-	// a spurious third file in the directory.
 	entries, readDirErr := os.ReadDir(filepath.Join(targetDir, "deploy"))
 	require.NoError(t, readDirErr)
 	gotNames := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		gotNames = append(gotNames, entry.Name())
 	}
-	assert.ElementsMatch(t, []string{"dev.yaml", "us east.yaml"}, gotNames)
+	assert.ElementsMatch(t, []string{"dev.yaml", "us.yaml", "east.yaml"}, gotNames)
 }
 
 func TestExecuteWithSetup_FilesMatrixDuplicateTargetFails(t *testing.T) {

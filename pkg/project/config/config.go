@@ -178,7 +178,7 @@ type FileSpec struct {
 	// environment: answers.environments, where environments is a multiselect
 	// field or a structured value supplied through --set or a
 	// template-declared preset), or a Go-template expression (e.g.
-	// environment: '{{ keys answers.environments }}') computing the list from
+	// environment: '{{ collectKeys answers.environments }}') computing the list from
 	// nested/structured answer data. Requires Target, since Path alone cannot
 	// serve as the output path for more than one generated file. See
 	// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)".

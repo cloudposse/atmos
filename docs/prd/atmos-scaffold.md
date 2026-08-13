@@ -469,7 +469,7 @@ entry is matched:
   - a Go-template expression (any string containing `{{`) computing the list from
     nested/structured answer data, rendered with the same Gomplate/Sprig/custom
     FuncMap scaffold templates already use, plus `answers` exposed as the
-    expression's only variable (e.g. `environment: '{{ keys answers.environments }}'`
+    expression's only variable (e.g. `environment: '{{ collectKeys answers.environments }}'`
     — see "Computed Axes" below).
 
   Invalid combinations (an axis pairing that doesn't apply, e.g. a region a given
@@ -525,11 +525,13 @@ spec:
 `answers` — e.g. `answers.environments` is itself a map of environment name to a
 struct that includes its own `regions` map, as it would be for a nested/structured
 field rather than a flat `multiselect` — a Go-template expression computes the list
-instead. `keys` is the function this depends on: `keys(m)` returns `m`'s top-level
-keys, sorted; `keys(m, "nestedKey")` collects `nestedKey`'s own keys from every one
-of `m`'s values, flattening and deduplicating across all of them. It's registered
-alongside Gomplate and Sprig's functions in the same scaffold template FuncMap
-(overriding Sprig's own unsorted, non-flattening `keys`), so any other Sprig/Gomplate
+instead. `collectKeys` is the function this depends on: `collectKeys(m)` returns `m`'s
+top-level keys, sorted; `collectKeys(m, "nestedKey")` collects `nestedKey`'s own keys
+from every one of `m`'s values, flattening and deduplicating across all of them.
+It's registered alongside Gomplate and Sprig's functions in every Go-template FuncMap
+Atmos builds — not just scaffold templates — under its own name, so it doesn't shadow
+Sprig's own `keys` (which takes multiple maps and returns their unsorted, non-deduped
+union — a different function for a different purpose). Any other Sprig/Gomplate
 function is available to an axis expression too:
 
 ```yaml
@@ -538,8 +540,8 @@ spec:
     - path: templates/deploy.yaml
       target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
       matrix:
-        environment: '{{ keys answers.environments }}'
-        region: '{{ keys answers.environments "regions" }}'
+        environment: '{{ collectKeys answers.environments }}'
+        region: '{{ collectKeys answers.environments "regions" }}'
       when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
@@ -569,17 +571,12 @@ registered as a zero-argument template function rather than a data field — Go'
 template grammar only chains `.field` access off of `.` or a `$var`, never off a
 bare identifier, but it does chain off a bare identifier's function-call result,
 which is what lets `answers.environments` parse as "call `answers()`, then select
-`.environments`." The expression's rendered text is then parsed back into a list.
-`keys` (and any custom function meant for axis use) returns a small named string-slice
-type whose text representation uses a non-printable, unambiguous marker instead of
-Go's default slice-formatting style (`[a b c]`, space-joined) — so a resolved value
-that itself contains whitespace (e.g. a map key with a space in it) still round-trips
-as one intact value, not split into two. That whitespace-safe round-trip only applies
-when the axis expression's result is that marker-bearing representation, i.e. it went
-through `keys` or another function built for axis use. Any other function (e.g.
-Sprig's `splitList`, or any expression that isn't built for axis use) instead falls
-back to best-effort bracket/whitespace parsing, with the same whitespace ambiguity
-that implies.
+`.environments`." The expression's rendered text is then parsed back into a list by
+splitting on whitespace (tolerating Go's default slice-formatting brackets, e.g.
+`[a b c]`). This means an individual axis value containing whitespace (e.g. a map
+key with a space in it) would be split into multiple values — an accepted limitation
+of computed axes, not something worth engineering around for a rare edge case; avoid
+whitespace in values meant to become axis entries.
 
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so
@@ -613,11 +610,11 @@ time.
 
 Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
 `{{ splitList "," answers.environment_csv }}`) and deriving one axis's values from
-nested/structured answer data (e.g. `{{ keys answers.environments "regions" }}`,
+nested/structured answer data (e.g. `{{ collectKeys answers.environments "regions" }}`,
 computing the full set of regions used across every environment) were both
 originally scoped as non-goals, but fall out of the general computed-axis mechanism
 above for free — any Sprig/Gomplate function is available to an axis expression,
-not just `keys`. `--set` values for a `multiselect` field are still comma-split
+not just `collectKeys`. `--set` values for a `multiselect` field are still comma-split
 automatically, so a multiselect-sourced axis keeps working non-interactively without
 needing a template expression at all.
 

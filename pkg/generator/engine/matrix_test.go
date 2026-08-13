@@ -136,7 +136,7 @@ func TestExpandMatrix_AxisErrors(t *testing.T) {
 }
 
 func TestExpandMatrix_TemplateExpressionAxis(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
 	var gotExpr string
@@ -150,7 +150,7 @@ func TestExpandMatrix_TemplateExpressionAxis(t *testing.T) {
 
 	rows, err := ExpandMatrix(matrix, answers, render, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "{{ keys answers.environments }}", gotExpr)
+	assert.Equal(t, "{{ collectKeys answers.environments }}", gotExpr)
 	assert.Equal(t, []string{"{{", "}}"}, gotDelimiters)
 	require.Len(t, rows, 2)
 	assert.Equal(t, "dev", rows[0]["environment"])
@@ -166,7 +166,7 @@ func TestExpandMatrix_TemplateExpressionAxis(t *testing.T) {
 // re-split or otherwise mangle a renderer's returned values on the way into
 // a row.
 func TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	render := func(string, map[string]interface{}, []string) ([]string, error) {
 		return []string{"us east", "dev"}, nil
 	}
@@ -185,13 +185,13 @@ func TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace(t *testing
 // resolveMatrixAxisFromAnswers and fail because it doesn't start with
 // "answers.".
 func TestExpandMatrix_TemplateExpressionAxisCustomDelimiters(t *testing.T) {
-	matrix := map[string]any{"environment": "[[ keys answers.environments ]]"}
+	matrix := map[string]any{"environment": "[[ collectKeys answers.environments ]]"}
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
 	var gotDelimiters []string
 	render := func(expr string, a map[string]interface{}, delimiters []string) ([]string, error) {
 		gotDelimiters = delimiters
-		assert.Equal(t, "[[ keys answers.environments ]]", expr)
+		assert.Equal(t, "[[ collectKeys answers.environments ]]", expr)
 		return []string{"dev", "staging"}, nil
 	}
 
@@ -209,7 +209,7 @@ func TestExpandMatrix_TemplateExpressionAxisCustomDelimiters(t *testing.T) {
 // letting an empty delimiters[0] make every axis value match
 // strings.Contains(v, "") in resolveMatrixAxis.
 func TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
 	var gotDelimiters []string
@@ -230,7 +230,7 @@ func TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
 // TestExpandMatrix_EmptyLeftDelimiterFallsBackToDefault for an empty right
 // delimiter (e.g. ["[[", ""]).
 func TestExpandMatrix_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
 	var gotDelimiters []string
@@ -248,7 +248,7 @@ func TestExpandMatrix_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
 }
 
 func TestExpandMatrix_TemplateExpressionAxisWithoutRendererErrors(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 
 	_, err := ExpandMatrix(matrix, map[string]interface{}{}, nil, nil)
 	require.Error(t, err)
@@ -256,7 +256,7 @@ func TestExpandMatrix_TemplateExpressionAxisWithoutRendererErrors(t *testing.T) 
 }
 
 func TestExpandMatrix_TemplateExpressionAxisPropagatesRenderError(t *testing.T) {
-	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	renderErr := errors.New("boom")
 	render := func(string, map[string]interface{}, []string) ([]string, error) {
 		return nil, renderErr

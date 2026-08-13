@@ -21,8 +21,8 @@ const MatrixKey = "Matrix"
 // root reference into the answers map -- see resolveMatrixAxis.
 const answersPrefix = "answers."
 
-// AxisRenderer renders a Go-template matrix-axis expression (e.g. "{{ keys
-// answers.environments }}") against answers into its resolved list of
+// AxisRenderer renders a Go-template matrix-axis expression (e.g. "{{
+// collectKeys answers.environments }}") against answers into its resolved list of
 // string values. Delimiters is the two-element left/right delimiter pair
 // (defaulted to "{{"/"}}" by ExpandMatrix when the caller doesn't supply
 // one) a scaffold's own spec.delimiters override uses, so a template

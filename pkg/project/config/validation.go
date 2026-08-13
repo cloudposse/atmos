@@ -146,7 +146,7 @@ func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 // validateMatrixAxisValue validates one matrix axis's declared value: a
 // non-empty literal list, a string that references a top-level answer via
 // the same `answers.<path>` root reference When's CEL expressions read, or a
-// Go-template expression (e.g. `{{ keys answers.environments }}`) computing
+// Go-template expression (e.g. `{{ collectKeys answers.environments }}`) computing
 // the list from nested/structured answer data. A template expression's
 // actual rendered result can only be checked once real answers are known, at
 // generation time -- this only confirms the string looks like one.

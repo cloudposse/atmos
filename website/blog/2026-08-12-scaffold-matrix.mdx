@@ -52,14 +52,14 @@ own content, so a file can both name itself and branch on its own combination.
 
 Real answers aren't always a flat, pre-selected list. An environment might carry its own set of
 regions, varying per environment — the full list of regions actually used isn't something anyone
-selected directly, it has to be derived. A `keys` function is available anywhere an axis needs
-computing: `keys` on its own returns a map's keys, and given a second argument, it collects that
-key from every value in the map, flattening and deduplicating across all of them:
+selected directly, it has to be derived. A `collectKeys` function is available anywhere an axis
+needs computing: `collectKeys` on its own returns a map's keys, and given a second argument, it
+collects that key from every value in the map, flattening and deduplicating across all of them:
 
 ```yaml
 matrix:
-  environment: '{{ keys answers.environments }}'
-  region: '{{ keys answers.environments "regions" }}'
+  environment: '{{ collectKeys answers.environments }}'
+  region: '{{ collectKeys answers.environments "regions" }}'
 when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 

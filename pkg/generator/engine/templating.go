@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -162,8 +163,8 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 // To use Gomplate's version explicitly, use namespaced variants:
 //   - coll.Dict, conv.ToJSON, data.YAML, base64.Encode, etc.
 //
-// keys overrides Sprig's own (unsorted, no nested-key support) variant --
-// see keysFunc in funcs.go.
+// collectKeys is Atmos's own addition, registered under its own name so it
+// never shadows Sprig's "keys" -- see templatefuncs.CollectKeys.
 func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 	d := data.Data{}
 	ctx := context.TODO()
@@ -182,11 +183,13 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 		funcs[k] = v
 	}
 
-	// Add custom functions.
+	// Add Atmos's own custom functions (highest priority, overrides both).
+	for k, v := range templatefuncs.FuncMap() {
+		funcs[k] = v
+	}
 	funcs["config"] = func(key string) interface{} {
 		return userValues[key]
 	}
-	funcs["keys"] = keysFunc
 
 	return funcs
 }

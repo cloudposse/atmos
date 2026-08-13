@@ -391,11 +391,11 @@ func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
 func TestLoadScaffoldConfigAcceptsTemplateExpressionAxis(t *testing.T) {
 	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
-		"      matrix:\n        environment: '{{ keys answers.environments }}'\n" +
-		"        region: '{{ keys answers.environments \"regions\" }}'\n"
+		"      matrix:\n        environment: '{{ collectKeys answers.environments }}'\n" +
+		"        region: '{{ collectKeys answers.environments \"regions\" }}'\n"
 
 	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
 	require.NoError(t, err)
 	require.Len(t, scaffoldConfig.Spec.Files, 1)
-	assert.Equal(t, "{{ keys answers.environments }}", scaffoldConfig.Spec.Files[0].Matrix["environment"])
+	assert.Equal(t, "{{ collectKeys answers.environments }}", scaffoldConfig.Spec.Files[0].Matrix["environment"])
 }

@@ -920,6 +920,7 @@ var (
 	ErrRenderTemplate        = errors.New("failed to render template with datasources")
 	ErrResolveOutputPath     = errors.New("failed to resolve output path")
 	ErrWriteOutput           = errors.New("failed to write output")
+	ErrCollectKeysNotMap     = errors.New("collectKeys: argument is not a map")
 
 	// Import-related errors.
 	ErrBasePath             = errors.New("base path required to process imports")
@@ -1246,7 +1247,6 @@ var (
 	ErrScaffoldMatrixSourceNotList    = errors.New("matrix axis source did not resolve to a list")
 	ErrScaffoldMatrixExpressionFailed = errors.New("matrix axis expression failed to render")
 	ErrScaffoldDuplicateOutputPath    = errors.New("two files rendered to the same output path")
-	ErrScaffoldKeysFuncNotMap         = errors.New("keys: argument is not a map")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

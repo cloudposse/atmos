@@ -138,10 +138,10 @@ path. Two files (matrixed or not) rendering to the same output path is a hard er
 silent overwrite.
 
 When an axis's values aren't already list-shaped anywhere in `answers` — e.g. an answer is itself
-a map of structured values rather than a flat `multiselect` — compute the list with `keys`, a
-template function available (alongside every Sprig/Gomplate function) to axis expressions:
-`keys(m)` returns `m`'s top-level keys, sorted; `keys(m, "nestedKey")` collects `nestedKey`'s own
-keys from every value in `m`, flattened and deduplicated:
+a map of structured values rather than a flat `multiselect` — compute the list with
+`collectKeys`, a template function available (alongside every Sprig/Gomplate function) to axis
+expressions: `collectKeys(m)` returns `m`'s top-level keys, sorted; `collectKeys(m, "nestedKey")`
+collects `nestedKey`'s own keys from every value in `m`, flattened and deduplicated:
 
 ```yaml title="scaffold.yaml"
 spec:
@@ -149,8 +149,8 @@ spec:
     - path: deploy.yaml
       target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
       matrix:
-        environment: '{{ keys answers.environments }}'
-        region: '{{ keys answers.environments "regions" }}'
+        environment: '{{ collectKeys answers.environments }}'
+        region: '{{ collectKeys answers.environments "regions" }}'
       when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
