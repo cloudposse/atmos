@@ -87,7 +87,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.SecretsSectionName]
 		assert.False(t, present, "secrets must be absent when no layer declares any")
@@ -100,7 +100,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 			AtmosConfig:   atmosCfg,
 			GlobalSecrets: secretsSection("DB", nil),
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		section, ok := comp[cfg.SecretsSectionName].(map[string]any)
 		require.True(t, ok, "secrets section must be present and a map")
@@ -115,7 +115,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = secretsSection("INHERITED", nil)
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section, ok := comp[cfg.SecretsSectionName].(map[string]any)
 		require.True(t, ok, "inherited secrets must flow through")
@@ -133,7 +133,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.ComponentSecrets = secretsSection("DB", nil)
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section := comp[cfg.SecretsSectionName].(map[string]any)
 		assert.Equal(t, string(secrets.ScopeInstance), secretScopeOf(t, section, "DB"),
@@ -151,7 +151,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res.BaseComponentSecrets = secretsSection("DB", map[string]any{"description": "b"})
 		res.ComponentSecrets = secretsSection("DB", map[string]any{"description": "c"})
 		res.ComponentOverridesSecrets = secretsSection("DB", map[string]any{"description": "o"})
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section := comp[cfg.SecretsSectionName].(map[string]any)
 		spec := section["vars"].(map[string]any)["DB"].(map[string]any)
@@ -168,7 +168,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		// Component layer pinning a secret to stack scope conflicts with its instance position.
 		res.ComponentSecrets = secretsSection("DB", map[string]any{"scope": string(secrets.ScopeStack)})
-		_, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentSecrets)
 	})
@@ -189,7 +189,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 				AtmosConfig:   atmosCfg,
 				GlobalSecrets: secretsSection("DB", nil),
 			}
-			comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+			comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 			require.NoError(t, err, "component type %q", ct)
 			_, present := comp[cfg.SecretsSectionName]
 			assert.True(t, present, "secrets section must be present for component type %q", ct)
@@ -207,7 +207,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = baseSecrets
 		res.ComponentSecrets = compSecrets
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		merged := comp[cfg.SecretsSectionName].(map[string]any)["vars"].(map[string]any)["DB"].(map[string]any)
@@ -230,7 +230,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = baseSecrets
 		res.ComponentSecrets = compSecrets
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		merged := comp[cfg.SecretsSectionName].(map[string]any)["vars"].(map[string]any)["DB"].(map[string]any)
 		require.Equal(t, "component", merged["description"], "component wins over base before mutation")

@@ -54,8 +54,23 @@ real user — not to re-run what automated tests already cover. Anticipate plaus
 misunderstandings, not just obvious bugs.
 
 **This pass is investigation only.** Do not fix anything you find — see Phase 5. Report and stop;
-the user decides what to fix (and when they do, that follow-up work should close with the
-`fix-log` skill, not this one).
+the user decides what to fix. Any follow-up fix work — including a plan to fix the findings, not
+just the implementation — must close with the `fix-log` skill, not this one.
+
+## Plan Mode
+
+If plan mode is active when this skill is invoked (a `<system-reminder>` says so), Phase 3
+(Build fixtures) and Phase 4 (Execute) can't run inline — writing fixture files and running real,
+sometimes state-mutating commands are exactly what plan mode exists to gate.
+
+- Run Phase 1 (Research) and Phase 2 (Generate hypotheses) as normal — both are already read-only
+  and fit plan mode's constraints without modification.
+- Instead of proceeding into Phase 3/4, write the plan file: the target under test, the
+  prioritized hypothesis list from Phase 2, the fixtures Phase 3 would build (note which
+  extend/copy an existing fixture, per that phase's guidance), and which planned Phase 4 commands
+  are read-only vs. state-mutating — the mutating ones are specifically what need sign-off.
+- Call `ExitPlanMode` to request approval of that plan. Don't ask for approval any other way.
+- Once approved, resume at Phase 3 using the approved plan as the fixture/execution blueprint.
 
 ## Phase 1 — Research before touching anything
 
@@ -163,14 +178,19 @@ section, scratch/research files never get committed; only the fixtures built in 
 for lasting value) and this final report are durable output.
 
 Do not fix anything found — this pass is investigation only. Stop and report; the user decides what
-to fix. End by invoking the `say` skill — a completed test pass reaching a stopping point a human
-should review is exactly its trigger.
+to fix. If a plan gets made to fix any finding — whether right away or as a later follow-up,
+even in a different session — that plan and its implementation must close with the `fix-log`
+skill so the fix leaves a durable record under `docs/fixes/`. End by invoking the `say` skill — a
+completed test pass reaching a stopping point a human should review is exactly its trigger.
 
 ## Related
 
+- **Plan Mode** (above) — when invoked under plan mode, Phases 3-4 wait for approval via
+  `ExitPlanMode` before building fixtures or executing.
 - **`Explore` agent** — Phase 1's broad read-only research.
 - **`atmos-emulator` skill** — real local infra for Phase 3/4 when the target touches
   AWS/GCP/Azure/Kubernetes.
 - **`docs` skill** — conventions for the CLI docs being cross-checked in Phase 1.
-- **`fix-log` skill** — for the user's follow-up once they decide what to fix; out of scope here.
+- **`fix-log` skill** — required for any follow-up fix work, including a plan to fix findings,
+  once the user decides what to fix; out of scope here.
 - **`say` skill** — end-of-pass notification.
