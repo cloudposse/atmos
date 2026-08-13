@@ -16,7 +16,7 @@ The failure hit only the mutating/verifying secret commands; `atmos terraform ..
 
 ## Root Cause
 
-`injectSecretStoreAuthResolver` (`cmd/secret/shared.go`) called `atmosConfig.Stores.SetAuthContextResolver(resolver)`, which passes an empty identity to every store. An identity-less store therefore kept no identity and fell back to the AWS default credential chain (EC2 IMDS). The terraform paths (`cmd/terraform/utils.go`, `internal/exec/terraform_execute_helpers.go`) already call `SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)`; the secret CLI even computed the same `DefaultIdentity` (into `SecretsAuth`) but never applied it to the stores.
+`injectSecretStoreAuthResolver` (`cmd/secret/shared.go`) called `atmosConfig.Stores.SetAuthContextResolver(resolver)`, which wires the resolver but supplies no default identity to identity-less stores. An identity-less store therefore kept no identity and fell back to the AWS default credential chain (EC2 IMDS). The terraform paths (`cmd/terraform/utils.go`, `internal/exec/terraform_execute_helpers.go`) already call `SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)`; the secret CLI even computed the same `DefaultIdentity` (into `SecretsAuth`) but never applied it to the stores.
 
 ## Fix
 
@@ -33,7 +33,7 @@ No config or API changes. Stores that declare an explicit `identity` keep it (`d
 ## Tests
 
 - `cmd/secret.TestInjectSecretStoreAuthResolver_AppliesDefaultIdentity` - with no `--identity`, an identity-less SSM store resolves the chain-tail default onto `SecretsAuth`; the store-level application is asserted by the existing `pkg/store.TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores`.
-- `cmd/secret.TestInjectSecretStoreAuthResolver_ResolverOnly` - unchanged: an explicit-identity mock store still receives its own identity (a mock is not a concrete store type, so the default is not applied to it).
+- `cmd/secret.TestInjectSecretStoreAuthResolver_ResolverOnly` - unchanged: the resolver is injected into an identity-aware store, which receives an empty identity name. An explicit identity always wins, and the default only fills eligible identity-less stores.
 
 ```shell
 go test ./cmd/secret/ -run 'InjectSecretStoreAuthResolver' -count=1
