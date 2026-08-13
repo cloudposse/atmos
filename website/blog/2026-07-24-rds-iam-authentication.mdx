@@ -1,0 +1,63 @@
+---
+slug: rds-iam-authentication
+title: "RDS IAM Authentication: Database Tokens Without the AWS CLI"
+authors: [jaguer0]
+tags: [feature]
+date: 2026-07-24T00:00:00.000Z
+---
+
+You want to connect to an RDS database with IAM authentication instead of a static password — the
+right call for security. But minting the short-lived token means installing the AWS CLI, running
+`aws rds generate-db-auth-token`, and resolving AWS credentials separately from the identity system
+you already use for every other AWS operation in Atmos. In CI, that is one more tool to install and
+one more credential path to wire up, just to hand a password to `psql`.
+
+<!--truncate-->
+
+## The Problem
+
+RDS and Aurora support IAM database authentication: instead of a long-lived password, a client
+presents a short-lived, SigV4-signed token as the password over a TLS connection. It is a real
+security win — no shared database passwords to rotate or leak.
+
+The catch is generating that token. The standard path is `aws rds generate-db-auth-token`, which
+needs the AWS CLI installed and a set of AWS credentials resolved on its own — outside the Atmos
+identity system that already manages your SSO, OIDC, and assume-role chains. So you end up with two
+credential paths to keep in sync, and an extra binary in every CI image, all to produce a password.
+
+## The Fix
+
+Atmos can now mint the token directly from an Atmos identity:
+
+```shell
+PGPASSWORD="$(atmos aws rds token \
+  --host mydb.abc123.us-east-2.rds.amazonaws.com --port 5432 \
+  --username app --region us-east-2 --identity dev-admin)" \
+  psql "host=mydb.abc123.us-east-2.rds.amazonaws.com sslmode=require dbname=app user=app"
+```
+
+The `atmos aws rds token` command is the RDS analog of `atmos aws eks token`. It authenticates the
+identity you name (or your default identity), builds the SigV4 token locally — no AWS API call — and
+writes it to `stdout` so it drops straight into `PGPASSWORD` or any driver's password field. There is
+no AWS CLI dependency and no static database password anywhere.
+
+Because the token is the credential, it is written unmasked; the expiry is reported on `stderr` so
+`stdout` stays a clean, pipeable value.
+
+## How to Use It
+
+1. Enable IAM database authentication on the instance or cluster and grant the database user IAM
+   access (PostgreSQL `GRANT rds_iam`; MySQL/MariaDB `AWSAuthenticationPlugin`).
+2. Give the identity an `rds-db:connect` IAM permission on the database user's resource ARN.
+3. Run `atmos aws rds token` with the endpoint, port, user, and region, and use the result as the
+   password over a TLS connection.
+
+See the [`atmos aws rds token`](/cli/commands/aws/rds-token) command reference for flags, prerequisites,
+and MySQL/Aurora examples.
+
+## Get Involved
+
+This is the first step: on-demand token generation. Stack- and component-aware endpoint discovery
+(resolving the host, port, and user straight from a component's Terraform outputs) is a natural
+follow-up. Have feedback or ideas? Open an issue on
+[GitHub](https://github.com/cloudposse/atmos/issues).
