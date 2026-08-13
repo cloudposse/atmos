@@ -180,6 +180,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
+	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
 	ErrUnsupportedYamlTag               = errors.New("unsupported YAML tag")
 	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
