@@ -100,6 +100,32 @@ func TestBuildPath(t *testing.T) {
 			},
 			want: []string{"terraform", "fixtures-ecs-cluster-inherited-instance"},
 		},
+		{
+			// "\" is Windows' real path separator: a component name
+			// containing it must sanitize identically to "/", or
+			// filepath.Join/Clean would treat it as real directory
+			// segments (including ".."-traversal) on that platform.
+			name:            "backslash-containing component name does not add a path segment",
+			basePath:        "/base",
+			componentType:   "terraform",
+			component:       `ecs\cluster`,
+			stack:           "fixtures",
+			componentConfig: map[string]any{},
+			want:            []string{"terraform", "fixtures-ecs-cluster"},
+		},
+		{
+			// A component name crafted to escape the workdir root via
+			// backslash-".." segments must sanitize to a single, safe
+			// segment rather than letting filepath.Join/Clean resolve it
+			// as real parent-directory traversal.
+			name:            "backslash dot-dot traversal in component name does not escape the workdir root",
+			basePath:        "/base",
+			componentType:   "terraform",
+			component:       `..\..\evil`,
+			stack:           "fixtures",
+			componentConfig: map[string]any{},
+			want:            []string{"terraform", "fixtures-..-..-evil"},
+		},
 	}
 
 	for _, tt := range tests {

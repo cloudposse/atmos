@@ -147,7 +147,15 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	// different roots solely because one component name contains "/". Mirror
 	// the same sanitization already used for backend template context (see
 	// internal/exec/terraform_generate_backends.go).
+	//
+	// "\" is sanitized identically and unconditionally (not just on Windows):
+	// it is Windows' real path separator, so a crafted or copy-pasted
+	// component name containing it (e.g. "..\\..\\evil") would otherwise let
+	// filepath.Join/Clean treat it as real ".."-traversal segments there,
+	// escaping the intended workdir root. Stripping it on every platform also
+	// keeps a given component name's workdir path identical across OSes.
 	workdirComponent = strings.ReplaceAll(workdirComponent, "/", "-")
+	workdirComponent = strings.ReplaceAll(workdirComponent, "\\", "-")
 
 	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
 	return filepath.Join(basePath, WorkdirPath, componentType, workdirName)
