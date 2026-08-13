@@ -36,9 +36,9 @@ runs:
 
         diagnose_colima() {
           echo "::group::Colima diagnostics"
-          colima status || true
-          limactl list || true
-          pgrep -fl 'colima|lima|qemu' || true
+          run_with_timeout 30 colima status || true
+          run_with_timeout 30 limactl list || true
+          pgrep -fl 'colima|lima' || true
           for log in "$HOME"/.colima/_lima/colima/serial*.log "$HOME"/.colima/_lima/colima/ha.stderr.log; do
             if [ -f "$log" ]; then
               echo "---- $log ----"
@@ -55,7 +55,7 @@ runs:
         run_with_timeout 420 brew install colima docker
 
         # Colima/Lima occasionally leaves the VM half-started on macOS runners
-        # (SSH/DHCP timeout while QEMU is still exiting). Start from a clean
+        # (SSH/DHCP timeout while the previous VM is still exiting). Start from a clean
         # instance and retry before failing the job. The k3s image is pulled
         # once after the runtime verifies (below), not inside this retry loop,
         # so a slow or rate-limited Docker Hub pull cannot masquerade as a
@@ -63,42 +63,35 @@ runs:
         start_colima() {
           local status=1
 
-          run_with_timeout 180 colima delete --data --force || true
+          run_with_timeout 90 colima delete --data --force || true
 
-          # vz (Virtualization.framework) does not come up on GitHub's Intel
-          # macOS runners, and the k3s job runs on macos-15-intel precisely
-          # because the M-series runners lack the virtualization path Colima
-          # needs (see the build matrix note in test.yml). Trying vz there
-          # burns up to two full attempts (~27 minutes of caps) before qemu,
-          # the runtime that actually works, is tried. Go straight to qemu
-          # on x86_64; keep the vz-first ladder on arm64.
-          local vm_types
-          if [ "$(uname -m)" = "x86_64" ]; then
-            vm_types=(qemu)
-          else
-            vm_types=(vz qemu)
-          fi
-
-          for vm_type in "${vm_types[@]}"; do
-            if [ "$vm_type" = "qemu" ]; then
-              run_with_timeout 420 brew install qemu
-            fi
-
-            for attempt in 1 2; do
-              echo "::group::Start Colima (${vm_type}) attempt ${attempt}"
-              if run_with_timeout 480 colima start --runtime docker --vm-type "$vm_type" --cpu 2 --memory 4 --disk 20 \
-                && run_with_timeout 120 docker info; then
-                echo "::endgroup::"
-                return 0
-              fi
-
-              status=$?
+          # vz (Virtualization.framework) is the runtime that works on the
+          # macos-15-intel runner this job targets; the former qemu fallback
+          # never came up there (usernet SSH-forwarding failure, see
+          # docs/fixes/2026-07-01-macos-k3s-runner-research.md), so it was a
+          # dead rung that only added minutes to the failure path. vz only,
+          # two bounded attempts.
+          for attempt in 1 2; do
+            echo "::group::Start Colima (vz) attempt ${attempt}"
+            if run_with_timeout 480 colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20 \
+              && run_with_timeout 120 docker info; then
               echo "::endgroup::"
-              diagnose_colima
+              return 0
+            else
+              # Capture inside the else: after a completed `if` with no branch
+              # taken, $? is the if statement's own zero, so a post-if capture
+              # makes start_colima report success after every attempt failed.
+              status=$?
+            fi
+            echo "::endgroup::"
+            diagnose_colima
 
-              run_with_timeout 180 colima delete --data --force || true
-              sleep $((attempt * 20))
-            done
+            # Teardown and backoff only between attempts; after the final
+            # failure the runner is discarded, so cleanup is dead time.
+            if [ "$attempt" -lt 2 ]; then
+              run_with_timeout 90 colima delete --data --force || true
+              sleep 20
+            fi
           done
 
           return "$status"
@@ -107,7 +100,7 @@ runs:
         start_colima
 
         docker context use colima || true
-        run_with_timeout 120 docker version
+        run_with_timeout 60 docker version
 
         # Pre-pull the k3s image the Kubernetes emulator drives
         # (pkg/emulator/driver/k3s.go), once, now that the runtime is healthy.
@@ -115,13 +108,13 @@ runs:
         # pull cannot trigger a VM rebuild, but retried on its own: a
         # transient registry failure should not fail the job after the VM
         # came up successfully.
-        for attempt in 1 2 3; do
-          if run_with_timeout 600 docker pull rancher/k3s:latest; then
+        for attempt in 1 2; do
+          if run_with_timeout 300 docker pull rancher/k3s:latest; then
             break
           fi
-          if [ "$attempt" = 3 ]; then
+          if [ "$attempt" = 2 ]; then
             echo "::error::Failed to pull rancher/k3s:latest after ${attempt} attempts"
             exit 1
           fi
-          sleep $((attempt * 30))
+          sleep 30
         done
