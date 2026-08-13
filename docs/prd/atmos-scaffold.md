@@ -438,16 +438,14 @@ pkg/condition also parses is not accepted by the scaffold JSON Schema).
 authors reuse a shape they already know, and CEL `when:` stays the only place any
 filtering logic lives.
 
-`spec.files[].when:` alone only gates a *statically discovered, fixed-count* file —
-it can skip a file, never multiply one. The only list-producing prompt type,
-`multiselect`, requires a static, template-author-declared `options:` list, so there
-was no way to say "one file per item the user selected." The declarative `matrix:`
-below closes that gap.
+`spec.files[].when:` gates whether a statically discovered, fixed-count file is
+generated — it can skip a file, never multiply it. `matrix:` is the mechanism for
+producing more than one file from a single entry: one generated file per resolved
+combination of one or more axes.
 
-**Shape**: everything stays under the existing `spec.files[]` overlay, no new
-top-level `spec` key. `path:` keeps meaning exactly what it means elsewhere (the
-file's on-disk discovered path); two new, optional keys change what happens once an
-entry is matched:
+**Shape**: a matrix entry is a `spec.files[]` entry like any other. `path:` means
+the file's on-disk discovered path, exactly as it does elsewhere. Two optional keys
+control what happens once an entry is matched:
 
 - **`target:`** — a Go-template string overriding the rendered output path. Without
   `matrix:`, it's optional and rendered once, exactly like `path:` is rendered
@@ -603,20 +601,19 @@ successfully, can only be checked once real answers are available, at generation
 time.
 
 **Non-goals**:
-- No directory-level `matrix` (stamping a whole per-combination subtree from one
-  entry). The `path`/`target` split this design is built around should generalize to
-  that, but it isn't implemented.
-- No changes to field types or the interactive prompt form.
+- Directory-level `matrix` — stamping a whole per-combination subtree from one
+  entry. The `path`/`target` split could extend to this, but doesn't today.
+- Changes to field types or the interactive prompt form.
 
 Turning a plain, delimited free-text answer into a list-shaped axis source (e.g.
 `{{ splitList "," answers.environment_csv }}`) and deriving one axis's values from
 nested/structured answer data (e.g. `{{ collectKeys answers.environments "regions" }}`,
-computing the full set of regions used across every environment) were both
-originally scoped as non-goals, but fall out of the general computed-axis mechanism
-above for free — any Sprig/Gomplate function is available to an axis expression,
-not just `collectKeys`. `--set` values for a `multiselect` field are still comma-split
-automatically, so a multiselect-sourced axis keeps working non-interactively without
-needing a template expression at all.
+computing the full set of regions used across every environment) both work through
+the same general computed-axis mechanism described above — any Sprig/Gomplate
+function is available to an axis expression, not just `collectKeys`. `--set` values
+for a `multiselect` field are still comma-split automatically, so a
+multiselect-sourced axis keeps working non-interactively without needing a template
+expression at all.
 
 ### Update Flow (with 3-Way Merge)
 

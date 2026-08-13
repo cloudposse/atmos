@@ -6,11 +6,13 @@ authors: [jorrite]
 tags: [feature]
 ---
 
-A scaffold template's file list is fixed by design: every declared file renders exactly once, and
-`when:` can skip a file entirely but never multiply it. That's a real limit the moment a golden
-path needs "one stack file per environment" or "one deploy manifest per environment-region pair"
-selected during generation — until now, that meant hand-rolling files outside the template, or
-maintaining a pile of near-duplicate ones inside it.
+Every file a scaffold template declares renders exactly once, and `when:` can skip a file entirely
+but never multiply it. One way around that is authoring every combination that could ever be
+needed and letting `when:` prune down to what actually applies this run — but that only works
+when every combination is knowable up front. It falls apart the moment they aren't: environments
+picked interactively out of a longer list, or names typed in by hand that no template author
+could have enumerated in advance. Until now, that meant hand-rolling files outside the template,
+or maintaining a pile of near-duplicate ones inside it.
 
 <!--truncate-->
 
