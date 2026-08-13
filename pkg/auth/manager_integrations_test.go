@@ -53,7 +53,7 @@ func TestManager_GetIntegration(t *testing.T) {
 						Identity: "dev-admin",
 					},
 					Spec: &schema.IntegrationSpec{
-						Registry: &schema.ECRRegistry{
+						Registry: &schema.Registry{
 							AccountID: "123456789012",
 							Region:    "us-east-1",
 						},
@@ -88,7 +88,7 @@ func TestManager_GetIntegration(t *testing.T) {
 }
 
 func TestManager_GetIntegration_ReturnsCorrectData(t *testing.T) {
-	expectedRegistry := &schema.ECRRegistry{
+	expectedRegistry := &schema.Registry{
 		AccountID: "123456789012",
 		Region:    "us-east-1",
 	}
@@ -155,7 +155,7 @@ func TestManager_ExecuteIntegration_NoIdentity(t *testing.T) {
 				Kind: "aws/ecr",
 				// No Via configured.
 				Spec: &schema.IntegrationSpec{
-					Registry: &schema.ECRRegistry{
+					Registry: &schema.Registry{
 						AccountID: "123456789012",
 						Region:    "us-east-1",
 					},
@@ -187,7 +187,7 @@ func TestManager_ExecuteIntegration_EmptyIdentity(t *testing.T) {
 					Identity: "", // Empty identity.
 				},
 				Spec: &schema.IntegrationSpec{
-					Registry: &schema.ECRRegistry{
+					Registry: &schema.Registry{
 						AccountID: "123456789012",
 						Region:    "us-east-1",
 					},
@@ -217,7 +217,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 			integration: schema.Integration{
 				Kind: "aws/ecr",
 				Spec: &schema.IntegrationSpec{
-					Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+					Registry: &schema.Registry{AccountID: "123456789012", Region: "us-east-1"},
 				},
 			},
 			want: "aws/ecr:123456789012:us-east-1",
@@ -236,7 +236,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 			integration: schema.Integration{
 				Kind: "aws/eks",
 				Spec: &schema.IntegrationSpec{
-					Cluster: &schema.EKSCluster{Name: "prod-cluster", Region: "us-west-2"},
+					Cluster: &schema.Cluster{Name: "prod-cluster", Region: "us-west-2"},
 				},
 			},
 			want: "aws/eks:prod-cluster:us-west-2",
@@ -258,7 +258,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 		{
 			name:        "ECR Public with spec also returns fixed key",
 			intName:     "ecr-public-component",
-			integration: schema.Integration{Kind: "aws/ecr-public", Spec: &schema.IntegrationSpec{Registry: &schema.ECRRegistry{Region: "us-east-1"}}},
+			integration: schema.Integration{Kind: "aws/ecr-public", Spec: &schema.IntegrationSpec{Registry: &schema.Registry{Region: "us-east-1"}}},
 			want:        "aws/ecr-public",
 		},
 		{
@@ -275,7 +275,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 			integration: schema.Integration{
 				Kind: "aws/ecr",
 				Spec: &schema.IntegrationSpec{
-					Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+					Registry: &schema.Registry{AccountID: "123456789012", Region: "us-east-1"},
 				},
 			},
 			want: "aws/ecr:123456789012:us-east-1",
@@ -297,7 +297,7 @@ func TestIntegrationTargetKey_Deduplication(t *testing.T) {
 	t.Cleanup(resetProcessIntegrationCache)
 
 	registrySpec := &schema.IntegrationSpec{
-		Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+		Registry: &schema.Registry{AccountID: "123456789012", Region: "us-east-1"},
 	}
 
 	// Two different integration names, same registry.
