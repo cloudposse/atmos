@@ -1,0 +1,12 @@
+# atmos:template
+# Auto-generated deployment manifest for the "{{ .matrix.environment }}"
+# environment in the "{{ .matrix.region }}" region.
+#
+# One copy of this file is generated per environment/region pairing that the
+# deploy_topology preset actually declares -- both axes are *computed* via
+# the collectKeys template function, not sourced from a flat multiselect
+# answer. See scaffold.yaml's `matrix` entry for deploy.yaml, and README.md's
+# "Dynamic File Generation (matrix)" section.
+vars:
+  environment: "{{ .matrix.environment }}"
+  region: "{{ .matrix.region }}"
