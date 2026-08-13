@@ -243,6 +243,10 @@ func (p *deviceCodeProvider) updateAzureCLICache(update *tokenCacheUpdate) error
 	cache, accessTokenSection, accountSection := p.loadAndInitializeCLICache(msalCachePath)
 	cacheKey := p.populateCLICacheWithTokens(accessTokenSection, accountSection, userOID, username, update)
 
+	// Copy refresh tokens from the Atmos realm cache so az can self-mint any
+	// audience and survive access-token expiry.
+	azureCloud.CopyAtmosRefreshTokensInto(cache, home, p.realm, update.HomeAccountID)
+
 	// Write updated cache.
 	updatedData, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
@@ -321,7 +325,7 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 		"local_account_id":            userOID,
 		"username":                    username,
 		"authority_type":              "MSSTS",
-		"account_source":              "device_code",
+		"account_source":              p.accountSource(),
 	}
 	accountSection[accountKey] = accountEntry
 	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
@@ -330,7 +334,8 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
 	// Azure CLI looks up tokens using the management scope as the cache key.
 	// Using a different scope format (like adding user_impersonation) causes lookup failures.
-	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, p.cloudEnv.ManagementScope, ids)
+	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt,
+		strings.Join(append([]string{p.cloudEnv.ManagementScope}, p.cloudEnv.LegacyManagementScopes...), " "), ids)
 
 	// Add Graph API and KeyVault tokens if available.
 	addOptionalCLITokens(accessTokenSection, update, ids, p.cloudEnv)

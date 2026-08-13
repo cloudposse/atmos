@@ -50,7 +50,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@f06d0f4bd286898b613412d2fcc6622e5b68bbdc # v3.0.0
+        uses: cloudposse/github-action-docker-build-push@02993d675b44dcc7082e6de7485c1ff8740bce9d # v3.1.0
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
@@ -58,6 +58,7 @@ jobs:
           login: "${{ github.actor }}"
           password: "${{ secrets.GITHUB_TOKEN }}"
           platforms: linux/amd64,linux/arm64
+          binfmt-image: mirror.gcr.io/tonistiigi/binfmt:qemu-v7.0.0
           file: Dockerfile
           build-args: |
             ATMOS_VERSION=${{ github.event.release.tag_name }}

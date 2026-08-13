@@ -133,7 +133,7 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext)
+	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext, provisioner.OutputWriters{})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrProvisionerFailed).
 			WithCause(err).

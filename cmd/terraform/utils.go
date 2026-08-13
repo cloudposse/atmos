@@ -31,6 +31,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -325,7 +326,7 @@ func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, in
 
 	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
 	defer cancel()
-	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
 		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
 	}
 }
@@ -512,7 +513,12 @@ type terraformNodeHooks struct {
 }
 
 // Before implements schema.ComponentNodeHooks.
-func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+func (n *terraformNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+// BeforeWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
 	injectLastAuthContext(info)
@@ -526,11 +532,16 @@ func (n *terraformNodeHooks) Before(_ context.Context, info *schema.ConfigAndSta
 	// identity-aware store hooks (for example, after-apply output publishing)
 	// do not fall back to ambient credentials.
 	injectHookStoreAuthResolver(&atmosConfig, info)
-	return n.runUserHooksForNode(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess})
+	return n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers)
 }
 
 // After implements schema.ComponentNodeHooks.
-func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+func (n *terraformNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+// AfterWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.After")()
 
 	injectLastAuthContext(info)
@@ -547,7 +558,7 @@ func (n *terraformNodeHooks) After(_ context.Context, info *schema.ConfigAndStac
 	if execErr != nil {
 		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
 	}
-	hookErr := n.runUserHooksForNode(&atmosConfig, info, n.afterEvent, outcome)
+	hookErr := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
 
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNode(&atmosConfig, info, output, execErr)
@@ -575,6 +586,10 @@ func injectLastAuthContext(info *schema.ConfigAndStacksInfo) {
 // verbatim: RunAll already resolves each hook's on_failure mode internally
 // (applyOnFailure) — a non-nil return specifically means on_failure: fail.
 func (n *terraformNodeHooks) runUserHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome) error {
+	return n.runUserHooksForNodeWithWriters(atmosConfig, info, event, outcome, schema.ComponentNodeHookWriters{})
+}
+
+func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome, writers schema.ComponentNodeHookWriters) error {
 	if event == "" {
 		return nil
 	}
@@ -585,6 +600,8 @@ func (n *terraformNodeHooks) runUserHooksForNode(atmosConfig *schema.AtmosConfig
 		Cmd:         n.cmd,
 		Args:        n.args,
 		Outcome:     outcome,
+		Stdout:      writers.Stdout,
+		Stderr:      writers.Stderr,
 	})
 }
 

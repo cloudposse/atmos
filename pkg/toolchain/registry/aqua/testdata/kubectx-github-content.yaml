@@ -1,0 +1,5 @@
+packages:
+  - type: github_content
+    repo_owner: ahmetb
+    repo_name: kubectx
+    path: kubens

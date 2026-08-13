@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -14,7 +15,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestIsWorkdirEnabled(t *testing.T) {
@@ -261,7 +266,7 @@ func TestServiceProvision_WorkdirDisabled(t *testing.T) {
 		// No provision.workdir.enabled
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	// No FS calls should have been made.
 }
@@ -285,7 +290,7 @@ func TestServiceProvision_MissingComponentName(t *testing.T) {
 		// No component field
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -312,7 +317,7 @@ func TestServiceProvision_MkdirFails(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
 }
@@ -340,7 +345,7 @@ func TestServiceProvision_SourceNotExists(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -369,7 +374,7 @@ func TestServiceProvision_SyncDirFails(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirSync)
 }
@@ -394,6 +399,14 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -407,10 +420,35 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	}
 
 	// Hash failure is a warning, not an error.
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	ctx := WithOutputSuppressed(context.Background())
+	err = service.Provision(ctx, atmosConfig, componentConfig, provisioner.OutputWriters{Stderr: &componentOutput})
 	require.NoError(t, err)
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
+	assert.Empty(t, uiOutput.String())
+	plainOutput := atmosansi.Strip(componentOutput.String())
+	assert.Contains(t, plainOutput, "Provisioning workdir for component 'vpc'")
+	assert.Contains(t, plainOutput, "Local component files synced")
+	assert.Contains(t, plainOutput, "Failed to compute content hash: hash failed")
+}
+
+func TestServiceComputeContentHash_WarnsWithoutOutputWriter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockHasher := NewMockHasher(ctrl)
+	mockHasher.EXPECT().HashDir("workdir").Return("", errors.New("hash failed"))
+	service := NewServiceWithDeps(nil, mockHasher)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&output)
+	t.Cleanup(restoreUI)
+
+	contentHash := service.computeContentHash(WithOutputSuppressed(t.Context()), "workdir", provisioner.OutputWriters{})
+
+	assert.Empty(t, contentHash)
+	assert.Contains(t, atmosansi.Strip(output.String()), "Failed to compute content hash: hash failed")
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
@@ -457,7 +495,7 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
 }
@@ -494,7 +532,7 @@ func TestServiceProvision_Success(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 }
@@ -532,7 +570,7 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -574,7 +612,7 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -716,7 +754,7 @@ func TestProvisionWorkdir_DisabledReturnsNil(t *testing.T) {
 		// No provision.workdir.enabled
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -1026,7 +1064,7 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 			service := NewServiceWithDeps(mockFS, mockHasher)
 			atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 
-			err = service.Provision(context.Background(), atmosConfig, tt.componentConfig)
+			err = service.Provision(context.Background(), atmosConfig, tt.componentConfig, provisioner.OutputWriters{})
 			require.NoError(t, err)
 			assert.Contains(t, tt.componentConfig[WorkdirPathKey], tt.expectedInPath)
 		})
@@ -1054,7 +1092,7 @@ func TestServiceProvision_MissingStackName(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -1096,7 +1134,7 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-fallback")
 }
@@ -1481,7 +1519,7 @@ func TestServiceProvision_SkipsWhenSourceConfigured(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// The provisioner should skip without calling any filesystem operations.
 			// No mock expectations needed because it should return early.
-			err := service.Provision(ctx, atmosConfig, tt.config)
+			err := service.Provision(ctx, atmosConfig, tt.config, provisioner.OutputWriters{})
 			assert.NoError(t, err)
 		})
 	}
@@ -1519,7 +1557,7 @@ func TestServiceProvision_SkipsWhenWorkdirPathKeySet(t *testing.T) {
 	}
 
 	// The provisioner should skip without calling any filesystem operations.
-	err := service.Provision(ctx, atmosConfig, config)
+	err := service.Provision(ctx, atmosConfig, config, provisioner.OutputWriters{})
 	assert.NoError(t, err)
 }
 
@@ -1571,7 +1609,7 @@ func TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled(t *testing.T) {
 	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(false, nil)
 	mockHasher.EXPECT().HashDir(workdirPath).Return("hash123", nil)
 
-	err = service.Provision(ctx, atmosConfig, config)
+	err = service.Provision(ctx, atmosConfig, config, provisioner.OutputWriters{})
 	assert.NoError(t, err)
 
 	// Verify WorkdirPathKey was set

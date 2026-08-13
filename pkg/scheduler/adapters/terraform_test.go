@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -57,6 +59,84 @@ func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
 	require.Equal(t, 3, executed)
 	require.Equal(t, 1, starts)
 	require.Equal(t, 1, closes)
+}
+
+func TestExecuteTerraformSuppressesSpinnersDuringConcurrentRun(t *testing.T) {
+	originalSuppressSpinners := suppressTerraformSpinners
+	t.Cleanup(func() { suppressTerraformSpinners = originalSuppressSpinners })
+
+	var active atomic.Bool
+	var restored atomic.Bool
+	suppressTerraformSpinners = func() func() {
+		active.Store(true)
+		return func() {
+			active.Store(false)
+			restored.Store(true)
+		}
+	}
+
+	var observedActive atomic.Bool
+	var observedOutputSuppression atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			observedActive.Store(active.Load())
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, observedActive.Load())
+	require.True(t, observedOutputSuppression.Load())
+	require.True(t, restored.Load())
+	require.False(t, active.Load())
+}
+
+func TestExecuteTerraformKeepsProvisioningOutputForSequentialRun(t *testing.T) {
+	var observedOutputSuppression atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.False(t, observedOutputSuppression.Load())
+}
+
+func TestExecuteTerraformNormalizesNilContext(t *testing.T) {
+	var executorContext context.Context
+	var nilContext context.Context
+	err := ExecuteTerraform(nilContext, TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executorContext = execution.Context
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, executorContext)
 }
 
 func TestStartSharedTerraformCache(t *testing.T) {
@@ -323,25 +403,55 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 // fail for specific nodes, so tests can assert the Dispatch-level wiring
 // added to fix component hooks.RunAll not firing under bulk dispatch.
 type testNodeHooks struct {
-	mu          sync.Mutex
-	beforeCalls []string
-	afterCalls  []string
-	beforeErr   map[string]error
-	afterErr    map[string]error
+	mu                  sync.Mutex
+	beforeCalls         []string
+	afterCalls          []string
+	beforeErr           map[string]error
+	afterErr            map[string]error
+	beforeOutput        string
+	beforeOutputReady   chan<- struct{}
+	beforeOutputRelease <-chan struct{}
 }
 
-func (n *testNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+func (n *testNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	n.mu.Lock()
-	defer n.mu.Unlock()
 	key := info.Component + "@" + info.Stack
 	n.beforeCalls = append(n.beforeCalls, key)
-	if n.beforeErr != nil {
-		return n.beforeErr[key]
+	err := n.beforeErr[key]
+	beforeOutput := n.beforeOutput
+	ready := n.beforeOutputReady
+	release := n.beforeOutputRelease
+	n.mu.Unlock()
+
+	if err != nil {
+		return err
 	}
+	if beforeOutput == "" {
+		return nil
+	}
+	if writers.Stdout == nil {
+		writers.Stdout = os.Stdout
+	}
+	if ready != nil && release != nil {
+		_, _ = fmt.Fprint(writers.Stdout, "hook progress\r")
+		ready <- struct{}{}
+		<-release
+		_, _ = fmt.Fprint(writers.Stdout, "hook complete\n")
+		return nil
+	}
+	_, _ = fmt.Fprint(writers.Stdout, beforeOutput)
 	return nil
 }
 
-func (n *testNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error) error {
+func (n *testNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error, _ schema.ComponentNodeHookWriters) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := info.Component + "@" + info.Stack
@@ -383,6 +493,66 @@ func TestExecuteTerraformFiresNodeHooksBeforeAndAfter(t *testing.T) {
 	require.Equal(t, want, executed)
 	require.Equal(t, want, nodeHooks.beforeCalls, "Before must fire once per node with the executed order")
 	require.Equal(t, want, nodeHooks.afterCalls, "After must fire once per node with the executed order")
+}
+
+func TestExecuteTerraformConcurrentHooksUseNodeWriters(t *testing.T) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdout := os.Stdout
+	os.Stdout = stdoutWriter
+	t.Cleanup(func() { os.Stdout = originalStdout })
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"db":  terraformAdapterComponentWithPath("selected", terraformAdapterPath("db")),
+				},
+			},
+		},
+	}
+
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- ExecuteTerraform(context.Background(), TerraformOptions{
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info: &schema.ConfigAndStacksInfo{
+				All:               true,
+				SubCommand:        "plan",
+				MaxConcurrency:    2,
+				TerraformLogOrder: terraformLogOrderStream,
+				NodeHooks: &testNodeHooks{
+					beforeOutput:        "hook progress\rhook complete\n",
+					beforeOutputReady:   ready,
+					beforeOutputRelease: release,
+				},
+			},
+			Stacks: stacks,
+			Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				return TerraformExecutionResult{}, nil
+			},
+		})
+	}()
+
+	for range 2 {
+		select {
+		case <-ready:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent hooks did not both write their partial records")
+		}
+	}
+	close(release)
+	err = <-errCh
+	require.NoError(t, err)
+	require.NoError(t, stdoutWriter.Close())
+	stdout, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	require.Contains(t, string(stdout), "[dev/app] hook progress\n[dev/app] hook complete\n")
+	require.Contains(t, string(stdout), "[dev/db] hook progress\n[dev/db] hook complete\n")
 }
 
 func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {

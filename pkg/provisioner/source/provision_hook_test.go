@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,8 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExtractComponentName(t *testing.T) {
@@ -1398,7 +1403,7 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
 }
 
@@ -1447,12 +1452,48 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// The guard marker must now be present in componentConfig.
 	_, done := componentConfig[invocationDoneKey]
 	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+}
+
+func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"source": map[string]any{
+			"uri": sourceDir,
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	ctx := workdir.WithOutputSuppressed(t.Context())
+	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{Stderr: &componentOutput})
+	require.NoError(t, err)
+	assert.Empty(t, uiOutput.String())
+	assert.Contains(t, atmosansi.Strip(componentOutput.String()), "Auto-provisioned source to")
 }
 
 // TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
@@ -1472,7 +1513,7 @@ func TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir(t *testi
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.NoDirExists(t, filepath.Join(tmpDir, "app"),
@@ -1497,7 +1538,7 @@ func TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir(t *test
 		},
 	}
 
-	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.Error(t, err, "provisioning from a nonexistent source must fail")
 
 	assert.DirExists(t, targetDir,

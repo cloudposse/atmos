@@ -315,7 +315,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.19.1/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.19.2/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
@@ -735,7 +735,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - k8s.io/api
     License: Apache-2.0
-    URL: https://github.com/kubernetes/api/blob/v0.36.2/LICENSE
+    URL: https://github.com/kubernetes/api/blob/v0.36.3/LICENSE
 
   - k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
     License: Apache-2.0
@@ -743,7 +743,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - k8s.io/apimachinery/pkg
     License: Apache-2.0
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.2/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/LICENSE
 
   - k8s.io/apiserver/pkg/endpoints/deprecation
     License: Apache-2.0
@@ -755,7 +755,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - k8s.io/client-go
     License: Apache-2.0
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.2/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/LICENSE
 
   - k8s.io/component-base/version
     License: Apache-2.0
@@ -1096,11 +1096,11 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.37.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.55.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.56.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1120,7 +1120,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.38.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.39.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
@@ -1164,11 +1164,11 @@ BSD LICENSED DEPENDENCIES
 
   - k8s.io/apimachinery/third_party/forked/golang
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.2/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/third_party/forked/golang/LICENSE
 
   - k8s.io/client-go/third_party/forked/golang/template
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.2/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/third_party/forked/golang/LICENSE
 
   - k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json
     License: BSD-3-Clause
@@ -1297,7 +1297,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/terraform-config-inspect/tfconfig
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-config-inspect/blob/813a97530220/LICENSE
+    URL: https://github.com/hashicorp/terraform-config-inspect/blob/2fb54c236733/LICENSE
 
   - github.com/hashicorp/terraform-exec
     License: MPL-2.0
@@ -1368,9 +1368,17 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
 
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armresources/v1.2.0/sdk/resourcemanager/resources/armresources/LICENSE.txt
+
   - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
+
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/storage/armstorage/v4.1.0/sdk/resourcemanager/storage/armstorage/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys
     License: MIT
@@ -1650,7 +1658,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/epiclabs-io/diff3
     License: MIT
-    URL: https://github.com/epiclabs-io/diff3/blob/280ec18688b6/LICENSE
+    URL: https://github.com/epiclabs-io/diff3/blob/3b1669897fb1/LICENSE
 
   - github.com/exponent-io/jsonpath
     License: MIT
@@ -2246,7 +2254,7 @@ MIT LICENSED DEPENDENCIES
 
   - k8s.io/client-go/third_party/forked/httpcache
     License: MIT
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.2/third_party/forked/httpcache/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/third_party/forked/httpcache/LICENSE
 
   - modernc.org/libc
     License: MIT
