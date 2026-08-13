@@ -5,11 +5,13 @@
 # backend.local.path (../../../.context/tfstate/...).
 .context/
 
-# Ignore the sibling directory the "../escape-test-nowd" path-traversal probe
-# lands in when provision.workdir.enabled is NOT set (DetermineTargetDirectory's
-# no-guard fallback in pkg/provisioner/source/source.go escapes one level out
-# of components/terraform/ into components/<name>/). Kept ignored rather than
-# removed from the fixture so the probe stays runnable.
+# The "../escape-test-nowd" path-traversal probe (provision.workdir.enabled
+# NOT set) now fails with ErrPathTraversal before writing anything --
+# DetermineTargetDirectory in pkg/provisioner/source/source.go gained a
+# containment guard, so this sibling directory should never actually be
+# created. The ignore entry is kept defensively (harmless if empty, catches
+# a regression that resurrects the escape rather than silently untracking a
+# real vendored directory) rather than removed.
 components/escape-test-nowd/
 
 # Terraform files.

@@ -27,9 +27,10 @@ observe the bug's real-world symptom:
 - `app/local-nested`: a **local (non-source)** nested component with
   workdir enabled, exercising `pkg/provisioner/workdir/workdir.go`'s
   `Service.Provision` -> `createWorkdirDirectory`, a *different* code path
-  from `workdir.BuildPath` that reimplements the same unsanitized
-  `fmt.Sprintf("%s-%s", stack, component)` + `filepath.Join` formula and
-  was **not** touched by the fix (see Known Findings below).
+  from `workdir.BuildPath` that used to reimplement the same unsanitized
+  `fmt.Sprintf("%s-%s", stack, component)` + `filepath.Join` formula
+  (`createWorkdirDirectory` now delegates to `BuildPath` -- see
+  docs/fixes/2026-08-07-createworkdirdirectory-duplicate-unsanitized-formula.md).
 - `../escape-test` and `../escape-test-nowd`: path-traversal probes for
   component names containing `..` segments.
 - `consumer-*`: components reading the flat and nested producers via
@@ -54,21 +55,24 @@ find .context -type f
 atmos describe component consumer-nested-output --stack dev
 atmos describe component consumer-nested-state --stack dev
 
-# KNOWN BUG (not fixed by workdir.BuildPath): local, non-source nested
-# component reproduces the original one-level-too-deep symptom via a
-# different function (createWorkdirDirectory). Expect
-# .workdir/terraform/dev-app/local-nested/ (a REAL nested directory) instead
-# of the sanitized sibling .workdir/terraform/dev-app-local-nested/, and
-# state landing at .workdir/.context/tfstate/dev/app-local-nested/ instead
-# of .context/tfstate/dev/app-local-nested/ at the fixture root:
+# FIXED: local, non-source nested component now sanitizes identically to
+# workdir.BuildPath (createWorkdirDirectory delegates to it). Expect the
+# sanitized sibling .workdir/terraform/dev-app-local-nested/ (NOT a real
+# nested .workdir/terraform/dev-app/local-nested/ directory), and state
+# landing at .context/tfstate/dev/app-local-nested/ at the fixture root
+# (NOT nested one level short at .workdir/.context/tfstate/...):
 atmos terraform apply "app/local-nested" --stack dev
+find .workdir/terraform -maxdepth 1 -mindepth 1 -type d
 find .workdir -name terraform.tfstate -not -path "*/.terraform/*"
 
-# Path-traversal probes (no destructive action -- both stay within this
-# fixture directory on this branch, but are unguarded by design; see the
-# fix's follow-up report for the exact escape mechanism observed):
-atmos terraform source pull "../escape-test" --stack dev        # sanitized, safe (see report)
-atmos terraform source pull "../escape-test-nowd" --stack dev   # NOT sanitized -- escapes components/terraform/
+# Path-traversal probes: both are now guarded and must fail with
+# ErrPathTraversal ("path traversal not allowed") rather than vendoring
+# outside the intended component base path. Neither should create
+# anything under components/ -- confirm with the `test -d` checks below.
+atmos terraform source pull "../escape-test" --stack dev        # sanitized, safe
+atmos terraform source pull "../escape-test-nowd" --stack dev   # must fail with ErrPathTraversal
+test -d components/escape-test && echo "UNEXPECTED: escape-test dir exists" || echo "ok: no escape"
+test -d components/escape-test-nowd && echo "UNEXPECTED: escape-test-nowd dir exists" || echo "ok: no escape"
 ```
 
 ## Cleanup
