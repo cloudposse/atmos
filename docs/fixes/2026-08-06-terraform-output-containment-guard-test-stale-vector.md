@@ -5,7 +5,7 @@
 ## Summary
 
 `TestExtractComponentPath_ContainmentGuard` (`pkg/terraform/output/config_test.go`)
-started failing on all three CI platforms (linux, windows, macos) after an
+started failing on all three CI platforms (linux, windows, macOS) after an
 unrelated, earlier fix closed the specific traversal vector the test
 exercised. No production code was broken — the test's chosen attack vector
 just stopped being reachable, so the containment guard it was checking
@@ -57,7 +57,7 @@ still needs to catch, and the pre-fix test simply wasn't exercising it.
 - `go build ./...` — clean.
 - `go test ./pkg/terraform/output/...` (full package) — all pass.
 - `atmos lint --changed` — 0 issues.
-- Confirmed via the linux/windows/macos Acceptance Tests CI logs that this
+- Confirmed via the linux/windows/macOS Acceptance Tests CI logs that this
   was the *only* failing test across all three platforms before this fix,
   and that no other package was affected.
 
