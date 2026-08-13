@@ -1,35 +1,35 @@
 ---
 slug: scaffold-matrix
-title: "One scaffold template, one file per environment, region, or any combination"
+title: "Generate one file per selection with `matrix:`"
 date: 2026-08-12T12:00:00.000Z
 authors: [jorrite]
 tags: [feature]
 ---
 
-Every file a scaffold template declares renders exactly once, and `when:` can skip a file entirely
-but never multiply it. One way around that is authoring every combination that could ever be
-needed and letting `when:` prune down to what actually applies this run — but that only works
-when every combination is knowable up front. It falls apart the moment they aren't: environments
-picked interactively out of a longer list, or names typed in by hand that no template author
-could have enumerated in advance. Until now, that meant hand-rolling files outside the template,
-or maintaining a pile of near-duplicate ones inside it.
+Every file a scaffold template declares renders exactly once. `when:` can skip a file, but it
+can never multiply one. You could work around that by authoring every combination up front and
+letting `when:` prune down to what applies — but that only works if every combination is
+knowable in advance. It breaks down for environments picked interactively from a longer list, or
+names typed in by hand that no template author could have enumerated ahead of time. Until now,
+that meant hand-rolling files outside the template, or maintaining a pile of near-duplicate ones
+inside it.
 
 <!--truncate-->
 
 ## The Problem
 
-The number of files a project needs often isn't fixed at all — it depends on what gets selected
-when the project is generated. Three environments picked out of five available ones should mean
-three stack files, not five, and not one file manually copy-pasted three times. Nothing in a
-template's file list could express "generate one of these per selected value" — only "generate
-this file" or "skip this file."
+The number of files a project needs often depends on what gets selected when the project is
+generated. Pick three environments out of five, and you want three stack files — not five, and
+not one file copy-pasted by hand three times. Nothing in a template's file list could express
+that: only "generate this file" or "skip this file," never "generate one of these per selected
+value."
 
 ## The Fix
 
-`matrix:` on a file entry expands it into one generated file per combination of one or more axes,
-reusing the exact shape Atmos workflow `matrix:` steps already use, so the shape is one template
-authors likely already know. `when:` prunes combinations that don't apply — the same conditional
-engine that already gates whole files, now scoped to one combination at a time:
+Declaring `matrix:` on a file entry expands it into one generated file per combination of one or
+more axes. It reuses the same shape Atmos workflow `matrix:` steps already use, so the syntax
+should feel familiar. `when:` still prunes combinations that don't apply — the same conditional
+engine that already gates whole files, now scoped to a single combination at a time:
 
 ```yaml
 spec:
@@ -45,15 +45,15 @@ spec:
 ```
 
 Selecting `dev` and `staging` generates exactly `stacks/deploy/dev.yaml` and
-`stacks/deploy/staging.yaml` — nothing more, nothing hand-maintained. Declaring more than one axis
-expands their full combination, and each resolved combination is available as `.matrix.<axis>`
-everywhere a file entry can use it: in the output path, in `when:`, and inside the generated file's
-own content, so a file can both name itself and branch on its own combination.
+`stacks/deploy/staging.yaml`. Declaring more than one axis expands their full combination, and
+each resolved combination is available as `.matrix.<axis>` anywhere a file entry can use it: in
+the output path, in `when:`, and inside the generated file's own content — so a file can name
+itself and branch on its own combination.
 
 ### Free-text answers
 
-The intro's "typed in by hand" case works too — an axis doesn't need a `multiselect` at all. A
-plain free-text answer is just a string; split it into a list with any Sprig function,
+The "typed in by hand" case works too. An axis doesn't need to be a `multiselect` at all — a
+plain free-text answer is just a string, and any Sprig function can split it into a list,
 `splitList` included:
 
 ```yaml
@@ -69,17 +69,17 @@ spec:
         environment: '{{ splitList "," answers.environments_csv }}'
 ```
 
-Typing `dev,staging,production` at the prompt generates the same three files the `multiselect`
-example above does — except now the values aren't limited to options a template author had to
-list ahead of time.
+Typing `dev,staging,production` at the prompt generates the same three files as the `multiselect`
+example above — except now the values aren't limited to options a template author had to list in
+advance.
 
 ### Computed axes
 
 Real answers aren't always a flat, pre-selected list. An environment might carry its own set of
 regions, varying per environment — the full list of regions actually used isn't something anyone
-selected directly, it has to be derived. A `collectKeys` function is available anywhere an axis
-needs computing: `collectKeys` on its own returns a map's keys, and given a second argument, it
-collects that key from every value in the map, flattening and deduplicating across all of them:
+selected directly, it has to be derived. The `collectKeys` function handles this: called with one
+argument, it returns a map's keys; called with a second argument, it collects that key from every
+value in the map, flattening and deduplicating across all of them.
 
 ```yaml
 matrix:
@@ -88,8 +88,8 @@ matrix:
 when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
-`environment` becomes every environment, `region` becomes every region used by any of them, and
-`when:` prunes the full combination back down to each environment's actual regions.
+Here, `environment` becomes every environment, and `region` becomes every region used by any of
+them. `when:` then prunes the full combination back down to each environment's actual regions.
 
 ## How to Use It
 
