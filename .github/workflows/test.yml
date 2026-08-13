@@ -605,7 +605,11 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        timeout-minutes: 45
+        # Must exceed the setup-colima vz -> qemu fallback ladder. At 45 minutes
+        # the step was guillotined partway through the vz retries, so the qemu
+        # fallback (the runtime that actually comes up on the Intel runner) never
+        # ran and every failure cost the full 45 minutes.
+        timeout-minutes: 60
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
