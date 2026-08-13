@@ -9,6 +9,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// axisListSeparator joins axisList's String() representation. The ASCII
+// Unit Separator (0x1F) is a non-printable control character reserved by
+// ASCII specifically for this purpose (delimiting data fields within a
+// record) and cannot occur in any realistic YAML-authored map key or answer
+// value, unlike a space or comma -- see axisList for why this matters.
+const axisListSeparator = "\x1f"
+
+// axisList is []string with a custom String(): when a matrix axis
+// expression's entire body is one bare function call (e.g. "{{ keys
+// answers.environments }}"), Go's text/template stringifies the result via
+// fmt's Stringer interface if present, so returning axisList instead of a
+// plain []string makes that stringification unambiguous and losslessly
+// reversible by parseAxisExpressionResult -- unlike []string's default %v
+// formatting ("[a b c]", space-joined), which can't distinguish "one value
+// containing a space" from "two values". Ranging over axisList (e.g. "{{
+// range keys answers.environments }}") behaves identically to []string,
+// since String() is only consulted when the value itself is the thing being
+// printed.
+type axisList []string
+
+// String renders v with a leading axisListSeparator, then one more before
+// every subsequent element. The leading separator is load-bearing, not
+// cosmetic: without it, a single-element list whose one value itself
+// contains whitespace (e.g. axisList{"us east"}) would render identically
+// to how a plain, non-axisList string would ("us east"), making the two
+// indistinguishable to parseAxisExpressionResult. The leading separator
+// means only true axisList output ever starts with it, so its mere presence
+// -- regardless of element count -- unambiguously selects the exact-split
+// parse path over the best-effort fallback.
+func (v axisList) String() string {
+	return axisListSeparator + strings.Join([]string(v), axisListSeparator)
+}
+
 // keysFunc is the "keys" template function available to scaffold templates
 // and matrix axis expressions. With no extra argument it returns v's
 // top-level keys, sorted for deterministic matrix expansion. With a
@@ -16,7 +49,7 @@ import (
 // nestedKey's own keys from every one of v's values, flattening and
 // deduplicating across all of them -- e.g. keys(answers.environments,
 // "regions") returns every region that appears in any environment.
-func keysFunc(v any, nestedKey ...string) ([]string, error) {
+func keysFunc(v any, nestedKey ...string) (axisList, error) {
 	m, err := toStringKeyedMap(v)
 	if err != nil {
 		return nil, err
@@ -127,28 +160,35 @@ func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]i
 			Err()
 	}
 
-	return parseBracketedList(result.String()), nil
+	return parseAxisExpressionResult(result.String()), nil
 }
 
-// parseBracketedList parses a rendered axis expression's text output into a
-// list of values. Tolerant of Go's default %v slice formatting ("[a b c]",
-// what {{ keys ... }} renders as) as well as a plain whitespace-separated
-// list without brackets, so a template author isn't tied to one specific
-// function's output shape.
+// parseAxisExpressionResult parses a rendered axis expression's text output
+// into a list of values.
 //
-// Known constraint: splitting on whitespace cannot distinguish "one value
-// containing a space" from "two values" -- an individual resolved value with
-// whitespace in it (e.g. a map key with a space) would be split incorrectly.
-// This is accepted rather than worked around: matrix axis values are always
-// identifier-like strings in practice (environment names, region codes --
-// infrastructure taxonomies that don't contain whitespace), and Go's
-// text/template always stringifies a returned []string via this same
-// space-joined %v format, so switching the delimiter here (e.g. to
-// newlines) wouldn't help without also requiring template authors to write
-// {{ range keys answers.environments }}{{ . }}{{ "\n" }}{{ end }} instead of
-// the single-call {{ keys answers.environments }} syntax this feature is
-// designed around (see https://github.com/orgs/cloudposse/discussions/126).
-func parseBracketedList(rendered string) []string {
+// The primary, unambiguous path: a leading axisListSeparator (0x1F) means
+// the expression's result was an axisList (e.g. keys' return value)
+// stringified via its String() method -- strip it and split the remainder
+// on the same separator, which losslessly recovers every value exactly as
+// computed, including a single value that itself contains whitespace (the
+// leading separator is what makes this unambiguous regardless of element
+// count -- see axisList.String()'s doc comment).
+//
+// Fallback for anything else (a custom function that doesn't return
+// axisList): tolerant of Go's default %v slice formatting ("[a b c]") as
+// well as a plain whitespace-separated list without brackets, so a template
+// author isn't tied to axisList specifically. This fallback can't
+// distinguish "one value containing a space" from "two values" -- but it
+// only applies when the result doesn't start with axisListSeparator, i.e.
+// the expression didn't go through axisList's String() in the first place.
+func parseAxisExpressionResult(rendered string) []string {
+	if rest, ok := strings.CutPrefix(rendered, axisListSeparator); ok {
+		if rest == "" {
+			return []string{}
+		}
+		return strings.Split(rest, axisListSeparator)
+	}
+
 	trimmed := strings.TrimSpace(rendered)
 	trimmed = strings.TrimPrefix(trimmed, "[")
 	trimmed = strings.TrimSuffix(trimmed, "]")

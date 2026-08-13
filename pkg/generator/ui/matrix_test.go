@@ -176,6 +176,69 @@ func TestExecuteWithSetup_FilesMatrixComputedAxesFromNestedAnswers(t *testing.T)
 	}
 }
 
+// whitespaceAxisScaffoldYAML declares a single computed axis (environment)
+// over answers.environments, whose keys include one containing whitespace.
+const whitespaceAxisScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-template
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: '{{ keys answers.environments }}'
+`
+
+func whitespaceAxisEmbedsConfig() *templates.Configuration {
+	return &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: whitespaceAxisScaffoldYAML, Permissions: 0o644},
+			{
+				Path:        "deploy.yaml",
+				Content:     "environment: {{ .matrix.environment }}\n",
+				IsTemplate:  true,
+				Permissions: 0o644,
+			},
+		},
+	}
+}
+
+// TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace is
+// the end-to-end regression test for a computed axis value that itself
+// contains whitespace: proves both target-path rendering (the generated
+// file's own path) and the file's rendered content carry the value through
+// intact, all the way from the raw answers map through ExpandMatrix,
+// .matrix.<axis> binding, and template rendering -- not split into two
+// combinations, and not truncated at the space.
+func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	cmdTemplateValues := map[string]interface{}{
+		"environments": map[string]interface{}{
+			"us east": map[string]interface{}{},
+			"dev":     map[string]interface{}{},
+		},
+	}
+
+	err := ui.executeWithSetup(whitespaceAxisEmbedsConfig(), targetDir, false, false, true, "", cmdTemplateValues, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		relPath string
+		want    string
+	}{
+		{filepath.Join("deploy", "us east.yaml"), "environment: us east\n"},
+		{filepath.Join("deploy", "dev.yaml"), "environment: dev\n"},
+	} {
+		content, readErr := os.ReadFile(filepath.Join(targetDir, tc.relPath))
+		require.NoError(t, readErr, "expected %s to be generated", tc.relPath)
+		assert.Equal(t, tc.want, string(content))
+	}
+}
+
 func TestExecuteWithSetup_FilesMatrixDuplicateTargetFails(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()

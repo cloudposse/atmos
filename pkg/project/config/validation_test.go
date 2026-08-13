@@ -362,6 +362,21 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 	}
 }
 
+// TestValidateMatrixAxisValueRejectsNonStringElement is a direct unit test of
+// validateMatrixAxisValue's []any branch, called in-package rather than
+// through LoadScaffoldConfigFromContent: the same region: [5] input is
+// already rejected earlier by JSON Schema validation on that path (see
+// "literal axis list with non-string element" above), which would never
+// reach this function at all. This test exercises validateMatrixAxisValue
+// itself, as a defense-in-depth backstop should it ever be reached from a
+// caller that skips schema validation.
+func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
 func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
 	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +

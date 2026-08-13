@@ -569,20 +569,15 @@ registered as a zero-argument template function rather than a data field — Go'
 template grammar only chains `.field` access off of `.` or a `$var`, never off a
 bare identifier, but it does chain off a bare identifier's function-call result,
 which is what lets `answers.environments` parse as "call `answers()`, then select
-`.environments`." The expression's rendered text is then parsed back into a list:
-tolerant of Go's default slice-formatting style (`[a b c]`, what `keys` renders as)
-as well as a plain whitespace-separated list without brackets.
-
-**Known constraint**: because the rendered list is parsed by splitting on
-whitespace, an individual resolved value that itself contains whitespace (e.g. a
-map key with a space in it) cannot be distinguished from two separate values.
-Axis expressions are expected to resolve to identifier-like strings (environment
-names, region codes, and similar infrastructure taxonomy) that never contain
-whitespace in practice; this is a deliberate, documented constraint rather than
-a validated one. Working around it in general (e.g. requiring a newline-joined
-`{{ range keys answers.environments }}{{ . }}{{ "\n" }}{{ end }}` form) would
-regress the clean, single-call `{{ keys answers.environments }}` syntax this
-feature is designed around, so it is not attempted.
+`.environments`." The expression's rendered text is then parsed back into a list.
+`keys` (and any custom function meant for axis use) returns a small named string-slice
+type whose text representation uses a non-printable, unambiguous separator instead of
+Go's default slice-formatting style (`[a b c]`, space-joined) — so a resolved value
+that itself contains whitespace (e.g. a map key with a space in it) still round-trips
+as one intact value, not split into two. A plain whitespace-separated or
+bracket-wrapped list without that marker (e.g. from a function that doesn't use it)
+still parses on a best-effort basis for compatibility, with the same whitespace
+ambiguity that implies.
 
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so

@@ -164,6 +164,11 @@ func validateMatrixAxisValue(filePath, axis string, value any) error {
 		if len(v) == 0 {
 			return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
 		}
+		for _, item := range v {
+			if _, ok := item.(string); !ok {
+				return fmt.Errorf("%w: file %q axis %q: element %v is not a string", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, item)
+			}
+		}
 	default:
 		return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
 	}

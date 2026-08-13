@@ -157,6 +157,27 @@ func TestExpandMatrix_TemplateExpressionAxis(t *testing.T) {
 	assert.Equal(t, "staging", rows[1]["environment"])
 }
 
+// TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace proves a
+// computed axis value that itself contains whitespace survives Cartesian
+// product expansion as one intact value -- not split, not truncated. The
+// render func here stands in for RenderMatrixAxisExpression (already
+// covered directly by TestRenderMatrixAxisExpression_ValueContainingWhitespace
+// in funcs_test.go); this test's job is to prove ExpandMatrix itself doesn't
+// re-split or otherwise mangle a renderer's returned values on the way into
+// a row.
+func TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace(t *testing.T) {
+	matrix := map[string]any{"environment": "{{ keys answers.environments }}"}
+	render := func(string, map[string]interface{}, []string) ([]string, error) {
+		return []string{"us east", "dev"}, nil
+	}
+
+	rows, err := ExpandMatrix(matrix, map[string]interface{}{}, render, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "us east", rows[0]["environment"])
+	assert.Equal(t, "dev", rows[1]["environment"])
+}
+
 // TestExpandMatrix_TemplateExpressionAxisCustomDelimiters proves a matrix
 // axis expression is detected as a template expression using the scaffold's
 // own custom delimiters ("[["/"]]"), not a hardcoded "{{"/"}}" -- without
