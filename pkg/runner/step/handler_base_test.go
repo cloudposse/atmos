@@ -100,14 +100,45 @@ func TestBaseHandler_ValidateRequired(t *testing.T) {
 	t.Run("default (non-verbose) message names the step and field", func(t *testing.T) {
 		// The field/step/type are already computed here — the default message must
 		// surface them directly rather than hiding them behind --verbose context.
-		step := &schema.WorkflowStep{Name: "run", Type: "container"}
-		err := handler.ValidateRequired(step, "run.image", "")
-		require.Error(t, err)
+		// Step name, type, and field are chosen with no shared substrings across
+		// cases so each assertion can only pass by actually finding its own
+		// value, not by accidentally matching a different field's text.
+		tests := []struct {
+			name     string
+			step     *schema.WorkflowStep
+			field    string
+			wantType string // empty means step.Type == "" -- the "(type ...)" clause must be omitted
+		}{
+			{
+				name:     "typed step",
+				step:     &schema.WorkflowStep{Name: "build-step-alpha", Type: "container"},
+				field:    "run.image",
+				wantType: "container",
+			},
+			{
+				// Covers ValidateRequired's step.Type == "" branch, which omits the
+				// "(type ...)" clause entirely -- untested before this case.
+				name:     "untyped step",
+				step:     &schema.WorkflowStep{Name: "notify-step-beta", Type: ""},
+				field:    "prompt",
+				wantType: "",
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := handler.ValidateRequired(tt.step, tt.field, "")
+				require.Error(t, err)
 
-		formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
-		assert.Contains(t, formatted, "run", "default message should name the step")
-		assert.Contains(t, formatted, "container", "default message should name the step type")
-		assert.Contains(t, formatted, "run.image", "default message should name the missing field")
+				formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+				assert.Contains(t, formatted, tt.step.Name, "default message should name the step")
+				assert.Contains(t, formatted, tt.field, "default message should name the missing field")
+				if tt.wantType != "" {
+					assert.Contains(t, formatted, tt.wantType, "default message should name the step type")
+				} else {
+					assert.NotContains(t, formatted, "(type", "default message must omit the type clause when step.Type is empty")
+				}
+			})
+		}
 	})
 }
 
