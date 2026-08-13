@@ -45,3 +45,15 @@ const (
 	LogFieldExpiresOn    = "expiresOn"    // Log field for token expiration.
 	LogFieldKey          = "key"          // Log field for cache key.
 )
+
+// AKS server AAD application constants. AKSServerAppID is the well-known
+// application ID for AKS-managed AAD server apps (the "aks" first-party app),
+// the same GUID across public/government/china clouds — only the token
+// issuer endpoint (CloudEnvironment.LoginEndpoint) varies. Used as a
+// login-time speculative token acquisition; the update-kubeconfig path
+// prefers the cluster-specific server ID parsed from
+// ListClusterUserCredentials when a cluster is already known.
+const (
+	AKSServerAppID = "6dae42f8-4368-4678-94ff-3960e28e3630"
+	AKSServerScope = AKSServerAppID + "/.default"
+)

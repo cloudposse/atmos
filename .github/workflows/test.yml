@@ -305,8 +305,14 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
-      # TestTerraformRegistryCache runs once above on every active OS. Skip it
-      # here so Linux coverage does not execute the same trust/cache test twice.
+      # TestTerraformRegistryCache runs once above on every active OS. Skip it in
+      # both steps below so no OS executes the same trust/cache test twice: it
+      # installs/removes a real cert in the OS trust store (the macOS System
+      # keychain via `sudo security`, or the Windows Root store), and a second,
+      # concurrent run racing dozens of other tests that make real TLS calls
+      # (provider installs, vendor pulls, GitHub API requests) can destabilize
+      # trust verification for the rest of the job — surfacing as spurious
+      # "certificate signed by unknown authority" failures on unrelated tests.
       - name: Acceptance tests with coverage
         timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
@@ -338,6 +344,7 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          TESTARGS: "-skip=^TestTerraformRegistryCache$"
         run: atmos test acceptance
 
       - name: Upload coverage report artifact
