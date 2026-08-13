@@ -50,6 +50,26 @@ func TestIsAtmosYAMLFunction(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "detects !labels function",
+			input:    "!labels",
+			expected: true,
+		},
+		{
+			name:     "detects !labels.keys function",
+			input:    "!labels.keys",
+			expected: true,
+		},
+		{
+			name:     "detects !labels.values function",
+			input:    "!labels.values",
+			expected: true,
+		},
+		{
+			name:     "detects !tags function",
+			input:    "!tags",
+			expected: true,
+		},
+		{
 			name:     "returns false for regular string",
 			input:    "regular string",
 			expected: false,

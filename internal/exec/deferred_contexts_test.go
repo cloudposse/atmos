@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -95,7 +96,7 @@ func TestResolveDeferredYamlFunctions_SkipsSectionMissingFromComponentSection(t 
 // it must fail loudly (errUtils.ErrDeferredTemplateContextMissing) instead of leaving a nil/unset
 // placeholder in the final vars.
 func TestProcessStacks_DeferredYamlFunctionResolutionError_PropagatesFromProcessStacks(t *testing.T) {
-	t.Chdir("../../tests/fixtures/scenarios/atmos-yaml-functions-merge")
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-yaml-functions-merge"))
 	t.Setenv("ATMOS_STAGE", "test")
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)

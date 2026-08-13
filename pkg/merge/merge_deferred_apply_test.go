@@ -252,8 +252,8 @@ func TestApplyDeferredMerges_SingleContributionReuse(t *testing.T) {
 	newProcessor := func(calls *int) *mockYAMLProcessor {
 		return &mockYAMLProcessor{processFunc: func(value string) (any, error) {
 			*calls++
-			// Simulate a NON-deterministic/side-effecting function: each invocation yields a
-			// distinct value, so a spurious second call would be observable in the result.
+			// Stands in for a side-effecting function such as !exec. The `calls` counter is the
+			// observable signal: a spurious second invocation increments it.
 			return "resolved", nil
 		}}
 	}

@@ -351,8 +351,8 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 
 		tagList, ok := vars["tag_list"].([]interface{})
 		require.True(t, ok, "vars.tag_list should be a list")
-		assert.ElementsMatch(t, []interface{}{"X", "Y", "Z"}, tagList,
-			"!tags result must merge with the component's own override list, not be replaced by it")
+		assert.Equal(t, []interface{}{"X", "Y", "Z"}, tagList,
+			"!tags result must merge with the component's own override list, not be replaced by it, and must preserve precedence order")
 	})
 
 	t.Run("handles multiple yaml functions with precedence", func(t *testing.T) {
@@ -383,6 +383,182 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		assert.Contains(t, vars, "region")
 	})
 
+	t.Run("deep merges a deferred function nested inside a list item", func(t *testing.T) {
+		// base-component-list-nested (list_merge_strategy: merge) sets servers[0] = {name: web,
+		// stage: !env ATMOS_STAGE} and servers[1] = {name: db, stage: static}; the component
+		// overrides servers[0] with {name: web, region: us-east-1} only. With merge strategy,
+		// index 0 must deep-merge (env-resolved stage survives alongside the new region key)
+		// and index 1, which has no override, must pass through unchanged.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-list-nested-function",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		servers, ok := vars["servers"].([]interface{})
+		require.True(t, ok, "vars.servers should be a list")
+		assert.Equal(t, []interface{}{
+			map[string]interface{}{"name": "web", "stage": "test", "region": "us-east-1"},
+			map[string]interface{}{"name": "db", "stage": "static"},
+		}, servers, "the !env contribution at index 0 must survive the deep merge; index 1 must pass through untouched")
+	})
+
+	t.Run("resolves a 3-layer type flip to the highest-precedence layer", func(t *testing.T) {
+		// base-component-typeflip (!template producing {a:1,b:2}) <- base-component-typeflip-mixin
+		// (a plain scalar, via metadata.inherits) <- the component's own override (a map with
+		// different keys). Pins current behavior for this precedence chain: the
+		// highest-precedence map wins outright: the base layer's !template contribution does not
+		// survive once an intermediate layer has type-flipped the path away from a map.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-typeflip-3layer",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		assert.Equal(t, map[string]interface{}{"c": "3", "highest": "wins"}, vars["flip_config"],
+			"the component's own override must win the 3-layer type-flip chain")
+	})
+
+	t.Run("a plain scalar overrides a deferred function's own map-producing path", func(t *testing.T) {
+		// base-component's !template-produced map at vars.template_config is overridden directly
+		// (not at an ancestor path) by a plain string. A scalar always wins outright over a map —
+		// there is nothing to deep-merge.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-scalar-overrides-map-function",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		assert.Equal(t, "just-a-plain-string", vars["template_config"],
+			"a scalar override must replace the !template map outright")
+	})
+
+	t.Run("honors the default (replace) list_merge_strategy for !tags", func(t *testing.T) {
+		// Mirror of "deep merges with labels and tags functions" but under the fixture-wide
+		// DEFAULT list_merge_strategy (replace) instead of an explicit "append" opt-in: the
+		// component's own tag_list must replace the !tags-produced list outright, not merge with
+		// it. tags (a map) still deep-merges regardless of list_merge_strategy — the component
+		// does not override it here, so the !labels result passes through unchanged.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-labels-override-default-strategy",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		assert.Equal(t, map[string]interface{}{"X": "1", "Y": "2"}, vars["tags"],
+			"the unmodified !labels result must pass through")
+		assert.Equal(t, []interface{}{"Z"}, vars["tag_list"],
+			"under the default replace strategy, the override list must replace the !tags result, not merge with it")
+	})
+
+	t.Run("deep merges a parent-path function with a child-path function", func(t *testing.T) {
+		// base-component-nested-collision's vars.combo is a !template-produced map ({a:1,b:2}); the
+		// component overrides vars.combo.nested with its own !template and adds vars.combo.plain.
+		// A parent-level deferred function and a child-level deferred function at the same
+		// subtree must both resolve and deep-merge correctly, not clobber one another.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-nested-function-collision",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		assert.Equal(t, map[string]interface{}{
+			"a":      "1",
+			"b":      "2",
+			"nested": "nested-value",
+			"plain":  "concrete",
+		}, vars["combo"], "the parent-path !template contribution and the child-path override (including its own !template) must all survive")
+	})
+
+	t.Run("an override still clobbers an untracked (non-deferred) function", func(t *testing.T) {
+		// !git.root is deliberately NOT in the deferred-function allowlist (pkg/merge's
+		// postMergeFunctions) — only 11 specific functions get the #2888 deep-merge protection.
+		// This pins the known, by-design limitation: a concrete override at the same path as an
+		// untracked function still replaces it outright, the original #2888 failure mode, rather
+		// than deep-merging.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-untracked-function-override",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		assert.Equal(t, map[string]interface{}{"extra": "value"}, vars["git_info"],
+			"an untracked function's contribution is not protected: the override replaces it outright")
+	})
+
+	t.Run("resolves and deep-merges a deferred function inside the backend section", func(t *testing.T) {
+		// base-component-backend sets backend.s3.bucket to a !template expression and
+		// backend.s3.key to a literal; the component adds backend.s3.region. backend is not one of
+		// the sections resolveDeferredYamlFunctions is wired to, but since nothing overrides
+		// `bucket` itself here, the document-wide Stage 2 pass (ProcessCustomYamlTags) alone
+		// resolves it, and the ordinary structural merge combines the non-colliding keys.
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component:            "test-backend-override",
+				Stack:                "test",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		backend, ok := componentSection["backend"].(map[string]interface{})
+		require.True(t, ok, "backend should be a map")
+
+		assert.Equal(t, "acme-us-east-1-tfstate", backend["bucket"], "the !template bucket expression must resolve")
+		assert.Equal(t, "base/terraform.tfstate", backend["key"])
+		assert.Equal(t, "us-east-1", backend["region"], "the component's own region addition must be present")
+	})
+
 	t.Run("loads all test cases without errors", func(t *testing.T) {
 		// Verify all test components can be loaded without type conflicts
 		components := []string{
@@ -393,6 +569,13 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 			"test-deep-merge",
 			"test-mirror-precedence",
 			"test-labels-override",
+			"test-list-nested-function",
+			"test-typeflip-3layer",
+			"test-scalar-overrides-map-function",
+			"test-labels-override-default-strategy",
+			"test-nested-function-collision",
+			"test-untracked-function-override",
+			"test-backend-override",
 		}
 
 		for _, componentName := range components {

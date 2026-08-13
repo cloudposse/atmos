@@ -25,16 +25,17 @@ func withViperBasePath(t *testing.T, path string) {
 
 // exampleProjectPath resolves the bundled emulator-aws example, a valid local
 // project (no cloud credentials required) used to exercise the completion happy
-// paths end-to-end.
+// paths end-to-end. It is a checked-in repo fixture, not an optional/generated
+// one, so a missing atmos.yaml here means the fixture moved or was deleted —
+// that must fail the test loudly, not be silently skipped as a pass.
 func exampleProjectPath(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	path, err := filepath.Abs(filepath.Join(wd, "..", "..", "examples", "emulator-aws"))
 	require.NoError(t, err)
-	if _, statErr := os.Stat(filepath.Join(path, "atmos.yaml")); statErr != nil {
-		t.Skipf("example project not found at %s", path)
-	}
+	_, statErr := os.Stat(filepath.Join(path, "atmos.yaml"))
+	require.NoError(t, statErr, "example project not found at %s", path)
 	return path
 }
 

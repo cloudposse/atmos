@@ -166,6 +166,21 @@ func TestDeferredMergeContext_Clone(t *testing.T) {
 		assert.True(t, originalValues[0].IsFunction)
 	})
 
+	t.Run("mutating the original's DeferredValue pointers does not affect the clone", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		path := []string{"vars", "config"}
+		dctx.AddDeferred(path, "!template 'value1'")
+
+		clone := dctx.Clone()
+		originalValues := dctx.GetDeferredValues()["vars.config"]
+		originalValues[0].Value = "resolved-value"
+		originalValues[0].IsFunction = false
+
+		cloneValues := clone.GetDeferredValues()["vars.config"]
+		assert.Equal(t, "!template 'value1'", cloneValues[0].Value)
+		assert.True(t, cloneValues[0].IsFunction)
+	})
+
 	t.Run("mutating the clone's path slice does not affect the original", func(t *testing.T) {
 		dctx := NewDeferredMergeContext()
 		path := []string{"vars", "config"}
@@ -177,6 +192,19 @@ func TestDeferredMergeContext_Clone(t *testing.T) {
 
 		originalValues := dctx.GetDeferredValues()["vars.config"]
 		assert.Equal(t, "vars", originalValues[0].Path[0])
+	})
+
+	t.Run("mutating the original's path slice does not affect the clone", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		path := []string{"vars", "config"}
+		dctx.AddDeferred(path, "!template 'value1'")
+
+		clone := dctx.Clone()
+		originalValues := dctx.GetDeferredValues()["vars.config"]
+		originalValues[0].Path[0] = "mutated"
+
+		cloneValues := clone.GetDeferredValues()["vars.config"]
+		assert.Equal(t, "vars", cloneValues[0].Path[0])
 	})
 
 	t.Run("appending to the clone's deferred values does not affect the original", func(t *testing.T) {
