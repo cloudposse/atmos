@@ -105,7 +105,7 @@ func emulatorStackNames(atmosConfig *schema.AtmosConfiguration, component ...str
 }
 
 func stackNamesForCompletion(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
-	stacksMap, _, err := e.FindStacksMap(atmosConfig, false)
+	stacksMap, _, _, err := e.FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return nil, err
 	}

@@ -28,7 +28,7 @@ func validEKSConfig(name string) *integrations.IntegrationConfig {
 				Identity: "dev-admin",
 			},
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Alias:  "dev-eks",
@@ -97,7 +97,7 @@ func TestNewEKSIntegration_NoClusterName(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Region: "us-east-2",
 					// No Name.
 				},
@@ -117,7 +117,7 @@ func TestNewEKSIntegration_NoRegion(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name: "dev-cluster",
 					// No Region.
 				},
@@ -137,7 +137,7 @@ func TestNewEKSIntegration_NoVia(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 				},
@@ -160,7 +160,7 @@ func TestNewEKSIntegration_InvalidMode(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Kubeconfig: &schema.KubeconfigSettings{
@@ -183,7 +183,7 @@ func TestNewEKSIntegration_InvalidUpdateMode(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Kubeconfig: &schema.KubeconfigSettings{
@@ -207,7 +207,7 @@ func TestNewEKSIntegration_ValidKubeconfigSettings(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSEKS,
 			Spec: &schema.IntegrationSpec{
-				Cluster: &schema.EKSCluster{
+				Cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Kubeconfig: &schema.KubeconfigSettings{
@@ -235,7 +235,7 @@ func TestEKSIntegration_Kind(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 		},
@@ -248,7 +248,7 @@ func TestEKSIntegration_GetIdentity(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 		},
@@ -258,7 +258,7 @@ func TestEKSIntegration_GetIdentity(t *testing.T) {
 }
 
 func TestEKSIntegration_GetCluster(t *testing.T) {
-	cluster := &schema.EKSCluster{
+	cluster := &schema.Cluster{
 		Name:   "dev-cluster",
 		Region: "us-east-2",
 		Alias:  "dev-eks",
@@ -281,7 +281,7 @@ func TestEKSIntegration_Environment_DefaultPath(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 		},
@@ -303,7 +303,7 @@ func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Kubeconfig: &schema.KubeconfigSettings{
@@ -325,7 +325,7 @@ func TestEKSIntegration_Cleanup_NoAlias(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			// No alias.
@@ -341,7 +341,7 @@ func TestEKSIntegration_Cleanup_NonexistentFile(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Alias:  "dev-eks",
@@ -392,16 +392,16 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 				ARN:                      clusterARN,
 				Region:                   "us-east-2",
 			}
-			clusterConfig := kube.BuildClusterConfig(info, tt.alias, "dev-admin")
+			clusterConfig := kube.BuildClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias)
 
 			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 			require.NoError(t, err)
-			_, err = mgr.WriteClusterConfig(info, tt.alias, "dev-admin", "merge")
+			_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias, "merge")
 			require.NoError(t, err)
 
 			// Verify entries exist.
 			_ = clusterConfig // Used BuildClusterConfig above to verify consistency.
-			arns, err := mgr.ListClusterARNs()
+			arns, err := mgr.ListClusterIDs()
 			require.NoError(t, err)
 			assert.Contains(t, arns, clusterARN)
 
@@ -417,7 +417,7 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 			integration := &EKSIntegration{
 				name:     "test",
 				identity: "dev-admin",
-				cluster: &schema.EKSCluster{
+				cluster: &schema.Cluster{
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Alias:  tt.alias,
@@ -431,7 +431,7 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify entries were removed.
-			arns, err = mgr.ListClusterARNs()
+			arns, err = mgr.ListClusterIDs()
 			require.NoError(t, err)
 			assert.NotContains(t, arns, clusterARN)
 
@@ -482,7 +482,7 @@ func TestEKSIntegrationRegistration_ViaRegistry(t *testing.T) {
 func TestEKSIntegration_ResolveKubeconfigSettings_NilKubeconfig(t *testing.T) {
 	integration := &EKSIntegration{
 		name: "test",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			// No Kubeconfig settings.
@@ -498,7 +498,7 @@ func TestEKSIntegration_ResolveKubeconfigSettings_NilKubeconfig(t *testing.T) {
 func TestEKSIntegration_ResolveKubeconfigSettings_WithSettings(t *testing.T) {
 	integration := &EKSIntegration{
 		name: "test",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Kubeconfig: &schema.KubeconfigSettings{
@@ -544,7 +544,7 @@ func TestEKSIntegration_Execute_Success(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test-eks",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Alias:  "dev-eks",
@@ -594,7 +594,7 @@ func TestEKSIntegration_Execute_NoAlias(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test-eks",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			// No Alias — context name should default to ARN.
@@ -623,7 +623,7 @@ func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test-eks",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 		},
@@ -654,7 +654,7 @@ func TestEKSIntegration_Execute_DescribeClusterError(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test-eks",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 		},
@@ -694,7 +694,7 @@ func TestEKSIntegration_Execute_ReplaceMode(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test-eks",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Alias:  "dev-eks",
@@ -727,11 +727,11 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	}
 	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	require.NoError(t, err)
-	_, err = mgr.WriteClusterConfig(info, "", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), "", "merge")
 	require.NoError(t, err)
 
 	// Verify entry exists.
-	arns, err := mgr.ListClusterARNs()
+	arns, err := mgr.ListClusterIDs()
 	require.NoError(t, err)
 	assert.Contains(t, arns, clusterARN)
 
@@ -739,7 +739,7 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			// No alias.
@@ -753,7 +753,7 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify entries were removed.
-	arns, err = mgr.ListClusterARNs()
+	arns, err = mgr.ListClusterIDs()
 	require.NoError(t, err)
 	assert.NotContains(t, arns, clusterARN)
 }
@@ -780,13 +780,13 @@ func TestEKSIntegration_FindClusterARN_MultipleCluster(t *testing.T) {
 			ARN:                      cluster.arn,
 			Region:                   "us-east-2",
 		}
-		_, err = mgr.WriteClusterConfig(info, cluster.alias, "admin", "merge")
+		_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), cluster.alias, "merge")
 		require.NoError(t, err)
 	}
 
 	// findClusterARN should find the correct one.
 	integration := &EKSIntegration{
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "prod-cluster",
 			Region: "us-west-2",
 			Kubeconfig: &schema.KubeconfigSettings{
@@ -814,11 +814,11 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/other-cluster",
 		Region:                   "us-east-2",
 	}
-	_, err = mgr.WriteClusterConfig(info, "other", "admin", "merge")
+	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), "other", "merge")
 	require.NoError(t, err)
 
 	integration := &EKSIntegration{
-		cluster: &schema.EKSCluster{
+		cluster: &schema.Cluster{
 			Name:   "missing-cluster",
 			Region: "us-east-2",
 			Kubeconfig: &schema.KubeconfigSettings{
