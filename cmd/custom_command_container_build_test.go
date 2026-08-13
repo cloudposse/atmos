@@ -106,8 +106,6 @@ commands:
 	fields := strings.Split(buildLine, "\t")
 	assert.Contains(t, fields, "--builder", "configured Buildx driver must be applied")
 	assert.Contains(t, fields, "atmos-native-ci")
-	assert.Contains(t, fields, "--cache-from", "configured registry cache-from must be applied")
-	assert.Contains(t, fields, "--cache-to", "configured registry cache-to must be applied")
 	assert.Contains(t, fields, "-t", "configured tag must be applied")
 	assert.Contains(t, fields, "example.invalid/demo:sha-test")
 	assert.Contains(t, fields, "-f", "configured Dockerfile must be applied")
@@ -118,10 +116,66 @@ commands:
 	assert.Contains(t, fields, filepath.Join(appDir, "Dockerfile"), "configured Dockerfile must be applied")
 	assert.Contains(t, fields, appDir, "configured context must be applied")
 
+	// The driver: block must provision a real Buildx builder before the build
+	// runs (pkg/container/docker.go's ensureBuilder calls `docker buildx
+	// create` as a separate invocation), and the cache entries must reach
+	// docker as the exact configured reference/mode, not merely as a bare
+	// `--cache-from`/`--cache-to` flag with an unchecked value. The fake
+	// runtime already records every invocation unconditionally, so both are
+	// present in the same recorded args log used above.
+	var createLine string
+	for _, line := range lines {
+		createFields := strings.Split(line, "\t")
+		if len(createFields) > 1 && createFields[0] == "buildx" && createFields[1] == "create" {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine,
+		"expected a `docker buildx create ...` invocation provisioning the configured driver; got invocations: %v", lines)
+	createFields := strings.Split(createLine, "\t")
+
+	flagValueCases := []struct {
+		name   string
+		fields []string
+		flag   string
+		want   string
+	}{
+		{"builder uses configured driver provider", createFields, "--driver", "docker-container"},
+		{"builder uses configured driver image opt", createFields, "--driver-opt", "image=mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+		{"cache-from carries the configured ref", fields, "--cache-from", "ref=example.invalid/demo:buildcache,type=registry"},
+		{"cache-to carries the configured ref and mode=max", fields, "--cache-to", "mode=max,ref=example.invalid/demo:buildcache,type=registry"},
+	}
+	for _, tc := range flagValueCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFlagValue(t, tc.fields, tc.flag, tc.want)
+		})
+	}
+	assert.Contains(t, createFields, "atmos-native-ci", "builder create must use the configured driver name")
+
 	// The exact bug report's symptom: Atmos must not fall back to a bare,
 	// unconfigured `docker build -f Dockerfile .`.
 	for _, line := range lines {
 		assert.NotEqual(t, "build\t-f\tDockerfile\t.", line,
 			"must not silently fall back to a bare, unconfigured docker build")
 	}
+}
+
+// assertFlagValue asserts fields contains flag immediately followed by want,
+// so a flag's actual configured value is checked rather than merely its
+// presence somewhere in the argv.
+func assertFlagValue(t *testing.T, fields []string, flag, want string) {
+	t.Helper()
+
+	for i, field := range fields {
+		if field == flag {
+			if i+1 >= len(fields) {
+				t.Errorf("flag %q has no following value in %v", flag, fields)
+				return
+			}
+			assert.Equal(t, want, fields[i+1], "%s value", flag)
+			return
+		}
+	}
+	t.Errorf("expected flag %q not found in %v", flag, fields)
 }
