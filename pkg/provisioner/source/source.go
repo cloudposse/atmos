@@ -194,8 +194,13 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 			Err()
 	}
 
+	// filepath.Rel avoids the naive absBase+separator prefix check's edge case: when
+	// componentBasePath resolves to a filesystem root ("/" on Unix, "C:\" on Windows),
+	// absBase already ends in the separator, so a literal absBase+sep prefix ("//" or
+	// "C:\\") never matches any real descendant, rejecting every valid target.
 	sep := string(filepath.Separator)
-	if absTarget == absBase || strings.HasPrefix(absTarget, absBase+sep) {
+	rel, errRel := filepath.Rel(absBase, absTarget)
+	if errRel == nil && rel != ".." && !strings.HasPrefix(rel, ".."+sep) {
 		return nil
 	}
 

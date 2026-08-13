@@ -246,6 +246,63 @@ func TestDetermineTargetDirectory(t *testing.T) {
 	}
 }
 
+// TestValidateWithinComponentBasePath_RootBase is a regression test for the naive
+// absBase+separator prefix check rejecting every valid descendant when
+// componentBasePath resolves to a filesystem root ("/" on Unix): absBase already
+// ends in the separator there, so the literal absBase+sep prefix ("//") never
+// matches any real target, incorrectly returning ErrPathTraversal for legitimate
+// paths. The filepath.Rel-based check does not have this edge case.
+func TestValidateWithinComponentBasePath_RootBase(t *testing.T) {
+	tests := []struct {
+		name        string
+		targetDir   string
+		base        string
+		expectError bool
+	}{
+		{
+			name:        "descendant of filesystem root base is allowed",
+			targetDir:   "/vpc",
+			base:        "/",
+			expectError: false,
+		},
+		{
+			name:        "nested descendant of filesystem root base is allowed",
+			targetDir:   "/terraform/vpc",
+			base:        "/",
+			expectError: false,
+		},
+		{
+			name:        "root base equals target",
+			targetDir:   "/",
+			base:        "/",
+			expectError: false,
+		},
+		{
+			// Nothing is "above" the filesystem root -- filepath.Clean collapses a
+			// leading ".." at the root back to "/" (e.g. "/../outside" -> "/outside"),
+			// so an escape-from-root case isn't constructible. Confirm instead that
+			// the filepath.Rel-based rewrite didn't weaken rejection in general by
+			// checking a true escape against a non-root base still fails.
+			name:        "true escape from a non-root base is still rejected",
+			targetDir:   "/base/../../outside",
+			base:        "/base",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateWithinComponentBasePath(tt.targetDir, tt.base)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestGetComponentBasePath(t *testing.T) {
 	tests := []struct {
 		name          string
