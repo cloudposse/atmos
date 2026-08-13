@@ -13,6 +13,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -165,7 +166,7 @@ func TestInjectSecretStoreAuthResolver_AppliesDefaultIdentity(t *testing.T) {
 	authManager.EXPECT().GetChain().Return([]string{"sso", "role-b"}).AnyTimes()
 
 	// A real, identity-less SSM store (client init is deferred, so no credentials are needed).
-	ssmStore, err := storepkg.NewSSMStore(storepkg.SSMStoreOptions{Region: "us-east-1"}, "")
+	ssmStore, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "")
 	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{
