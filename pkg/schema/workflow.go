@@ -267,7 +267,7 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.MappingNode:
 		type workflowContainer WorkflowContainer
 		var decoded workflowContainer
-		if err := value.Decode(&decoded); err != nil {
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
 			return fmt.Errorf("%w: container must be a mapping or boolean: %w", ErrInvalidWorkflowContainer, err)
 		}
 		*c = WorkflowContainer(decoded)

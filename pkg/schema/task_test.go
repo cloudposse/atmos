@@ -1508,6 +1508,59 @@ func TestContainerStepOverride_WorkflowAndCustomCommandDecodeIdentically(t *test
 		"a step's boolean container: false opt-out must decode identically for workflow files and custom commands")
 }
 
+// containerStepOverrideUnknownFieldYAML mirrors containerStepOverrideYAML's
+// mapping-form override but with a typo'd field (`imgae` instead of `image`)
+// that WorkflowContainer has no field for.
+const containerStepOverrideUnknownFieldYAML = `
+- name: run-in-sandbox
+  command: echo hello
+  container:
+    imgae: alpine
+    provider: docker
+`
+
+// TestContainerStepOverride_RejectsUnknownField confirms a typo'd/nonexistent
+// field in a step-level `container:` mapping (e.g. `imgae` instead of
+// `image`) is rejected rather than silently dropped, for both the
+// workflow-file path (yaml.Unmarshal -> WorkflowContainer.UnmarshalYAML) and
+// the custom-command path (mapstructure + TasksDecodeHook ->
+// decodeTaskContainerFromMapValue -> the same UnmarshalYAML). Before this
+// fix, WorkflowContainer.UnmarshalYAML's mapping branch used plain
+// value.Decode, which has no KnownFields/strict mode, so `imgae:` was
+// silently discarded with no error and no trace in the decoded struct.
+func TestContainerStepOverride_RejectsUnknownField(t *testing.T) {
+	t.Run("workflow file path", func(t *testing.T) {
+		var fromYAML Tasks
+		err := yaml.Unmarshal([]byte(containerStepOverrideUnknownFieldYAML), &fromYAML)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+		assert.Contains(t, err.Error(), "imgae")
+	})
+
+	t.Run("custom command path", func(t *testing.T) {
+		var generic []any
+		require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideUnknownFieldYAML), &generic))
+
+		var fromMapstructure Tasks
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &fromMapstructure,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				ConditionDecodeHook(),
+				WorkflowStepDecodeHook(),
+				TasksDecodeHook(),
+			),
+		})
+		require.NoError(t, err)
+		err = decoder.Decode(generic)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+		assert.Contains(t, err.Error(), "imgae")
+	})
+}
+
 // TestDecodeTaskItem_MapAnyAny verifies the default branch of decodeTaskItem that
 // stringifies a map[any]any item before decoding it as a task map.
 func TestDecodeTaskItem_MapAnyAny(t *testing.T) {

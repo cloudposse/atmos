@@ -96,6 +96,18 @@ func TestWorkflowContainerUnmarshalRejectsSequence(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
 }
 
+// TestWorkflowContainerUnmarshalRejectsUnknownField verifies a typo'd/nonexistent
+// field in a `container:` mapping (e.g. `imgae` instead of `image`) is rejected
+// rather than silently discarded. Before this fix, the mapping branch used plain
+// yaml.Node.Decode, which has no KnownFields/strict mode.
+func TestWorkflowContainerUnmarshalRejectsUnknownField(t *testing.T) {
+	var c WorkflowContainer
+	err := yaml.Unmarshal([]byte("imgae: alpine\n"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+	assert.Contains(t, err.Error(), "imgae")
+}
+
 // TestWorkflowContainerJSONRoundTripPreservesEnabled reproduces the third leg
 // of a field-test finding sibling to https://github.com/cloudposse/atmos/issues/2876:
 // cmd/cmd_utils.go's cloneCommand deep-copies a schema.Command (including any
