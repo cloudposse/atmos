@@ -154,3 +154,20 @@ func TestWorkflowContainerJSONRoundTripEnabledOmittedWhenNil(t *testing.T) {
 	assert.Nil(t, round.Enabled)
 	assert.True(t, round.IsEnabled())
 }
+
+// TestWorkflowContainerUnmarshalJSONWrapsDecodeError verifies a
+// type-mismatched field (syntactically valid JSON that still fails to
+// decode into workflowContainerJSON) is wrapped in the static
+// ErrInvalidWorkflowContainer sentinel (per this repo's error-handling
+// conventions) rather than returned as a raw, unclassifiable
+// json.Unmarshal error. A JSON syntax error (e.g. malformed input) never
+// reaches UnmarshalJSON at all -- encoding/json rejects it during its own
+// tokenizing pass before dispatching to any custom Unmarshaler -- so this
+// must exercise the type-mismatch path specifically to reach the code
+// under test.
+func TestWorkflowContainerUnmarshalJSONWrapsDecodeError(t *testing.T) {
+	var c WorkflowContainer
+	err := json.Unmarshal([]byte(`{"image": 123}`), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+}

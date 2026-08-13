@@ -318,7 +318,7 @@ func (c *WorkflowContainer) MarshalJSON() ([]byte, error) {
 func (c *WorkflowContainer) UnmarshalJSON(data []byte) error {
 	var decoded workflowContainerJSON
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrInvalidWorkflowContainer, err)
 	}
 	*c = WorkflowContainer(decoded)
 	return nil
