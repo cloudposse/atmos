@@ -176,17 +176,34 @@ func TestParseAxisExpressionResult(t *testing.T) {
 		in   string
 		want []string
 	}{
-		// Leading-separator path (axisList.String()'s actual output shape).
-		{name: "axisList: empty", in: axisListSeparator, want: []string{}},
-		{name: "axisList: one value", in: axisListSeparator + "dev", want: []string{"dev"}},
-		{name: "axisList: one value containing whitespace", in: axisListSeparator + "us east", want: []string{"us east"}},
-		{name: "axisList: multiple values", in: axisListSeparator + "dev" + axisListSeparator + "staging", want: []string{"dev", "staging"}},
+		// axisList encoding path (axisList.String()'s actual output shape):
+		// axisListMarker followed by length-prefixed elements.
+		{name: "axisList: empty", in: axisListMarker, want: []string{}},
+		{name: "axisList: one value", in: axisList{"dev"}.String(), want: []string{"dev"}},
+		{name: "axisList: one value containing whitespace", in: axisList{"us east"}.String(), want: []string{"us east"}},
+		{name: "axisList: multiple values", in: axisList{"dev", "staging"}.String(), want: []string{"dev", "staging"}},
 		{
 			name: "axisList: multiple values, one containing whitespace",
-			in:   axisListSeparator + "us east" + axisListSeparator + "dev",
+			in:   axisList{"us east", "dev"}.String(),
 			want: []string{"us east", "dev"},
 		},
-		// Fallback path: no leading separator, so this wasn't an axisList's
+		// axisList: the two round-trip ambiguities a naive separator-joined
+		// encoding couldn't resolve -- a single empty-string element (must
+		// not be confused with an empty list) and multiple empty-string
+		// elements.
+		{name: "axisList: one empty-string value", in: axisList{""}.String(), want: []string{""}},
+		{name: "axisList: multiple empty-string values", in: axisList{"", ""}.String(), want: []string{"", ""}},
+		// axisList: a value containing a colon (the length-prefix
+		// delimiter) or the marker byte itself must still round-trip
+		// intact, since each element is framed by its own byte length
+		// rather than split on either character.
+		{name: "axisList: one value containing a colon", in: axisList{"us:east"}.String(), want: []string{"us:east"}},
+		{
+			name: "axisList: one value containing the marker byte",
+			in:   axisList{"a" + axisListMarker + "b"}.String(),
+			want: []string{"a" + axisListMarker + "b"},
+		},
+		// Fallback path: no marker prefix, so this wasn't an axisList's
 		// String() output -- best-effort bracket/whitespace parsing, same as
 		// before axisList existed.
 		{name: "fallback: bracketed", in: "[dev staging production]", want: []string{"dev", "staging", "production"}},

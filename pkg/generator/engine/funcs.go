@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -9,12 +10,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// axisListSeparator joins axisList's String() representation. The ASCII
-// Unit Separator (0x1F) is a non-printable control character reserved by
-// ASCII specifically for this purpose (delimiting data fields within a
-// record) and cannot occur in any realistic YAML-authored map key or answer
-// value, unlike a space or comma -- see axisList for why this matters.
-const axisListSeparator = "\x1f"
+// axisListMarker prefixes axisList's encoded form. Its mere presence (not
+// its absence, and not what follows it byte-for-byte) is what
+// unambiguously signals "this is axisList's own encoding" to
+// parseAxisExpressionResult, regardless of what the elements themselves
+// contain.
+const axisListMarker = "\x1f"
 
 // axisList is []string with a custom String(): when a matrix axis
 // expression's entire body is one bare function call (e.g. "{{ keys
@@ -29,17 +30,25 @@ const axisListSeparator = "\x1f"
 // printed.
 type axisList []string
 
-// String renders v with a leading axisListSeparator, then one more before
-// every subsequent element. The leading separator is load-bearing, not
-// cosmetic: without it, a single-element list whose one value itself
-// contains whitespace (e.g. axisList{"us east"}) would render identically
-// to how a plain, non-axisList string would ("us east"), making the two
-// indistinguishable to parseAxisExpressionResult. The leading separator
-// means only true axisList output ever starts with it, so its mere presence
-// -- regardless of element count -- unambiguously selects the exact-split
-// parse path over the best-effort fallback.
+// String encodes v as axisListMarker followed by each element in
+// length-prefixed ("netstring") form: "<byte-length>:<bytes>" for every
+// element, back to back, with no separator between entries (none is
+// needed -- each element's own length prefix says exactly how many bytes
+// to consume next). This is unambiguous for any element content
+// whatsoever, including an empty string, multiple empty strings, or an
+// element that happens to contain axisListMarker itself -- unlike a
+// plain separator-joined encoding, which cannot distinguish an empty
+// list from a single empty-string element, and would incorrectly split
+// an element containing the separator character.
 func (v axisList) String() string {
-	return axisListSeparator + strings.Join([]string(v), axisListSeparator)
+	var b strings.Builder
+	b.WriteString(axisListMarker)
+	for _, s := range v {
+		b.WriteString(strconv.Itoa(len(s)))
+		b.WriteByte(':')
+		b.WriteString(s)
+	}
+	return b.String()
 }
 
 // keysFunc is the "keys" template function available to scaffold templates
@@ -166,27 +175,23 @@ func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]i
 // parseAxisExpressionResult parses a rendered axis expression's text output
 // into a list of values.
 //
-// The primary, unambiguous path: a leading axisListSeparator (0x1F) means
-// the expression's result was an axisList (e.g. keys' return value)
-// stringified via its String() method -- strip it and split the remainder
-// on the same separator, which losslessly recovers every value exactly as
-// computed, including a single value that itself contains whitespace (the
-// leading separator is what makes this unambiguous regardless of element
-// count -- see axisList.String()'s doc comment).
+// The primary, unambiguous path: decodeAxisList recognizes the expression's
+// result as an axisList (e.g. keys' return value) stringified via its
+// String() method, and losslessly recovers every value exactly as computed,
+// including an empty list, a single empty-string value, or a value that
+// itself contains whitespace or the marker byte -- see axisList.String()'s
+// and decodeAxisList's doc comments.
 //
 // Fallback for anything else (a custom function that doesn't return
 // axisList): tolerant of Go's default %v slice formatting ("[a b c]") as
 // well as a plain whitespace-separated list without brackets, so a template
 // author isn't tied to axisList specifically. This fallback can't
 // distinguish "one value containing a space" from "two values" -- but it
-// only applies when the result doesn't start with axisListSeparator, i.e.
-// the expression didn't go through axisList's String() in the first place.
+// only applies when the result isn't axisList's own encoding, i.e. the
+// expression didn't go through axisList's String() in the first place.
 func parseAxisExpressionResult(rendered string) []string {
-	if rest, ok := strings.CutPrefix(rendered, axisListSeparator); ok {
-		if rest == "" {
-			return []string{}
-		}
-		return strings.Split(rest, axisListSeparator)
+	if result, ok := decodeAxisList(rendered); ok {
+		return result
 	}
 
 	trimmed := strings.TrimSpace(rendered)
@@ -196,4 +201,34 @@ func parseAxisExpressionResult(rendered string) []string {
 		return []string{}
 	}
 	return strings.Fields(trimmed)
+}
+
+// decodeAxisList decodes axisList.String()'s length-prefixed encoding
+// back into its original elements. ok is false if rendered doesn't start
+// with axisListMarker (not axisList's encoding at all) or is malformed
+// (which should never happen for genuine axisList output -- only
+// possible if something else coincidentally produced a string starting
+// with the marker byte, astronomically unlikely for real template
+// output).
+func decodeAxisList(rendered string) (result []string, ok bool) {
+	rest, hasMarker := strings.CutPrefix(rendered, axisListMarker)
+	if !hasMarker {
+		return nil, false
+	}
+
+	result = []string{}
+	for len(rest) > 0 {
+		idx := strings.IndexByte(rest, ':')
+		if idx < 0 {
+			return nil, false
+		}
+		n, err := strconv.Atoi(rest[:idx])
+		if err != nil || n < 0 || n > len(rest)-idx-1 {
+			return nil, false
+		}
+		rest = rest[idx+1:]
+		result = append(result, rest[:n])
+		rest = rest[n:]
+	}
+	return result, true
 }

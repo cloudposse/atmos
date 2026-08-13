@@ -571,13 +571,15 @@ bare identifier, but it does chain off a bare identifier's function-call result,
 which is what lets `answers.environments` parse as "call `answers()`, then select
 `.environments`." The expression's rendered text is then parsed back into a list.
 `keys` (and any custom function meant for axis use) returns a small named string-slice
-type whose text representation uses a non-printable, unambiguous separator instead of
+type whose text representation uses a non-printable, unambiguous marker instead of
 Go's default slice-formatting style (`[a b c]`, space-joined) — so a resolved value
 that itself contains whitespace (e.g. a map key with a space in it) still round-trips
-as one intact value, not split into two. A plain whitespace-separated or
-bracket-wrapped list without that marker (e.g. from a function that doesn't use it)
-still parses on a best-effort basis for compatibility, with the same whitespace
-ambiguity that implies.
+as one intact value, not split into two. That whitespace-safe round-trip only applies
+when the axis expression's result is that marker-bearing representation, i.e. it went
+through `keys` or another function built for axis use. Any other function (e.g.
+Sprig's `splitList`, or any expression that isn't built for axis use) instead falls
+back to best-effort bracket/whitespace parsing, with the same whitespace ambiguity
+that implies.
 
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so

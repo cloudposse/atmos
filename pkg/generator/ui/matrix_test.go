@@ -237,6 +237,20 @@ func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *te
 		require.NoError(t, readErr, "expected %s to be generated", tc.relPath)
 		assert.Equal(t, tc.want, string(content))
 	}
+
+	// Beyond the two expected files' own content, also prove no extra,
+	// unexpected file was written alongside them -- a regression that
+	// incorrectly split "us east" into more than one axis value (e.g. three
+	// pieces instead of two) would still pass the per-file checks above as
+	// long as those two exact files happened to still exist, but would leave
+	// a spurious third file in the directory.
+	entries, readDirErr := os.ReadDir(filepath.Join(targetDir, "deploy"))
+	require.NoError(t, readDirErr)
+	gotNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		gotNames = append(gotNames, entry.Name())
+	}
+	assert.ElementsMatch(t, []string{"dev.yaml", "us east.yaml"}, gotNames)
 }
 
 func TestExecuteWithSetup_FilesMatrixDuplicateTargetFails(t *testing.T) {
