@@ -129,7 +129,7 @@ commands:
     description: Explicitly opt out of any container sandbox
     steps:
       - name: run
-        command: echo host > ` + markerPath + `
+        command: echo host > "` + filepath.ToSlash(markerPath) + `"
         container: false
 `
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
