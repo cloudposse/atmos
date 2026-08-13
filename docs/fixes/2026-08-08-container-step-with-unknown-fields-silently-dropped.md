@@ -29,7 +29,7 @@ block-dropped.md`) put in place so the two paths can't drift apart. Until
 now, `decodeYAMLInto` called plain `node.Decode(&cfg)`. `yaml.Node.Decode` has
 no strict/unknown-field-rejection mode -- `KnownFields(true)` only exists on
 the stream-level `yaml.Decoder` (`yaml.NewDecoder(r).KnownFields(true)`), not
-on a already-parsed `*yaml.Node`'s own `Decode` method -- so there was no way
+on an already-parsed `*yaml.Node`'s own `Decode` method -- so there was no way
 for this call site to reject an unknown key even though the intent (per the
 JSON Schema's own docstring) was clearly to have the step handler enforce it.
 The same gap existed one level deeper: `ContainerDriverConfig.UnmarshalYAML`

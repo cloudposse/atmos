@@ -57,7 +57,7 @@ ancestor depending on whether the component name happens to contain `/` —
     table's common setup into a shared `assertJITStateFound` helper to avoid
     the `dupl` linter's near-duplicate-code flag between this case and its
     sibling.
-- `go build ./...`, `gofmt` — clean.
+- `go build ./...`, `gofumpt` — clean.
 - `go test ./pkg/provisioner/... ./internal/terraform_backend/...` (full
   packages) — all pass. Also ran the `internal/exec` backend-generation and
   workdir-path tests (`-run 'TestGenerateBackend|TestConstructTerraformComponentWorkingDir|TestWorkdir'`)

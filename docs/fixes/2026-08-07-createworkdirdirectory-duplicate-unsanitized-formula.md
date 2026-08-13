@@ -68,7 +68,7 @@ was the only duplicate.
   `WorkdirPathKey` path matches `BuildPath`'s canonical (sanitized) output,
   and asserts no nested directory tree was created on disk.
   - Pre-fix failure:
-    ```
+    ```text
     Error: Not equal:
     expected: .../.workdir/terraform/dev-app-local-nested
     actual: .../.workdir/terraform/dev-app/local-nested

@@ -9,7 +9,7 @@
 enough arguments in call to service.Provision` after merging
 `origin/main`'s `fix(terraform): prevent concurrent output corruption
 (#2898)`, which added a fourth `provisioner.OutputWriters` parameter to
-`(*Service).Provision`. Acceptance Tests CI (linux/windows/macos) reported
+`(*Service).Provision`. Acceptance Tests CI (linux/windows/macOS) reported
 this build failure across two consecutive pushes, even though the exact
 pushed commit's content, verified byte-for-byte against GitHub's own blob
 SHAs and a fully isolated fresh clone, compiled cleanly in every case.

@@ -67,7 +67,7 @@ coverage.
 ## Validation
 
 - New test fails against pre-fix code:
-  ```
+  ```text
   --- FAIL: TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker
       does not contain "--restart\ton-failure:3"
       does not contain "--health-cmd\ttrue"
@@ -75,7 +75,7 @@ coverage.
       does not contain "--health-retries\t2"
   ```
 - Passes after the fix:
-  ```
+  ```text
   --- PASS: TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker (19.35s)
   ```
 - `go build ./...` — clean.

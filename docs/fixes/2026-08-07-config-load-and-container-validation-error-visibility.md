@@ -42,11 +42,11 @@ notes that commands/configuration in the file won't be available until
 it's fixed.
 
 - Before (nothing printed by default; only `--logs-level=Trace`):
-  ```
+  ```text
   DEBU failed to load local config path=.../container-commands.yaml error="While parsing config: yaml: line 3: mapping values are not allowed in this context"
   ```
 - After (printed by default, via `ui.Warningf`, in addition to the existing `log.Debug`):
-  ```
+  ```text
   ⚠ Skipping config file `.../container-commands.yaml`: While parsing config: yaml: line 3: mapping values are not allowed in this context
     Commands or configuration defined in this file will not be available until the error is fixed
   ```
@@ -67,28 +67,28 @@ a `.WithExplanationf(...)` that names the step, type, and field.
 `inspect` field-value validation, e.g. `run.pull`) already had a
 `.WithExplanation(explanation)` with the valid options, but never included
 the actual value the user passed. Fixed by folding the value into the
-explanation via `.WithExplanationf("%s (got \`%s\`)", explanation, value)`.
+explanation via ``.WithExplanationf("%s (got `%s`)", explanation, value)``.
 The `.WithContext("value", value)` is left in place for the verbose/Sentry
 structured-context path.
 
 - `run.image` omitted, before (default/non-verbose):
-  ```
+  ```text
   **Error:** required field missing for step
   ```
 - `run.image` omitted, after:
-  ```
+  ```text
   **Error:** required field missing for step
 
   Step `run` (type `container`) is missing required field `run.image`
   ```
 - `run.pull: sometimes`, before (default/non-verbose):
-  ```
+  ```text
   **Error:** required field missing for step
 
   Pull policy must be `missing`, `always`, `never`, or empty
   ```
 - `run.pull: sometimes`, after:
-  ```
+  ```text
   **Error:** required field missing for step
 
   Pull policy must be `missing`, `always`, `never`, or empty (got `sometimes`)
