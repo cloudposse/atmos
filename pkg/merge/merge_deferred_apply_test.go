@@ -238,3 +238,96 @@ func (m *mockYAMLProcessor) ProcessYAMLFunctionString(value string) (any, error)
 	}
 	return value, nil
 }
+
+// TestApplyDeferredMerges_SingleContributionReuse pins the fix for the double-execution regression
+// (docs/fixes/2026-08-13-deferred-merge-double-execution.md): when a deferred path has a single
+// contributing layer and `result` already holds a resolved value there (as it does after the
+// document-wide ProcessCustomYamlTags pass in exec.processStacks), ApplyDeferredMerges must NOT
+// invoke the processor again — otherwise uncached side-effecting functions like !exec run twice.
+func TestApplyDeferredMerges_SingleContributionReuse(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
+	}
+
+	newProcessor := func(calls *int) *mockYAMLProcessor {
+		return &mockYAMLProcessor{processFunc: func(value string) (any, error) {
+			*calls++
+			// Simulate a NON-deterministic/side-effecting function: each invocation yields a
+			// distinct value, so a spurious second call would be observable in the result.
+			return "resolved", nil
+		}}
+	}
+
+	t.Run("does not re-invoke the processor when the single value is already resolved", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "foo"}, "!exec echo hi")
+
+		// `result` mirrors what ProcessCustomYamlTags already produced for this no-collision path.
+		result := map[string]any{"vars": map[string]any{"foo": "already-resolved"}}
+
+		calls := 0
+		require.NoError(t, ApplyDeferredMerges(dctx, result, cfg, newProcessor(&calls)))
+
+		assert.Equal(t, 0, calls, "processor must not run again for an already-resolved single-contribution path")
+		vars := result["vars"].(map[string]any)
+		assert.Equal(t, "already-resolved", vars["foo"], "the earlier pass's resolved value must be preserved untouched")
+	})
+
+	t.Run("still resolves when result holds a nil placeholder (no prior pass)", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "foo"}, "!exec echo hi")
+
+		// No prior resolution pass: the placeholder nil is what WalkAndDeferYAMLFunctions left.
+		result := map[string]any{"vars": map[string]any{"foo": nil}}
+
+		calls := 0
+		require.NoError(t, ApplyDeferredMerges(dctx, result, cfg, newProcessor(&calls)))
+
+		assert.Equal(t, 1, calls, "a real-processor caller with no prior resolution must still resolve exactly once")
+		vars := result["vars"].(map[string]any)
+		assert.Equal(t, "resolved", vars["foo"])
+	})
+
+	t.Run("still resolves when result holds the raw function string (no prior pass)", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "foo"}, "!exec echo hi")
+
+		result := map[string]any{"vars": map[string]any{"foo": "!exec echo hi"}}
+
+		calls := 0
+		require.NoError(t, ApplyDeferredMerges(dctx, result, cfg, newProcessor(&calls)))
+
+		assert.Equal(t, 1, calls, "an unresolved raw function string must not be mistaken for a resolved value")
+		vars := result["vars"].(map[string]any)
+		assert.Equal(t, "resolved", vars["foo"])
+	})
+
+	t.Run("still resolves a genuine collision so the #2888 deep-merge is unaffected", func(t *testing.T) {
+		// Two competing layers at the same path: a concrete override (higher precedence) and a
+		// deferred function (lower precedence). This is a real merge, so the processor MUST run.
+		dctx := NewDeferredMergeContext()
+		dctx.AddDeferred([]string{"vars", "tags"}, "!labels") // precedence 0 (function).
+		dctx.IncrementPrecedence()                            //nolint:wsl
+		dctx.deferredValues["vars.tags"] = append(dctx.deferredValues["vars.tags"], &DeferredValue{
+			Path:       []string{"vars", "tags"},
+			Value:      map[string]any{"Z": "override"},
+			Precedence: 1,
+			IsFunction: false,
+		})
+
+		// Even though `result` has a resolved value, len > 1 means we must NOT take the reuse path.
+		result := map[string]any{"vars": map[string]any{"tags": map[string]any{"Z": "override"}}}
+
+		calls := 0
+		proc := &mockYAMLProcessor{processFunc: func(value string) (any, error) {
+			calls++
+			return map[string]any{"X": "1", "Y": "2"}, nil
+		}}
+		require.NoError(t, ApplyDeferredMerges(dctx, result, cfg, proc))
+
+		assert.Equal(t, 1, calls, "the !labels function must still be resolved to deep-merge against the concrete override")
+		vars := result["vars"].(map[string]any)
+		tags := vars["tags"].(map[string]any)
+		assert.Equal(t, map[string]any{"X": "1", "Y": "2", "Z": "override"}, tags, "collision must deep-merge, preserving both the function's keys and the override")
+	})
+}

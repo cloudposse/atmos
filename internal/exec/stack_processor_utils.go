@@ -554,7 +554,7 @@ type stackProcessResult struct {
 	importsConfig    map[string]map[string]any
 	uniqueImports    []string
 	mergeContext     *m.MergeContext
-	deferredContexts map[string]map[string]ComponentDeferredContexts
+	deferredContexts StackComponentDeferredContexts
 	err              error
 }
 
@@ -574,7 +574,7 @@ func ProcessYAMLConfigFiles(
 	[]string,
 	map[string]any,
 	map[string]map[string]any,
-	map[string]map[string]map[string]ComponentDeferredContexts,
+	AllStacksDeferredContexts,
 	error,
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
@@ -583,7 +583,7 @@ func ProcessYAMLConfigFiles(
 	listResult := make([]string, count)
 	mapResult := make(map[string]any, count)
 	rawStackConfigs := make(map[string]map[string]any, count)
-	deferredContextsResult := make(map[string]map[string]map[string]ComponentDeferredContexts, count)
+	deferredContextsResult := make(AllStacksDeferredContexts, count)
 
 	// Create channel for results - no locks needed with channels.
 	results := make(chan stackProcessResult, count)

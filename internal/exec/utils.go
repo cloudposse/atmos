@@ -144,7 +144,7 @@ func processComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
-	deferredContexts map[string]map[string]map[string]ComponentDeferredContexts,
+	deferredContexts AllStacksDeferredContexts,
 	componentType string,
 	component string,
 	authManager auth.AuthManager,
@@ -355,7 +355,7 @@ func init() {
 type findStacksMapCacheEntry struct {
 	stacksMap        map[string]any
 	rawStackConfigs  map[string]map[string]any
-	deferredContexts map[string]map[string]map[string]ComponentDeferredContexts
+	deferredContexts AllStacksDeferredContexts
 }
 
 // getFindStacksMapCacheKey generates a content-aware cache key from atmosConfig and parameters.
@@ -441,7 +441,7 @@ func ClearFindStacksMapCache() {
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
-	map[string]map[string]map[string]ComponentDeferredContexts,
+	AllStacksDeferredContexts,
 	error,
 ) {
 	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
@@ -551,7 +551,7 @@ func findComponentInStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stacksMap map[string]any,
-	deferredContexts map[string]map[string]map[string]ComponentDeferredContexts,
+	deferredContexts AllStacksDeferredContexts,
 	authManager auth.AuthManager,
 ) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
 	type componentCandidate struct {

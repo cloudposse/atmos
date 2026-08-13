@@ -17,6 +17,17 @@ import (
 // against any concrete override at the same path.
 type ComponentDeferredContexts map[string]*m.DeferredMergeContext
 
+// StackComponentDeferredContexts holds, for a single stack, every component's
+// ComponentDeferredContexts keyed by [componentType][component] (e.g.
+// ["terraform"]["vpc"]). It is the shape ProcessStackConfig produces per stack.
+type StackComponentDeferredContexts map[string]map[string]ComponentDeferredContexts
+
+// AllStacksDeferredContexts holds every stack's deferred contexts keyed by
+// [stack][componentType][component]. This is the shape threaded from
+// ProcessYAMLConfigFiles through FindStacksMap to the per-invocation Stage 3
+// resolver (see resolveDeferredYamlFunctions).
+type AllStacksDeferredContexts map[string]StackComponentDeferredContexts
+
 // resolveDeferredYamlFunctions is Stage 3 of the deferred-merge pipeline: for each section with
 // deferred YAML functions recovered from the FindStacksMap cache
 // (configAndStacksInfo.DeferredMergeContexts), resolve them with a real

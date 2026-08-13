@@ -597,10 +597,53 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 
 	// Process each deferred field.
 	for _, pathKey := range pathKeys {
-		if err := processDeferredField(pathKey, allDeferred[pathKey], result, cfgPtr, processor); err != nil {
+		deferredValues := allDeferred[pathKey]
+
+		// Single-contribution reuse: when a deferred path has exactly one contributing layer
+		// (no concrete override and no competing deferred function to deep-merge against) and
+		// `result` already holds a fully resolved value at that path, re-resolving here would
+		// execute the same function a SECOND time. In Atmos, exec.processStacks runs a
+		// document-wide YAML-function pass (ProcessCustomYamlTags) before this Stage 3 resolver,
+		// so the surviving (highest-precedence) function at a no-collision path is already
+		// resolved in `result` by the time we get here. Re-running it is a harmless no-op for
+		// pure/cached functions (!template, !terraform.output/state, !labels, !tags, !env), but
+		// doubles the side effects and cost of UNCACHED functions such as !exec (runs the shell
+		// again) and !store (an extra backend read). Reuse the value the earlier pass produced.
+		// See docs/fixes/2026-08-13-deferred-merge-double-execution.md.
+		//
+		// Scope of the guard:
+		//   - processor != nil restricts this to the Stage 3 resolution pass; the nil-processor
+		//     structural-writeback callers never resolve functions and must keep placing the raw
+		//     string, so they must not skip.
+		//   - len == 1 restricts this to no-collision paths; a genuine collision (concrete
+		//     override, or multiple competing functions) still needs the full resolve-and-merge.
+		//   - isResolvedNonFunctionValue guards a real-processor caller that has NOT had a prior
+		//     resolution pass (result still holds a nil placeholder or the raw function string):
+		//     that caller must still resolve the function here rather than skip it.
+		if processor != nil && len(deferredValues) == 1 {
+			if existing, ok := GetValueAtPath(result, deferredValues[0].Path); ok && isResolvedNonFunctionValue(existing) {
+				continue
+			}
+		}
+
+		if err := processDeferredField(pathKey, deferredValues, result, cfgPtr, processor); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// isResolvedNonFunctionValue reports whether v is a concrete, already-resolved value — i.e. neither
+// a nil placeholder (left by WalkAndDeferYAMLFunctions) nor a still-unresolved Atmos YAML function
+// string. ApplyDeferredMerges uses it to decide whether a single-contribution deferred path was
+// already resolved by an earlier pass and can be reused instead of re-executed.
+func isResolvedNonFunctionValue(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	if s, ok := v.(string); ok && isAtmosYAMLFunction(s) {
+		return false
+	}
+	return true
 }

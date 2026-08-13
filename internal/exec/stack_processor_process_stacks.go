@@ -77,7 +77,7 @@ func ProcessStackConfig(
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
-) (map[string]any, map[string]map[string]ComponentDeferredContexts, error) {
+) (map[string]any, StackComponentDeferredContexts, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
 
 	stackName := strings.TrimSuffix(
@@ -192,7 +192,7 @@ func ProcessStackConfig(
 	// overrides (see docs/prd/deferred-yaml-functions-evaluation-in-merge.md's completion plan).
 	// Custom (non-built-in) component types don't go through mergeComponentConfigurations/deferred
 	// merge at all, so they have no entry here.
-	allDeferredContexts := map[string]map[string]ComponentDeferredContexts{}
+	allDeferredContexts := StackComponentDeferredContexts{}
 
 	// Global sections.
 	if i, ok := config[cfg.VarsSectionName]; ok {
