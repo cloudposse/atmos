@@ -40,13 +40,13 @@ resolved values are byte-identical to `main`. The concern is uncached, side-effe
 Two passes run in `internal/exec/utils.go`'s `processStacks` under `if processYamlFunctions`:
 
 1. `ProcessCustomYamlTags` — walks the whole (freshly rebuilt) component section and resolves any
-   Atmos YAML-function string it finds. Because `mergeComponentConfigurations` writes each deferred
-   path's *literal function string* back into the section via a nil-processor `ApplyDeferredMerges`,
-   this pass sees and resolves the surviving (highest-precedence) function at every no-collision
-   path — exactly as Atmos did before PR #2892.
+  Atmos YAML-function string it finds. Because `mergeComponentConfigurations` writes each deferred
+  path's *literal function string* back into the section via a nil-processor `ApplyDeferredMerges`,
+  this pass sees and resolves the surviving (highest-precedence) function at every no-collision
+  path — exactly as Atmos did before PR #2892.
 2. `resolveDeferredYamlFunctions` (Stage 3) — resolves deferred functions from the saved context
-   with a template- and auth-aware processor and deep-merges the result against any concrete
-   override at the same path. This is what fixes #2888.
+  with a template- and auth-aware processor and deep-merges the result against any concrete
+  override at the same path. This is what fixes #2888.
 
 For a genuine collision where the concrete override wins the structural merge (the headline #2888
 case, e.g. `vars.tags: !labels` overridden by a component's own `tags` map), the function string
