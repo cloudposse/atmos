@@ -605,11 +605,14 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        # Must exceed the setup-colima vz -> qemu fallback ladder. At 45 minutes
-        # the step was guillotined partway through the vz retries, so the qemu
-        # fallback (the runtime that actually comes up on the Intel runner) never
-        # ran and every failure cost the full 45 minutes.
-        timeout-minutes: 60
+        # setup-colima goes straight to qemu on the Intel runner (vz cannot come
+        # up there), so the ladder this cap must exceed is: brew installs (7m of
+        # caps) + initial delete (3m) + two qemu attempts (10m of caps each,
+        # plus teardown between) + docker verify and k3s image pull with
+        # retries. A realistic pass is 10-15 minutes; 35 gives 2x headroom and,
+        # unlike a cap equal to the job's 60-minute budget, leaves the balance
+        # of the job for the k3s tests this step exists to enable.
+        timeout-minutes: 35
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
