@@ -22,6 +22,9 @@ const (
 
 	// Default timeout for device code authentication.
 	deviceCodeTimeout = 15 * time.Minute
+
+	// Structured-log key name for token expiration fields.
+	logKeyExpiresOn = "expiresOn"
 )
 
 // isInteractive checks if we're running in an interactive terminal.
@@ -250,6 +253,8 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 	// Update Azure CLI token cache so Terraform can use it automatically.
 	// This makes Atmos auth work exactly like `az login`.
 	// Note: MSAL already persisted tokens (including refresh tokens) to ~/.azure/msal_token_cache.json.
+	// AKS tokens are intentionally NOT mirrored into this cache: it exists for
+	// Terraform's azurerm/azuread providers, which have no AKS-scoped consumer.
 	if err := p.updateAzureCLICache(&tokenCacheUpdate{
 		AccessToken:       tokens.accessToken,
 		ExpiresAt:         tokens.expiresOn,
@@ -270,9 +275,11 @@ type tokenAcquisitionResult struct {
 	accessToken       string
 	graphToken        string
 	keyVaultToken     string
+	aksToken          string
 	expiresOn         time.Time
 	graphExpiresOn    time.Time
 	keyVaultExpiresOn time.Time
+	aksExpiresOn      time.Time
 	// homeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
 	// account. For guest (B2B) users the home tenant differs from p.tenantID, and
 	// the Azure CLI cache write-back must use this value to avoid duplicate accounts.
@@ -314,7 +321,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 	result.accessToken = mgmtResult.AccessToken
 	result.expiresOn = mgmtResult.ExpiresOn
 	result.homeAccountID = account.HomeAccountID
-	log.Debug("Successfully acquired management token silently", "expiresOn", result.expiresOn)
+	log.Debug("Successfully acquired management token silently", logKeyExpiresOn, result.expiresOn)
 
 	// Try to get Graph token silently.
 	graphResult, err := client.AcquireTokenSilent(
@@ -339,9 +346,23 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 	if err == nil {
 		result.keyVaultToken = kvResult.AccessToken
 		result.keyVaultExpiresOn = kvResult.ExpiresOn
-		log.Debug("Successfully acquired KeyVault token silently", "expiresOn", result.keyVaultExpiresOn)
+		log.Debug("Successfully acquired KeyVault token silently", logKeyExpiresOn, result.keyVaultExpiresOn)
 	} else {
 		log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
+	}
+
+	// Try to get an AKS-scoped token silently, for `atmos azure aks token`.
+	aksResult, err := client.AcquireTokenSilent(
+		ctx,
+		[]string{azureCloud.AKSServerScopeFromContext(ctx)},
+		public.WithSilentAccount(account),
+	)
+	if err == nil {
+		result.aksToken = aksResult.AccessToken
+		result.aksExpiresOn = aksResult.ExpiresOn
+		log.Debug("Successfully acquired AKS token silently", logKeyExpiresOn, result.aksExpiresOn)
+	} else {
+		log.Debug("Failed to get AKS token silently, will skip", "error", err)
 	}
 
 	return result
@@ -430,8 +451,25 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 		result.keyVaultToken = kvResult.AccessToken
 		result.keyVaultExpiresOn = kvResult.ExpiresOn
 		log.Debug("Successfully obtained KeyVault token",
-			"expiresOn", result.keyVaultExpiresOn,
+			logKeyExpiresOn, result.keyVaultExpiresOn,
 			"tokenLength", len(result.keyVaultToken))
+	}
+
+	// Request an AKS-scoped token for `atmos azure aks token` (silently).
+	log.Debug("Requesting AKS token")
+	aksResult, err := client.AcquireTokenSilent(
+		ctx,
+		[]string{azureCloud.AKSServerScopeFromContext(ctx)},
+		public.WithSilentAccount(account),
+	)
+	if err != nil {
+		log.Debug("Failed to get AKS token, atmos azure aks token may not work", "error", err)
+	} else {
+		result.aksToken = aksResult.AccessToken
+		result.aksExpiresOn = aksResult.ExpiresOn
+		log.Debug("Successfully obtained AKS token",
+			logKeyExpiresOn, result.aksExpiresOn,
+			"tokenLength", len(result.aksToken))
 	}
 }
 
@@ -499,6 +537,17 @@ func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (
 			"keyVaultExpiration", tokens.keyVaultExpiresOn.Format(time.RFC3339))
 	} else {
 		log.Debug("KeyVault API token is empty, not adding to credentials")
+	}
+
+	// Add AKS-scoped token if available.
+	if tokens.aksToken != "" {
+		creds.AKSToken = tokens.aksToken
+		creds.AKSTokenExpiration = tokens.aksExpiresOn.Format(time.RFC3339)
+		log.Debug("Added AKS token to credentials",
+			"aksTokenLength", len(tokens.aksToken),
+			"aksExpiration", tokens.aksExpiresOn.Format(time.RFC3339))
+	} else {
+		log.Debug("AKS token is empty, not adding to credentials")
 	}
 
 	return creds, nil
