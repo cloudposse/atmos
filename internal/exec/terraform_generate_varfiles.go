@@ -137,7 +137,10 @@ func ExecuteTerraformGenerateVarfiles(
 					ComponentOverridesSection: overridesSection,
 					ComponentBackendSection:   backendSection,
 					ComponentBackendType:      backendTypeSection,
-					ComponentSection: map[string]any{
+					// Snapshot the complete merged component section (hooks, generate,
+					// required_providers, etc. included), not just the sections this generator
+					// directly consumes — see cloneComponentSectionWithOverrides.
+					ComponentSection: cloneComponentSectionWithOverrides(componentSection, map[string]any{
 						cfg.VarsSectionName:        varsSection,
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
@@ -147,7 +150,7 @@ func ExecuteTerraformGenerateVarfiles(
 						cfg.OverridesSectionName:   overridesSection,
 						cfg.BackendSectionName:     backendSection,
 						cfg.BackendTypeSectionName: backendTypeSection,
-					},
+					}),
 				}
 
 				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {

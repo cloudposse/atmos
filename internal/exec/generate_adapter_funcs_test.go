@@ -236,8 +236,8 @@ func TestGetGenerateFilenamesForComponent_FilenamePatterns(t *testing.T) {
 
 // TestFindStacksMapForGenerate verifies the adapter wrapper forwards its arguments to
 // FindStacksMap and returns the same stacksMap/rawStackConfigs, deliberately discarding only the
-// deferred-contexts return value (see FindStacksMapForGenerate's doc comment: varfile/backend
-// generation never resolves deferred YAML functions).
+// deferred-contexts return value (see FindStacksMapForGenerate's doc comment: its only caller,
+// the bulk `generate:`-section preview, never resolves deferred YAML functions).
 func TestFindStacksMapForGenerate(t *testing.T) {
 	atmosConfig := setupSharedCacheFixture(t)
 

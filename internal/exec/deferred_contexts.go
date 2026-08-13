@@ -28,6 +28,28 @@ type StackComponentDeferredContexts map[string]map[string]ComponentDeferredConte
 // resolver (see resolveDeferredYamlFunctions).
 type AllStacksDeferredContexts map[string]StackComponentDeferredContexts
 
+// cloneComponentSectionWithOverrides returns a fresh copy of raw (a component's complete merged
+// section, straight from FindStacksMap) with overrides layered on top. Used by the terraform
+// generate backends/varfiles batch flows so their ConfigAndStacksInfo.ComponentSection carries
+// every section (auth, hooks, generate, required_providers, etc.), not just the ones the
+// generator directly consumes — matching what the main describe/plan path (processStacks in
+// utils.go) provides for deferred-YAML-function template rendering and structural resolution. A
+// reduced map here would silently drop data for a deferred !template expression (or
+// ProcessTmplWithDatasources render) that references an "unrelated" section. The raw argument is
+// never mutated; the caller's later field writes land on the returned copy only.
+func cloneComponentSectionWithOverrides(raw, overrides map[string]any) map[string]any {
+	defer perf.Track(nil, "exec.cloneComponentSectionWithOverrides")()
+
+	cloned := make(map[string]any, len(raw)+len(overrides))
+	for k, v := range raw {
+		cloned[k] = v
+	}
+	for k, v := range overrides {
+		cloned[k] = v
+	}
+	return cloned
+}
+
 // resolveDeferredYamlFunctions is Stage 3 of the deferred-merge pipeline: for each section with
 // deferred YAML functions recovered from the FindStacksMap cache
 // (configAndStacksInfo.DeferredMergeContexts), resolve them with a real

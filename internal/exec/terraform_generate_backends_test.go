@@ -1225,3 +1225,69 @@ components:
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "test-bucket")
 }
+
+// TestExecuteTerraformGenerateBackends_ComponentTemplateContextIncludesAuth is a regression test
+// for a PR #2892 review finding: the ConfigAndStacksInfo.ComponentSection this generator builds
+// used to be a hand-picked subset of sections (vars, metadata, settings, env, providers, hooks,
+// overrides, backend, backend_type) that omitted `auth` entirely. A Go template anywhere in the
+// component — including inside the backend block itself — referencing `.auth...` would silently
+// render empty, unlike the main describe/plan path (processStacks in utils.go), which always
+// snapshots the complete merged component section. This test renders the S3 bucket name from
+// `.auth.role` and asserts the real value made it through.
+func TestExecuteTerraformGenerateBackends_ComponentTemplateContextIncludesAuth(t *testing.T) {
+	tempDir := t.TempDir()
+
+	stacksDir := filepath.Join(tempDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc component\n"), 0o644))
+
+	stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      auth:
+        role: platform-admin
+      backend:
+        s3:
+          bucket: "{{ .auth.role }}-bucket"
+          key: terraform.tfstate
+      backend_type: s3
+`
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+	require.NoError(t, os.WriteFile(stackFile, []byte(stackContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+		StacksBaseAbsolutePath:        stacksDir,
+		TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+		IncludeStackAbsolutePaths:     []string{stacksDir},
+		StackConfigFilesAbsolutePaths: []string{stackFile},
+	}
+
+	err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{"vpc"})
+	require.NoError(t, err)
+
+	backendTF := filepath.Join(componentDir, "backend.tf")
+	content, err := os.ReadFile(backendTF)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "platform-admin-bucket")
+}

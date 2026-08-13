@@ -183,17 +183,21 @@ func ExecuteTerraformGenerateBackends(
 					ComponentOverridesSection: overridesSection,
 					ComponentBackendSection:   backendSection,
 					ComponentBackendType:      backendTypeSection,
-					ComponentSection: map[string]any{
+					// Snapshot the complete merged component section (auth, required_providers,
+					// generate, etc. included), not just the sections this generator directly
+					// consumes — see cloneComponentSectionWithOverrides.
+					ComponentSection: cloneComponentSectionWithOverrides(componentSection, map[string]any{
 						cfg.VarsSectionName:        varsSection,
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
 						cfg.EnvSectionName:         envSection,
+						cfg.AuthSectionName:        authSection,
 						cfg.ProvidersSectionName:   providersSection,
 						cfg.HooksSectionName:       hooksSection,
 						cfg.OverridesSectionName:   overridesSection,
 						cfg.BackendSectionName:     backendSection,
 						cfg.BackendTypeSectionName: backendTypeSection,
-					},
+					}),
 				}
 
 				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {

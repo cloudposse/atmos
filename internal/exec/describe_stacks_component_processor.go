@@ -107,6 +107,12 @@ type describeStacksProcessor struct {
 	// nil and reported here instead of aborting the whole describe-stacks call. See
 	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
 	onWarning func(DegradationWarning)
+	// deferredContexts holds every component's deferred-merge contexts, recovered from the
+	// FindStacksMap cache in ExecuteDescribeStacks. processComponentEntry looks up each
+	// component's entry to run Stage 3 (resolveDeferredYamlFunctions) after Stage 2 — this
+	// processor does not go through processStacks (utils.go), so it must resolve deferred
+	// YAML functions itself instead of silently losing their contribution (#2888).
+	deferredContexts AllStacksDeferredContexts
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -551,6 +557,28 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		)
 		if err != nil {
 			return err
+		}
+		info.ComponentSection = componentSection
+
+		// Stage 3: resolve deferred YAML functions and deep-merge their results against any
+		// concrete override at the same path. Without this, a section that only survived
+		// Stage 2's structural merge as an unresolved function string (or a placeholder) would
+		// silently lose that function's contribution — the same #2888 data-loss bug the main
+		// describe-component/plan path (processStacks in utils.go) fixes via this same call.
+		if compDctx, ok := p.deferredContexts[stackFileName][typeName][componentName]; ok {
+			info.DeferredMergeContexts = compDctx
+			var settingsSectionStruct schema.Settings
+			if err := mapstructure.Decode(secs.settings, &settingsSectionStruct); err != nil {
+				return err
+			}
+			componentTemplateContext := make(map[string]any, len(info.ComponentSection))
+			for k, v := range info.ComponentSection {
+				componentTemplateContext[k] = v
+			}
+			if err := resolveDeferredYamlFunctions(p.atmosConfig, &info, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
+				return err
+			}
+			componentSection = info.ComponentSection
 		}
 	}
 	if hasLiteralMocks {
