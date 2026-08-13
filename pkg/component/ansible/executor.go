@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -409,7 +410,7 @@ func resolveComponentPath(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
+		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
 	)
 	if err != nil {
 		return "", err
