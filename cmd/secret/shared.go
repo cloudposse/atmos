@@ -263,10 +263,15 @@ func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authM
 	}
 
 	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
-	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	defaultIdentity := secretsDefaultIdentity(scope, authManager)
+	// Apply the effective identity to identity-less store-backed backends (e.g. aws/ssm) so the
+	// `atmos secret` CLI inherits the component's identity - matching the terraform paths
+	// (cmd/terraform/utils.go, internal/exec/terraform_execute_helpers.go). Without this an
+	// identity-less store falls back to the default AWS chain (EC2 IMDS) and fails off-EC2.
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
 	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
 		Resolver:        resolver,
-		DefaultIdentity: secretsDefaultIdentity(scope, authManager),
+		DefaultIdentity: defaultIdentity,
 	}
 }
 
