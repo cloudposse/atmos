@@ -77,7 +77,7 @@ func ProcessStackConfig(
 	componentStackMap map[string]map[string][]string,
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
-) (map[string]any, error) {
+) (map[string]any, StackComponentDeferredContexts, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
 
 	stackName := strings.TrimSuffix(
@@ -186,96 +186,103 @@ func ProcessStackConfig(
 	kubernetesComponents := map[string]any{}
 	helmComponents := map[string]any{}
 	allComponents := map[string]any{}
+	// allDeferredContexts collects, per component type, the per-component ComponentDeferredContexts
+	// bundle produced by processComponentsInParallel — the plumbing that lets a later,
+	// per-invocation stage resolve deferred YAML functions and deep-merge them against concrete
+	// overrides (see docs/prd/deferred-yaml-functions-evaluation-in-merge.md's completion plan).
+	// Custom (non-built-in) component types don't go through mergeComponentConfigurations/deferred
+	// merge at all, so they have no entry here.
+	allDeferredContexts := StackComponentDeferredContexts{}
 
 	// Global sections.
 	if i, ok := config[cfg.VarsSectionName]; ok {
 		globalVarsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.HooksSectionName]; ok {
 		globalHooksSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, errors.Wrapf(errUtils.ErrInvalidHooksSection, " '%s'", stackName)
+			return nil, nil, errors.Wrapf(errUtils.ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
 	if i, ok := config[cfg.SettingsSectionName]; ok {
 		globalSettingsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.EnvSectionName]; ok {
 		globalEnvSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.GenerateSectionName]; ok {
 		globalGenerateSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.TerraformSectionName]; ok {
 		globalTerraformSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.HelmfileSectionName]; ok {
 		globalHelmfileSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.PackerSectionName]; ok {
 		globalPackerSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.AnsibleSectionName]; ok {
 		globalAnsibleSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.KubernetesSectionName]; ok {
 		globalKubernetesSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.HelmSectionName]; ok {
 		globalHelmSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.ComponentsSectionName]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsSection, stackName)
 		}
 	}
 
 	if i, ok := config[cfg.AuthSectionName]; ok {
 		globalAuthSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
 		}
 	}
 
@@ -287,11 +294,11 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.MetadataSectionName]; ok {
 		globalMetadataSectionRaw, ok := i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGlobalMetadataSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGlobalMetadataSection, stackName)
 		}
 		validatedGlobalMetadata, err := validateGlobalMetadataSection(globalMetadataSectionRaw, stackName)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		globalMetadataSection = validatedGlobalMetadata
 	}
@@ -301,7 +308,7 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.SecretsSectionName]; ok {
 		globalSecretsSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
 		}
 	}
 
@@ -309,62 +316,62 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.CommandSectionName]; ok {
 		terraformCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformCommand, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.VarsSectionName]; ok {
 		terraformVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformVars, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformVars, stackName)
 		}
 	}
 
 	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("%w '%s'", errUtils.ErrInvalidTerraformHooksSection, stackName)
+			return nil, nil, fmt.Errorf("%w '%s'", errUtils.ErrInvalidTerraformHooksSection, stackName)
 		}
 	}
 
 	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.GenerateSectionName]; ok {
 		terraformGenerate, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformGenerateSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformGenerateSection, stackName)
 		}
 	}
 
 	globalAndTerraformGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, terraformGenerate})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.SettingsSectionName]; ok {
 		terraformSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSettings, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSettings, stackName)
 		}
 	}
 
 	globalAndTerraformSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, terraformSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.EnvSectionName]; ok {
 		terraformEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformEnv, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformEnv, stackName)
 		}
 	}
 
@@ -372,26 +379,26 @@ func ProcessStackConfig(
 	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.Env)
 	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalTerraformSection[cfg.ProvidersSectionName]; ok {
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProviders, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProviders, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.AuthSectionName]; ok {
 		terraformAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformAuth, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformAuth, stackName)
 		}
 	}
 
 	globalAndTerraformAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, terraformAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Global backend.
@@ -401,14 +408,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.BackendTypeSectionName]; ok {
 		globalBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackendType, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackendType, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.BackendSectionName]; ok {
 		globalBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackend, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformBackend, stackName)
 		}
 	}
 
@@ -419,14 +426,14 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.RemoteStateBackendTypeSectionName]; ok {
 		globalRemoteStateBackendType, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateType, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateType, stackName)
 		}
 	}
 
 	if i, ok := globalTerraformSection[cfg.RemoteStateBackendSectionName]; ok {
 		globalRemoteStateBackendSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateSection, stackName)
 		}
 	}
 
@@ -436,7 +443,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.SourceSectionName]; ok {
 		globalSourceSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSource, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSource, stackName)
 		}
 	}
 
@@ -446,7 +453,7 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.ProvisionSectionName]; ok {
 		globalProvisionSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProvision, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProvision, stackName)
 		}
 	}
 
@@ -456,7 +463,7 @@ func ProcessStackConfig(
 	if i, ok := config[cfg.DependenciesSectionName]; ok {
 		globalDependenciesSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
 		}
 	}
 
@@ -464,328 +471,328 @@ func ProcessStackConfig(
 	if i, ok := globalTerraformSection[cfg.DependenciesSectionName]; ok {
 		terraformDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformDependencies, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformDependencies, stackName)
 		}
 	}
 
 	globalAndTerraformDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, terraformDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileCommand, stackName)
 		}
 	}
 
 	if i, ok := globalHelmfileSection[cfg.VarsSectionName]; ok {
 		helmfileVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileVars, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileVars, stackName)
 		}
 	}
 
 	globalAndHelmfileVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, helmfileVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmfileSection[cfg.SettingsSectionName]; ok {
 		helmfileSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSettings, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileSettings, stackName)
 		}
 	}
 
 	globalAndHelmfileSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, helmfileSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmfileSection[cfg.EnvSectionName]; ok {
 		helmfileEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileEnv, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileEnv, stackName)
 		}
 	}
 
 	// Include atmos.yaml global env as lowest priority in the merge chain.
 	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmfileEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmfileSection[cfg.AuthSectionName]; ok {
 		helmfileAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileAuth, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileAuth, stackName)
 		}
 	}
 
 	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Helmfile dependencies section (Scope 2).
 	if i, ok := globalHelmfileSection[cfg.DependenciesSectionName]; ok {
 		helmfileDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileDependencies, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileDependencies, stackName)
 		}
 	}
 
 	globalAndHelmfileDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, helmfileDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Packer section.
 	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
 		packerCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerCommand, stackName)
 		}
 	}
 
 	if i, ok := globalPackerSection[cfg.VarsSectionName]; ok {
 		packerVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerVars, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerVars, stackName)
 		}
 	}
 
 	globalAndPackerVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, packerVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalPackerSection[cfg.SettingsSectionName]; ok {
 		packerSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSettings, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerSettings, stackName)
 		}
 	}
 
 	globalAndPackerSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, packerSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalPackerSection[cfg.EnvSectionName]; ok {
 		packerEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerEnv, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerEnv, stackName)
 		}
 	}
 
 	// Include atmos.yaml global env as lowest priority in the merge chain.
 	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, packerEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalPackerSection[cfg.AuthSectionName]; ok {
 		packerAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerAuth, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerAuth, stackName)
 		}
 	}
 
 	globalAndPackerAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, packerAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Packer dependencies section (Scope 2).
 	if i, ok := globalPackerSection[cfg.DependenciesSectionName]; ok {
 		packerDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerDependencies, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerDependencies, stackName)
 		}
 	}
 
 	globalAndPackerDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, packerDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Ansible section.
 	if i, ok := globalAnsibleSection[cfg.CommandSectionName]; ok {
 		ansibleCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleCommand, stackName)
 		}
 	}
 
 	if i, ok := globalAnsibleSection[cfg.VarsSectionName]; ok {
 		ansibleVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleVars, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleVars, stackName)
 		}
 	}
 
 	globalAndAnsibleVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, ansibleVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalAnsibleSection[cfg.SettingsSectionName]; ok {
 		ansibleSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSettings, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSettings, stackName)
 		}
 	}
 
 	globalAndAnsibleSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, ansibleSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalAnsibleSection[cfg.EnvSectionName]; ok {
 		ansibleEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleEnv, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleEnv, stackName)
 		}
 	}
 
 	// Include atmos.yaml global env as lowest priority in the merge chain.
 	globalAndAnsibleEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, ansibleEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalAnsibleSection[cfg.AuthSectionName]; ok {
 		ansibleAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleAuth, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleAuth, stackName)
 		}
 	}
 
 	globalAndAnsibleAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, ansibleAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Ansible dependencies section (Scope 2).
 	if i, ok := globalAnsibleSection[cfg.DependenciesSectionName]; ok {
 		ansibleDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleDependencies, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleDependencies, stackName)
 		}
 	}
 
 	globalAndAnsibleDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, ansibleDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Kubernetes section.
 	if i, ok := globalKubernetesSection[cfg.CommandSectionName]; ok {
 		kubernetesCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
 		}
 	}
 
 	if i, ok := globalKubernetesSection[cfg.VarsSectionName]; ok {
 		kubernetesVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
 		}
 	}
 
 	globalAndKubernetesVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, kubernetesVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.HooksSectionName]; ok {
 		kubernetesHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
 		}
 	}
 
 	globalAndKubernetesHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, kubernetesHooks})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.GenerateSectionName]; ok {
 		kubernetesGenerate, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
 		}
 	}
 
 	globalAndKubernetesGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, kubernetesGenerate})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.SettingsSectionName]; ok {
 		kubernetesSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
 		}
 	}
 
 	globalAndKubernetesSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, kubernetesSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.EnvSectionName]; ok {
 		kubernetesEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
 		}
 	}
 
 	globalAndKubernetesEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, kubernetesEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.AuthSectionName]; ok {
 		kubernetesAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
 		}
 	}
 
 	globalAndKubernetesAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, kubernetesAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.DependenciesSectionName]; ok {
 		kubernetesDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
 		}
 	}
 
 	globalAndKubernetesDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, kubernetesDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalKubernetesSection[cfg.SourceSectionName]; ok {
 		kubernetesSource, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
 		}
 	}
 
 	if i, ok := globalKubernetesSection[cfg.ProvisionSectionName]; ok {
 		kubernetesProvision, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
 		}
 	}
 
@@ -794,7 +801,7 @@ func ProcessStackConfig(
 	if i, ok := globalKubernetesSection[cfg.ProviderSectionName]; ok {
 		kubernetesProvider, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 		}
 	}
 
@@ -809,7 +816,7 @@ func ProcessStackConfig(
 	if i, ok := globalKubernetesSection[cfg.RenderSectionName]; ok {
 		kubernetesRender, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 		}
 	}
 
@@ -821,105 +828,105 @@ func ProcessStackConfig(
 	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
 		helmCommand, ok = i.(string)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
 		}
 	}
 
 	if i, ok := globalHelmSection[cfg.VarsSectionName]; ok {
 		helmVars, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
 		}
 	}
 
 	globalAndHelmVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, helmVars})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.HooksSectionName]; ok {
 		helmHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
 		}
 	}
 
 	globalAndHelmHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, helmHooks})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.GenerateSectionName]; ok {
 		helmGenerate, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
 		}
 	}
 
 	globalAndHelmGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, helmGenerate})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.SettingsSectionName]; ok {
 		helmSettings, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
 		}
 	}
 
 	globalAndHelmSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, helmSettings})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.EnvSectionName]; ok {
 		helmEnv, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
 		}
 	}
 
 	globalAndHelmEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmEnv})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.AuthSectionName]; ok {
 		helmAuth, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
 		}
 	}
 
 	globalAndHelmAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmAuth})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.DependenciesSectionName]; ok {
 		helmDependencies, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
 		}
 	}
 
 	globalAndHelmDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, helmDependencies})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if i, ok := globalHelmSection[cfg.SourceSectionName]; ok {
 		helmSource, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
 		}
 	}
 
 	if i, ok := globalHelmSection[cfg.ProvisionSectionName]; ok {
 		helmProvision, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
 		}
 	}
 
@@ -930,10 +937,10 @@ func ProcessStackConfig(
 	if atmosConfig.Auth.Providers != nil || atmosConfig.Auth.Identities != nil {
 		jsonBytes, err := json.Marshal(atmosConfig.Auth)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to marshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+			return nil, nil, fmt.Errorf("%w: failed to marshal global auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 		}
 		if err := json.Unmarshal(jsonBytes, &atmosAuthConfig); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+			return nil, nil, fmt.Errorf("%w: failed to unmarshal global auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 		}
 	} else {
 		atmosAuthConfig = map[string]any{}
@@ -944,7 +951,7 @@ func ProcessStackConfig(
 		if allTerraformComponents, ok := globalComponentsSection[cfg.TerraformComponentType]; ok {
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsTerraform, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsTerraform, stackName)
 			}
 
 			// Build options for each Terraform component.
@@ -981,10 +988,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			terraformComponents, err = processComponentsInParallel(atmosConfig, allTerraformComponentsMap, buildTerraformOpts)
+			var terraformComponentsDeferredContexts map[string]ComponentDeferredContexts
+			terraformComponents, terraformComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allTerraformComponentsMap, buildTerraformOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.TerraformComponentType] = terraformComponentsDeferredContexts
 		}
 	}
 
@@ -993,7 +1002,7 @@ func ProcessStackConfig(
 		if allHelmfileComponents, ok := globalComponentsSection[cfg.HelmfileComponentType]; ok {
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsHelmfile, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsHelmfile, stackName)
 			}
 
 			// Build options for each Helmfile component.
@@ -1021,10 +1030,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			helmfileComponents, err = processComponentsInParallel(atmosConfig, allHelmfileComponentsMap, buildHelmfileOpts)
+			var helmfileComponentsDeferredContexts map[string]ComponentDeferredContexts
+			helmfileComponents, helmfileComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allHelmfileComponentsMap, buildHelmfileOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.HelmfileComponentType] = helmfileComponentsDeferredContexts
 		}
 	}
 
@@ -1033,7 +1044,7 @@ func ProcessStackConfig(
 		if allPackerComponents, ok := globalComponentsSection[cfg.PackerComponentType]; ok {
 			allPackerComponentsMap, ok := allPackerComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsPacker, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsPacker, stackName)
 			}
 
 			// Build options for each Packer component.
@@ -1061,10 +1072,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			packerComponents, err = processComponentsInParallel(atmosConfig, allPackerComponentsMap, buildPackerOpts)
+			var packerComponentsDeferredContexts map[string]ComponentDeferredContexts
+			packerComponents, packerComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allPackerComponentsMap, buildPackerOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.PackerComponentType] = packerComponentsDeferredContexts
 		}
 	}
 
@@ -1073,7 +1086,7 @@ func ProcessStackConfig(
 		if allAnsibleComponents, ok := globalComponentsSection[cfg.AnsibleComponentType]; ok {
 			allAnsibleComponentsMap, ok := allAnsibleComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsAnsible, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsAnsible, stackName)
 			}
 
 			// Build options for each Ansible component.
@@ -1101,10 +1114,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			ansibleComponents, err = processComponentsInParallel(atmosConfig, allAnsibleComponentsMap, buildAnsibleOpts)
+			var ansibleComponentsDeferredContexts map[string]ComponentDeferredContexts
+			ansibleComponents, ansibleComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allAnsibleComponentsMap, buildAnsibleOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.AnsibleComponentType] = ansibleComponentsDeferredContexts
 		}
 	}
 
@@ -1113,7 +1128,7 @@ func ProcessStackConfig(
 		if allKubernetesComponents, ok := globalComponentsSection[cfg.KubernetesComponentType]; ok {
 			allKubernetesComponentsMap, ok := allKubernetesComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 			}
 
 			kubernetesComponentsBasePath := ""
@@ -1157,10 +1172,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			kubernetesComponents, err = processComponentsInParallel(atmosConfig, allKubernetesComponentsMap, buildKubernetesOpts)
+			var kubernetesComponentsDeferredContexts map[string]ComponentDeferredContexts
+			kubernetesComponents, kubernetesComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allKubernetesComponentsMap, buildKubernetesOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.KubernetesComponentType] = kubernetesComponentsDeferredContexts
 		}
 	}
 
@@ -1169,7 +1186,7 @@ func ProcessStackConfig(
 		if allHelmComponents, ok := globalComponentsSection[cfg.HelmComponentType]; ok {
 			allHelmComponentsMap, ok := allHelmComponents.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 			}
 
 			helmComponentsBasePath := ""
@@ -1208,10 +1225,12 @@ func ProcessStackConfig(
 			}
 
 			var err error
-			helmComponents, err = processComponentsInParallel(atmosConfig, allHelmComponentsMap, buildHelmOpts)
+			var helmComponentsDeferredContexts map[string]ComponentDeferredContexts
+			helmComponents, helmComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allHelmComponentsMap, buildHelmOpts)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			allDeferredContexts[cfg.HelmComponentType] = helmComponentsDeferredContexts
 		}
 	}
 
@@ -1232,6 +1251,7 @@ func ProcessStackConfig(
 		cfg.PackerComponentType:     true,
 		cfg.AnsibleComponentType:    true,
 		cfg.KubernetesComponentType: true,
+		cfg.HelmComponentType:       true,
 	}
 	for componentType, components := range globalComponentsSection {
 		if builtInTypes[componentType] {
@@ -1250,7 +1270,7 @@ func ProcessStackConfig(
 		for componentName, componentConfig := range componentsMap {
 			componentMap, ok := componentConfig.(map[string]any)
 			if !ok {
-				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
+				return nil, nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
 					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
 			}
 			// Resolve `metadata.inherits` and deep-merge base components so custom
@@ -1259,7 +1279,7 @@ func ProcessStackConfig(
 			// keys (image/build/run/composition/vars/...), not just vars/settings/env.
 			resolvedMap, inheritErr := resolveCustomComponentInheritance(atmosConfig, componentMap, componentsMap, map[string]bool{})
 			if inheritErr != nil {
-				return nil, inheritErr
+				return nil, nil, inheritErr
 			}
 			componentMap = resolvedMap
 			// Merge global vars into component vars.
@@ -1306,7 +1326,7 @@ func ProcessStackConfig(
 			componentLocalMetadata, _ := componentMap[cfg.MetadataSectionName].(map[string]any)
 			componentMetadata, mergeErr := m.Merge(atmosConfig, []map[string]any{globalMetadataSection, componentLocalMetadata})
 			if mergeErr != nil {
-				return nil, mergeErr
+				return nil, nil, mergeErr
 			}
 			if len(componentMetadata) > 0 {
 				componentMap[cfg.MetadataSectionName] = componentMetadata
@@ -1334,7 +1354,7 @@ func ProcessStackConfig(
 		result[cfg.VersionSectionName] = stackVersionSection
 	}
 
-	return result, nil
+	return result, allDeferredContexts, nil
 }
 
 // resolveCustomComponentInheritance resolves a custom component's
@@ -1444,9 +1464,10 @@ func sanitizeBaseForInheritance(base map[string]any) (map[string]any, error) {
 
 // componentProcessResult holds the result of processing a single component in parallel.
 type componentProcessResult struct {
-	component string
-	comp      map[string]any
-	err       error
+	component        string
+	comp             map[string]any
+	deferredContexts ComponentDeferredContexts
+	err              error
 }
 
 // componentWork holds the component name and its processing options.
@@ -1492,17 +1513,17 @@ func processComponentsInParallel(
 	atmosConfig *schema.AtmosConfiguration,
 	componentsMap map[string]any,
 	optsBuilder func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error),
-) (map[string]any, error) {
+) (map[string]any, map[string]ComponentDeferredContexts, error) {
 	defer perf.Track(atmosConfig, "exec.processComponentsInParallel")()
 
 	if len(componentsMap) == 0 {
-		return map[string]any{}, nil
+		return map[string]any{}, map[string]ComponentDeferredContexts{}, nil
 	}
 
 	// Pre-build all component options before starting parallel processing.
 	work, err := buildComponentWork(componentsMap, optsBuilder)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Create channels for results.
@@ -1523,8 +1544,8 @@ func processComponentsInParallel(
 			}
 
 			// Merge component configurations.
-			comp, err := mergeComponentConfigurations(atmosConfig, opts, result)
-			results <- componentProcessResult{component: component, comp: comp, err: err}
+			comp, deferredContexts, err := mergeComponentConfigurations(atmosConfig, opts, result)
+			results <- componentProcessResult{component: component, comp: comp, deferredContexts: deferredContexts, err: err}
 		}(w.component, w.opts)
 	}
 
@@ -1536,12 +1557,14 @@ func processComponentsInParallel(
 
 	// Collect results from all goroutines.
 	processedComponents := make(map[string]any, len(work))
+	processedDeferredContexts := make(map[string]ComponentDeferredContexts, len(work))
 	for result := range results {
 		if result.err != nil {
-			return nil, result.err
+			return nil, nil, result.err
 		}
 		processedComponents[result.component] = result.comp
+		processedDeferredContexts[result.component] = result.deferredContexts
 	}
 
-	return processedComponents, nil
+	return processedComponents, processedDeferredContexts, nil
 }

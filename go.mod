@@ -88,7 +88,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20260224005459-813a97530220
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20260709150029-2fb54c236733
 	github.com/hashicorp/terraform-exec v0.25.2
 	github.com/hashicorp/terraform-json v0.27.2
 	github.com/hexops/gotextdiff v1.0.3
@@ -479,6 +479,7 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6 v6.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/databus23/helm-diff/v3 v3.15.10
