@@ -12,6 +12,7 @@ import (
 type ThreeWayMerger struct {
 	thresholdPercent int              // Percentage threshold (0-100) for change detection
 	conflictStrategy ConflictStrategy // How to resolve a real ours/theirs divergence
+	driver           Driver           // Auto-detect vs forced text merging
 }
 
 // NewThreeWayMerger creates a new 3-way merger with the specified percentage threshold.
@@ -32,6 +33,14 @@ func (m *ThreeWayMerger) SetConflictStrategy(strategy ConflictStrategy) {
 	m.conflictStrategy = strategy
 }
 
+// SetDriver overrides automatic file-type detection. The zero value
+// (DriverAuto) is the default behavior.
+func (m *ThreeWayMerger) SetDriver(driver Driver) {
+	defer perf.Track(nil, "merge.ThreeWayMerger.SetDriver")()
+
+	m.driver = driver
+}
+
 // Merge performs a 3-way merge with automatic file type detection.
 // Parameters:
 //   - base: The original content (common ancestor)
@@ -46,6 +55,13 @@ func (m *ThreeWayMerger) SetConflictStrategy(strategy ConflictStrategy) {
 // Returns the merged content or an error if conflicts exceed threshold.
 func (m *ThreeWayMerger) Merge(base, ours, theirs, fileName string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.ThreeWayMerger.Merge")()
+
+	// DriverText forces every file through the text merger, bypassing detection.
+	if m.driver == DriverText {
+		merger := NewTextMerger(m.thresholdPercent)
+		merger.SetConflictStrategy(m.conflictStrategy)
+		return merger.Merge(base, ours, theirs)
+	}
 
 	// Detect file type based on extension
 	ext := strings.ToLower(filepath.Ext(fileName))
@@ -129,6 +145,38 @@ func ParseConflictStrategy(s string) (ConflictStrategy, error) {
 		return ConflictStrategyManual, errUtils.Build(errUtils.ErrUnknownMergeStrategy).
 			WithExplanationf("Invalid --merge-strategy value: `%s`", s).
 			WithHint("Valid values are: manual, ours, theirs").
+			WithExitCode(2).
+			Err()
+	}
+}
+
+// Driver selects which merger runs, named after git's merge driver concept
+// (see `man gitattributes`).
+type Driver int
+
+const (
+	// DriverAuto is the default (zero value): pick the merger by file
+	// extension (YAML-aware for .yaml/.yml, text otherwise).
+	DriverAuto Driver = iota
+	// DriverText forces every file through the line-oriented text merger,
+	// bypassing YAML-aware re-encoding (which doesn't preserve blank lines).
+	DriverText
+)
+
+// ParseDriver parses a --merge-driver flag value. An empty string (flag not
+// set) maps to the default DriverAuto.
+func ParseDriver(s string) (Driver, error) {
+	defer perf.Track(nil, "merge.ParseDriver")()
+
+	switch s {
+	case "", "auto":
+		return DriverAuto, nil
+	case "text":
+		return DriverText, nil
+	default:
+		return DriverAuto, errUtils.Build(errUtils.ErrUnknownMergeDriver).
+			WithExplanationf("Invalid --merge-driver value: `%s`", s).
+			WithHint("Valid values are: auto, text").
 			WithExitCode(2).
 			Err()
 	}

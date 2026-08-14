@@ -40,6 +40,10 @@ atmos scaffold generate terraform-component ./preview --dry-run --skip-hooks
 # Bring a recorded project forward after its template changes.
 atmos scaffold generate terraform-component ./components/terraform/vpc \
   --update --merge-strategy=manual
+
+# Force line-oriented text merging so YAML formatting (e.g. blank lines) survives an update.
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --update --merge-driver=text
 ```
 
 ## Template Sources
@@ -136,6 +140,13 @@ stores, Git, and CI integrations.
 
   <dt>`--update`</dt>
   <dd>Apply an optimistic three-way merge using the recorded source/base revision.</dd>
+
+  <dt>`--merge-driver` (default `auto`)</dt>
+  <dd>
+    Choose `auto` (YAML-aware for `.yaml`/`.yml`, text otherwise) or `text` to force every file
+    through the line-oriented text merge driver, preserving formatting (e.g. blank lines) that a
+    YAML-aware re-encode would otherwise collapse.
+  </dd>
 
   <dt>`--merge-strategy` (default `manual`)</dt>
   <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>
