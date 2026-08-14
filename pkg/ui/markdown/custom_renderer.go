@@ -193,6 +193,25 @@ func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 	extensions.NewStrictLinkifyExtension().Extend(md)
 }
 
+// ApplyStrictLinkify extends a bare glamour.TermRenderer (one created directly via
+// glamour.NewTermRenderer, not via NewCustomRenderer) with the strict linkify extension,
+// preventing package/tool references like foo/bar@1.0.0 or tool@1.0.0 from being
+// auto-linked as mailto: links by glamour's default GFM Linkify extension.
+//
+// This is exported for callers -- such as pkg/ui/formatter.go's renderMarkdown, which
+// renders short-lived content (e.g. command help/usage text) via a raw glamour renderer
+// for performance/simplicity -- that need this specific fix without opting into the full
+// custom syntax set (admonitions, muted text, badges, highlight) NewCustomRenderer adds.
+func ApplyStrictLinkify(renderer *glamour.TermRenderer) {
+	defer perf.Track(nil, "markdown.ApplyStrictLinkify")()
+
+	md := getGlamourGoldmark(renderer)
+	if md == nil {
+		return
+	}
+	extensions.NewStrictLinkifyExtension().Extend(md)
+}
+
 // getGlamourGoldmark extracts the internal goldmark.Markdown from a glamour.TermRenderer.
 // This uses reflection because glamour doesn't expose its internal goldmark instance.
 // Returns nil if the reflection fails (e.g., if glamour's internal structure changes).

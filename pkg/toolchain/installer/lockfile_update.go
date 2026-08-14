@@ -11,11 +11,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/schema"
 	toolchainlock "github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 func resolveLockFilePath(config *schema.AtmosConfiguration) string {
@@ -25,13 +27,90 @@ func resolveLockFilePath(config *schema.AtmosConfiguration) string {
 	if config.Toolchain.LockFile != "" {
 		return config.Toolchain.LockFile
 	}
-	installPath := config.Toolchain.InstallPath
-	if installPath == "" {
-		installPath = ".tools"
-	}
-	return filepath.Join(installPath, "toolchain.lock.yaml")
+	return filepath.Join(resolveDefaultInstallPath(config.Toolchain.InstallPath), "toolchain.lock.yaml")
 }
 
+// resolveDefaultInstallPath mirrors toolchain.GetInstallPath()'s fallback chain exactly
+// (pkg/toolchain/installer cannot import pkg/toolchain -- that would be a cycle -- so both
+// independently call the shared pkg/xdg helper the same way). Without this, the lock file
+// defaulted to a hardcoded relative ".tools" while actual tool installs defaulted to the XDG
+// cache dir, so toolchain.lock.yaml and the tools it's supposed to lock lived in two entirely
+// different directory trees whenever install_path was left unset.
+func resolveDefaultInstallPath(installPath string) string {
+	if installPath != "" {
+		return installPath
+	}
+	if cacheDir, err := xdg.GetXDGCacheDir("toolchain", defaultMkdirPermissions); err == nil && cacheDir != "" {
+		return cacheDir
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return filepath.Join(cwd, ".tools")
+	}
+	return ".tools"
+}
+
+// checkLockFileChecksumMismatch compares a freshly downloaded, verified artifact's checksum
+// against any existing toolchain.lock.yaml entry for the same tool/version/platform. It is
+// read-only -- unlike updateLockFile, it never creates or mutates lock file entries, so a
+// lookup miss (no lock file yet, or no matching tool/version/platform entry) is not an error,
+// just "nothing to compare against yet."
+//
+// Callers that extract/install the downloaded artifact onto disk (installFromTool) MUST call
+// this before extraction, not just rely on updateLockFile's (now removed) mismatch check after
+// the fact: updateLockFile runs after extractAndInstall/os.Chmod, so a mismatch caught only
+// there means the compromised or unexpectedly-changed binary was already placed in the install
+// tree by the time the error is returned -- exactly the supply-chain guarantee use_lock_file
+// exists to provide. See docs/fixes for the incident this closes.
+func (i *Installer) checkLockFileChecksumMismatch(tool *registry.Tool, version string, result *verification.Result) error {
+	if !i.verifyAgainstLock || i.lockFilePath == "" || result == nil || result.Checksum == "" {
+		return nil
+	}
+	lf, err := loadInstallerLockFile(i.lockFilePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("load installer lockfile: %w", err)
+	}
+	toolName := tool.RepoOwner + "/" + tool.RepoName
+	platform := runtime.GOOS + "_" + runtime.GOARCH
+	existingChecksum := lookupLockedChecksum(lf, toolName, version, platform)
+	if existingChecksum == "" || existingChecksum == result.Checksum {
+		return nil
+	}
+	return errUtils.Build(ErrLockfileChecksumMismatch).
+		WithExplanationf("the freshly downloaded checksum for %s@%s/%s doesn't match the one recorded in toolchain.lock.yaml", toolName, version, platform).
+		WithHint("if this version legitimately changed upstream, run `atmos toolchain lock` to refresh the recorded checksum").
+		WithHint("otherwise, this may indicate the download was tampered with or corrupted").
+		WithContext("tool", toolName).
+		WithContext("version", version).
+		WithContext("platform", platform).
+		Err()
+}
+
+// lookupLockedChecksum returns the checksum recorded for tool/version/platform in an
+// already-loaded lock file, or "" if no matching entry exists at any level (unknown tool,
+// unknown version, or unknown platform).
+func lookupLockedChecksum(lf *installerLockFile, toolName, version, platform string) string {
+	tool := lf.Tools[toolName]
+	if tool == nil {
+		return ""
+	}
+	versionEntry := tool.Versions[version]
+	if versionEntry == nil {
+		return ""
+	}
+	entry := versionEntry.Platforms[platform]
+	if entry == nil {
+		return ""
+	}
+	return entry.Checksum
+}
+
+// updateLockFile persists a successful, already-verified install's checksum into
+// toolchain.lock.yaml. It no longer performs the mismatch check itself -- callers that extract
+// an artifact onto disk must call checkLockFileChecksumMismatch beforehand (see its doc
+// comment); this function assumes that check, if applicable, already passed.
 func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string, result *verification.Result) error {
 	if !i.useLockFile || i.lockFilePath == "" || result == nil || result.Checksum == "" {
 		return nil
@@ -49,12 +128,11 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 			lf = newInstallerLockFile()
 		}
 		toolName := tool.RepoOwner + "/" + tool.RepoName
-		entry := getOrCreateInstallerTool(lf, toolName)
-		entry.Version = version
-		entry.Source = tool.Registry
-		entry.BinaryName = tool.BinaryName
+		versionEntry := getOrCreateInstallerToolVersion(lf, toolName, version)
 		platform := runtime.GOOS + "_" + runtime.GOARCH
-		entry.Platforms[platform] = &toolchainlock.PlatformEntry{
+		versionEntry.Source = tool.Registry
+		versionEntry.BinaryName = tool.BinaryName
+		versionEntry.Platforms[platform] = &toolchainlock.PlatformEntry{
 			URL:               assetURL,
 			Checksum:          result.Checksum,
 			Size:              result.AssetSize,
@@ -69,8 +147,9 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 }
 
 type (
-	installerLockFile = toolchainlock.LockFile
-	installerLockTool = toolchainlock.Tool
+	installerLockFile     = toolchainlock.LockFile
+	installerLockTool     = toolchainlock.Tool
+	installerVersionEntry = toolchainlock.VersionEntry
 )
 
 func newInstallerLockFile() *installerLockFile {
@@ -119,11 +198,9 @@ func saveInstallerLockFile(filePath string, lf *installerLockFile) error {
 }
 
 func getOrCreateInstallerTool(lf *installerLockFile, name string) *installerLockTool {
-	// GetOrCreateTool never returns nil; only the Platforms map needs backfilling for
-	// entries loaded from lockfiles written before platforms were recorded.
-	tool := lf.GetOrCreateTool(name)
-	if tool.Platforms == nil {
-		tool.Platforms = make(map[string]*toolchainlock.PlatformEntry)
-	}
-	return tool
+	return lf.GetOrCreateTool(name)
+}
+
+func getOrCreateInstallerToolVersion(lf *installerLockFile, name, version string) *installerVersionEntry {
+	return getOrCreateInstallerTool(lf, name).GetOrCreateVersion(version)
 }
