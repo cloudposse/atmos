@@ -92,10 +92,14 @@ func TestToolVersionsFileManager_AddTool_AsDefault(t *testing.T) {
 	err = mgr.AddTool(ctx, "terraform", "1.13.4", WithAsDefault())
 	require.NoError(t, err)
 
-	// Verify file contents - default should be first
+	// Setting a new default fully replaces the line (matching asdf's own "set" convention:
+	// `asdf set <tool> <version>` is documented as equivalent to
+	// `echo "<tool> <version>" > .tool-versions`) -- the old default (1.10.0) must not
+	// survive as a stale second entry.
 	content, err := os.ReadFile(tmpFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform 1.13.4 1.10.0")
+	assert.Contains(t, string(content), "terraform 1.13.4\n")
+	assert.NotContains(t, string(content), "1.10.0")
 }
 
 func TestToolVersionsFileManager_AddTool_Disabled(t *testing.T) {
@@ -172,10 +176,12 @@ func TestToolVersionsFileManager_SetDefault(t *testing.T) {
 	err = mgr.SetDefault(ctx, "terraform", "1.13.4")
 	require.NoError(t, err)
 
-	// Verify file contents
+	// SetDefault fully replaces the line, matching asdf's own "set" convention -- the other
+	// pinned version (1.10.0) must not survive as a stale entry.
 	content, err := os.ReadFile(tmpFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform 1.13.4 1.10.0")
+	assert.Contains(t, string(content), "terraform 1.13.4\n")
+	assert.NotContains(t, string(content), "1.10.0")
 }
 
 func TestToolVersionsFileManager_GetTools(t *testing.T) {
