@@ -294,6 +294,109 @@ func TestParseConflictStrategy(t *testing.T) {
 	}
 }
 
+func TestParseDriver(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    Driver
+		wantErr bool
+	}{
+		{name: "empty defaults to auto", input: "", want: DriverAuto},
+		{name: "auto", input: "auto", want: DriverAuto},
+		{name: "text", input: "text", want: DriverText},
+		{name: "invalid value", input: "bogus", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDriver(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestThreeWayMerger_SetDriver_ForcesTextMerger verifies DriverText bypasses
+// extension-based detection and preserves blank lines that DriverAuto's
+// YAML re-encode collapses.
+func TestThreeWayMerger_SetDriver_ForcesTextMerger(t *testing.T) {
+	base := `servers:
+- name: web
+
+settings:
+  timeout: 30
+
+tasks:
+- name: setup
+  steps:
+  - run: "install deps"
+`
+	ours := base
+	theirs := `servers:
+- name: web
+
+settings:
+  timeout: 30
+
+tasks:
+- name: setup
+  steps:
+  - run: "install deps"
+
+- name: cleanup
+  steps:
+  - run: "remove temp files"
+`
+
+	tests := []struct {
+		name   string
+		driver Driver
+		want   string
+	}{
+		{
+			name:   "auto driver collapses blank lines",
+			driver: DriverAuto,
+			// YAML-aware merge re-encodes the document, so blank lines between
+			// top-level blocks and the original unindented list style are lost.
+			want: "servers:\n  - name: web\nsettings:\n  timeout: 30\ntasks:\n  - name: setup\n    steps:\n" +
+				"      - run: \"install deps\"\n  - name: cleanup\n    steps:\n      - run: \"remove temp files\"\n",
+		},
+		{
+			name:   "text driver preserves blank lines and formatting",
+			driver: DriverText,
+			// The line-oriented text merger never re-encodes the document, so
+			// blank lines and the original list indentation survive untouched,
+			// and the template's new task is still merged in.
+			want: "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n  steps:\n" +
+				"  - run: \"install deps\"\n\n- name: cleanup\n  steps:\n  - run: \"remove temp files\"\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(100)
+			merger.SetDriver(tt.driver)
+			result, err := merger.Merge(base, ours, theirs, "config.yaml")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Content != tt.want {
+				t.Errorf("driver %v: got:\n%q\nwant:\n%q", tt.driver, result.Content, tt.want)
+			}
+		})
+	}
+}
+
 func TestThreeWayMerger_RealWorldScenarios(t *testing.T) {
 	tests := []struct {
 		name     string
