@@ -401,12 +401,12 @@ tags:
 ## Performance Considerations
 
 1. `atmos.Component` requires resolving the full component context and potentially running
-   `terraform output`, which initializes Terraform and downloads providers
+    `terraform output`, which initializes Terraform and downloads providers
 2. `atmos.GomplateDatasource` caches results per execution (use it instead of `datasource`)
 3. `atmos.Store` caches results per store/stack/component/key combination
 4. All Atmos template functions cache results within a single CLI command execution
 5. Functions like `atmos describe stacks` evaluate all templates, so heavy use of
-   `atmos.Component` can significantly slow these commands
+    `atmos.Component` can significantly slow these commands
 
 ## Safety Guidelines
 
