@@ -112,6 +112,10 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 Verify the result with `which terraform`. On PowerShell, use `Get-Command terraform`. The command
 must resolve to the Atmos toolchain install directory, not the tfenv shim.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: this is a static snapshot, not tfenv's dynamic per-directory resolution.** tfenv's
 shim re-reads `.terraform-version` on every command. So when you `cd` into a different project,
 tfenv switches versions automatically. `atmos toolchain env` sets `PATH` once, at eval time, using

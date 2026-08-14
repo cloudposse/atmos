@@ -118,6 +118,10 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 Verify with `which tofu` (`Get-Command tofu` on PowerShell). The result must point to the Atmos
 toolchain install directory, not the tofuenv shim.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: this is a static snapshot, not tofuenv's dynamic per-directory resolution.**
 tofuenv's shim re-reads `.opentofu-version` on every command. Changing directory into a different
 project automatically switches versions. `atmos toolchain env` sets the resolved paths for the

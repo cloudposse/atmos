@@ -132,6 +132,10 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 Verify the result with `which terraform` (`Get-Command terraform` on PowerShell). The command must
 resolve to the Atmos toolchain install directory, not the system `terraform` or an asdf shim.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: `atmos toolchain env` creates a static snapshot. It does not match asdf's dynamic
 per-directory resolution.** asdf shims read `.tool-versions` again on every command. So when you
 change directory (`cd`) into a different project, asdf automatically switches versions. `atmos

@@ -132,6 +132,10 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 Verify the result with `which terraform` (use `Get-Command terraform` on PowerShell). The command
 must resolve to the Atmos toolchain install directory, not Homebrew's `bin` directory.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: this is a real behavior change from Homebrew's global installs, not only a syntax
 change.** With Homebrew, `terraform` was the same version in every shell and every directory.
 `atmos toolchain env` sets `PATH` from the current directory's resolved paths at eval time. If you

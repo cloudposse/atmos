@@ -141,6 +141,10 @@ Verify the setup with `which terraform` (use `Get-Command terraform` on PowerShe
 must resolve under the Atmos toolchain install directory, not a tenv shim. Repeat this check for
 `tofu`, `terragrunt`, and `tflint` as needed.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: `atmos toolchain env` creates a static snapshot. It does not repeat tenv's
 per-directory resolution.** tenv's shims read their version files again on every command. Because
 of this, changing directories (`cd`) into a different project automatically switches versions for

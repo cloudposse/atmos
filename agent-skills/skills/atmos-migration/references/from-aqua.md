@@ -135,6 +135,10 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 Verify with `which terraform` (use `Get-Command terraform` on PowerShell). It must resolve under
 the Atmos toolchain install directory, not Aqua's proxy directory.
 
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
 **Important: this method takes a static snapshot, not Aqua's dynamic per-directory resolution.**
 `aqua-proxy` resolves the nearest `aqua.yaml` again on every command. As a result, when you `cd`
 into a different project, Aqua automatically switches versions. `atmos toolchain env` bakes the
@@ -158,21 +162,8 @@ full reference.
 
 ## Functional Gaps
 
-### Planned
-
-| Aqua package type | Status | Workaround until it lands |
-|---|---|---|
-| `github_archive` | In progress. [PR #2416](https://github.com/cloudposse/atmos/pull/2416) adds this feature. It resolves to `https://github.com/{owner}/{repo}/archive/refs/tags/{version}.tar.gz`, matching upstream Aqua semantics. | Hand-port to a `type: atmos` inline registry entry (`http` type pointed at the archive URL). Or leave the tool on Aqua until the PR merges. |
-| `github_content` | In progress. [PR #2416](https://github.com/cloudposse/atmos/pull/2416) also adds this feature. | Hand-port to a `type: atmos` inline registry entry (`http` type pointed at the raw file URL). Or leave the tool on Aqua until the PR merges. |
-
-Check whether PR #2416 has merged before you tell a user these types are unsupported. If it has
-merged, treat both types as supported and remove this section. The Not Supported table below
-still applies.
-
-### Not Supported
-
-Atmos intentionally does not support the following Aqua schema features. These come from the
-"Unsupported Aqua Features" list in [atmos-toolchain](../../atmos-toolchain/SKILL.md).
+Atmos intentionally does not support the following Aqua schema features. Most of this list comes
+from the "Unsupported Aqua Features" list in [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 
 | Aqua feature | Why it does not port directly | Workaround |
 |---|---|---|
@@ -181,7 +172,7 @@ Atmos intentionally does not support the following Aqua schema features. These c
 | `version_filter` | Atmos does not support this Aqua registry field. Aqua uses it to filter candidate GitHub tags before version resolution. | Pin an exact, already-known-good version in `.tool-versions`. |
 | `version_expr` / `version_expr_prefix` | Atmos does not support version-string manipulation through an expression. | Pin an exact version. |
 | `go_version_file` | Atmos does not support reading a version from a Go source file. | Pin the version explicitly in `.tool-versions`. |
-| `import` | Atmos does not support Aqua's registry-composition mechanism. | Add multiple `toolchain.registries` entries instead of one registry that imports others. |
+| `import` | Not needed. Atmos already lets you compose multiple registries by importing multiple `atmos.yaml` files through its own `import:` mechanism. A separate registry-level `import` field was not implemented. | Add multiple `toolchain.registries` entries directly. Or split them across `atmos.yaml` files and combine them with `import:`. |
 | `command_aliases` | Atmos does not support this Aqua field. | Use `toolchain.proxies` in `atmos.yaml` instead. `toolchain.proxies` creates a command-name link, the same role `command_aliases` plays in Aqua. Do not use `toolchain.aliases` for this. `toolchain.aliases` only maps a short tool name to an `owner/repo` registry entry for lookup. It does not change the command name a tool runs under. See the Shell Integration section above. |
 | `tags` | Not supported. | No equivalent exists. Atmos does not filter installs by tag. |
 | `vars` | Atmos does not support Aqua's per-package template variables. | Hard-code the value into the `url` template of a `type: atmos` inline registry entry. |
@@ -192,7 +183,12 @@ and compares versions. A package that already ships from an Aqua registry needs 
 `version_prefix` to a custom `type: atmos` inline registry entry when you define a tool with no
 upstream Aqua registry entry.
 
-## Worked Example
+**`github_archive` and `github_content` are supported, not a gap.** Atmos added these two Aqua
+package types in [PR #2416](https://github.com/cloudposse/atmos/pull/2416). Treat a package that
+uses either type the same as any other Aqua package: convert it with
+`atmos toolchain add owner/repo@version`.
+
+## Example
 
 This mixed `aqua.yaml` file shows both cases:
 ```yaml
@@ -210,9 +206,6 @@ release asset, if one exists. Otherwise, leave it out of scope for this migratio
 ## Cross-Links
 
 - [atmos-toolchain SKILL.md](../../atmos-toolchain/SKILL.md): the Registries section and the
-  "Unsupported Aqua Features" list. The Not Supported table above comes from this list.
-- [PR #2416](https://github.com/cloudposse/atmos/pull/2416): adds `github_archive` and
-  `github_content` package-type support. Check its merge status before you cite the Planned table
-  above as still accurate.
+  "Unsupported Aqua Features" list. The Functional Gaps table above comes from this list.
 - [atmos-toolchain commands-reference.md](../../atmos-toolchain/references/commands-reference.md):
   covers `atmos toolchain add`, `registry list`, `registry search`.
