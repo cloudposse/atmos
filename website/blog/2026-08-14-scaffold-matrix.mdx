@@ -6,7 +6,7 @@ authors: [jorrite]
 tags: [feature]
 ---
 
-Every file a scaffold template declares renders exactly once. `when:` can skip a file, but it
+Every file a scaffold template declares renders at most once. `when:` can skip a file, but it
 can never multiply one. You could work around that by authoring every combination up front and
 letting `when:` prune down to what applies — but that only works if every combination is
 knowable in advance. It breaks down for environments picked interactively from a longer list, or
@@ -49,9 +49,9 @@ spec:
 
 Selecting `dev` and `staging` generates exactly `stacks/deploy/dev.yaml` and
 `stacks/deploy/staging.yaml`. Declaring more than one axis expands their full combination, and
-each resolved combination is available as `.matrix.<axis>` anywhere a file entry can use it: in
-the output path, in `when:`, and inside the generated file's own content — so a file can name
-itself and branch on its own combination.
+each resolved combination is available as `.matrix.<axis>` in Go-template fields such as the
+output path and generated content, and as `matrix.<axis>` in `when:` conditions — so a file can
+name itself and branch on its own combination.
 
 ### Computed axes
 
