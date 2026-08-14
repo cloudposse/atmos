@@ -70,12 +70,11 @@ mandates for all `cmd` tests.
 - `./custom-gcl run --new-from-rev=origin/main` — 0 issues in any file
   changed by this fix. (6 pre-existing issues were reported in
   `pkg/auth/cloud/kube/config.go`, a file untouched by this change.)
-- Did not add a dedicated regression test asserting that two independent
-  tests each registering a command onto `RootCmd` no longer see each other's
-  commands — the existing `cmd` package test suite already exercises this
-  exact scenario in practice (multiple tests registering real custom
-  commands via `processCustomCommands` in the same `go test` run), and it
-  passed cleanly with this change in place.
+- Added `TestTestKit_RootCmdCommandsRestoration` (`cmd/testkit_test.go`), a
+  table-driven test that registers one or more commands on `RootCmd` after a
+  `NewTestKit` snapshot, asserts they're present mid-test, then asserts after
+  the subtest's cleanup runs that the added commands are gone and the
+  original commands are unchanged.
 
 ## Follow-ups
 

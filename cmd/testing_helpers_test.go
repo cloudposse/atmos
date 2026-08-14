@@ -46,7 +46,7 @@ type cmdStateSnapshot struct {
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
-	commands       []*cobra.Command // RootCmd.Commands() at snapshot time
+	commands       []*cobra.Command // RootCmd.Commands() at snapshot time.
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.

@@ -65,9 +65,9 @@ atmos terraform apply "app/local-nested" --stack dev
 find .workdir/terraform -maxdepth 1 -mindepth 1 -type d
 find .workdir -name terraform.tfstate -not -path "*/.terraform/*"
 
-# Path-traversal probes: both are now guarded and must fail with
-# ErrPathTraversal ("path traversal not allowed") rather than vendoring
-# outside the intended component base path. Neither should create
+# Path-traversal probes: ../escape-test is sanitized safely, while
+# ../escape-test-nowd must fail with ErrPathTraversal ("path traversal not allowed")
+# rather than vendoring outside the intended component base path. Neither should create
 # anything under components/ -- confirm with the `test -d` checks below.
 atmos terraform source pull "../escape-test" --stack dev        # sanitized, safe
 atmos terraform source pull "../escape-test-nowd" --stack dev   # must fail with ErrPathTraversal
