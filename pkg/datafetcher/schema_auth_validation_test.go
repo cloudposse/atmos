@@ -3,6 +3,7 @@ package datafetcher
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -114,6 +115,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 		name      string
 		manifest  map[string]interface{}
 		expectErr bool
+		errField  string
 	}{
 		{
 			name: "component with required identities",
@@ -179,6 +181,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 				},
 			},
 			expectErr: true,
+			errField:  "require_identity",
 		},
 		{
 			name: "native helm component with identity guard and standard sections",
@@ -224,6 +227,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 				},
 			},
 			expectErr: true,
+			errField:  "require_identity",
 		},
 		{
 			name: "component with empty auth",
@@ -287,6 +291,13 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 
 			if tt.expectErr {
 				assert.False(t, result.Valid(), "Expected validation errors")
+				if tt.errField != "" {
+					fields := make([]string, 0, len(result.Errors()))
+					for _, desc := range result.Errors() {
+						fields = append(fields, desc.Field())
+					}
+					assert.Contains(t, strings.Join(fields, " "), tt.errField)
+				}
 			} else {
 				if !result.Valid() {
 					for _, desc := range result.Errors() {
