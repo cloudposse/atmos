@@ -426,6 +426,15 @@ jobs:
       # filenames and hand them to codecov-action together in one call below -
       # Codecov's backend aggregates line hits across multiple report files
       # server-side, so no local merge step is needed here.
+      #
+      # These 10 downloads are independent and a good fit for GitHub Actions'
+      # `parallel:` step group (shipped 2026-06-25), but this repo's vendored
+      # actionlint (github.com/rhysd/actionlint, pinned in go.mod and enforced
+      # by the atmos-validate-editorconfig pre-commit hook via
+      # pkg/ci/validate/githubactions/actionlint.go) doesn't recognize that
+      # syntax yet as of its latest release (v1.7.12, 2026-03-30, predates the
+      # feature). Revisit once actionlint adds support and this repo bumps the
+      # dependency.
       - name: Download linux coverage report artifact (shard 1)
         uses: ./.github/actions/download-artifact-retry
         with:
