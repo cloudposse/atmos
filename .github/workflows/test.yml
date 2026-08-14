@@ -41,6 +41,10 @@ env:
   HELM_DIFF_VERSION: "v3.15.10"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # Number of parallel shards the `test` job's acceptance suite is split into per
+  # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
+  # matrix.shard list below, which must stay in sync with this count).
+  TEST_SHARD_COUNT: "10"
   # Use pipe fallback so transient proxy.golang.org errors (5xx, HTTP/2 stream
   # resets) during `go mod download` fall back to direct module fetches. The
   # default comma-separated GOPROXY list only falls through on "not found"
@@ -171,7 +175,10 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Acceptance Tests (${{ matrix.flavor.target }})
+    # The job `name:` context doesn't have access to workflow-level `env`, so the
+    # shard count is hardcoded here - keep it in sync with env.TEST_SHARD_COUNT
+    # above and the matrix.shard list below.
+    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
     needs: [build]
     strategy:
       fail-fast: false
@@ -180,17 +187,18 @@ jobs:
           - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    # Linux is the tightest target: its timed steps alone (registry cache test 25m +
-    # coverage-enabled acceptance tests 60m + coverage upload 5m) already sum to 90m,
-    # before checkout, Go/Atmos setup, and toolchain installs. windows-latest sums to
-    # 105m (registry cache test 25m + acceptance tests 80m, see the "Acceptance tests"
-    # step's own timeout below for why windows gets the wider budget) and macos-15
-    # sums to 85m (registry cache test 25m + acceptance tests 60m) for the same
-    # reason - a run that hit exactly 75.0 minutes was force-cancelled by an earlier,
-    # tighter ceiling with every step, including the full go test suite, already
-    # completed successfully in the logs. Give the job-level ceiling real headroom
-    # above the step-budget sum, not just equal to it.
-    timeout-minutes: 140
+        # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
+        # across these shards by hashing each test case's name (ATMOS_TEST_SHARD /
+        # ATMOS_TEST_SHARD_COUNT below); keep this list and env.TEST_SHARD_COUNT in
+        # sync if the shard count ever changes.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    # Sharding splits the acceptance suite's runtime across parallel jobs, but each
+    # shard still pays the same fixed per-job overhead (checkout, toolchain installs,
+    # `atmos build deps`) that used to be amortized over one long-running job. Give
+    # shards real headroom above their expected fraction of the pre-sharding budgets
+    # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
+    # on this comment) rather than dividing those numbers by the shard count exactly.
+    timeout-minutes: 40
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -289,9 +297,18 @@ jobs:
           bash scripts/test-check-terraform-example-syntax.sh
           scripts/check-terraform-example-syntax.sh
 
+      # Runs once per OS on shard 1 only - not on every shard. It installs/removes
+      # a real cert in the OS trust store (the macOS System keychain via `sudo
+      # security`, or the Windows Root store); a concurrent run on the same VM
+      # racing dozens of other tests that make real TLS calls (provider installs,
+      # vendor pulls, GitHub API requests) can destabilize trust verification for
+      # the rest of the job - surfacing as spurious "certificate signed by unknown
+      # authority" failures on unrelated tests. Each shard is its own isolated VM,
+      # so running it once per OS (not once per shard) is about avoiding redundant
+      # 25-minute runs, not a cross-shard race.
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25
-        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        if: matrix.shard == 1 && (matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft))
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -305,16 +322,18 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
-      # TestTerraformRegistryCache runs once above on every active OS. Skip it in
-      # both steps below so no OS executes the same trust/cache test twice: it
-      # installs/removes a real cert in the OS trust store (the macOS System
-      # keychain via `sudo security`, or the Windows Root store), and a second,
-      # concurrent run racing dozens of other tests that make real TLS calls
-      # (provider installs, vendor pulls, GitHub API requests) can destabilize
-      # trust verification for the rest of the job — surfacing as spurious
-      # "certificate signed by unknown authority" failures on unrelated tests.
+      # TestTerraformRegistryCache runs once per OS above (shard 1 only). Skip it in
+      # both steps below on every shard so no shard executes the same trust/cache
+      # test a second time.
+      #
+      # ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT are read by tests/cli_test.go's
+      # TestCLICommands to run only this shard's slice of the ~388 CLI-driven test
+      # cases (see testShard/testCaseShard). TEST is set per shard: shard 1 also
+      # picks up every non-`tests` package (the ~400 fast unit-test packages) so
+      # they run exactly once per OS instead of on every shard; shards 2+ only run
+      # ./tests.
       - name: Acceptance tests with coverage
-        timeout-minutes: 60
+        timeout-minutes: 40
         if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -322,21 +341,25 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-        run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+          COVERAGE_OUT: coverage-shard-${{ matrix.shard }}.out
+        run: |
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
+            export TEST="./tests $OTHER_PACKAGES"
+          else
+            export TEST="./tests"
+          fi
+          TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
-        # Build job's timeout comment above): runs of this step have been
-        # observed between 37m43s and 60m17s (the latter timed out at the
-        # previous 60m budget with the full go test suite already completed
-        # successfully in the logs — every package printed `ok`, the step
-        # was force-cancelled ~17s after `go test` itself finished). That's
-        # 20+ minutes of CI-to-CI variance on a budget with almost no
-        # headroom. Give Windows real slack; macOS finishes this step in
-        # ~35m today so its budget stays at 60m (still matching Linux's
-        # coverage-enabled step budget) — the extra headroom is a no-op for
-        # it.
-        timeout-minutes: ${{ matrix.flavor.target == 'windows' && 80 || 60 }}
+        # Build job's timeout comment above): before sharding, runs of the
+        # unsharded step were observed between 37m43s and 60m17s. Give Windows
+        # real slack per shard too; macOS shards finish faster so their budget
+        # stays lower.
+        timeout-minutes: ${{ matrix.flavor.target == 'windows' && 40 || 30 }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -345,19 +368,46 @@ jobs:
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           TESTARGS: "-skip=^TestTerraformRegistryCache$"
-        run: atmos test acceptance
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: |
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
+            export TEST="./tests $OTHER_PACKAGES"
+          else
+            export TEST="./tests"
+          fi
+          atmos test acceptance
 
       - name: Upload coverage report artifact
-        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage-shard-{0}.out', matrix.shard)) != ''
         timeout-minutes: 5
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: acceptance-coverage-linux
-          path: coverage.out
+          name: acceptance-coverage-linux-shard-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.out
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
+
+  # Sharding the `test` job (matrix.shard) fans it out into TEST_SHARD_COUNT x 3
+  # separate per-leg checks instead of one per OS. Branch protection needs one
+  # stable required-check name regardless of shard count, so gate on this
+  # aggregator instead of the individual "Acceptance Tests (...)" legs (mirrors
+  # the k3s-required pattern below).
+  test-required:
+    name: Acceptance Tests (required)
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check test matrix result
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix result was '${{ needs.test.result }}'"
+            exit 1
+          fi
 
   coverage:
     name: Upload acceptance coverage to Codecov
@@ -370,10 +420,70 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download linux coverage report artifact
+      # Each Linux shard uploads its own coverage-shard-N.out artifact (see the
+      # `test` job's "Upload coverage report artifact" step) instead of one
+      # combined file. Download all TEST_SHARD_COUNT of them into distinct
+      # filenames and hand them to codecov-action together in one call below -
+      # Codecov's backend aggregates line hits across multiple report files
+      # server-side, so no local merge step is needed here.
+      - name: Download linux coverage report artifact (shard 1)
         uses: ./.github/actions/download-artifact-retry
         with:
-          name: acceptance-coverage-linux
+          name: acceptance-coverage-linux-shard-1
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 2)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-2
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 3)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-3
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 4)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-4
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 5)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-5
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 6)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-6
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 7)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-7
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 8)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-8
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 9)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-9
+          path: ${{ github.workspace }}
+
+      - name: Download linux coverage report artifact (shard 10)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: acceptance-coverage-linux-shard-10
           path: ${{ github.workspace }}
 
       - name: Upload coverage report to Codecov
@@ -383,7 +493,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage.out
+          files: coverage-shard-1.out,coverage-shard-2.out,coverage-shard-3.out,coverage-shard-4.out,coverage-shard-5.out,coverage-shard-6.out,coverage-shard-7.out,coverage-shard-8.out,coverage-shard-9.out,coverage-shard-10.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key

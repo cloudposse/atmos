@@ -3,6 +3,10 @@ set -e
 
 # Directory for subprocess coverage data
 COVERAGE_DIR="${COVERAGE_DIR:-coverage}"
+# Final coverage profile path. Overridable so parallel CI shards (each its own
+# job/process, never concurrent within one invocation) can write to distinct
+# files before a later step merges/uploads them together.
+COVERAGE_OUT="${COVERAGE_OUT:-coverage.out}"
 TEST="${1:-./...}"
 TESTARGS="${2:-}"
 
@@ -12,9 +16,12 @@ echo "Running tests with subprocess coverage collection"
 rm -rf "$COVERAGE_DIR"
 mkdir -p "$COVERAGE_DIR/integration"
 
-# Run tests with coverage enabled - subprocesses will write to GOCOVERDIR
+# Run tests with coverage enabled - subprocesses will write to GOCOVERDIR.
+# -covermode=atomic is pinned explicitly (rather than relying on go test's
+# default) so multiple shards' profiles remain mergeable/aggregatable
+# downstream instead of silently mixing covermodes.
 GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST \
-    -cover -coverpkg=./... $TESTARGS -timeout 40m \
+    -cover -covermode=atomic -coverpkg=./... $TESTARGS -timeout 40m \
     -coverprofile="$COVERAGE_DIR/unit.txt"
 
 # Convert subprocess binary coverage to text format if it exists
@@ -35,10 +42,10 @@ fi
 
 # Filter out mock files - handle cross-platform grep behavior
 if grep -q "mock_" coverage.raw 2>/dev/null; then
-    grep -v "mock_" coverage.raw > coverage.out
+    grep -v "mock_" coverage.raw > "$COVERAGE_OUT"
 else
-    cp coverage.raw coverage.out
+    cp coverage.raw "$COVERAGE_OUT"
 fi
 rm -f coverage.raw
 
-echo "Coverage report generated: coverage.out"
+echo "Coverage report generated: $COVERAGE_OUT"

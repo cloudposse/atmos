@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
@@ -1419,6 +1420,8 @@ func TestCLICommands(t *testing.T) {
 		t.Fatalf("Failed to load test suites: %v", err)
 	}
 
+	shard, shardCount := testShard(t)
+
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
 			logger.Warn("Skipping disabled test", "test", tc.Name)
@@ -1431,11 +1434,53 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
+		// Skip cases not assigned to this shard. Filtering happens outside t.Run so
+		// unselected cases don't show up as noise in per-shard CI logs/results.
+		if shardCount > 1 && testCaseShard(tc.Name, shardCount) != shard {
+			continue
+		}
+
 		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+// testShard reads ATMOS_TEST_SHARD (1-based) and ATMOS_TEST_SHARD_COUNT from the
+// environment so CI can split TestCLICommands' cases across parallel jobs. Both
+// unset (the local dev default) disables sharding: every case runs, unchanged
+// from historical behavior.
+func testShard(t *testing.T) (shard, shardCount int) {
+	t.Helper()
+
+	shardCountStr := os.Getenv("ATMOS_TEST_SHARD_COUNT")
+	if shardCountStr == "" {
+		return 0, 1
+	}
+
+	shardCount, err := strconv.Atoi(shardCountStr)
+	if err != nil || shardCount < 1 {
+		t.Fatalf("invalid ATMOS_TEST_SHARD_COUNT %q: must be a positive integer", shardCountStr)
+	}
+
+	shardStr := os.Getenv("ATMOS_TEST_SHARD")
+	shard, err = strconv.Atoi(shardStr)
+	if err != nil || shard < 1 || shard > shardCount {
+		t.Fatalf("invalid ATMOS_TEST_SHARD %q: must be an integer between 1 and ATMOS_TEST_SHARD_COUNT (%d)", shardStr, shardCount)
+	}
+
+	return shard, shardCount
+}
+
+// testCaseShard deterministically maps a test case name to a 1-based shard index
+// in [1, shardCount]. Hashing the case name (rather than deriving a regex over
+// go test's sanitized subtest names) keeps shard assignment stable regardless of
+// how the testing package mangles names for -run/display purposes.
+func testCaseShard(name string, shardCount int) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return int(h.Sum32()%uint32(shardCount)) + 1
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
