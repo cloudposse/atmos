@@ -320,6 +320,11 @@ func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
 	ui.processor.SetConflictStrategy(strategy)
 }
 
+// SetMergeDriver sets which merger handles every file during a 3-way merge.
+func (ui *InitUI) SetMergeDriver(driver merge.Driver) {
+	ui.processor.SetMergeDriver(driver)
+}
+
 // SetSkipHooks configures the --skip-hooks predicate (see
 // hooks.NewSkipPredicate) consulted before running any scaffold hook. A nil
 // predicate (the zero value) runs every hook, matching today's behavior for
