@@ -206,13 +206,11 @@ func whitespaceAxisEmbedsConfig() *templates.Configuration {
 	}
 }
 
-// TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace is
-// the end-to-end regression test documenting a known, accepted limitation of
-// computed axes: an axis expression's rendered result is parsed back into a
-// list by splitting on whitespace, so a value that itself contains
-// whitespace (e.g. a map key with a space in it) is split into multiple axis
-// values rather than kept intact. See "Computed axes" in
-// docs/prd/atmos-scaffold.md.
+// TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace
+// documents a known, accepted limitation: an axis expression's rendered
+// result is parsed by splitting on whitespace, so a value that itself
+// contains whitespace is split into multiple axis values rather than kept
+// intact. See "Computed axes" in docs/prd/atmos-scaffold.md.
 func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
@@ -402,12 +400,9 @@ func TestProcessSingleFileEntry_SkippedFileCountsAsNeitherSuccessNorFailure(t *t
 }
 
 // TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath proves a
-// matrix entry whose axis expression fails to resolve (here, an
-// `answers.`-prefixed dot-path pointing at a key the answers map doesn't
-// have) is reported as one failed file with the underlying error preserved,
-// the same shape a per-combination write failure already gets in
-// TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry -- but raised
-// before any combination is even resolved, so there's nothing to loop over.
+// matrix entry whose axis expression fails to resolve (an `answers.`-
+// prefixed dot-path pointing at a missing key) is reported as one failed
+// file, raised before any combination is even resolved.
 func TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
@@ -431,12 +426,9 @@ func TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath(t *testing.T) 
 }
 
 // TestProcessSingleFileEntry_ExistingFileWithoutForceReturnsFailedPath
-// proves a non-matrix file that collides with a real pre-existing file on
-// disk (as opposed to TestProcessSingleFileEntry_WriteFailureReturnsFailedPath's
-// in-run duplicate-target collision) is reported as one failed file too --
-// this is the only way to reach ProcessFile's own error, which
-// reportWriteResult's default branch (a write failure that isn't a skip)
-// has to handle distinctly from a skip or an in-run duplicate.
+// proves a real pre-existing file on disk (not an in-run duplicate-target
+// collision) is also reported as one failed file, exercising
+// reportWriteResult's default branch via ProcessFile's own error.
 func TestProcessSingleFileEntry_ExistingFileWithoutForceReturnsFailedPath(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
@@ -506,11 +498,9 @@ func TestProcessSingleFileEntry_DryRunReportsCreateAndUpdateStatus(t *testing.T)
 }
 
 // TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate proves
-// writeOneOutput's own path-rendering fallback: when outputTemplate itself
-// fails to parse as a Go template (an author typo, not a missing answer --
-// a missing answer renders as "<no value>" rather than erroring), the error
-// status line names the raw, unrendered template string rather than an
-// empty path or a panic.
+// writeOneOutput's path-rendering fallback: when outputTemplate fails to
+// parse (an author typo, not a missing answer), the error status line
+// names the raw template string rather than an empty path or a panic.
 func TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
@@ -532,11 +522,9 @@ func TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate(t *testing
 }
 
 // TestProcessMatrixRow_PrunedRowWithMalformedTargetFallsBackToRawTemplate
-// mirrors TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate
-// for processMatrixRow's own copy of the same fallback, reached only when
-// the row is pruned by `when:` -- rendering the path there is purely for
-// the skip line's display, since a pruned row never reaches writeOneOutput
-// at all.
+// mirrors the test above for processMatrixRow's own copy of the fallback,
+// reached only when the row is pruned by `when:` for the skip line's
+// display.
 func TestProcessMatrixRow_PrunedRowWithMalformedTargetFallsBackToRawTemplate(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()

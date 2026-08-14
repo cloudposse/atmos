@@ -146,25 +146,14 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	return result.String(), nil
 }
 
-// buildTemplateFuncMap merges Gomplate, Sprig, and custom functions into the
-// FuncMap every scaffold template render (file content, paths, and matrix
-// axis expressions) shares. Order matters for collisions - later additions
-// override earlier ones.
-//
-// Function precedence (later wins):
-//  1. Gomplate functions (added first)
-//  2. Sprig functions (override Gomplate on collisions)
-//  3. Custom functions (highest priority)
-//
-// Notable collisions where Sprig overrides Gomplate:
-//   - env, dict, join, split, toJson, fromJson, toYaml, fromYaml
-//   - base, dir, ext, trim, upper, lower, rand, uuid
-//
-// To use Gomplate's version explicitly, use namespaced variants:
-//   - coll.Dict, conv.ToJSON, data.YAML, base64.Encode, etc.
-//
-// collectKeys is Atmos's own addition, registered under its own name so it
-// never shadows Sprig's "keys" -- see templatefuncs.CollectKeys.
+// buildTemplateFuncMap merges Gomplate, Sprig, and Atmos's own functions
+// into the FuncMap every scaffold template render (file content, paths,
+// and matrix axis expressions) shares. Later additions win on collisions,
+// so Sprig overrides Gomplate (e.g. env, dict, join, split, toJson/fromJson,
+// toYaml/fromYaml, base/dir/ext/trim/upper/lower/rand/uuid -- use Gomplate's
+// namespaced variants like coll.Dict or conv.ToJSON to bypass this), and
+// collectKeys overrides both, registered under its own name so it doesn't
+// shadow Sprig's "keys".
 func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 	d := data.Data{}
 	ctx := context.TODO()

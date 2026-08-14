@@ -938,17 +938,12 @@ func (ui *InitUI) processSingleFileEntry(
 }
 
 // processMatrixedFileEntry renders and writes one output per matrix
-// combination that survives spec.When. Every combination is bound into a
-// shallow-cloned copy of mergedValues under the reserved engine.MatrixKey
-// before rendering; ProcessTemplateWithDelimiters hoists it onto the
-// template root as "matrix", so path and content templates see
-// .matrix.<axis> directly, exactly as documented in
-// docs/prd/atmos-scaffold.md. An expansion error (e.g. a matrix axis source
-// that doesn't resolve) counts as one failure for the whole entry,
-// consistent with how a single file's own processing error already counts
-// as one failure in processSingleFileEntry. Err is every failed
-// combination's underlying error, joined (via errors.Join) into one --
-// nil when errorCount is 0 -- so callers can preserve the real cause(s)
+// combination that survives spec.When. Each combination is bound into a
+// shallow-cloned copy of mergedValues under engine.MatrixKey, which
+// ProcessTemplateWithDelimiters hoists onto the template root as "matrix"
+// so path and content templates see .matrix.<axis> directly. An expansion
+// error counts as one failure for the whole entry; err joins every failed
+// combination's own error so callers can preserve the real cause(s)
 // alongside the generic "Failed to generate N files" summary.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
@@ -1013,12 +1008,10 @@ func (ui *InitUI) processMatrixedFileEntry(
 }
 
 // processMatrixRow renders and writes a single matrix combination (row),
-// gated by spec.When -- the per-combination body processMatrixedFileEntry's
-// loop calls once per resolved combination, split out to keep that loop's
-// orchestrating function within this repo's function-length limit. Row is
-// bound into a shallow-cloned copy of mergedValues under the reserved
-// engine.MatrixKey before rendering, exactly as processMatrixedFileEntry's
-// own doc comment describes.
+// gated by spec.When -- split out of processMatrixedFileEntry's loop to
+// keep that function within this repo's function-length limit. Row is
+// bound into mergedValues under engine.MatrixKey, same as
+// processMatrixedFileEntry's own doc comment describes.
 //
 //nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
 func (ui *InitUI) processMatrixRow(
@@ -1056,14 +1049,10 @@ func (ui *InitUI) processMatrixRow(
 
 // checkDuplicateRenderedPath reports whether renderedPath was already
 // claimed by an earlier file or matrix combination this run, recording it
-// under file.Path if not. A duplicate is a hard failure -- the first write
-// wins, a later one is refused rather than silently overwriting it.
-// RenderedPath is normalized with filepath.Clean before use as the map key,
-// matching the join/clean convention ProcessFile itself uses when it
-// resolves the same path for the actual write -- otherwise two
-// differently-formatted-but-equivalent paths (e.g. "deploy/dev.yaml" vs
-// "deploy//dev.yaml" or "./deploy/dev.yaml") could fail to be recognized as
-// the same target.
+// under file.Path if not. A duplicate is a hard failure -- first write
+// wins. RenderedPath is normalized with filepath.Clean first, matching
+// ProcessFile's own convention, so equivalent-but-differently-formatted
+// paths aren't treated as distinct targets.
 func (ui *InitUI) checkDuplicateRenderedPath(file tmpl.File, renderedPath string, seenRenderedPaths map[string]string) (bool, error) {
 	renderedPath = filepath.Clean(renderedPath)
 
@@ -1125,15 +1114,12 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 	}
 }
 
-// writeOneOutput renders outputTemplate as a path template against values,
-// applies the existing skip and (new) duplicate-output-path guards, and
-// writes it via ProcessFile -- the same pipeline a single (non-matrix) file
-// already went through, just parameterized by outputTemplate/values so
-// processFileEntry can call it once per matrix combination. See
-// reportWriteResult for what success/failed mean. CauseErr is the specific
-// underlying error when failed is true (nil otherwise), so a caller can
-// preserve it (e.g. via errors.Join) instead of collapsing every failure
-// into a generic message.
+// writeOneOutput renders outputTemplate against values, applies the skip
+// and duplicate-output-path guards, and writes via ProcessFile -- shared by
+// both the single-file and per-combination matrix paths. See
+// reportWriteResult for what success/failed mean; causeErr is the
+// underlying error when failed is true, for callers that want to preserve
+// it instead of a generic message.
 func (ui *InitUI) writeOneOutput(
 	file tmpl.File,
 	outputTemplate string,

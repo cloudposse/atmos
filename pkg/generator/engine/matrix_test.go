@@ -67,12 +67,10 @@ func TestExpandMatrix_DynamicAxisEmptyAnswerYieldsZeroRows(t *testing.T) {
 }
 
 // TestExpandMatrix_LiteralAxisFromDecodedYAMLAny proves a literal axis
-// value shaped the way it actually decodes from YAML -- []any (since
-// MatrixAxes is map[string]any), not []string -- resolves correctly.
-// Every other literal-axis test in this file constructs []string directly
-// in Go, which bypasses resolveMatrixAxis's dedicated []any branch
-// entirely. A non-string element (2) also exercises toString's fmt.Sprint
-// fallback for a value that isn't already a string.
+// value shaped the way it actually decodes from YAML -- []any, not
+// []string -- resolves correctly; every other literal-axis test here
+// constructs []string directly, bypassing that branch. The non-string
+// element (2) also exercises toString's fmt.Sprint fallback.
 func TestExpandMatrix_LiteralAxisFromDecodedYAMLAny(t *testing.T) {
 	matrix := map[string]any{"replica": []any{"dev", 2}}
 
@@ -84,12 +82,10 @@ func TestExpandMatrix_LiteralAxisFromDecodedYAMLAny(t *testing.T) {
 }
 
 // TestExpandMatrix_DynamicAxisFromAnswersAsStringSlice proves a dynamic
-// axis resolves correctly when the answer is already []string --
+// axis resolves when the answer is already []string, the shape --set's
+// multiselect coercion (splitMultiSelectValue) produces directly --
 // TestExpandMatrix_DynamicAxisFromAnswers only covers the []any shape a
-// YAML-decoded or Go-template-composed answer has. []string is the shape
-// --set's own multiselect coercion (splitMultiSelectValue in
-// pkg/project/config/validation.go) produces directly, so a
-// multiselect-sourced axis set non-interactively takes this branch instead.
+// YAML-decoded answer has.
 func TestExpandMatrix_DynamicAxisFromAnswersAsStringSlice(t *testing.T) {
 	matrix := map[string]any{"environment": "answers.environments"}
 	answers := map[string]interface{}{"environments": []string{"dev", "staging"}}
@@ -102,12 +98,9 @@ func TestExpandMatrix_DynamicAxisFromAnswersAsStringSlice(t *testing.T) {
 }
 
 // TestExpandMatrix_DynamicAxisNilAnswerYieldsZeroRows proves an answer key
-// that exists but is explicitly nil (e.g. `environments: null` in a
-// preset, or an unset field with no default) resolves to zero values, the
-// same "nothing selected" outcome
-// TestExpandMatrix_DynamicAxisEmptyAnswerYieldsZeroRows already covers for
-// an empty list -- not an error, since the key genuinely exists (map
-// lookup's comma-ok distinguishes "absent" from "present but nil").
+// that exists but is nil (e.g. `environments: null` in a preset) resolves
+// to zero values, not an error -- map lookup's comma-ok distinguishes
+// "absent" from "present but nil".
 func TestExpandMatrix_DynamicAxisNilAnswerYieldsZeroRows(t *testing.T) {
 	matrix := map[string]any{"environment": "answers.environments"}
 	answers := map[string]interface{}{"environments": nil}
@@ -208,14 +201,10 @@ func TestExpandMatrix_TemplateExpressionAxis(t *testing.T) {
 	assert.Equal(t, "staging", rows[1]["environment"])
 }
 
-// TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace proves a
-// computed axis value that itself contains whitespace survives Cartesian
-// product expansion as one intact value -- not split, not truncated. The
-// render func here stands in for RenderMatrixAxisExpression (already
-// covered directly by TestRenderMatrixAxisExpression_ValueContainingWhitespace
-// in funcs_test.go); this test's job is to prove ExpandMatrix itself doesn't
-// re-split or otherwise mangle a renderer's returned values on the way into
-// a row.
+// TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace proves
+// a computed axis value containing whitespace survives Cartesian product
+// expansion as one intact value -- ExpandMatrix itself must not re-split
+// or mangle a renderer's returned values on the way into a row.
 func TestExpandMatrix_TemplateExpressionAxisValueContainingWhitespace(t *testing.T) {
 	matrix := map[string]any{"environment": "{{ collectKeys answers.environments }}"}
 	render := func(string, map[string]interface{}, []string) ([]string, error) {

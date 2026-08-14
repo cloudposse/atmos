@@ -112,19 +112,12 @@ const answersPrefix = "answers."
 
 // validateFileMatrix statically validates each spec.files[] entry's matrix
 // configuration: target is required when matrix is set, and every axis is
-// either a non-empty literal list or an `answers.`-prefixed dot-path string.
-// All checkable without real answers (a dynamic axis's resolved values can
-// only be checked once answers are known, at generation time). Note that
-// LoadScaffoldConfigFromContent's manifest.Load call already validates the
-// document against the generated JSON Schema (which mirrors most of these
-// same constraints -- see MatrixAxes.JSONSchemaExtend and
-// FileSpec.JSONSchemaExtend in config.go) before this function ever runs, so
-// for atmos scaffold generate a schema-expressible violation (missing
-// target, an empty/wrong-typed axis value) is usually caught there first,
-// surfaced as ErrManifestValidation rather than one of this function's own
-// sentinels. This function remains the real enforcement path for the one
-// constraint the schema can't express -- a dynamic axis's `answers.` prefix
-// requirement -- and stays as a defensive backstop for the rest.
+// either a non-empty literal list or an `answers.`-prefixed dot-path
+// string. LoadScaffoldConfigFromContent's JSON Schema validation (see
+// MatrixAxes/FileSpec.JSONSchemaExtend in config.go) already mirrors most
+// of this and runs first, so this function is mainly a defensive backstop
+// plus the one constraint schema can't express: the `answers.` prefix
+// requirement.
 func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 	for i := range scaffoldConfig.Spec.Files {
 		file := &scaffoldConfig.Spec.Files[i]

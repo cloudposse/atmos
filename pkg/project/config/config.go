@@ -171,26 +171,20 @@ type FileSpec struct {
 	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated,oneof_type=string;array"`
 	// Matrix declares axes to expand this file into one generated file per
 	// resolved combination -- the Cartesian product of every axis's values,
-	// the same map[axis][]values shape the workflow `matrix:` step uses. Each
-	// axis's value is either a literal list of strings, author-declared
-	// directly here (e.g. region: [us-east-1, us-west-2]), a single string
-	// dot-path into answers.* referencing an already list-shaped answer (e.g.
-	// environment: answers.environments, where environments is a multiselect
-	// field or a structured value supplied through --set or a
-	// template-declared preset), or a Go-template expression (e.g.
-	// environment: '{{ collectKeys answers.environments }}') computing the list from
-	// nested/structured answer data. Requires Target, since Path alone cannot
-	// serve as the output path for more than one generated file. See
-	// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)".
+	// the same map[axis][]values shape the workflow `matrix:` step uses.
+	// Each axis's value is a literal list of strings, a dot-path into
+	// answers.* referencing an already list-shaped answer (e.g.
+	// answers.environments), or a Go-template expression computing the
+	// list from nested/structured answer data (e.g.
+	// '{{ collectKeys answers.environments }}'). Requires Target, since
+	// Path alone can't serve as the output path for more than one file.
 	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
 	// Target overrides the rendered output path for this file. Without
-	// Matrix it is optional and rendered once, exactly like Path is rendered
-	// today, letting authors keep Path a plain on-disk name while
-	// controlling dynamic output naming from a normal YAML string instead
-	// of embedding template syntax in a physical filename. With Matrix it is
-	// required and rendered once per resolved combination, with that
-	// combination available on the template root as .matrix.<axis> in both
-	// Target and the file's own content.
+	// Matrix it's optional, rendered once like Path -- letting authors keep
+	// Path a plain on-disk name while controlling dynamic naming from a
+	// normal YAML string. With Matrix it's required and rendered once per
+	// resolved combination, available as .matrix.<axis> in both Target and
+	// the file's own content.
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
 }
 

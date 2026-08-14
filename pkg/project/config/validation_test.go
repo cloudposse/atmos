@@ -280,17 +280,14 @@ func TestLoadScaffoldConfigRejectsInvalidFieldValidation(t *testing.T) {
 	}
 }
 
-// TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix configurations
-// LoadScaffoldConfigFromContent rejects. Most of these are now caught by the
-// generated JSON Schema itself (pkg/datafetcher/schema/scaffold/scaffold-config/1.0.json,
-// regenerated from FileSpec/MatrixAxes's jsonschema tags in config.go) inside
-// manifest.Load, before validateFileMatrix's own Go-level checks ever run --
-// so their expected error is the schema sentinel ErrManifestValidation, not
-// the more specific matrix sentinel that same bad input would have hit if
-// validateFileMatrix were the first (or only) line of defense. A dynamic
-// axis's "answers." prefix requirement is the one constraint the schema
-// can't express (any generic string satisfies the schema), so it's still
-// validateFileMatrix -- via ErrScaffoldMatrixAxisInvalid -- that rejects it.
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix
+// configurations LoadScaffoldConfigFromContent rejects. Most are caught by
+// the generated JSON Schema inside manifest.Load before validateFileMatrix's
+// own checks run, so their expected error is ErrManifestValidation rather
+// than a more specific matrix sentinel. The one exception: a dynamic axis's
+// "answers." prefix requirement, which the schema can't express, so
+// validateFileMatrix (via ErrScaffoldMatrixAxisInvalid) still rejects that
+// one directly.
 func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -362,14 +359,12 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 	}
 }
 
-// TestValidateMatrixAxisValueRejectsNonStringElement is a direct unit test of
-// validateMatrixAxisValue's []any branch, called in-package rather than
-// through LoadScaffoldConfigFromContent: the same region: [5] input is
-// already rejected earlier by JSON Schema validation on that path (see
-// "literal axis list with non-string element" above), which would never
-// reach this function at all. This test exercises validateMatrixAxisValue
-// itself, as a defense-in-depth backstop should it ever be reached from a
-// caller that skips schema validation.
+// TestValidateMatrixAxisValueRejectsNonStringElement is a direct unit test
+// of validateMatrixAxisValue's []any branch, bypassing
+// LoadScaffoldConfigFromContent: the same region: [5] input is already
+// rejected by JSON Schema first (see "literal axis list with non-string
+// element" above), so this exercises the function as a defense-in-depth
+// backstop instead.
 func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
 	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5})
 	require.Error(t, err)
@@ -379,15 +374,12 @@ func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
 
 // TestValidateMatrixAxisValueRejectsEmptyStringSlice and
 // TestValidateMatrixAxisValueRejectsEmptyAnySlice are direct unit tests of
-// validateMatrixAxisValue's two empty-list branches, for the same reason as
-// TestValidateMatrixAxisValueRejectsNonStringElement above: an empty literal
-// axis list is already rejected earlier by JSON Schema validation on the
-// LoadScaffoldConfigFromContent path (see "empty literal axis" in
-// TestLoadScaffoldConfigRejectsInvalidFileMatrix), which would never reach
-// either branch. []string and []any take separate branches in
-// validateMatrixAxisValue (a decoded YAML list is []any, not []string, but
-// the []string case exists for any caller that already has a typed slice),
-// so both need their own empty-list case.
+// validateMatrixAxisValue's two empty-list branches, same defense-in-depth
+// rationale as the non-string-element test above (see "empty literal
+// axis" in TestLoadScaffoldConfigRejectsInvalidFileMatrix). []string and
+// []any take separate branches -- a decoded YAML list is []any, but
+// []string exists for a caller that already has a typed slice -- so both
+// need their own case.
 func TestValidateMatrixAxisValueRejectsEmptyStringSlice(t *testing.T) {
 	err := validateMatrixAxisValue("deploy.yaml", "region", []string{})
 	require.Error(t, err)
@@ -402,12 +394,11 @@ func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
 	assert.ErrorContains(t, err, "region")
 }
 
-// TestValidateMatrixAxisValueRejectsUnsupportedType is a direct unit test of
-// validateMatrixAxisValue's default branch (a value that's neither a string
-// nor a list at all, e.g. a bool) -- same defense-in-depth rationale as the
-// tests above: JSON Schema's oneOf already rejects a non-string/non-array
-// axis value on the LoadScaffoldConfigFromContent path (see "axis of
-// unsupported type" in TestLoadScaffoldConfigRejectsInvalidFileMatrix).
+// TestValidateMatrixAxisValueRejectsUnsupportedType is a direct unit test
+// of validateMatrixAxisValue's default branch (a value that's neither a
+// string nor a list, e.g. a bool) -- same defense-in-depth rationale as
+// the tests above (see "axis of unsupported type" in
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix).
 func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
 	err := validateMatrixAxisValue("deploy.yaml", "region", true)
 	require.Error(t, err)
@@ -416,12 +407,10 @@ func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
 }
 
 // TestValidateFileMatrixRejectsMissingTarget is a direct unit test of
-// validateFileMatrix's own file.Target == "" check, called in-package
-// rather than through LoadScaffoldConfigFromContent: a missing target is
-// already rejected earlier by JSON Schema's required-property rule on that
-// path (see "matrix without target" in
-// TestLoadScaffoldConfigRejectsInvalidFileMatrix), which would never reach
-// this function at all.
+// validateFileMatrix's own file.Target == "" check, bypassing
+// LoadScaffoldConfigFromContent: a missing target is already rejected by
+// JSON Schema's required-property rule first (see "matrix without target"
+// in TestLoadScaffoldConfigRejectsInvalidFileMatrix).
 func TestValidateFileMatrixRejectsMissingTarget(t *testing.T) {
 	scaffoldConfig := &ScaffoldConfig{Spec: ScaffoldSpec{Files: []FileSpec{
 		{Path: "deploy.yaml", Matrix: MatrixAxes{"region": []any{"us-east-1"}}},
@@ -433,12 +422,10 @@ func TestValidateFileMatrixRejectsMissingTarget(t *testing.T) {
 	assert.ErrorContains(t, err, "deploy.yaml")
 }
 
-// TestValidateFileMatrixSkipsFilesWithoutMatrix proves a file entry with no
-// matrix: at all (the common case -- most scaffold files aren't matrixed)
-// is left alone by validateFileMatrix, through the real
-// LoadScaffoldConfigFromContent path: a template mixing a plain file
-// alongside a matrixed one -- exactly the shape examples/scaffolding-matrix
-// and examples/scaffolding use -- must load without error.
+// TestValidateFileMatrixSkipsFilesWithoutMatrix proves a file entry with
+// no matrix: at all (the common case) is left alone by validateFileMatrix:
+// a template mixing a plain file alongside a matrixed one must load
+// without error.
 func TestValidateFileMatrixSkipsFilesWithoutMatrix(t *testing.T) {
 	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 		"    - path: vendor.yaml\n" +

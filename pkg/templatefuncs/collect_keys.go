@@ -8,17 +8,15 @@ import (
 )
 
 // CollectKeys is the "collectKeys" template function. With no extra
-// argument it returns v's top-level keys, sorted for deterministic output.
-// With a nestedKey argument, it treats v as a map of maps and instead
-// collects nestedKey's own keys from every one of v's values, flattening
-// and deduplicating across all of them -- e.g. collectKeys(environments,
-// "regions") returns every region that appears in any environment.
+// argument it returns v's top-level keys, sorted. With a nestedKey
+// argument, it collects nestedKey's own keys from every one of v's values,
+// flattening and deduplicating across all of them -- e.g.
+// collectKeys(environments, "regions") returns every region used by any
+// environment.
 //
-// Sprig ships its own "keys", but it takes multiple maps (returning their
-// keys' union, unsorted, with duplicates), and has no nested-key mode --
-// a different function for a different purpose, not a replacement for
-// this one. CollectKeys is registered under its own name precisely so it
-// never shadows Sprig's.
+// Sprig's own "keys" takes multiple maps and returns their union
+// unsorted, with no nested-key mode -- CollectKeys is registered under its
+// own name so it doesn't shadow it.
 func CollectKeys(v any, nestedKey ...string) ([]string, error) {
 	defer perf.Track(nil, "templatefuncs.CollectKeys")()
 

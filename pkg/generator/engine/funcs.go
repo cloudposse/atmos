@@ -9,24 +9,16 @@ import (
 )
 
 // RenderMatrixAxisExpression renders a Go-template matrix-axis expression
-// (e.g. "{{ collectKeys answers.environments }}") against answers and returns
-// its resolved list of string values. Satisfies the AxisRenderer type
-// ExpandMatrix accepts, giving matrix axis expressions the same Gomplate,
-// Sprig, and custom (including collectKeys) FuncMap scaffold templates
-// already use. Delimiters is the scaffold's active left/right template
-// delimiter pair (an invalid/empty value defaults to "{{"/"}}"), so a matrix
-// axis expression honors a scaffold's own spec.delimiters override exactly
-// like target: and file content rendering already do via
-// ProcessTemplateWithDelimiters.
+// (e.g. "{{ collectKeys answers.environments }}") against answers and
+// returns its resolved list of string values. Satisfies the AxisRenderer
+// type ExpandMatrix accepts, so an axis expression gets the same FuncMap
+// and delimiters override scaffold templates already use.
 //
-// Answers is exposed as a zero-arg function, not a data field: Go's template
-// grammar only chains ".field" access off of "." or a "$var", never off a
-// bare identifier -- but it does chain off a bare identifier's function-call
-// result (e.g. "answers.environments" parses as "call answers(), then select
-// .environments from its result"), which is what lets the expression read
-// unprefixed "answers.<field>", matching how when: CEL conditions already
-// expose answers.<field>, since an axis expression is a computed derivation
-// from answers, not file content (which instead sees .Config.<field>).
+// Answers is exposed as a zero-arg function rather than a data field: Go's
+// template grammar only chains ".field" off "." or a "$var", never off a
+// bare identifier -- but it does chain off that identifier's call result,
+// which is what lets "answers.environments" read as "call answers(), then
+// select .environments".
 func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]interface{}, delimiters []string) ([]string, error) {
 	defer perf.Track(nil, "engine.Processor.RenderMatrixAxisExpression")()
 
@@ -57,10 +49,9 @@ func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]i
 }
 
 // parseAxisExpressionResult parses a rendered axis expression's text output
-// into a list of values. Tolerant of Go's default %v slice formatting ("[a b
-// c]") as well as a plain whitespace-separated list without brackets. This
-// can't distinguish "one value containing whitespace" from "two values" --
-// an accepted limitation for computed axis values; see the PRD.
+// into a list of values, tolerating both a bracketed Go slice ("[a b c]")
+// and a plain space-separated list. A value containing whitespace collapses
+// into multiple values -- an accepted limitation; see the PRD.
 func parseAxisExpressionResult(rendered string) []string {
 	trimmed := strings.TrimSpace(rendered)
 	trimmed = strings.TrimPrefix(trimmed, "[")

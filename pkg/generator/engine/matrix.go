@@ -22,28 +22,21 @@ const MatrixKey = "Matrix"
 const answersPrefix = "answers."
 
 // AxisRenderer renders a Go-template matrix-axis expression (e.g. "{{
-// collectKeys answers.environments }}") against answers into its resolved list of
-// string values. Delimiters is the two-element left/right delimiter pair
-// (defaulted to "{{"/"}}" by ExpandMatrix when the caller doesn't supply
-// one) a scaffold's own spec.delimiters override uses, so a template
-// expression axis honors the same custom delimiters as the rest of the
-// scaffold. A nil renderer disables template-expression axis support,
-// keeping ExpandMatrix's core algorithm -- and its many existing pure unit
-// tests -- free of any templating engine dependency. See
+// collectKeys answers.environments }}") against answers into its resolved
+// list of string values, honoring the scaffold's own spec.delimiters
+// override. A nil renderer disables template-expression axes, keeping
+// ExpandMatrix's core algorithm free of any templating dependency -- see
 // Processor.RenderMatrixAxisExpression in funcs.go for the real
 // implementation.
 type AxisRenderer func(expr string, answers map[string]interface{}, delimiters []string) ([]string, error)
 
 // defaultAxisDelimiters returns delimiters unchanged when it's a valid
-// two-element pair with both sides non-empty, otherwise the default Go
-// template delimiters -- so a caller that hasn't wired a scaffold's custom
-// spec.delimiters (e.g. ExpandMatrix's own pure unit tests, which pass nil)
-// still gets the original "{{"/"}}" detection and rendering behavior. A
-// pair with either side empty is rejected too: an empty left delimiter
-// would make strings.Contains(v, delimiters[0]) match every axis value in
-// resolveMatrixAxis, and text/template.Delims silently treats an empty
-// argument as "use the default" for that side only, producing a
-// mismatched half-custom/half-default pair rather than a clean fallback.
+// two-element pair with both sides non-empty, otherwise the default
+// "{{"/"}}". An empty side is rejected rather than passed through: an
+// empty left delimiter would make strings.Contains(v, delimiters[0]) match
+// every axis value in resolveMatrixAxis, and text/template.Delims treats
+// an empty argument as "use the default" for that side only, producing a
+// mismatched half-custom/half-default pair.
 func defaultAxisDelimiters(delimiters []string) []string {
 	if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
 		return []string{defaultLeftDelimiter, defaultRightDelimiter}
@@ -175,12 +168,9 @@ func toString(value any) string {
 
 // cartesianProduct expands axes into their full Cartesian product, one row
 // (map[axis]value) per combination, iterating axes in sorted order so
-// regenerating the same answers produces the same file set, in the same
-// order, every time -- mirroring pkg/workflow/control_matrix.go's
-// expandMatrix, which this intentionally parallels rather than imports (a
-// pure, dependency-free algorithm; importing pkg/workflow into the generator
-// package for it would pull in an unrelated subsystem for a few lines of
-// logic).
+// regenerating the same answers produces the same file set every time --
+// mirroring pkg/workflow/control_matrix.go's expandMatrix, intentionally
+// parallel rather than imported to keep this package dependency-free.
 func cartesianProduct(matrix map[string][]string) []map[string]string {
 	axes := make([]string, 0, len(matrix))
 	for axis := range matrix {
