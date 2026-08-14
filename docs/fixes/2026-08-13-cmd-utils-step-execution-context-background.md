@@ -49,7 +49,7 @@ The three flagged call sites just hadn't been updated to follow it.
   `RunStepContainerOverride` call, and the script-case
   `RunStepContainerOverride` call — with `executionCtx`.
 
-Other `context.Background()` uses in the same function (e.g.
+Other `context.Background()` uses in the same function (e.g.,
 `process.RunShellStep`, `ExecuteCustomCommandControlStep`, `retry.Do`) were
 not in scope of the review comment and were left unchanged to keep this fix
 minimal and targeted at the reported issue.
