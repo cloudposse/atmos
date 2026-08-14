@@ -15,8 +15,8 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
-GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
-verification — no extra actions required. And because every command is **git-aware**, the same
+GitHub Actions and get rich job summaries, status checks, output variables, pull-request plan
+comments, and stored planfile verification — no extra actions required. And because every command is **git-aware**, the same
 CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs across
 repositories, and commit results back to your source of truth. Kubernetes components also write
 native job summaries, with a deliberately smaller v1 surface.
@@ -29,6 +29,7 @@ anymore. The `atmos` CLI now does this work:
 - It writes job summaries.
 - It posts status checks.
 - It sets output variables.
+- It posts pull-request plan summaries.
 - It manages planfiles.
 
 Do not use the old Actions in new workflows. Existing workflows that use them still work. `actions/checkout`
@@ -57,6 +58,9 @@ ci:
       - plan_summary
   checks:
     enabled: true
+  comments:
+    enabled: true
+    behavior: upsert
 ```
 </File>
 
@@ -75,7 +79,7 @@ ci:
 </Terminal>
 
 <ActionCard title="CI Configuration">
-    Configure CI providers, job summaries, output variables, status checks, planfile storage, and templates in your `atmos.yaml`.
+    Configure CI providers, job summaries, output variables, status checks, pull-request plan comments, planfile storage, and templates in your `atmos.yaml`.
     <div>
       <PrimaryCTA to="/cli/configuration/ci">Configuration Reference</PrimaryCTA>
     </div>
@@ -481,6 +485,14 @@ output variables in v1.
 
 Live commit status checks showing real-time operation progress — "Plan in progress" while
 running and "3 to add, 1 to change, 0 to destroy" when complete.
+
+### [PR Comments](/cli/configuration/ci/comments)
+
+When `ci.comments.enabled: true`, Terraform plans running in a pull-request context can post their
+rendered plan summary as a PR comment. The comment uses the same template as the job summary and,
+with the default `upsert` behavior, updates one comment per command, component, and stack on later
+runs. This requires GitHub Actions `pull-requests: write`; comments are not posted for non-PR runs,
+when no summary is available, or by apply, deploy, Kubernetes, Helm, or Helmfile commands.
 
 ### [Planfile Storage](/ci/planfile-storage)
 
