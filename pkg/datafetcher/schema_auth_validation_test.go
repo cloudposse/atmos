@@ -181,13 +181,24 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name: "native helm component with identity guard",
+			name: "native helm component with identity guard and standard sections",
 			manifest: map[string]interface{}{
+				"helm": map[string]interface{}{
+					"locals": map[string]interface{}{
+						"default_namespace": "default",
+					},
+				},
 				"components": map[string]interface{}{
 					"helm": map[string]interface{}{
 						"example-release": map[string]interface{}{
 							"chart":     "example-chart",
 							"namespace": "default",
+							"locals": map[string]interface{}{
+								"release_suffix": "example",
+							},
+							"secrets": map[string]interface{}{
+								"vars": map[string]interface{}{},
+							},
 							"auth": map[string]interface{}{
 								"require_identity": true,
 							},

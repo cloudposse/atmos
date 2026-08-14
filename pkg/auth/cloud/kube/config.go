@@ -317,6 +317,8 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 
 // UserName returns the shared exec-plugin username for a cluster entry.
 func UserName(info *ClusterInfo) string {
+	defer perf.Track(nil, "kube.UserName")()
+
 	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
 	if info.AccountID != "" {
 		name += "-" + info.AccountID

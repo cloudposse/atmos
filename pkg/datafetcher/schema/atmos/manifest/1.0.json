@@ -1193,6 +1193,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "render": {
               "$ref": "#/definitions/kubernetes_render"
             },
@@ -1294,6 +1297,12 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
