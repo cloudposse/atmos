@@ -414,6 +414,12 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # gh run download (below) hits the REST API for artifacts of this run, which
+    # needs actions:read - unlike actions/download-artifact, which authenticates
+    # via the ambient artifact-service token and doesn't need it.
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -422,78 +428,54 @@ jobs:
 
       # Each Linux shard uploads its own coverage-shard-N.out artifact (see the
       # `test` job's "Upload coverage report artifact" step) instead of one
-      # combined file. Download all TEST_SHARD_COUNT of them into distinct
-      # filenames and hand them to codecov-action together in one call below -
-      # Codecov's backend aggregates line hits across multiple report files
-      # server-side, so no local merge step is needed here.
+      # combined file. Collating them into one Codecov report has to happen on
+      # a single machine (this job stays a single job, not a matrix), but the
+      # downloads themselves are independent - background them in shell so
+      # they run concurrently instead of one-at-a-time.
       #
-      # These 10 downloads are independent and a good fit for GitHub Actions'
-      # `parallel:` step group (shipped 2026-06-25), but this repo's vendored
-      # actionlint (github.com/rhysd/actionlint, pinned in go.mod and enforced
-      # by the atmos-validate-editorconfig pre-commit hook via
-      # pkg/ci/validate/githubactions/actionlint.go) doesn't recognize that
-      # syntax yet as of its latest release (v1.7.12, 2026-03-30, predates the
-      # feature). Revisit once actionlint adds support and this repo bumps the
-      # dependency.
-      - name: Download linux coverage report artifact (shard 1)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-1
-          path: ${{ github.workspace }}
+      # This uses `gh run download` + shell `&`/`wait` rather than 10 calls to
+      # the `download-artifact-retry` composite action (which wraps
+      # actions/download-artifact) or GitHub Actions' native `parallel:` step
+      # group (shipped 2026-06-25): `uses:` steps can't be backgrounded within
+      # a job without `parallel:`/`background:`, and this repo's vendored
+      # actionlint (github.com/rhysd/actionlint, pinned in go.mod, enforced by
+      # the atmos-validate-editorconfig pre-commit hook via
+      # pkg/ci/validate/githubactions/actionlint.go) predates that syntax as of
+      # its latest release (v1.7.12, 2026-03-30) and rejects it. Revisit once
+      # actionlint adds support and this repo bumps the dependency.
+      - name: Download linux shard coverage artifacts
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
 
-      - name: Download linux coverage report artifact (shard 2)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-2
-          path: ${{ github.workspace }}
+          pids=()
+          for shard in $(seq 1 "$TEST_SHARD_COUNT"); do
+            (
+              for attempt in 1 2 3; do
+                if gh run download "${{ github.run_id }}" \
+                     -n "acceptance-coverage-linux-shard-${shard}" \
+                     -D "${{ github.workspace }}"; then
+                  exit 0
+                fi
+                echo "shard ${shard} download attempt ${attempt} failed, retrying..." >&2
+                sleep 15
+              done
+              echo "shard ${shard} coverage artifact download failed after 3 attempts" >&2
+              exit 1
+            ) &
+            pids+=($!)
+          done
 
-      - name: Download linux coverage report artifact (shard 3)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-3
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 4)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-4
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 5)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-5
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 6)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-6
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 7)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-7
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 8)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-8
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 9)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-9
-          path: ${{ github.workspace }}
-
-      - name: Download linux coverage report artifact (shard 10)
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: acceptance-coverage-linux-shard-10
-          path: ${{ github.workspace }}
+          fail=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || fail=1
+          done
+          if [ "$fail" = "1" ]; then
+            echo "one or more shard coverage artifact downloads failed" >&2
+            exit 1
+          fi
 
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
