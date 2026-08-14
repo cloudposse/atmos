@@ -168,6 +168,23 @@ func TestExpandMatrix_AxisErrors(t *testing.T) {
 			},
 			wantErr: errUtils.ErrScaffoldMatrixSourceNotFound,
 		},
+		{
+			// A preset/--set value can put a map inside a []any answers list;
+			// fmt.Sprint on it would silently render as "map[...]", which
+			// contains a colon -- an illegal filename character on Windows.
+			name:   "dynamic axis element not scalar",
+			matrix: map[string]any{"environment": "answers.environments"},
+			answers: map[string]interface{}{
+				"environments": []any{"dev", map[string]interface{}{"nested": true}},
+			},
+			wantErr: errUtils.ErrScaffoldMatrixAxisValueNotScalar,
+		},
+		{
+			name:    "literal axis element not scalar",
+			matrix:  map[string]any{"environment": []any{"dev", []any{"nested"}}},
+			answers: map[string]interface{}{},
+			wantErr: errUtils.ErrScaffoldMatrixAxisValueNotScalar,
+		},
 	}
 
 	for _, tt := range tests {

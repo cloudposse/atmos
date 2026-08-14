@@ -80,7 +80,11 @@ func resolveMatrixAxis(axis string, raw any, answers map[string]interface{}, ren
 	case []any:
 		values := make([]string, len(v))
 		for i, item := range v {
-			values[i] = toString(item)
+			s, err := toString(axis, i, item)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = s
 		}
 		return values, nil
 	case string:
@@ -146,7 +150,11 @@ func resolveMatrixAxisFromAnswers(axis, source string, answers map[string]interf
 	case []any:
 		values := make([]string, len(v))
 		for i, item := range v {
-			values[i] = toString(item)
+			s, err := toString(axis, i, item)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = s
 		}
 		return values, nil
 	default:
@@ -159,11 +167,21 @@ func resolveMatrixAxisFromAnswers(axis, source string, answers map[string]interf
 
 // toString renders a resolved axis value's element as a plain string,
 // matching the workflow matrix step's own map[string][]string axis shape.
-func toString(value any) string {
-	if s, ok := value.(string); ok {
-		return s
+// Rejects non-scalar values (maps, slices, structs), which become illegal
+// path/filename characters once used as a path segment.
+func toString(axis string, index int, value any) (string, error) {
+	switch value.(type) {
+	case nil, string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return fmt.Sprint(value), nil
+	default:
+		return "", errUtils.Build(errUtils.ErrScaffoldMatrixAxisValueNotScalar).
+			WithExplanationf("matrix axis %q value at index %d is a %T, not a scalar", axis, index, value).
+			WithHint("Matrix axis values must be strings, numbers, or booleans -- not maps or lists").
+			Err()
 	}
-	return fmt.Sprint(value)
 }
 
 // cartesianProduct expands axes into their full Cartesian product, one row
