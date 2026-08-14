@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filelock"
@@ -63,6 +65,15 @@ func (m *LockFileManager) AddTool(ctx context.Context, tool, version string, opt
 		opt(cfg)
 	}
 
+	if version == "" {
+		return errUtils.Build(errUtils.ErrLockfileEmptyVersion).
+			WithExplanationf("Cannot add tool `%s` without a version", tool).
+			WithHint("Specify an explicit version to lock").
+			WithContext("tool", tool).
+			WithContext("lockfile", m.filePath).
+			Err()
+	}
+
 	return m.withExclusiveLock(ctx, func() error {
 		lock, err := lockfile.Load(m.filePath)
 		if err != nil {
@@ -71,14 +82,13 @@ func (m *LockFileManager) AddTool(ctx context.Context, tool, version string, opt
 			}
 			lock = lockfile.New()
 		}
-		entry := lock.GetOrCreateTool(tool)
-		entry.Version = version
+		versionEntry := lock.GetOrCreateTool(tool).GetOrCreateVersion(version)
 		platform := cfg.Platform
 		if platform == "" {
 			platform = runtime.GOOS + "_" + runtime.GOARCH
 		}
 		if cfg.URL != "" || cfg.Checksum != "" {
-			entry.Platforms[platform] = &lockfile.PlatformEntry{URL: cfg.URL, Checksum: cfg.Checksum, Size: cfg.Size}
+			versionEntry.Platforms[platform] = &lockfile.PlatformEntry{URL: cfg.URL, Checksum: cfg.Checksum, Size: cfg.Size}
 		}
 		return lockfile.Save(m.filePath, lock)
 	})
@@ -104,19 +114,43 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 		if !exists {
 			return nil
 		}
-		if version != "" && existingTool.Version != version {
+		if existingTool == nil {
+			// A hand-edited or corrupted toolchain.lock.yaml can have an explicit YAML null
+			// under an existing tool key (the map key is present, but the value isn't).
+			// existingTool.Versions below would panic on that; surface the same structured
+			// nil-entry error lockfile.Verify already uses for this exact malformed state.
+			return errUtils.Build(lockfile.ErrToolEntryNil).
+				WithExplanationf("Cannot remove tool `%s`: lockfile entry is corrupted (null)", tool).
+				WithHint("Run `atmos toolchain lock` to regenerate the lockfile").
+				WithContext("tool", tool).
+				WithContext("lockfile", m.filePath).
+				Err()
+		}
+		if version == "" {
+			lock.RemoveTool(tool)
+			return lockfile.Save(m.filePath, lock)
+		}
+		if _, exists := existingTool.Versions[version]; !exists {
+			lockedVersions := make([]string, 0, len(existingTool.Versions))
+			for v := range existingTool.Versions {
+				lockedVersions = append(lockedVersions, v)
+			}
+			sort.Strings(lockedVersions)
 			return errUtils.Build(errUtils.ErrLockfileVersionMismatch).
 				WithExplanationf("Cannot remove tool `%s`: lockfile version does not match requested version", tool).
 				WithHint("Update the lockfile or specify the correct version").
 				WithHint("Run `atmos toolchain list` to see installed versions").
 				WithContext("tool", tool).
-				WithContext("lockfile_version", existingTool.Version).
+				WithContext("lockfile_versions", strings.Join(lockedVersions, ", ")).
 				WithContext("requested_version", version).
 				WithContext("lockfile", m.filePath).
 				WithExitCode(2).
 				Err()
 		}
-		lock.RemoveTool(tool)
+		existingTool.RemoveVersion(version)
+		if len(existingTool.Versions) == 0 {
+			lock.RemoveTool(tool)
+		}
 		return lockfile.Save(m.filePath, lock)
 	})
 }
@@ -134,7 +168,7 @@ func (m *LockFileManager) SetDefault(ctx context.Context, tool, version string) 
 }
 
 // GetTools returns all tools managed by the lock file as a map of tool names to version slices.
-// Each tool maps to a single version (represented as a one-element slice).
+// A tool maps to every version currently locked for it, sorted for deterministic output.
 func (m *LockFileManager) GetTools(ctx context.Context) (map[string][]string, error) {
 	defer perf.Track(nil, "filemanager.LockFileManager.GetTools")()
 
@@ -150,7 +184,12 @@ func (m *LockFileManager) GetTools(ctx context.Context) (map[string][]string, er
 		}
 		tools = make(map[string][]string)
 		for name, entry := range lock.Tools {
-			tools[name] = []string{entry.Version}
+			versions := make([]string, 0, len(entry.Versions))
+			for version := range entry.Versions {
+				versions = append(versions, version)
+			}
+			sort.Strings(versions)
+			tools[name] = versions
 		}
 		return nil
 	})

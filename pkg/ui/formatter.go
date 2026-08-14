@@ -320,34 +320,48 @@ func MarkdownMessageNoWrapf(format string, a ...interface{}) {
 	MarkdownMessageNoWrap(content)
 }
 
+// Output writes formatted UI messages to a specific destination.
+type Output struct {
+	writer stdio.Writer
+}
+
+// New creates UI output that writes to writer, or the UI channel when writer is nil.
+func New(writer stdio.Writer) *Output {
+	return &Output{writer: writer}
+}
+
 // Success writes a success message with green checkmark to stderr (UI channel).
-// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Success(text string) {
+	New(nil).Success(text)
+}
+
+// Success writes a success message with green checkmark to the configured destination.
+func (o *Output) Success(text string) {
+	defer perf.Track(nil, "ui.Output.Success")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Success called before InitFormatter")
+		log.Debug("ui.Output.Success called before InitFormatter")
 		return
 	}
-	formatted := f.Success(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Success write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Success(text)+newline, "Output.Success")
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
-// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Successf(format string, a ...interface{}) {
+	New(nil).Successf(format, a...)
+}
+
+// Successf writes a formatted success message with green checkmark to the configured destination.
+func (o *Output) Successf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Successf")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Successf called before InitFormatter")
+		log.Debug("ui.Output.Successf called before InitFormatter")
 		return
 	}
-	formatted := f.Successf(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Successf write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Successf(format, a...)+newline, "Output.Successf")
 }
 
 // Error writes an error message with red X to stderr (UI channel).
@@ -381,62 +395,82 @@ func Errorf(format string, a ...interface{}) {
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Warning(text string) {
+	New(nil).Warning(text)
+}
+
+// Warning writes a warning message with yellow warning sign to the configured destination.
+func (o *Output) Warning(text string) {
+	defer perf.Track(nil, "ui.Output.Warning")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Warning called before InitFormatter")
+		log.Debug("ui.Output.Warning called before InitFormatter")
 		return
 	}
-	formatted := f.Warning(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Warning write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Warning(text)+newline, "Output.Warning")
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Warningf(format string, a ...interface{}) {
+	New(nil).Warningf(format, a...)
+}
+
+// Warningf writes a formatted warning message with yellow warning sign to the configured destination.
+func (o *Output) Warningf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Warningf")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Warningf called before InitFormatter")
+		log.Debug("ui.Output.Warningf called before InitFormatter")
 		return
 	}
-	formatted := f.Warningf(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Warningf write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Warningf(format, a...)+newline, "Output.Warningf")
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Info(text string) {
+	New(nil).Info(text)
+}
+
+// Info writes an info message with cyan info icon to the configured destination.
+func (o *Output) Info(text string) {
+	defer perf.Track(nil, "ui.Output.Info")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Info called before InitFormatter")
+		log.Debug("ui.Output.Info called before InitFormatter")
 		return
 	}
-	formatted := f.Info(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Info write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Info(text)+newline, "Output.Info")
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Infof(format string, a ...interface{}) {
+	New(nil).Infof(format, a...)
+}
+
+// Infof writes a formatted info message with cyan info icon to the configured destination.
+func (o *Output) Infof(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Infof")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Infof called before InitFormatter")
+		log.Debug("ui.Output.Infof called before InitFormatter")
 		return
 	}
-	formatted := f.Infof(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Infof write failed", "error", writeErr)
+	writeStatus(f, o.writer, f.Infof(format, a...)+newline, "Output.Infof")
+}
+
+func writeStatus(f *formatter, writer stdio.Writer, formatted, operation string) {
+	if writer != nil {
+		if _, err := fmt.Fprint(writer, f.ioCtx.Masker().Mask(formatted)); err != nil {
+			log.Debug("ui."+operation+" write failed", "error", err)
+		}
+		return
+	}
+	if err := f.terminal.Write(formatted); err != nil {
+		log.Debug("ui."+operation+" write failed", "error", err)
 	}
 }
 
@@ -1130,6 +1164,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 		return content, err
 	}
 	defer renderer.Close()
+
+	// Prevent package/tool references like foo/bar@1.0.0 or terraform@1.5.0 (common in
+	// command help/usage examples) from being auto-linked as mailto: links by glamour's
+	// default GFM Linkify extension.
+	markdown.ApplyStrictLinkify(renderer)
 
 	rendered, err := renderer.Render(content)
 	if err != nil {

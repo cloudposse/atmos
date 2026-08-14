@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -873,6 +874,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		serverResponse   interface{}
 		statusCode       int
 		expectError      bool
+		serverID         string
+		wantAKSScope     string
 		checkCredentials func(*testing.T, *authTypes.AzureCredentials)
 	}{
 		{
@@ -882,14 +885,22 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				TokenType:   "Bearer",
 				ExpiresIn:   7200,
 			},
-			statusCode:  http.StatusOK,
-			expectError: false,
+			statusCode:   http.StatusOK,
+			expectError:  false,
+			serverID:     "custom-server-id",
+			wantAKSScope: "custom-server-id/.default",
 			checkCredentials: func(t *testing.T, creds *authTypes.AzureCredentials) {
 				assert.Equal(t, "azure-access-token-xyz", creds.AccessToken)
 				assert.Equal(t, "Bearer", creds.TokenType)
 				assert.Equal(t, "tenant-123", creds.TenantID)
 				assert.Equal(t, "sub-789", creds.SubscriptionID)
 				assert.NotEmpty(t, creds.Expiration)
+				// acquireAdditionalTokens exchanges the same federated token
+				// against the same test server for Graph/KeyVault/AKS scopes
+				// (the handler doesn't distinguish by scope), confirming the
+				// AKS-scope goroutine runs and populates AzureCredentials.
+				assert.NotEmpty(t, creds.AKSToken)
+				assert.NotEmpty(t, creds.AKSTokenExpiration)
 			},
 		},
 		{
@@ -902,8 +913,19 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var scopes []string
+			var scopesMu sync.Mutex
+
 			// Create test server.
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := r.ParseForm(); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				scopesMu.Lock()
+				scopes = append(scopes, r.Form.Get("scope"))
+				scopesMu.Unlock()
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
 				_ = json.NewEncoder(w).Encode(tt.serverResponse)
@@ -924,6 +946,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			// Call Authenticate.
 			ctx := context.Background()
+			if tt.serverID != "" {
+				ctx = azureCloud.ContextWithAKSServerID(ctx, tt.serverID)
+			}
 			creds, err := provider.Authenticate(ctx)
 
 			if tt.expectError {
@@ -939,6 +964,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			if tt.checkCredentials != nil {
 				tt.checkCredentials(t, azureCreds)
+			}
+			if tt.wantAKSScope != "" {
+				assert.Contains(t, scopes, tt.wantAKSScope)
 			}
 		})
 	}

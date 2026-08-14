@@ -245,6 +245,11 @@ commands:
           atmos ansible playbook --help
           atmos ansible version --help
           atmos aws ecr login --help
+          atmos azure --help
+          atmos azure acr login --help
+          atmos azure aks --help
+          atmos azure aks token --help
+          atmos azure aks update-kubeconfig --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help
@@ -319,7 +324,6 @@ commands:
           atmos terraform workdir show --help
           atmos toolchain --help
           atmos toolchain add --help
-          atmos toolchain aliases --help
           atmos toolchain clean --help
           atmos toolchain du --help
           atmos toolchain env --help
@@ -328,6 +332,7 @@ commands:
           atmos toolchain info --help
           atmos toolchain install --help
           atmos toolchain list --help
+          atmos toolchain lock --help
           atmos toolchain path --help
           atmos toolchain registry --help
           atmos toolchain registry list --help
@@ -336,7 +341,7 @@ commands:
           atmos toolchain search --help
           atmos toolchain set --help
           atmos toolchain uninstall --help
-          atmos toolchain versions --help
+          atmos toolchain update --help
           atmos toolchain which --help
           atmos ci status --help
           atmos ci cache delete --help
@@ -639,6 +644,11 @@ commands:
           atmos ansible playbook --help
           atmos ansible version --help
           atmos aws ecr login --help
+          atmos azure --help
+          atmos azure acr login --help
+          atmos azure aks --help
+          atmos azure aks token --help
+          atmos azure aks update-kubeconfig --help
           atmos describe config
           atmos describe locals --help
           atmos devcontainer --help
@@ -713,7 +723,6 @@ commands:
           atmos terraform workdir show --help
           atmos toolchain --help
           atmos toolchain add --help
-          atmos toolchain aliases --help
           atmos toolchain clean --help
           atmos toolchain du --help
           atmos toolchain env --help
@@ -722,6 +731,7 @@ commands:
           atmos toolchain info --help
           atmos toolchain install --help
           atmos toolchain list --help
+          atmos toolchain lock --help
           atmos toolchain path --help
           atmos toolchain registry --help
           atmos toolchain registry list --help
@@ -730,7 +740,7 @@ commands:
           atmos toolchain search --help
           atmos toolchain set --help
           atmos toolchain uninstall --help
-          atmos toolchain versions --help
+          atmos toolchain update --help
           atmos toolchain which --help
           atmos ci status --help
           atmos ci cache delete --help

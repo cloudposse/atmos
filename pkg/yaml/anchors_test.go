@@ -35,6 +35,12 @@ func TestAnchorViolation_AliasCountChanged(t *testing.T) {
 
 	msg := anchorViolation("x", before, after)
 	assert.Contains(t, msg, "anchor &x alias references changed from 2 to 3")
+	// Regression: this branch previously had no actionable guidance at all.
+	// It must not reuse the sibling content-diff branch's "add an explicit
+	// key at this path" hint, since attempting that here is exactly what
+	// flattens the alias and triggers this rejection in the first place.
+	assert.Contains(t, msg, "edit the anchor definition explicitly")
+	assert.NotContains(t, msg, "add an explicit key at this path")
 }
 
 func TestAnchorViolation_NoChange(t *testing.T) {

@@ -546,15 +546,16 @@ func extractAndAddLocalsToContext(
 
 // stackProcessResult holds the result of processing a single stack in parallel.
 type stackProcessResult struct {
-	index         int
-	stackFileName string
-	yamlConfig    string
-	finalConfig   map[string]any
-	stackConfig   map[string]any
-	importsConfig map[string]map[string]any
-	uniqueImports []string
-	mergeContext  *m.MergeContext
-	err           error
+	index            int
+	stackFileName    string
+	yamlConfig       string
+	finalConfig      map[string]any
+	stackConfig      map[string]any
+	importsConfig    map[string]map[string]any
+	uniqueImports    []string
+	mergeContext     *m.MergeContext
+	deferredContexts StackComponentDeferredContexts
+	err              error
 }
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
@@ -573,6 +574,7 @@ func ProcessYAMLConfigFiles(
 	[]string,
 	map[string]any,
 	map[string]map[string]any,
+	AllStacksDeferredContexts,
 	error,
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
@@ -581,6 +583,7 @@ func ProcessYAMLConfigFiles(
 	listResult := make([]string, count)
 	mapResult := make(map[string]any, count)
 	rawStackConfigs := make(map[string]map[string]any, count)
+	deferredContextsResult := make(AllStacksDeferredContexts, count)
 
 	// Create channel for results - no locks needed with channels.
 	results := make(chan stackProcessResult, count)
@@ -652,7 +655,7 @@ func ProcessYAMLConfigFiles(
 
 			componentStackMap := map[string]map[string][]string{}
 
-			finalConfig, err := ProcessStackConfig(
+			finalConfig, deferredContexts, err := ProcessStackConfig(
 				atmosConfig,
 				stackBasePath,
 				terraformComponentsBasePath,
@@ -683,15 +686,16 @@ func ProcessYAMLConfigFiles(
 
 			// Send result via channel (lock-free).
 			results <- stackProcessResult{
-				index:         i,
-				stackFileName: stackFileName,
-				yamlConfig:    yamlConfig,
-				finalConfig:   finalConfig,
-				stackConfig:   processingResult.StackConfig,
-				importsConfig: processingResult.ImportsConfig,
-				uniqueImports: uniqueImports,
-				mergeContext:  mergeContext,
-				err:           nil,
+				index:            i,
+				stackFileName:    stackFileName,
+				yamlConfig:       yamlConfig,
+				finalConfig:      finalConfig,
+				stackConfig:      processingResult.StackConfig,
+				importsConfig:    processingResult.ImportsConfig,
+				uniqueImports:    uniqueImports,
+				mergeContext:     mergeContext,
+				deferredContexts: deferredContexts,
+				err:              nil,
 			}
 		}(i, filePath)
 	}
@@ -705,7 +709,7 @@ func ProcessYAMLConfigFiles(
 	// Collect all results from channel (no lock contention).
 	for result := range results {
 		if result.err != nil {
-			return nil, nil, nil, result.err
+			return nil, nil, nil, nil, result.err
 		}
 
 		// Store merge context for this stack file if provenance tracking is enabled.
@@ -722,9 +726,10 @@ func ProcessYAMLConfigFiles(
 			"imports":      result.importsConfig,
 			"import_files": result.uniqueImports,
 		}
+		deferredContextsResult[result.stackFileName] = result.deferredContexts
 	}
 
-	return listResult, mapResult, rawStackConfigs, nil
+	return listResult, mapResult, rawStackConfigs, deferredContextsResult, nil
 }
 
 // ProcessYAMLConfigFile takes a path to a YAML stack manifest,

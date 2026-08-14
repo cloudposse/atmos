@@ -89,7 +89,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
