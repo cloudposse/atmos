@@ -79,7 +79,7 @@ func singleValuePipe(expr string, delimiters []string, funcs template.FuncMap) (
 	if len(nodes) != 1 {
 		return nil, errUtils.Build(errUtils.ErrScaffoldMatrixExpressionFailed).
 			WithExplanationf("Matrix axis expression must be a single template action: `%s`", expr).
-			WithHint("Use exactly one {{ ... }} action with no surrounding text").
+			WithHint("Use exactly one " + delimiters[0] + " ... " + delimiters[1] + " action with no surrounding text").
 			Err()
 	}
 
