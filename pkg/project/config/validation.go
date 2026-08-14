@@ -146,24 +146,44 @@ func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 func validateMatrixAxisValue(filePath, axis string, value any) error {
 	switch v := value.(type) {
 	case string:
-		if !strings.HasPrefix(v, answersPrefix) && !strings.Contains(v, "{{") {
-			return fmt.Errorf("%w: file %q axis %q: %q is neither a template expression nor does it start with %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, v, answersPrefix)
-		}
+		return validateMatrixAxisStringValue(filePath, axis, v)
 	case []string:
-		if len(v) == 0 {
-			return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
-		}
+		return validateMatrixAxisNonEmpty(filePath, axis, len(v))
 	case []any:
-		if len(v) == 0 {
-			return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
-		}
-		for _, item := range v {
-			if _, ok := item.(string); !ok {
-				return fmt.Errorf("%w: file %q axis %q: element %v is not a string", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, item)
-			}
-		}
+		return validateMatrixAxisAnyList(filePath, axis, v)
 	default:
 		return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
+	}
+}
+
+// validateMatrixAxisStringValue validates a string axis value: either an
+// `answers.<path>` dot-path or a Go-template expression (see
+// validateMatrixAxisValue's doc comment).
+func validateMatrixAxisStringValue(filePath, axis, v string) error {
+	if strings.HasPrefix(v, answersPrefix) || strings.Contains(v, "{{") {
+		return nil
+	}
+	return fmt.Errorf("%w: file %q axis %q: %q is neither a template expression nor does it start with %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, v, answersPrefix)
+}
+
+// validateMatrixAxisNonEmpty rejects an empty literal-list axis value.
+func validateMatrixAxisNonEmpty(filePath, axis string, length int) error {
+	if length == 0 {
+		return fmt.Errorf("%w: file %q axis %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis)
+	}
+	return nil
+}
+
+// validateMatrixAxisAnyList validates a []any literal-list axis value: it
+// must be non-empty and every element must be a string.
+func validateMatrixAxisAnyList(filePath, axis string, v []any) error {
+	if err := validateMatrixAxisNonEmpty(filePath, axis, len(v)); err != nil {
+		return err
+	}
+	for _, item := range v {
+		if _, ok := item.(string); !ok {
+			return fmt.Errorf("%w: file %q axis %q: element %v is not a string", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, item)
+		}
 	}
 	return nil
 }

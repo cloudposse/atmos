@@ -1,10 +1,12 @@
 ---
 slug: scaffold-matrix
-title: "Generate one file per selection with `matrix:`"
+title: "Generate one file per selection with matrix"
 date: 2026-08-14T12:00:00.000Z
 authors: [jorrite]
 tags: [feature]
 ---
+
+import CastPlayer from '@site/src/components/CastPlayer'
 
 Every file a scaffold template declares renders at most once. `when:` can skip a file, but it
 can never multiply one. You could work around that by authoring every combination up front and
@@ -93,18 +95,21 @@ prunes the combination down to each environment's actual regions, so `dev` never
 
 ## How to Use It
 
+<CastPlayer src="/casts/examples/scaffolding-matrix/generate-example.cast" title="atmos scaffold: one file per selection via matrix" chrome controls scrubber />
+
 The [scaffolding-matrix example](/examples/scaffolding-matrix) is a minimal, runnable template —
 one `multiselect` field driving one matrix axis:
 
 ```shell
 cd examples/scaffolding-matrix
-atmos scaffold generate example ./my-project --set environments=dev,staging
+atmos scaffold generate example ./my-project
 ```
 
-Selecting `dev` and `staging` generates `stacks/dev.yaml` and `stacks/staging.yaml` from the
-template's single `environment.yaml` file. Add `matrix:` to any `spec.files[]` entry alongside
-`target:` to do the same in your own templates, using a literal list, a `multiselect` answer, or a
-computed expression for each axis.
+Answering the `environments` prompt with `dev` and `staging` generates `stacks/dev.yaml` and
+`stacks/staging.yaml` from the template's single `environment.yaml` file — or skip the prompt
+entirely with `--set environments=dev,staging` for scripted, non-interactive use. Add `matrix:` to
+any `spec.files[]` entry alongside `target:` to do the same in your own templates, using a literal
+list, a `multiselect` answer, or a computed expression for each axis.
 
 ## Get Involved
 

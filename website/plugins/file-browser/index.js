@@ -162,6 +162,10 @@ const CATEGORY_LABELS = {
 // README front matter `cast:` block still wins when present.
 const CAST_MAP = {
   scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
+  'scaffolding-matrix': {
+    file: '/casts/examples/scaffolding-matrix/generate-example.cast',
+    title: 'atmos scaffold: one file per selection via matrix',
+  },
 };
 
 // Documentation pages mapping for examples.

@@ -22,10 +22,10 @@ import (
 // which is what lets "answers.environments" read as "call answers(), then
 // select .environments".
 //
-// text/template can only render text, not the typed []string a function
-// like collectKeys returns, so the pipeline gets "| toJson" appended
-// internally and the result is decoded with json.Unmarshal -- transparent
-// to scaffold.yaml authors, who never write toJson themselves.
+// Go's text/template can only render text, not the typed []string a
+// function like collectKeys returns, so the pipeline gets "| toJson"
+// appended internally and the result is decoded with json.Unmarshal --
+// transparent to scaffold.yaml authors, who never write toJson themselves.
 func (p *Processor) RenderMatrixAxisExpression(expr string, answers map[string]interface{}, delimiters []string) ([]string, error) {
 	defer perf.Track(nil, "engine.Processor.RenderMatrixAxisExpression")()
 
@@ -75,7 +75,7 @@ func singleValuePipe(expr string, delimiters []string, funcs template.FuncMap) (
 			Err()
 	}
 
-	nodes := tmpl.Tree.Root.Nodes
+	nodes := tmpl.Root.Nodes
 	if len(nodes) != 1 {
 		return nil, errUtils.Build(errUtils.ErrScaffoldMatrixExpressionFailed).
 			WithExplanationf("Matrix axis expression must be a single template action: `%s`", expr).
