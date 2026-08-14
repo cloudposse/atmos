@@ -66,6 +66,57 @@ func TestExpandMatrix_DynamicAxisEmptyAnswerYieldsZeroRows(t *testing.T) {
 	assert.Empty(t, rows)
 }
 
+// TestExpandMatrix_LiteralAxisFromDecodedYAMLAny proves a literal axis
+// value shaped the way it actually decodes from YAML -- []any (since
+// MatrixAxes is map[string]any), not []string -- resolves correctly.
+// Every other literal-axis test in this file constructs []string directly
+// in Go, which bypasses resolveMatrixAxis's dedicated []any branch
+// entirely. A non-string element (2) also exercises toString's fmt.Sprint
+// fallback for a value that isn't already a string.
+func TestExpandMatrix_LiteralAxisFromDecodedYAMLAny(t *testing.T) {
+	matrix := map[string]any{"replica": []any{"dev", 2}}
+
+	rows, err := ExpandMatrix(matrix, map[string]interface{}{}, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, map[string]string{"replica": "dev"}, rows[0])
+	assert.Equal(t, map[string]string{"replica": "2"}, rows[1])
+}
+
+// TestExpandMatrix_DynamicAxisFromAnswersAsStringSlice proves a dynamic
+// axis resolves correctly when the answer is already []string --
+// TestExpandMatrix_DynamicAxisFromAnswers only covers the []any shape a
+// YAML-decoded or Go-template-composed answer has. []string is the shape
+// --set's own multiselect coercion (splitMultiSelectValue in
+// pkg/project/config/validation.go) produces directly, so a
+// multiselect-sourced axis set non-interactively takes this branch instead.
+func TestExpandMatrix_DynamicAxisFromAnswersAsStringSlice(t *testing.T) {
+	matrix := map[string]any{"environment": "answers.environments"}
+	answers := map[string]interface{}{"environments": []string{"dev", "staging"}}
+
+	rows, err := ExpandMatrix(matrix, answers, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "dev", rows[0]["environment"])
+	assert.Equal(t, "staging", rows[1]["environment"])
+}
+
+// TestExpandMatrix_DynamicAxisNilAnswerYieldsZeroRows proves an answer key
+// that exists but is explicitly nil (e.g. `environments: null` in a
+// preset, or an unset field with no default) resolves to zero values, the
+// same "nothing selected" outcome
+// TestExpandMatrix_DynamicAxisEmptyAnswerYieldsZeroRows already covers for
+// an empty list -- not an error, since the key genuinely exists (map
+// lookup's comma-ok distinguishes "absent" from "present but nil").
+func TestExpandMatrix_DynamicAxisNilAnswerYieldsZeroRows(t *testing.T) {
+	matrix := map[string]any{"environment": "answers.environments"}
+	answers := map[string]interface{}{"environments": nil}
+
+	rows, err := ExpandMatrix(matrix, answers, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
 // TestExpandMatrix_AxisErrors consolidates every ExpandMatrix error path
 // (an invalid axis type, a dynamic axis source that isn't found/isn't
 // list-shaped, and resolveMatrixAxisFromAnswers's dot-path walk) into one

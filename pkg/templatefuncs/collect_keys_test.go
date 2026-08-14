@@ -47,6 +47,22 @@ func TestCollectKeys_NestedSkipsEntriesMissingTheKey(t *testing.T) {
 	assert.Equal(t, []string{"us-east-1"}, got)
 }
 
+// TestCollectKeys_NestedSkipsWhenNestedValueIsNotAMap covers the case where
+// an entry has nestedKey, but that key's own value isn't a map (e.g.
+// "regions" is a string) -- distinct from
+// TestCollectKeys_NestedSkipsEntriesMissingTheKey, which covers an entry
+// missing the key entirely.
+func TestCollectKeys_NestedSkipsWhenNestedValueIsNotAMap(t *testing.T) {
+	m := map[string]interface{}{
+		"dev":     map[string]interface{}{"regions": "not-a-map"},
+		"staging": map[string]interface{}{"regions": map[string]interface{}{"us-east-1": nil}},
+	}
+
+	got, err := CollectKeys(m, "regions")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"us-east-1"}, got)
+}
+
 func TestCollectKeys_NotAMapErrors(t *testing.T) {
 	_, err := CollectKeys("not a map")
 	require.Error(t, err)
