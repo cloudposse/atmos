@@ -411,12 +411,13 @@ jobs:
 
   coverage:
     name: Upload acceptance coverage to Codecov
-    needs: test
+    needs: [build, test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # gh run download (below) hits the REST API for artifacts of this run, which
-    # needs actions:read - unlike actions/download-artifact, which authenticates
-    # via the ambient artifact-service token and doesn't need it.
+    # `atmos test download-coverage-shards` (below) runs `gh run download`,
+    # which hits the REST API for artifacts of this run and needs actions:read
+    # - unlike actions/download-artifact, which authenticates via the ambient
+    # artifact-service token and doesn't need it.
     permissions:
       actions: read
       contents: read
@@ -426,56 +427,30 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Atmos (install build artifact for linux)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ github.workspace }}
+          add-to-path: 'true'
+
       # Each Linux shard uploads its own coverage-shard-N.out artifact (see the
       # `test` job's "Upload coverage report artifact" step) instead of one
       # combined file. Collating them into one Codecov report has to happen on
       # a single machine (this job stays a single job, not a matrix), but the
-      # downloads themselves are independent - background them in shell so
-      # they run concurrently instead of one-at-a-time.
-      #
-      # This uses `gh run download` + shell `&`/`wait` rather than 10 calls to
-      # the `download-artifact-retry` composite action (which wraps
-      # actions/download-artifact) or GitHub Actions' native `parallel:` step
-      # group (shipped 2026-06-25): `uses:` steps can't be backgrounded within
-      # a job without `parallel:`/`background:`, and this repo's vendored
-      # actionlint (github.com/rhysd/actionlint, pinned in go.mod, enforced by
-      # the atmos-validate-editorconfig pre-commit hook via
-      # pkg/ci/validate/githubactions/actionlint.go) predates that syntax as of
-      # its latest release (v1.7.12, 2026-03-30) and rejects it. Revisit once
-      # actionlint adds support and this repo bumps the dependency.
+      # downloads themselves are independent - dogfood Atmos's own `matrix`
+      # step (.atmos.d/test.yaml's download-coverage-shards command, modeled
+      # on examples/parallel-steps/workflows/parallel.yaml) to fan them out
+      # concurrently with native per-shard retry, instead of hand-rolling a
+      # shell background/wait loop or reaching for GitHub Actions' native
+      # `parallel:` step group (shipped 2026-06-25, but rejected by this
+      # repo's vendored actionlint - see pkg/ci/validate/githubactions - which
+      # predates that syntax as of its latest release, v1.7.12/2026-03-30).
       - name: Download linux shard coverage artifacts
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-
-          pids=()
-          for shard in $(seq 1 "$TEST_SHARD_COUNT"); do
-            (
-              for attempt in 1 2 3; do
-                if gh run download "${{ github.run_id }}" \
-                     -n "acceptance-coverage-linux-shard-${shard}" \
-                     -D "${{ github.workspace }}"; then
-                  exit 0
-                fi
-                echo "shard ${shard} download attempt ${attempt} failed, retrying..." >&2
-                sleep 15
-              done
-              echo "shard ${shard} coverage artifact download failed after 3 attempts" >&2
-              exit 1
-            ) &
-            pids+=($!)
-          done
-
-          fail=0
-          for pid in "${pids[@]}"; do
-            wait "$pid" || fail=1
-          done
-          if [ "$fail" = "1" ]; then
-            echo "one or more shard coverage artifact downloads failed" >&2
-            exit 1
-          fi
+        run: atmos test download-coverage-shards
 
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
