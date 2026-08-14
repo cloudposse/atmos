@@ -31,11 +31,20 @@ type testStreams struct {
 	stderr stdio.Writer
 }
 
-func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
-func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
-func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+// Input returns the fake stdin reader.
+func (ts *testStreams) Input() stdio.Reader { return ts.stdin }
+
+// Output returns the fake stdout writer.
+func (ts *testStreams) Output() stdio.Writer { return ts.stdout }
+
+// Error returns the fake stderr writer.
+func (ts *testStreams) Error() stdio.Writer { return ts.stderr }
+
+// RawOutput returns the fake stdout writer, unmasked.
 func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
-func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// RawError returns the fake stderr writer, unmasked.
+func (ts *testStreams) RawError() stdio.Writer { return ts.stderr }
 
 // captureUIWarnings redirects the pkg/ui formatter to a buffer for the duration of the test
 // so warnings emitted via ui.Warning/ui.Warningf can be asserted against.

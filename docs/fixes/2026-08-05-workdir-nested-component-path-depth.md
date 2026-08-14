@@ -35,13 +35,17 @@ ancestor depending on whether the component name happens to contain `/` —
 
 ## Changes
 
-- `pkg/provisioner/workdir/types.go`: `BuildPath` now replaces `/` with `-`
-  in the resolved component name before formatting the workdir directory
-  name, mirroring the sanitization `internal/exec/terraform_generate_backends.go`
-  already applies for backend template context
-  (`strings.Replace(componentName, "/", "-", -1)`). Since `BuildPath` is the
-  one formula both the source provisioner and the JIT-workdir state lookup
-  call, this single change fixes both.
+- `pkg/provisioner/workdir/types.go`: `BuildPath` now replaces both `/` and
+  `\` with `-` in the resolved component name (via two `strings.ReplaceAll`
+  calls) before formatting the workdir directory name. Sanitizing `/` fixes
+  the reported path-depth bug; sanitizing `\` unconditionally on every
+  platform (not just Windows) closes a containment gap — a crafted or
+  copy-pasted component name containing `\` (e.g. `..\..\evil`) would
+  otherwise let `filepath.Join`/`Clean` treat it as real `..`-traversal
+  segments on Windows, escaping the intended workdir root — and keeps a
+  given component name's workdir path identical across OSes. Since
+  `BuildPath` is the one formula both the source provisioner and the
+  JIT-workdir state lookup call, this single change fixes both.
 
 ## Validation
 

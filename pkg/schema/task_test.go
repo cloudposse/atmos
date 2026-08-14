@@ -1776,3 +1776,37 @@ func TestDecodeStepWithFromMapValue_UnmarshalErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown anchor")
 }
+
+// containerValueMarshalError implements yaml.Marshaler and always fails, so
+// decodeTaskContainerFromMapValue's yaml.Marshal(containerValue) call
+// surfaces a real error instead of silently dropping it or panicking.
+type containerValueMarshalError struct{}
+
+var errContainerValueMarshal = errors.New("container-value marshal failed")
+
+func (containerValueMarshalError) MarshalYAML() (any, error) {
+	return nil, errContainerValueMarshal
+}
+
+// TestDecodeTaskFromMap_WithBlockMarshalErrorHasSentinel verifies that when
+// yamlNodeFromMapValue fails while decoding a task's `with:` block,
+// decodeTaskFromMap's outer error still classifies as
+// ErrWorkflowControlStepInvalid via errors.Is, not just a dynamically
+// wrapped string, so callers can distinguish this failure mode.
+func TestDecodeTaskFromMap_WithBlockMarshalErrorHasSentinel(t *testing.T) {
+	_, err := decodeTaskFromMap(map[string]any{"with": withValueMarshalError{}}, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+	assert.ErrorIs(t, err, errWithValueMarshal)
+}
+
+// TestDecodeTaskFromMap_ContainerBlockMarshalErrorHasSentinel verifies that
+// when yamlNodeFromMapValue fails while decoding a task's `container:`
+// block, decodeTaskFromMap's outer error still classifies as
+// ErrInvalidWorkflowContainer via errors.Is.
+func TestDecodeTaskFromMap_ContainerBlockMarshalErrorHasSentinel(t *testing.T) {
+	_, err := decodeTaskFromMap(map[string]any{"container": containerValueMarshalError{}}, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidWorkflowContainer)
+	assert.ErrorIs(t, err, errContainerValueMarshal)
+}

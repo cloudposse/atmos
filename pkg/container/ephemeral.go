@@ -56,9 +56,9 @@ type EphemeralConfig struct {
 	TTY               bool
 	Interactive       bool
 	Stdin             io.Reader
-	Host              bool           // grant access to the host container runtime (Docker-out-of-Docker)
-	Restart           *RestartPolicy // restart policy (nil = runtime default)
-	HealthCheck       *HealthCheck   // health check (nil = inherit image healthcheck)
+	Host              bool           // grant access to the host container runtime (Docker-out-of-Docker).
+	Restart           *RestartPolicy // restart policy (nil = runtime default).
+	HealthCheck       *HealthCheck   // health check (nil = inherit image healthcheck).
 }
 
 // EphemeralResult is the result of a one-shot container execution.

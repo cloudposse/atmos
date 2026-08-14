@@ -912,14 +912,14 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 			generic:   &task.With,
 			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 		}); err != nil {
-			return Task{}, fmt.Errorf("failed to decode task with-block at index %d: %w", index, err)
+			return Task{}, fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
 		}
 	}
 
 	if hasContainer {
 		container, err := decodeTaskContainerFromMapValue(containerValue)
 		if err != nil {
-			return Task{}, fmt.Errorf("failed to decode task container-block at index %d: %w", index, err)
+			return Task{}, fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
 		}
 		task.Container = container
 	}

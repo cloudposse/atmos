@@ -41,8 +41,8 @@ unrelated PRs on `main` (#2534, #2582).
 - `go build ./...` — clean.
 - `go test ./pkg/terraform/registry/... -run TestProviderMirror_VersionResolvesPlatformsConcurrently -v -count=5`
   — 5/5 pass, each completing in ~310ms (comfortably under the new 1200ms
-  bound, comfortably above what a serial regression would need to trip the
-  assertion).
+  bound, while a serial regression would remain above the 1.5s serial floor
+  and trip the assertion).
 - `go test ./pkg/terraform/registry/...` (full package) — pass.
 - `atmos lint --changed` — 0 issues.
 - Did not reproduce the exact 784ms Windows CI timing locally (this

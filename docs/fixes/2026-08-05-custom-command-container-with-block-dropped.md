@@ -75,10 +75,14 @@ of what `with:` contained.
   just the new tests) — all pass. One transient failure
   (`TestCustomCommandContainerBuildPassesWithBlockToDocker` clashing with
   this repo's own real `.atmos.d/build.yaml` "build" custom command left
-  registered on the shared global `RootCmd` by another test in the `cmd`
-  package) was fixed by renaming the test's custom command away from
-  `build`, not by chasing the underlying test-pollution source, which is
-  pre-existing and out of scope here.
+  registered on the shared global `RootCmd`) was fixed two ways: renaming
+  the test's custom command away from `build`, and — since the underlying
+  mechanism is any `cmd` test that loads real custom commands via
+  `InitCliConfig` + `processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)`
+  without removing them afterward — extending `cmd.NewTestKit(t)`'s
+  `snapshotRootCmdState`/`restoreRootCmdState` (`cmd/testing_helpers_test.go`)
+  to also snapshot and restore `RootCmd.Commands()`, so any command a test
+  registers is removed again in cleanup regardless of which test runs next.
 - `./custom-gcl run` via the repo's pre-commit hook — pass.
 
 ## Follow-ups

@@ -1352,7 +1352,7 @@ func executeCustomCommand(
 					})
 				}
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
-					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					return process.RunShellStep(executionCtx, &process.ShellSessionSpec{
 						Command:     commandToRun,
 						Name:        commandName,
 						Dir:         stepWorkDir,
@@ -1449,7 +1449,7 @@ func executeCustomCommand(
 				if s, ok := flagsData["stack"].(string); ok {
 					stack = s
 				}
-				return e.ExecuteCustomCommandControlStep(context.Background(), &e.CustomCommandControlContext{
+				return e.ExecuteCustomCommandControlStep(executionCtx, &e.CustomCommandControlContext{
 					AtmosConfig:      atmosConfig,
 					CommandName:      commandConfig.Name,
 					CommandEnv:       envpkg.CommandEnvToMap(commandConfig.Env),
@@ -1469,7 +1469,7 @@ func executeCustomCommand(
 		}
 		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			if step.Retry != nil {
-				if retryErr := retry.Do(context.Background(), step.Retry, runStep); retryErr != nil {
+				if retryErr := retry.Do(executionCtx, step.Retry, runStep); retryErr != nil {
 					return retryErr
 				}
 			} else if runErr := runStep(); runErr != nil {

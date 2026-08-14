@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 
@@ -45,6 +46,7 @@ type cmdStateSnapshot struct {
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
+	commands       []*cobra.Command // RootCmd.Commands() at snapshot time
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
@@ -58,6 +60,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		chdirProcessed: chdirProcessed,
 		colorProfile:   lipgloss.ColorProfile(),
 		openDocsURL:    openDocsURL,
+		commands:       append([]*cobra.Command(nil), RootCmd.Commands()...),
 	}
 
 	// Copy args.
@@ -170,4 +173,25 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 
 	// Restore package-level test seams.
 	openDocsURL = snapshot.openDocsURL
+
+	// Remove any command registered on RootCmd since the snapshot was taken
+	// (e.g. by a test loading real custom commands via InitCliConfig +
+	// processCustomCommands). Left in place, a later test can collide with
+	// or silently observe a command from an unrelated, already-finished test.
+	restoreRootCmdCommands(snapshot.commands)
+}
+
+// restoreRootCmdCommands removes every command currently on RootCmd that
+// wasn't present in the given snapshot, restoring RootCmd's command set to
+// what it was when the snapshot was taken.
+func restoreRootCmdCommands(original []*cobra.Command) {
+	originalSet := make(map[*cobra.Command]bool, len(original))
+	for _, c := range original {
+		originalSet[c] = true
+	}
+	for _, c := range RootCmd.Commands() {
+		if !originalSet[c] {
+			RootCmd.RemoveCommand(c)
+		}
+	}
 }

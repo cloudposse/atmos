@@ -49,10 +49,13 @@ The three flagged call sites just hadn't been updated to follow it.
   `RunStepContainerOverride` call, and the script-case
   `RunStepContainerOverride` call — with `executionCtx`.
 
-Other `context.Background()` uses in the same function (e.g.,
-`process.RunShellStep`, `ExecuteCustomCommandControlStep`, `retry.Do`) were
-not in scope of the review comment and were left unchanged to keep this fix
-minimal and targeted at the reported issue.
+A follow-up CodeRabbit pass on PR #2879 flagged the three remaining
+`context.Background()` uses in the same function — `process.RunShellStep`,
+`ExecuteCustomCommandControlStep`, and `retry.Do` (previously left unchanged
+as out of scope of the narrower original comment) — since they can likewise
+run shell steps, control steps, and retry loops after Cobra cancellation.
+These three are now also routed through `executionCtx`, so every step-
+execution call site in `executeCustomCommand` propagates cancellation.
 
 ## Validation
 
