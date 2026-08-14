@@ -342,9 +342,17 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 	}
 
-	// Add the tool with the selected version.
+	// Reject SemVer range/constraint syntax (e.g. "^1.7.0") before it's ever written to
+	// .tool-versions -- matches the validation already applied on the add/install paths.
+	if err := ValidateVersionSpec(version); err != nil {
+		return err
+	}
+
+	// Set the tool's default version. Always replace (not append) so `set`
+	// matches its documented purpose and never produces a multi-version
+	// .tool-versions line that leaves a stale version as the default.
 	filePath := GetToolVersionsFilePath()
-	err = AddToolToVersions(filePath, spec.key, version)
+	err = AddToolToVersionsAsDefault(filePath, spec.key, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
