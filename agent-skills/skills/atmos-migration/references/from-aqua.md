@@ -48,14 +48,16 @@ packages:
 1. Add the `toolchain:` block to `atmos.yaml`. A `registries:` entry with `type: standard` maps
     to a `toolchain.registries[]` entry with `type: aqua`. Carry over the `ref:` pin from
     `aqua.yaml` -- an unpinned registry can change under you the same way an unpinned `ref: main`
-    would.
+    would. Do not put a `tree/<ref>` segment in `source`; Atmos treats everything after
+    `github.com/<owner>/<repo>` as a literal file path, so `source` must end at the repository
+    (plus an optional subpath like `pkgs`) and the ref belongs in the separate `ref:` field.
     ```yaml
     toolchain:
       versions_file: .tool-versions
       registries:
         - name: aqua
           type: aqua
-          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          source: https://github.com/aquaproj/aqua-registry/pkgs
           ref: v4.0.0
           priority: 10
     ```
@@ -116,18 +118,21 @@ policies:
 1. Add the custom registry as a second `toolchain.registries[]` entry. Use `source` for the
     registry location, and `ref` to pin a version. Atmos accepts `ref` only when `source` is a
     `github.com` URL. Pin `ref` to a tag or commit SHA, not a branch -- a branch like `main` is
-    mutable and can change what gets installed without any change to `atmos.yaml`.
+    mutable and can change what gets installed without any change to `atmos.yaml`. Do not encode
+    the ref as a `tree/<ref>` path segment in `source`; that breaks tool lookups against this
+    registry (see "Common Gotchas" below). Keep `source` at the repository, plus an optional
+    subpath, and put the ref in `ref:`.
     ```yaml
     toolchain:
       registries:
         - name: internal
           type: aqua
-          source: https://github.com/myorg/my-registry/tree/main
+          source: https://github.com/myorg/my-registry
           ref: v1.2.0
           priority: 100
         - name: aqua
           type: aqua
-          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          source: https://github.com/aquaproj/aqua-registry/pkgs
           ref: v4.0.0
           priority: 10
     ```
@@ -184,6 +189,18 @@ Aqua CLI supports `AQUA_GLOBAL_CONFIG`, a list of config file paths that apply e
 just in one project. Atmos has no matching variable. Use the project `.tool-versions` file for
 tools every developer needs, or `toolchain.aliases`/`toolchain.registries` in `atmos.yaml` or in
 `.atmos.d/`.
+
+### A broken custom registry fails silently for public tools
+
+If a custom `toolchain.registries[]` entry can't resolve a tool (wrong `source`, unreachable
+host, tool not present at that path), Atmos does not error. It falls back to searching the
+built-in public Aqua registry for that same tool. For a tool that also exists publicly, this
+means a misconfigured custom registry produces no visible symptom at all -- the install succeeds,
+just from the wrong source. The failure only becomes visible for a tool that exists *only* in the
+custom registry, like the `myorg/internal-tool` example above, where it fails outright with "tool
+not in registry." After adding a custom registry, verify it is actually being used: run
+`atmos toolchain install` with `--reinstall` and `logs.level: Debug` in `atmos.yaml`, and confirm
+the log shows `Tool found in configured registry`, not a `Searching builtin registry` fallback.
 
 ### Shims are opt-in, not automatic
 

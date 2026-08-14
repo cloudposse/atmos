@@ -41,7 +41,10 @@ kubectl = "1.28.0"
     the Aqua registry, and the mise short name differs from the Aqua `owner/repo` name, add an
     alias in `toolchain.aliases`. If the tool is not in the Aqua registry, add an inline registry
     entry.
-3. Add the `toolchain:` block to `atmos.yaml`:
+3. Add the `toolchain:` block to `atmos.yaml`. Do not put a `tree/<ref>` segment in `source`;
+    Atmos treats everything after `github.com/<owner>/<repo>` as a literal file path, so this
+    breaks tool lookups. Keep `source` at the repository plus subpath, and pin a specific
+    revision with a separate `ref:` field if needed.
     ```yaml
     toolchain:
       versions_file: .tool-versions
@@ -52,7 +55,7 @@ kubectl = "1.28.0"
       registries:
         - name: aqua
           type: aqua
-          source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+          source: https://github.com/aquaproj/aqua-registry/pkgs
           priority: 10
     ```
     ```text
