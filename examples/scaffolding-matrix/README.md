@@ -21,8 +21,9 @@ atmos scaffold list
 atmos scaffold generate example ./my-project --set environments=dev,staging
 ```
 
-Selecting `dev` and `staging` generates exactly `stacks/dev.yaml` and `stacks/staging.yaml` —
-nothing more, nothing hand-maintained.
+Selecting `dev` and `staging` generates `stacks/dev.yaml` and `stacks/staging.yaml` — the
+matrix-driven files, one per selected environment, instead of hand-maintaining a near-duplicate
+file per environment yourself.
 
 ## Key Files
 
@@ -30,6 +31,8 @@ nothing more, nothing hand-maintained.
 |------|---------|
 | `scaffold.yaml` | Template configuration: one `environments` multiselect field, one `matrix`-expanded file entry |
 | `environment.yaml` | Discovered template expanded by `matrix` into one `stacks/<env>.yaml` per selected environment |
+| `atmos.yaml` | Template for generated Atmos configuration (this whole directory is `source: "."` for the `example` template, so it's copied verbatim, like in `examples/scaffolding`) |
+| `README.md` | This file, also copied verbatim into the generated project for the same reason |
 
 ## Learn More
 

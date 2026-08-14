@@ -1023,14 +1023,6 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 - `pkg/project/config` - Atmos configuration loading
 - `errors` - Static error definitions
 
-### Blockers for Phase 2 (Update Support)
-
-- **3-way merge implementation** - See [three-way-merge PRD](./three-way-merge/)
-- Specifically depends on:
-  - Phase 1: Text-based merge
-  - Phase 2: YAML-aware merge
-  - Phase 3: Base content storage
-
 ## Future Enhancements
 
 ### Template Marketplace

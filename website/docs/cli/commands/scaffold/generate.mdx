@@ -159,8 +159,10 @@ template-author-declared list.
 
 When an axis's values aren't already list-shaped anywhere in `answers` — e.g. an answer is itself
 a map of structured values rather than a flat `multiselect` — compute the list with
-`collectKeys`, a template function available (alongside every Sprig/Gomplate function) to axis
-expressions: `collectKeys(m)` returns `m`'s top-level keys, sorted; `collectKeys(m, "nestedKey")`
+`collectKeys`, a template function unconditionally available to axis expressions, alongside every
+Sprig/Gomplate function when the scaffold's own `atmos.yaml` has
+`templates.settings.sprig.enabled`/`templates.settings.gomplate.enabled` set (both default to
+`true`). `collectKeys(m)` returns `m`'s top-level keys, sorted; `collectKeys(m, "nestedKey")`
 collects `nestedKey`'s own keys from every value in `m`, flattened and deduplicated:
 
 ```yaml title="scaffold.yaml"
