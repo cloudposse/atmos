@@ -1220,6 +1220,7 @@ var (
 	ErrMergeThresholdExceeded        = errors.New("merge threshold exceeded")
 	ErrNoCommonAncestor              = errors.New("no common ancestor found")
 	ErrUnknownMergeStrategy          = errors.New("unknown merge strategy")
+	ErrUnknownMergeDriver            = errors.New("unknown merge driver")
 	ErrGeneratorFieldRequired        = errors.New("field is required")
 	ErrDuplicateScaffoldFieldName    = errors.New("duplicate scaffold field name")
 	ErrScaffoldConfigMissing         = errors.New("scaffold configuration not found")
