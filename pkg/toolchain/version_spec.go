@@ -134,6 +134,65 @@ func parseRefPrefix(version string) (VersionType, string, error) {
 	return VersionTypeRef, refValue, nil
 }
 
+// versionRangeChars are characters that are either forbidden in git tag/ref
+// names (per git-check-ref-format: space, ^, ~, :, ?, *, [, \) or are used
+// exclusively as SemVer range/constraint-operator punctuation (>, <, =, comma,
+// |). A real literal release tag — including vendor-specific formats like
+// "jq-1.7.1" or "release-2024.01" — never legitimately contains any of these,
+// so their presence reliably identifies range/constraint syntax rather than a
+// tag atmos just doesn't happen to recognize the shape of.
+const versionRangeChars = " \t^~:?*[\\><=,|"
+
+// ValidateVersionSpec rejects version strings that can't possibly be a literal
+// release tag — in particular SemVer range/constraint syntax (^1.2.0, ~>1.0.0,
+// >=1.0.0, ">=1.0.0,<2.0.0") — before the value ever reaches a network call.
+// Without this check that syntax was silently written to .tool-versions and
+// only failed later with a raw, unhelpful HTTP 404 from installer.Install
+// treating the range as a literal (nonexistent) release tag.
+//
+// This is deliberately permissive about what counts as a valid literal tag:
+// .tool-versions/add/install accept whatever tag string a tool's registry
+// actually uses (e.g. jq tags its releases "jq-1.7.1", not "1.7.1" or
+// "v1.7.1"), so this does NOT require the strict semver shape ParseVersionSpec
+// checks for — only the pr:/sha:/ref: explicit-prefix forms and "latest" get
+// that stricter validation; everything else just needs to be free of
+// characters that are either forbidden in git refs or are exclusively
+// range/constraint-operator syntax.
+func ValidateVersionSpec(version string) error {
+	defer perf.Track(nil, "toolchain.ValidateVersionSpec")()
+
+	if version == "" {
+		return errUtils.Build(errUtils.ErrVersionFormatInvalid).
+			WithExplanation("Version cannot be empty").
+			WithHint("Supported formats: an exact version (e.g. `1.7.0`), `latest`, `pr:NNNN`, `sha:xxxxxxx`, or `ref:<name>`").
+			WithExitCode(2).
+			Err()
+	}
+
+	if version == "latest" || strings.HasPrefix(version, prPrefix) ||
+		strings.HasPrefix(version, shaPrefix) || strings.HasPrefix(version, refPrefix) {
+		if _, _, err := ParseVersionSpec(version); err != nil {
+			return errUtils.Build(errUtils.ErrVersionFormatInvalid).
+				WithExplanationf("`%s` is not a valid `%s` specifier", version, strings.SplitN(version, ":", 2)[0]).
+				WithCause(err).
+				WithExitCode(2).
+				Err()
+		}
+		return nil
+	}
+
+	if strings.ContainsAny(version, versionRangeChars) {
+		return errUtils.Build(errUtils.ErrVersionFormatInvalid).
+			WithExplanationf("`%s` looks like a range/constraint expression, not a literal version", version).
+			WithHint("`.tool-versions` is exact-version-only — supported formats: an exact version (e.g. `1.7.0` or a tool-specific tag like `jq-1.7.1`), `latest`, `pr:NNNN`, `sha:xxxxxxx`, or `ref:<name>`").
+			WithHint("For range-based pinning (`^1.2.0`, `~>1.0.0`, `>=1.0.0`), use `dependencies.tools` in a stack manifest, or `atmos version track`").
+			WithContext("version", version).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
 // IsPRVersion checks if the version resolves to a PR.
 // Returns the PR number and true if it's a PR version, otherwise 0 and false.
 func IsPRVersion(version string) (int, bool) {
