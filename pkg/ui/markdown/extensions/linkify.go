@@ -9,9 +9,14 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 )
+
+// stringNodeRendererPriority matches the priority goldmark's own HTML renderer
+// uses for ast.KindString, keeping registration order consistent across renderers.
+const stringNodeRendererPriority = 500
 
 // StrictEmailRegexp matches valid email addresses but excludes package references.
 // This uses a stricter pattern than goldmark's default that requires:
@@ -78,21 +83,9 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 		return ast.WalkContinue, nil
 	})
 
-	// Replace each auto-link with plain text, in document order.
-	//
-	// ast.NewString produces an ast.KindString node, which is a valid goldmark node
-	// kind for "text with no source position" -- but glamour's ANSI renderer has no
-	// render case for it, so any replaced text silently disappears from rendered
-	// output (glamour's NewElement falls through to its default case and returns an
-	// empty Element{}). Build a proper source-backed ast.Text (ast.KindText) instead,
-	// which glamour does render, by locating the label's byte range in source.
-	//
-	// AutoLink only exposes its text as raw bytes (Label), not the underlying
-	// text.Segment, so the byte range is recovered here via a sequential search: since
-	// nodesToReplace is walked in document order, searching forward from the end of
-	// the previous match keeps each lookup anchored past prior occurrences instead of
-	// always finding the first one, which matters when the same package ref/version
-	// text appears more than once in a document.
+	// Replace each auto-link with plain text, walked (and thus replaced) in document
+	// order, so searchFrom always advances forward through source and lands on the
+	// correct occurrence even when the same label repeats later in the document.
 	searchFrom := 0
 	for _, autoLink := range nodesToReplace {
 		parent := autoLink.Parent()
@@ -101,19 +94,63 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 		}
 
 		label := autoLink.Label(source)
-		var textNode ast.Node
-		if idx := bytes.Index(source[searchFrom:], label); idx >= 0 {
-			start := searchFrom + idx
-			stop := start + len(label)
-			textNode = ast.NewTextSegment(text.NewSegment(start, stop))
-			searchFrom = stop
-		} else {
-			// Should be unreachable: label is always a substring of source. Fall back
-			// to a raw string node rather than dropping the text entirely.
-			textNode = ast.NewString(label)
-		}
-		parent.ReplaceChild(parent, autoLink, textNode)
+		parent.ReplaceChild(parent, autoLink, replacementTextNode(source, label, &searchFrom))
 	}
+}
+
+// replacementTextNode builds the plain-text replacement for an unlinked auto-link.
+//
+// It prefers an ast.Text node anchored to the label's real position in source
+// (found via a forward-only search from *searchFrom, advanced past each match so
+// repeated labels resolve to their next occurrence in document order), because
+// ast.Text's Pos() reflects that real source offset, which glamour's ANSI
+// renderer relies on to place inline content in the correct order. In contrast,
+// ast.String nodes always report Pos() -1 ("not associated with a source text"),
+// which previously caused glamour to render the replacement text out of order
+// relative to its surrounding words.
+//
+// If the label can't be located (should not normally happen -- AutoLink labels are
+// verbatim source bytes), this falls back to an ast.String node so the content is
+// still rendered, just without an order guarantee; NewStrictLinkifyExtension also
+// registers a renderer for ast.KindString to keep that fallback from silently
+// disappearing under glamour's ANSI renderer, which has no built-in handling for it.
+func replacementTextNode(source, label []byte, searchFrom *int) ast.Node {
+	if idx := bytes.Index(source[*searchFrom:], label); idx >= 0 {
+		start := *searchFrom + idx
+		stop := start + len(label)
+		*searchFrom = stop
+		return ast.NewTextSegment(text.NewSegment(start, stop))
+	}
+	return ast.NewString(label)
+}
+
+// stringNodeRenderer renders ast.String nodes (the plain-text replacement
+// packageRefTransformer substitutes for unlinked auto-links) as their raw byte
+// value. Although goldmark's own HTML renderer registers a handler for
+// ast.KindString, glamour's ANSI renderer does not: without this registration,
+// glamour logs "Warning: unhandled element String" and silently drops the
+// node's content instead of printing it, e.g. rendering
+// "atmos toolchain exec terraform@1.5.0 -- version" as
+// "atmos toolchain exec -- version" with the tool@version spec gone.
+type stringNodeRenderer struct{}
+
+// RegisterFuncs implements renderer.NodeRenderer.
+func (r *stringNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindString, r.renderString)
+}
+
+// renderString writes the ast.String node's raw value, unescaped -- this output
+// goes straight to a terminal, not HTML, so no escaping is needed or wanted.
+func (r *stringNodeRenderer) renderString(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	str, ok := n.(*ast.String)
+	if !ok {
+		return ast.WalkContinue, nil
+	}
+	_, _ = w.Write(str.Value)
+	return ast.WalkContinue, nil
 }
 
 // strictLinkifyExtension adds a transformer that unlinks package references.
@@ -124,7 +161,9 @@ type strictLinkifyExtension struct{}
 //
 // Since glamour uses GFM which includes Linkify with a permissive email regex,
 // this extension adds an AST transformer that runs after parsing and converts
-// auto-linked package references back to plain text.
+// auto-linked package references back to plain text. It also registers a
+// renderer for the resulting ast.String nodes (see stringNodeRenderer) since
+// glamour's ANSI renderer has no built-in handling for that node kind.
 //
 // It identifies package references by:
 //   - Presence of "/" in the URL (emails cannot contain slashes)
@@ -138,6 +177,11 @@ func (e *strictLinkifyExtension) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(
 		parser.WithASTTransformers(
 			util.Prioritized(&packageRefTransformer{}, packageRefTransformerPriority),
+		),
+	)
+	m.Renderer().AddOptions(
+		renderer.WithNodeRenderers(
+			util.Prioritized(&stringNodeRenderer{}, stringNodeRendererPriority),
 		),
 	)
 }

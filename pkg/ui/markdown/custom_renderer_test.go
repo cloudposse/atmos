@@ -697,3 +697,23 @@ func TestGetGlamourGoldmark_ReflectionStability(t *testing.T) {
 	stripped := stripANSIForTest(output)
 	assert.Contains(t, stripped, "Note", "Expected admonition label; getGlamourGoldmark may have failed")
 }
+
+// TestApplyStrictLinkify verifies that a bare glamour.TermRenderer (created directly via
+// glamour.NewTermRenderer, not via NewCustomRenderer) can be extended with the strict
+// linkify fix via ApplyStrictLinkify. This is the exact code path pkg/ui/formatter.go's
+// renderMarkdown uses for short-lived content (command help/usage text) rendered without
+// the full custom syntax set. Without ApplyStrictLinkify, glamour's default GFM Linkify
+// extension auto-links "tool@version" specs as mailto: links.
+func TestApplyStrictLinkify(t *testing.T) {
+	glamourRenderer, err := glamour.NewTermRenderer()
+	require.NoError(t, err)
+
+	ApplyStrictLinkify(glamourRenderer)
+
+	output, err := glamourRenderer.Render("atmos toolchain exec terraform@1.5.0 -- version")
+	require.NoError(t, err)
+
+	stripped := stripANSIForTest(output)
+	assert.NotContains(t, stripped, "mailto:", "tool@version spec must not be auto-linked as an email")
+	assert.Contains(t, stripped, "terraform@1.5.0", "tool@version spec must still appear in the rendered output")
+}

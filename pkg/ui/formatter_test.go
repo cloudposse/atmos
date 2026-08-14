@@ -380,6 +380,61 @@ func TestFormatter_RenderMarkdown(t *testing.T) {
 	}
 }
 
+// TestFormatter_Markdown_ToolVersionSpecsNotLinkified reproduces a bug where
+// "tool@version" specs (common in command help/usage examples, e.g.
+// "atmos toolchain exec terraform@1.5.0") were auto-linked as mailto: links by
+// glamour's default GFM Linkify extension, and -- once that was suppressed --
+// silently dropped or reordered because the plain-text replacement wasn't
+// anchored to its original source position. The rendered output must contain
+// the tool@version spec, verbatim and in its original position, with no
+// "mailto:" text anywhere.
+func TestFormatter_Markdown_ToolVersionSpecsNotLinkified(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	tests := []struct {
+		name     string
+		input    string
+		precedes string // substring that must appear, and appear first.
+		spec     string // the tool@version spec that must appear, verbatim, after precedes.
+	}{
+		{
+			name:     "bare tool@version",
+			input:    "atmos toolchain exec terraform@1.5.0 -- version",
+			precedes: "exec",
+			spec:     "terraform@1.5.0",
+		},
+		{
+			name:     "owner/repo@version",
+			input:    "atmos toolchain install hashicorp/terraform@1.5.0",
+			precedes: "install",
+			spec:     "hashicorp/terraform@1.5.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := f.Markdown(tt.input)
+			if err != nil {
+				t.Fatalf("Markdown() error = %v", err)
+			}
+			if strings.Contains(got, "mailto:") {
+				t.Errorf("Markdown() must not linkify tool@version specs, got %q", got)
+			}
+			if !strings.Contains(got, tt.spec) {
+				t.Errorf("Markdown() dropped the tool@version spec, got %q", got)
+			}
+			// Word order must be preserved: tt.precedes must still precede the
+			// tool@version spec, not be reordered around it.
+			idxPrecedes, idxSpec := strings.Index(got, tt.precedes), strings.Index(got, tt.spec)
+			if idxPrecedes == -1 || idxSpec == -1 || idxPrecedes > idxSpec {
+				t.Errorf("Markdown() reordered content, got %q", got)
+			}
+		})
+	}
+}
+
 func TestFormatter_Markdown_MaxWidth(t *testing.T) {
 	// Test that Markdown doesn't fail with markdown content
 	// This test ensures the method handles content correctly

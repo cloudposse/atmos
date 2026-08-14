@@ -1952,21 +1952,16 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 	assert.Contains(t, string(content), "1.11.4")
 }
 
-// TestSetToolVersion_ReordersExistingDefault tests that SetToolVersion makes the
-// given version the new default (first entry) instead of only appending it,
-// regression coverage for it previously calling AddToolToVersions (append-only)
-// instead of AddToolToVersionsAsDefault.
-func TestSetToolVersion_ReordersExistingDefault(t *testing.T) {
+// TestSetToolVersion_ReplacesExistingDefault reproduces a bug where `set` only
+// appended the new version instead of replacing the existing default — silently
+// contradicting its own documented purpose ("Set default version for a tool")
+// and leaving the OLD version as the resolved default for which/exec/env/path.
+func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
 	setupTestIO(t)
 
 	tmpFile, err := os.CreateTemp("", "tool-versions-*")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
-
-	// Seed the file with an existing default version for jqlang/jq.
-	toolVersions := &ToolVersions{Tools: make(map[string][]string)}
-	AddVersionToTool(toolVersions, "jqlang/jq", "1.7.1", false)
-	require.NoError(t, SaveToolVersions(tmpFile.Name(), toolVersions))
 
 	oldConfig := atmosConfig
 	defer func() { atmosConfig = oldConfig }()
@@ -1976,15 +1971,23 @@ func TestSetToolVersion_ReordersExistingDefault(t *testing.T) {
 		},
 	}
 
-	err = SetToolVersion("jqlang/jq", "1.9.0", 3)
+	// Tool already pinned to an older version.
+	err = AddToolToVersions(tmpFile.Name(), "hashicorp/terraform", "1.5.7")
+	require.NoError(t, err)
+
+	// `set` a newer version.
+	err = SetToolVersion("hashicorp/terraform", "1.11.4", 3)
 	assert.NoError(t, err)
 
-	loaded, err := LoadToolVersions(tmpFile.Name())
+	toolVersions, err := LoadToolVersions(tmpFile.Name())
 	require.NoError(t, err)
-	versions := loaded.Tools["jqlang/jq"]
-	require.NotEmpty(t, versions)
-	assert.Equal(t, "1.9.0", versions[0], "the version passed to set should become the new default")
-	assert.Contains(t, versions, "1.7.1", "the previous version should remain tracked, not be dropped")
+	versions := toolVersions.Tools["hashicorp/terraform"]
+	require.NotEmpty(t, versions, "hashicorp/terraform should still be configured")
+	assert.Equal(t, "1.11.4", versions[0], "set should replace the default (first) version, not append")
+	// The whole point of "replace, not append": the old default must not survive as a
+	// second entry. Checking versions[0] alone (as this test previously did) passes even
+	// when the old version is silently retained -- assert the full, exact shape instead.
+	assert.Equal(t, []string{"1.11.4"}, versions, "set on a single-version tool must not leave the old default (1.5.7) pinned as a stale second entry")
 }
 
 // TestSetToolVersion_UpdatesExistingAliasKeyInPlace tests that SetToolVersion updates
@@ -2022,12 +2025,39 @@ func TestSetToolVersion_UpdatesExistingAliasKeyInPlace(t *testing.T) {
 	loaded, err := LoadToolVersions(tmpFile.Name())
 	require.NoError(t, err)
 	require.Len(t, loaded.Tools, 1, "should update the existing 'jq' entry, not add a second entry under the canonical form")
-	versions := loaded.Tools["jq"]
-	require.NotEmpty(t, versions)
-	assert.Equal(t, "1.9.0", versions[0], "the version passed to set should become the new default")
-	assert.Contains(t, versions, "1.7.1", "the previous version should remain tracked, not be dropped")
+	// set replaces (not merges into) the default, matching TestSetToolVersion_ReplacesExistingDefault --
+	// the old 1.7.1 must not survive as a stale second entry under "jq".
+	assert.Equal(t, []string{"1.9.0"}, loaded.Tools["jq"], "set should replace the existing alias-keyed entry, not append to it")
 	_, hasCanonicalKey := loaded.Tools["jqlang/jq"]
 	assert.False(t, hasCanonicalKey, "must not create a second entry under the resolved owner/repo form")
+}
+
+// TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write
+// invalid SemVer range/constraint syntax (e.g. "^1.7.0") straight into .tool-versions without
+// validation, unlike the add/install paths which already reject it via ValidateVersionSpec.
+func TestSetToolVersion_RejectsRangeSyntax(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+		},
+	}
+
+	err = SetToolVersion("terraform", "^1.7.0", 3)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+
+	// The invalid spec must never have been written to .tool-versions.
+	toolVersions, loadErr := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, loadErr)
+	assert.Empty(t, toolVersions.Tools, "invalid version spec must not be persisted")
 }
 
 // TestSetToolVersion_WithInvalidTool tests SetToolVersion with an invalid tool name.

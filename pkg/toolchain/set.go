@@ -342,9 +342,15 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 	}
 
-	// Set the tool's default version. AddToolToVersionsAsDefault reorders the
-	// version list so version becomes the resolved default, matching what
-	// GetDefaultVersion/LookupToolVersion and this command's own help text expect.
+	// Reject SemVer range/constraint syntax (e.g. "^1.7.0") before it's ever written to
+	// .tool-versions -- matches the validation already applied on the add/install paths.
+	if err := ValidateVersionSpec(version); err != nil {
+		return err
+	}
+
+	// Set the tool's default version. Always replace (not append) so `set`
+	// matches its documented purpose and never produces a multi-version
+	// .tool-versions line that leaves a stale version as the default.
 	//
 	// Write under toolName (the string the user passed), not spec.key (the
 	// resolved owner/repo form) -- matching AddToolVersion's (add.go) pattern.
