@@ -124,6 +124,8 @@ const (
 // It uses atmos_component (the instance name) from componentConfig when available,
 // falling back to the provided component name. This ensures all provisioners
 // (workdir, source, JIT) use the same directory for a given component instance.
+// Both "/" and "\" in the resolved component name are replaced with "-" (see
+// the inline comment below for the path-depth and containment rationale).
 //
 // Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
 func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) string {
