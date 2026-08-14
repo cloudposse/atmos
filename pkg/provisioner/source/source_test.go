@@ -303,6 +303,65 @@ func TestValidateWithinComponentBasePath_RootBase(t *testing.T) {
 	}
 }
 
+// trySymlink attempts to create a symlink and skips the test if unsupported (e.g. Windows
+// without Developer Mode / SeCreateSymbolicLinkPrivilege, or a locked-down CI sandbox).
+func trySymlink(t *testing.T, oldname, newname string) {
+	t.Helper()
+	if err := os.Symlink(oldname, newname); err != nil {
+		t.Skipf("skipping symlink test: cannot create symlink (%v)", err)
+	}
+}
+
+// TestValidateWithinComponentBasePath_SymlinkEscape is a regression test for a gap where a
+// symlink under componentBasePath pointing outside it was lexically contained (the literal path
+// string starts with componentBasePath) but resolved outside componentBasePath on the real
+// filesystem, defeating the containment guard; validateWithinComponentBasePath must resolve
+// symlinks in whatever portion of the path already exists and reject based on where it actually
+// points.
+func TestValidateWithinComponentBasePath_SymlinkEscape(t *testing.T) {
+	componentBasePath := t.TempDir()
+	outsideDir := t.TempDir() // Sibling directory, NOT under componentBasePath.
+
+	symlinkPath := filepath.Join(componentBasePath, "evil")
+	trySymlink(t, outsideDir, symlinkPath)
+
+	// targetDir itself does not exist yet -- only the "evil" symlink ancestor does -- mirroring
+	// the pre-creation call site in DetermineTargetDirectory.
+	targetDir := filepath.Join(symlinkPath, "vpc")
+
+	err := validateWithinComponentBasePath(targetDir, componentBasePath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestValidateWithinComponentBasePath_SymlinkWithinBase confirms a symlink under
+// componentBasePath that points to another location *inside* componentBasePath is still
+// allowed -- the new symlink resolution must not become overly strict.
+func TestValidateWithinComponentBasePath_SymlinkWithinBase(t *testing.T) {
+	componentBasePath := t.TempDir()
+	realDir := filepath.Join(componentBasePath, "real-vpc")
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+
+	linkPath := filepath.Join(componentBasePath, "link-vpc")
+	trySymlink(t, realDir, linkPath)
+
+	err := validateWithinComponentBasePath(linkPath, componentBasePath)
+	assert.NoError(t, err)
+}
+
+// TestValidateWithinComponentBasePath_BaseItselfIsSymlink confirms componentBasePath itself
+// being reached through a symlink (e.g. macOS /tmp -> /private/tmp) does not cause a false
+// positive: both target and base resolve to the same real location.
+func TestValidateWithinComponentBasePath_BaseItselfIsSymlink(t *testing.T) {
+	realBase := t.TempDir()
+	linkBase := filepath.Join(t.TempDir(), "base-link")
+	trySymlink(t, realBase, linkBase)
+
+	targetDir := filepath.Join(linkBase, "vpc")
+	err := validateWithinComponentBasePath(targetDir, linkBase)
+	assert.NoError(t, err)
+}
+
 func TestGetComponentBasePath(t *testing.T) {
 	tests := []struct {
 		name          string

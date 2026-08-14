@@ -162,7 +162,8 @@ inside a container" once the clone's JSON round-trip erased the marker.
   `shell` is special-cased in `internal/exec/workflow_utils.go`, outside the
   registered `pkg/runner/step` handler, which has no ambient-container
   concept at all); fixing that is a natural, low-risk follow-up but was not
-  reported and is left out of scope here.
+  reported and is left out of scope here. Fixed in
+  `docs/fixes/2026-08-13-custom-command-script-step-container-override-dropped.md`.
 - An *ambient* command-level `container:` block (a `schema.Command`-level
   sibling to `schema.WorkflowDefinition.Container`, so every step in a
   command can share one sandbox the way workflow steps can) does not exist

@@ -183,8 +183,14 @@ func DetermineTargetDirectory(
 }
 
 // validateWithinComponentBasePath verifies that targetDir resolves to a location inside (or
-// equal to) componentBasePath, returning ErrPathTraversal if it does not. Note: symlinks are
-// not resolved; this is a best-effort guard against literal ".." traversal in component names.
+// equal to) componentBasePath, returning ErrPathTraversal if it does not. It runs two
+// containment checks: first a cheap lexical check on the Abs-cleaned paths (catches component
+// names containing literal ".." segments), then a symlink-aware check that resolves symlinks in
+// the longest existing ancestor of each path and re-verifies containment (catches a symlink
+// under componentBasePath -- e.g. componentBasePath/evil -> /etc -- that is lexically contained
+// but resolves outside componentBasePath on disk). The target directory commonly does not exist
+// yet (this guard runs before the target directory is created), so the symlink check only
+// resolves the portion of the path that already exists and rejoins the rest.
 func validateWithinComponentBasePath(targetDir, componentBasePath string) error {
 	absTarget, errTarget := filepath.Abs(targetDir)
 	absBase, errBase := filepath.Abs(componentBasePath)
@@ -194,22 +200,88 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 			Err()
 	}
 
-	// filepath.Rel avoids the naive absBase+separator prefix check's edge case: when
-	// componentBasePath resolves to a filesystem root ("/" on Unix, "C:\" on Windows),
-	// absBase already ends in the separator, so a literal absBase+sep prefix ("//" or
-	// "C:\\") never matches any real descendant, rejecting every valid target.
-	sep := string(filepath.Separator)
-	rel, errRel := filepath.Rel(absBase, absTarget)
-	if errRel == nil && rel != ".." && !strings.HasPrefix(rel, ".."+sep) {
-		return nil
+	if !isWithinBase(absTarget, absBase) {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s`", targetDir, componentBasePath).
+			WithHint("Component names must not contain '..' segments that escape the components directory").
+			WithContext("target_dir", absTarget).
+			WithContext("component_base_path", absBase).
+			Err()
 	}
 
-	return errUtils.Build(errUtils.ErrPathTraversal).
-		WithExplanationf("Component target directory `%s` resolves outside the component base path `%s`", targetDir, componentBasePath).
-		WithHint("Component names must not contain '..' segments that escape the components directory").
-		WithContext("target_dir", absTarget).
-		WithContext("component_base_path", absBase).
-		Err()
+	// Lexical check passed. Resolve symlinks in whatever portion of each path already exists
+	// on disk and re-check containment against the real filesystem location.
+	resolvedTarget, err := resolveExistingSymlinks(absTarget)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve symlinks for component target directory `%s`", targetDir).
+			WithContext("target_dir", absTarget).
+			Err()
+	}
+	resolvedBase, err := resolveExistingSymlinks(absBase)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve symlinks for component base path `%s`", componentBasePath).
+			WithContext("component_base_path", absBase).
+			Err()
+	}
+
+	if !isWithinBase(resolvedTarget, resolvedBase) {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s` through a symlink", targetDir, componentBasePath).
+			WithHint("A symlink under the components directory points outside the component base path").
+			WithContext("target_dir", absTarget).
+			WithContext("resolved_target_dir", resolvedTarget).
+			WithContext("component_base_path", absBase).
+			WithContext("resolved_component_base_path", resolvedBase).
+			Err()
+	}
+
+	return nil
+}
+
+// isWithinBase reports whether target is equal to or a descendant of base, using filepath.Rel
+// to avoid the naive base+separator prefix check's edge case: when base resolves to a
+// filesystem root ("/" on Unix, "C:\" on Windows), base already ends in the separator, so a
+// literal base+sep prefix ("//" or "C:\\") never matches any real descendant, rejecting every
+// valid target.
+func isWithinBase(target, base string) bool {
+	sep := string(filepath.Separator)
+	rel, err := filepath.Rel(base, target)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+sep)
+}
+
+// resolveExistingSymlinks resolves symlinks in the longest existing ancestor of path and
+// rejoins the (possibly non-existent) remainder. The path commonly does not exist yet when
+// this runs, so a bare filepath.EvalSymlinks(path) would fail with ENOENT for the common case;
+// this walks up to the nearest ancestor that does exist, resolves that, and rejoins the
+// missing suffix. Only a genuine filesystem error while resolving an existing ancestor (e.g. a
+// symlink loop) is returned; a not-exist condition at any level is expected and handled by
+// walking further up. The path must already be absolute and lexically clean (filepath.Abs'd).
+func resolveExistingSymlinks(path string) (string, error) {
+	var suffix []string
+	dir := path
+	for {
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err == nil {
+			if len(suffix) == 0 {
+				return resolved, nil
+			}
+			return filepath.Join(append([]string{resolved}, suffix...)...), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached the filesystem root without finding an existing ancestor. Should not
+			// happen in practice -- componentBasePath is expected to exist -- but fall back to
+			// the original path defensively rather than error.
+			return path, nil
+		}
+		suffix = append([]string{filepath.Base(dir)}, suffix...)
+		dir = parent
+	}
 }
 
 // getWorkingDirectoryOverride checks for working_directory in metadata or settings.

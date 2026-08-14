@@ -1281,6 +1281,34 @@ func executeCustomCommand(
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
 			return runErr
 		}
+		// runExtendedStep converts step to a schema.WorkflowStep and routes it through the
+		// registered pkg/runner/step handlers (used for genuinely-extended step types like
+		// input/confirm/choose, and for "script" steps with no active container override).
+		runExtendedStep := func(workflowStep schema.WorkflowStep) error {
+			// Carry env onto the step so handlers that read step.Env (e.g. the
+			// container handler's in-container env) see it. The step's own
+			// declared `env:` had its map keys lowercased by Viper, so restore
+			// the original case from the shared env case map, then merge it over
+			// the resolved command/process env (step vars win on collisions).
+			stepOwnEnv := workflowStep.Env
+			if atmosConfig.CaseMaps != nil {
+				stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
+			}
+			mergedStepEnv := envpkg.SliceToMap(env)
+			for key, value := range stepOwnEnv {
+				mergedStepEnv[key] = value
+			}
+			workflowStep.Env = mergedStepEnv
+			workflowStep.WorkingDirectory = stepWorkDir
+
+			if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+				executor.SetFlag("stack", stack)
+			}
+
+			// Execute the extended step.
+			_, execErr := executor.Execute(context.Background(), &workflowStep)
+			return execErr
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1339,6 +1367,32 @@ func executeCustomCommand(
 						})
 					})
 				})
+			case schema.TaskTypeScript:
+				// A step-level `container:` override routes the step through the same
+				// pkg/workflow session/merge logic internal/exec/workflow_utils.go uses for
+				// workflow-file script steps, mirroring the "shell" case above.
+				// workflowPkg.RunStepContainerOverride's containerStepCommand already
+				// special-cases Type == script to invoke Interpreter/Script directly instead
+				// of wrapping the display command in `sh -lc`.
+				workflowStep := step.ToWorkflowStep()
+				if workflowPkg.StepContainerOverride(&workflowStep) {
+					return runCommandStep(func(stdout, stderr io.Writer) error {
+						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+							Workflow:      commandConfig.Name,
+							WorkflowPath:  atmosConfig.CliConfigPath,
+							BasePath:      atmosConfig.BasePath,
+							WorkflowDef:   &schema.WorkflowDefinition{},
+							Step:          &workflowStep,
+							HostWorkDir:   stepWorkDir,
+							Command:       process.FormatScriptDisplay(step.Interpreter, step.Script),
+							StepEnv:       env,
+							RuntimeEnv:    env,
+							StdoutCapture: stdout,
+							StderrCapture: stderr,
+						})
+					})
+				}
+				return runExtendedStep(workflowStep)
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
 				return process.ReplaceShellSession(&process.ExecSpec{
@@ -1399,31 +1453,7 @@ func executeCustomCommand(
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {
-					// Convert Task to WorkflowStep for handler compatibility.
-					workflowStep := step.ToWorkflowStep()
-					// Carry env onto the step so handlers that read step.Env (e.g. the
-					// container handler's in-container env) see it. The step's own
-					// declared `env:` had its map keys lowercased by Viper, so restore
-					// the original case from the shared env case map, then merge it over
-					// the resolved command/process env (step vars win on collisions).
-					stepOwnEnv := workflowStep.Env
-					if atmosConfig.CaseMaps != nil {
-						stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
-					}
-					mergedStepEnv := envpkg.SliceToMap(env)
-					for key, value := range stepOwnEnv {
-						mergedStepEnv[key] = value
-					}
-					workflowStep.Env = mergedStepEnv
-					workflowStep.WorkingDirectory = stepWorkDir
-
-					if stack, ok := flagsData["stack"].(string); ok && stack != "" {
-						executor.SetFlag("stack", stack)
-					}
-
-					// Execute the extended step.
-					_, execErr := executor.Execute(context.Background(), &workflowStep)
-					return execErr
+					return runExtendedStep(step.ToWorkflowStep())
 				}
 				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}

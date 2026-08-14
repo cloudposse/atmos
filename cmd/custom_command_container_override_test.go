@@ -109,6 +109,93 @@ commands:
 	assert.Contains(t, execFields, "echo host-should-not-run-this", "the step's own command must reach the container")
 }
 
+// TestCustomCommandStepContainerOverrideRunsInsideContainer_ScriptType is the
+// `type: script` sibling of TestCustomCommandStepContainerOverrideRunsInsideContainer.
+//
+// Before this fix, cmd/cmd_utils.go's step-execution switch had no case for
+// schema.TaskTypeScript, so script steps fell into the default branch and
+// routed through pkg/runner/step's ScriptHandler straight to
+// process.RunScript on the host -- workflowPkg.StepContainerOverride was
+// never consulted, silently ignoring a step-level `container:` override
+// (see internal/exec/workflow_utils.go's `case commandType ==
+// schema.TaskTypeScript` for the workflow-file path that already got this
+// right). This test proves a script step's container override now reaches
+// the container runtime, and that it does so via the script-aware
+// containerStepCommand path (pkg/workflow/container.go), not the generic
+// `sh -lc "<command>"` wrap the shell case uses: the fake docker's `exec`
+// invocation must show the interpreter run directly with `-c` and the raw
+// script body, not `-lc`.
+func TestCustomCommandStepContainerOverrideRunsInsideContainer_ScriptType(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tempDir := t.TempDir()
+
+	atmosYAML := `
+base_path: "."
+commands:
+  - name: test-container-script-step-override
+    description: Run a script step inside a step-level container override
+    steps:
+      - name: run-in-container
+        type: script
+        interpreter: /bin/sh
+        script: echo host-should-not-run-this
+        container:
+          image: alpine
+          provider: docker
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_BASE_PATH", tempDir)
+	t.Chdir(tempDir)
+
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: "docker",
+		Mode: testhelpers.FakeContainerRuntimeStep,
+	})
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd))
+
+	RootCmd.SetArgs([]string{"test-container-script-step-override"})
+	require.NoError(t, RootCmd.Execute())
+
+	content, err := os.ReadFile(argsPath)
+	require.NoError(t, err, "the fake docker executable must have been invoked at least once -- "+
+		"the script step must run inside the container, not on the host")
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+
+	var createLine, execLine string
+	for _, line := range lines {
+		fields := strings.Split(line, "\t")
+		if len(fields) == 0 {
+			continue
+		}
+		switch fields[0] {
+		case "create":
+			createLine = line
+		case "exec":
+			execLine = line
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a `docker create ...` invocation; got invocations: %v", lines)
+	require.NotEmpty(t, execLine, "expected a `docker exec ...` invocation; got invocations: %v", lines)
+
+	createFields := strings.Split(createLine, "\t")
+	assert.Contains(t, createFields, "alpine", "configured container image must be applied")
+
+	execFields := strings.Split(execLine, "\t")
+	assert.Contains(t, execFields, "/bin/sh", "step interpreter must reach the container")
+	assert.Contains(t, execFields, "-c", "script steps invoke the interpreter directly (ScriptInvocation), not a shell -lc wrap")
+	assert.NotContains(t, execFields, "-lc", "script steps must not go through the generic shell-wrap path")
+	assert.Contains(t, execFields, "echo host-should-not-run-this", "the step's own script body must reach the container")
+}
+
 // TestCustomCommandStepContainerFalseOptOutRunsOnHost confirms the boolean
 // `container: false` form -- previously breaking InitCliConfig entirely for
 // the whole atmos.yaml (see pkg/config's
