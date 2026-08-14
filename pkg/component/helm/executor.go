@@ -58,6 +58,7 @@ var (
 	applyHelmRelease         = applyRelease
 	deleteHelmRelease        = deleteRelease
 	setupRepositories        = setupHelmRepositories
+	writeStatusLine          = data.Writeln
 )
 
 // renderTimeout bounds a single chart render/locate (which may download remote charts).
@@ -97,7 +98,7 @@ func executeSingle(
 	info *schema.ConfigAndStacksInfo,
 	operation Operation,
 ) error {
-	if err := processStacksWithAuth(atmosConfig, info); err != nil {
+	if err := processStacksWithAuth(atmosConfig, info, operation); err != nil {
 		return err
 	}
 	if !info.ComponentIsEnabled {
@@ -211,9 +212,11 @@ func runOperation(
 	case OperationApply:
 		applySummary, err := deliverApply(atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
+		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
 		err := deleteHelmRelease(spec.ReleaseName, spec.Namespace)
+		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err
 	default:
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrHelmUnsupportedOperation, operation)
@@ -391,9 +394,9 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
 	var authManager auth.AuthManager
-	if info.Identity != "" {
+	if shouldSetupComponentAuth(info, operation) {
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
@@ -408,6 +411,26 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 	*info = processedInfo
 	return nil
+}
+
+// shouldSetupComponentAuth reports whether to resolve component auth (which auto-detects the stack's
+// `default: true` identity) before processing stacks. It runs when an explicit identity was requested,
+// or for any cluster operation (apply/diff/delete) so those resolve the stack's default-identity
+// binding automatically - matching `atmos terraform`, which never needs an explicit --identity for a
+// stack that binds one. The offline template render never triggers auth. When no auth is configured,
+// setupComponentAuthForCLI returns a nil manager and the identity stays empty (ambient KUBECONFIG is
+// used, preserving prior behavior). See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
+	if info.Identity != "" {
+		return true
+	}
+	return operationRequiresCluster(operation)
+}
+
+// operationRequiresCluster reports whether an operation contacts the cluster (everything except the
+// offline template render).
+func operationRequiresCluster(operation Operation) bool {
+	return operation != OperationTemplate
 }
 
 func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
@@ -487,6 +510,39 @@ func runHelmCIHook(p helmCIHookParams) {
 		Aggregate:    summary,
 	}); err != nil {
 		log.Warn("CI hook execution failed", "component", p.info.ComponentFromArg, "error", err)
+	}
+}
+
+// emitOperationStatus prints a human-readable status line for a completed cluster operation so
+// apply/delete do not succeed silently. It writes only for apply/delete and only on success; the
+// template/diff operations already produce their own output. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+func emitOperationStatus(operation Operation, summary map[string]any, opErr error) {
+	if opErr != nil {
+		return
+	}
+	msg := formatOperationStatus(operation, summary)
+	if msg == "" {
+		return
+	}
+	_ = writeStatusLine(msg)
+}
+
+// formatOperationStatus builds the one-line status message for apply/delete from the operation
+// summary. It returns an empty string for operations that need no status line (template, diff).
+func formatOperationStatus(operation Operation, summary map[string]any) string {
+	release, _ := summary["release_name"].(string)
+	namespace, _ := summary["namespace"].(string)
+	switch operation {
+	case OperationApply:
+		msg := fmt.Sprintf("Applied Helm release %q to namespace %q", release, namespace)
+		if chart, ok := summary["chart"].(string); ok && chart != "" {
+			msg += fmt.Sprintf(" (chart %s)", chart)
+		}
+		return msg
+	case OperationDelete:
+		return fmt.Sprintf("Deleted Helm release %q from namespace %q", release, namespace)
+	default:
+		return ""
 	}
 }
 
