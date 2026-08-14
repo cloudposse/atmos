@@ -612,7 +612,18 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        timeout-minutes: 45
+        # setup-colima is vz-only: qemu never came up on this Intel runner
+        # (usernet failure, docs/fixes/2026-07-01-macos-k3s-runner-research.md),
+        # and a green run shows vz starting on the first attempt with the whole
+        # step under 6 minutes. Caps: brew 7m + initial cleanup 1.5m + two vz
+        # start/info attempts 10m each + bounded diagnostics and intermediate
+        # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
+        # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
+        # The recovery path fits when the final image pull completes normally;
+        # anything past 40 is treated as pathological. The job-level 60m cap
+        # preserves fail-fast behavior; the observed healthy setup leaves ample
+        # time for both 15-minute test attempts.
+        timeout-minutes: 40
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
