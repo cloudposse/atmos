@@ -17,7 +17,7 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, lf)
 	assert.Equal(t, 1, lf.Version)
 	assert.NotNil(t, lf.Tools)
-	assert.Equal(t, 1, lf.Metadata.LockFileVersion)
+	assert.Equal(t, currentLockFileVersion, lf.Metadata.LockFileVersion)
 	assert.NotEmpty(t, lf.Metadata.GeneratedAt)
 	assert.NotEmpty(t, lf.Metadata.AtmosVersion)
 
@@ -33,16 +33,16 @@ func TestSave_And_Load(t *testing.T) {
 	// Create a lock file
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.BinaryName = "terraform"
-	tool.Source = "https://github.com/aquaproj/aqua-registry"
+	versionEntry := tool.GetOrCreateVersion("1.13.4")
+	versionEntry.BinaryName = "terraform"
+	versionEntry.Source = "https://github.com/aquaproj/aqua-registry"
 
 	platform := &PlatformEntry{
 		URL:      "https://example.com/terraform.zip",
 		Checksum: "sha256:abc123def456",
 		Size:     95842304,
 	}
-	tool.Platforms["darwin_arm64"] = platform
+	versionEntry.Platforms["darwin_arm64"] = platform
 
 	// Save
 	err := Save(tmpFile, lf)
@@ -74,11 +74,12 @@ func TestSave_And_Load(t *testing.T) {
 
 	loadedTool := loaded.Tools["hashicorp/terraform"]
 	require.NotNil(t, loadedTool)
-	assert.Equal(t, "1.13.4", loadedTool.Version)
-	assert.Equal(t, "terraform", loadedTool.BinaryName)
-	assert.Equal(t, "https://github.com/aquaproj/aqua-registry", loadedTool.Source)
+	loadedVersion := loadedTool.Versions["1.13.4"]
+	require.NotNil(t, loadedVersion)
+	assert.Equal(t, "terraform", loadedVersion.BinaryName)
+	assert.Equal(t, "https://github.com/aquaproj/aqua-registry", loadedVersion.Source)
 
-	loadedPlatform := loadedTool.Platforms["darwin_arm64"]
+	loadedPlatform := loadedVersion.Platforms["darwin_arm64"]
 	require.NotNil(t, loadedPlatform)
 	assert.Equal(t, "https://example.com/terraform.zip", loadedPlatform.URL)
 	assert.Equal(t, "sha256:abc123def456", loadedPlatform.Checksum)
@@ -163,10 +164,11 @@ func TestLoad_MissingVersion(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "missing-version.yaml")
 
-	// Write lock file without version
+	// Write lock file without top-level version
 	content := `tools:
   terraform:
-    version: "1.13.4"
+    versions:
+      1.13.4: {}
 metadata:
   generated_at: "2025-01-01T00:00:00Z"
 `
@@ -178,22 +180,77 @@ metadata:
 	assert.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
+// TestLoad_MigratesLegacyV1ToolShape reproduces a real-world upgrade bug: every released
+// version through v1.226.0-rc.4 wrote toolchain.lock.yaml with "version"/"platforms" directly
+// on the tool (lock_file_version: 1). Unmarshaling that shape into the current (v2) Tool struct
+// -- which nests that data under a "versions" map, to support locking more than one version of
+// the same tool -- silently leaves Versions nil for every tool, since the v1 keys don't match
+// any v2 field. That would make Verify report every tool as missing its version and force
+// install to silently re-lock everything, defeating the supply-chain guarantee use_lock_file
+// exists to provide. Load must recover the v1 data instead of dropping it.
+func TestLoad_MigratesLegacyV1ToolShape(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "v1.lock.yaml")
+
+	// The exact v1 on-disk shape (verified against the real v1.226.0-rc.4 release).
+	content := `version: 1
+tools:
+  hashicorp/terraform:
+    version: "1.11.4"
+    source: https://github.com/aquaproj/aqua-registry
+    binary_name: terraform
+    installed_at: "2025-01-01T00:00:00Z"
+    platforms:
+      darwin_arm64:
+        url: https://example.com/terraform.zip
+        checksum: sha256:deadbeef
+        checksum_algorithm: sha256
+        size: 12345
+metadata:
+  generated_at: "2025-01-01T00:00:00Z"
+  atmos_version: "1.200.0"
+  platform: darwin_arm64
+  lock_file_version: 1
+`
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
+
+	loaded, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	tool := loaded.Tools["hashicorp/terraform"]
+	require.NotNil(t, tool, "expected the legacy tool entry to survive migration")
+	require.Contains(t, tool.Versions, "1.11.4", "the v1 version must be recovered, not dropped")
+
+	entry := tool.Versions["1.11.4"]
+	assert.Equal(t, "https://github.com/aquaproj/aqua-registry", entry.Source)
+	assert.Equal(t, "terraform", entry.BinaryName)
+	assert.Equal(t, "2025-01-01T00:00:00Z", entry.InstalledAt)
+	require.Contains(t, entry.Platforms, "darwin_arm64")
+	assert.Equal(t, "sha256:deadbeef", entry.Platforms["darwin_arm64"].Checksum)
+	assert.Equal(t, "sha256", entry.Platforms["darwin_arm64"].ChecksumAlgorithm)
+	assert.Equal(t, int64(12345), entry.Platforms["darwin_arm64"].Size)
+
+	assert.Equal(t, currentLockFileVersion, loaded.Metadata.LockFileVersion,
+		"a migrated file must be stamped with the current version so re-saving it persists v2 shape")
+
+	// Verify must succeed post-migration -- this is the actual user-facing contract broken by
+	// the bug: a stale lockFileVersion previously meant Verify (and thus install's
+	// checksum-mismatch guard) treated every tool as missing its version.
+	require.NoError(t, Verify(tmpFile))
+}
+
 func TestGetOrCreateTool_CreateNew(t *testing.T) {
 	lf := New()
 
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
 
 	assert.NotNil(t, tool)
-	assert.NotNil(t, tool.Platforms)
-	assert.NotEmpty(t, tool.InstalledAt)
+	assert.NotNil(t, tool.Versions)
+	assert.Empty(t, tool.Versions)
 
 	// Verify it was added to the lock file
 	assert.Len(t, lf.Tools, 1)
 	assert.Equal(t, tool, lf.Tools["hashicorp/terraform"])
-
-	// Verify InstalledAt is valid RFC3339
-	_, err := time.Parse(time.RFC3339, tool.InstalledAt)
-	assert.NoError(t, err)
 }
 
 func TestGetOrCreateTool_GetExisting(t *testing.T) {
@@ -201,19 +258,104 @@ func TestGetOrCreateTool_GetExisting(t *testing.T) {
 
 	// Create first
 	tool1 := lf.GetOrCreateTool("hashicorp/terraform")
-	tool1.Version = "1.13.4"
-	originalInstalledAt := tool1.InstalledAt
+	version1 := tool1.GetOrCreateVersion("1.13.4")
+	originalInstalledAt := version1.InstalledAt
 
 	// Get existing
 	tool2 := lf.GetOrCreateTool("hashicorp/terraform")
 
 	// Should return same instance
 	assert.Equal(t, tool1, tool2)
-	assert.Equal(t, "1.13.4", tool2.Version)
-	assert.Equal(t, originalInstalledAt, tool2.InstalledAt)
+	version2 := tool2.Versions["1.13.4"]
+	require.NotNil(t, version2)
+	assert.Equal(t, originalInstalledAt, version2.InstalledAt)
 
 	// Should still have only one tool
 	assert.Len(t, lf.Tools, 1)
+}
+
+func TestGetOrCreateVersion_GetExisting(t *testing.T) {
+	tool := &Tool{}
+
+	v1 := tool.GetOrCreateVersion("1.13.4")
+	v1.BinaryName = "terraform"
+
+	v2 := tool.GetOrCreateVersion("1.13.4")
+
+	assert.Same(t, v1, v2)
+	assert.Equal(t, "terraform", v2.BinaryName)
+	assert.Len(t, tool.Versions, 1)
+}
+
+// TestGetOrCreateTool_ExistingWithNilVersions covers loading a legacy v1
+// lockfile: the old flat Version/Platforms format never populated a
+// "versions" YAML key, so unmarshaling it into the v2 Tool struct leaves
+// Versions nil even though the tool entry itself exists. GetOrCreateTool must
+// heal that nil map in place rather than panicking the first time a caller
+// (e.g. AddTool locking a new version) tries to write into it.
+func TestGetOrCreateTool_ExistingWithNilVersions(t *testing.T) {
+	lf := New()
+	existing := &Tool{Versions: nil}
+	lf.Tools["hashicorp/terraform"] = existing
+
+	tool := lf.GetOrCreateTool("hashicorp/terraform")
+
+	assert.Same(t, existing, tool, "must heal the existing entry in place, not replace it")
+	assert.NotNil(t, tool.Versions)
+	assert.Empty(t, tool.Versions)
+
+	// Confirm the healed map is actually writable.
+	version := tool.GetOrCreateVersion("1.13.4")
+	assert.NotNil(t, version)
+	assert.Len(t, tool.Versions, 1)
+}
+
+// TestGetOrCreateVersion_ExistingWithNilPlatforms covers a version entry
+// that exists (e.g. read back from a hand-edited or partially-written
+// lockfile) but has no "platforms" key, leaving Platforms nil.
+// GetOrCreateVersion must heal that nil map in place rather than panicking
+// the first time a caller writes a platform entry into it.
+func TestGetOrCreateVersion_ExistingWithNilPlatforms(t *testing.T) {
+	tool := &Tool{Versions: map[string]*VersionEntry{
+		"1.13.4": {Platforms: nil, BinaryName: "terraform"},
+	}}
+	existing := tool.Versions["1.13.4"]
+
+	version := tool.GetOrCreateVersion("1.13.4")
+
+	assert.Same(t, existing, version, "must heal the existing entry in place, not replace it")
+	assert.Equal(t, "terraform", version.BinaryName, "healing Platforms must not disturb other fields")
+	assert.NotNil(t, version.Platforms)
+	assert.Empty(t, version.Platforms)
+
+	// Confirm the healed map is actually writable.
+	version.Platforms["darwin_arm64"] = &PlatformEntry{URL: "https://example.com/terraform"}
+	assert.Len(t, tool.Versions["1.13.4"].Platforms, 1)
+}
+
+func TestTool_MultipleVersions(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "multi-version.yaml")
+
+	lf := New()
+	tool := lf.GetOrCreateTool("mikefarah/yq")
+
+	v1 := tool.GetOrCreateVersion("4.45.1")
+	v1.Platforms["darwin_arm64"] = &PlatformEntry{URL: "https://example.com/yq-4.45.1", Checksum: "sha256:v1"}
+
+	v2 := tool.GetOrCreateVersion("4.50.1")
+	v2.Platforms["darwin_arm64"] = &PlatformEntry{URL: "https://example.com/yq-4.50.1", Checksum: "sha256:v2"}
+
+	require.NoError(t, Save(tmpFile, lf))
+
+	loaded, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	loadedTool := loaded.Tools["mikefarah/yq"]
+	require.NotNil(t, loadedTool)
+	require.Len(t, loadedTool.Versions, 2, "locking a second version of the same tool must not discard the first")
+	assert.Equal(t, "sha256:v1", loadedTool.Versions["4.45.1"].Platforms["darwin_arm64"].Checksum)
+	assert.Equal(t, "sha256:v2", loadedTool.Versions["4.50.1"].Platforms["darwin_arm64"].Checksum)
 }
 
 func TestGetOrCreateTool_NilTools(t *testing.T) {
@@ -234,10 +376,10 @@ func TestRemoveTool(t *testing.T) {
 
 	// Add multiple tools
 	tool1 := lf.GetOrCreateTool("hashicorp/terraform")
-	tool1.Version = "1.13.4"
+	tool1.GetOrCreateVersion("1.13.4")
 
 	tool2 := lf.GetOrCreateTool("kubernetes/kubectl")
-	tool2.Version = "1.34.1"
+	tool2.GetOrCreateVersion("1.34.1")
 
 	assert.Len(t, lf.Tools, 2)
 
@@ -253,7 +395,7 @@ func TestRemoveTool_NonExistent(t *testing.T) {
 	lf := New()
 
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
+	tool.GetOrCreateVersion("1.13.4")
 
 	// Remove non-existent tool (should not error)
 	lf.RemoveTool("does-not-exist")
@@ -263,14 +405,26 @@ func TestRemoveTool_NonExistent(t *testing.T) {
 	assert.NotNil(t, lf.Tools["hashicorp/terraform"])
 }
 
+func TestRemoveVersion(t *testing.T) {
+	tool := &Tool{}
+	tool.GetOrCreateVersion("4.45.1")
+	tool.GetOrCreateVersion("4.50.1")
+	require.Len(t, tool.Versions, 2)
+
+	tool.RemoveVersion("4.45.1")
+
+	assert.Len(t, tool.Versions, 1)
+	assert.NotNil(t, tool.Versions["4.50.1"])
+}
+
 func TestVerify_ValidLockFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "valid.lock.yaml")
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.Platforms["darwin_arm64"] = &PlatformEntry{
+	version := tool.GetOrCreateVersion("1.13.4")
+	version.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "https://example.com/terraform.zip",
 		Checksum: "sha256:abc123",
 		Size:     123456,
@@ -290,7 +444,8 @@ func TestVerify_InvalidVersion(t *testing.T) {
 	content := `version: 0
 tools:
   terraform:
-    version: "1.13.4"
+    versions:
+      1.13.4: {}
 metadata:
   generated_at: "2025-01-01T00:00:00Z"
   lock_file_version: 1
@@ -310,11 +465,12 @@ func TestVerify_InvalidMetadataVersion(t *testing.T) {
 	content := `version: 1
 tools:
   terraform:
-    version: "1.13.4"
-    platforms:
-      darwin_arm64:
-        url: "https://example.com/terraform.zip"
-        checksum: "sha256:abc123"
+    versions:
+      1.13.4:
+        platforms:
+          darwin_arm64:
+            url: "https://example.com/terraform.zip"
+            checksum: "sha256:abc123"
 metadata:
   generated_at: "2025-01-01T00:00:00Z"
   lock_file_version: 0
@@ -332,12 +488,7 @@ func TestVerify_MissingToolVersion(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "missing-tool-version.yaml")
 
 	lf := New()
-	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "" // Missing version
-	tool.Platforms["darwin_arm64"] = &PlatformEntry{
-		URL:      "https://example.com/terraform.zip",
-		Checksum: "sha256:abc123",
-	}
+	lf.GetOrCreateTool("hashicorp/terraform") // No version added.
 
 	err := Save(tmpFile, lf)
 	require.NoError(t, err)
@@ -353,8 +504,8 @@ func TestVerify_NoPlatforms(t *testing.T) {
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	// No platforms added
+	tool.GetOrCreateVersion("1.13.4")
+	// No platforms added.
 
 	err := Save(tmpFile, lf)
 	require.NoError(t, err)
@@ -370,8 +521,8 @@ func TestVerify_MissingPlatformURL(t *testing.T) {
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.Platforms["darwin_arm64"] = &PlatformEntry{
+	version := tool.GetOrCreateVersion("1.13.4")
+	version.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "", // Missing URL
 		Checksum: "sha256:abc123",
 	}
@@ -390,8 +541,8 @@ func TestVerify_MissingPlatformChecksum(t *testing.T) {
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.Platforms["darwin_arm64"] = &PlatformEntry{
+	version := tool.GetOrCreateVersion("1.13.4")
+	version.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "https://example.com/terraform.zip",
 		Checksum: "", // Missing checksum
 	}
@@ -410,8 +561,8 @@ func TestVerify_NilPlatformEntry(t *testing.T) {
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.Platforms["darwin_arm64"] = nil // Nil platform entry
+	version := tool.GetOrCreateVersion("1.13.4")
+	version.Platforms["darwin_arm64"] = nil // Nil platform entry
 
 	err := Save(tmpFile, lf)
 	require.NoError(t, err)
@@ -420,6 +571,23 @@ func TestVerify_NilPlatformEntry(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPlatformEntryNil)
 	assert.Contains(t, err.Error(), "hashicorp/terraform/darwin_arm64")
+}
+
+func TestVerify_NilVersionEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "nil-version.yaml")
+
+	lf := New()
+	tool := lf.GetOrCreateTool("hashicorp/terraform")
+	tool.Versions["1.13.4"] = nil // Nil version entry
+
+	err := Save(tmpFile, lf)
+	require.NoError(t, err)
+
+	err = Verify(tmpFile)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVersionEntryNil)
+	assert.Contains(t, err.Error(), "hashicorp/terraform@1.13.4")
 }
 
 func TestVerify_FileNotFound(t *testing.T) {
@@ -436,8 +604,8 @@ func TestLockFile_MultiplePlatforms(t *testing.T) {
 
 	lf := New()
 	tool := lf.GetOrCreateTool("hashicorp/terraform")
-	tool.Version = "1.13.4"
-	tool.BinaryName = "terraform"
+	version := tool.GetOrCreateVersion("1.13.4")
+	version.BinaryName = "terraform"
 
 	// Add multiple platforms
 	platforms := map[string]*PlatformEntry{
@@ -464,7 +632,7 @@ func TestLockFile_MultiplePlatforms(t *testing.T) {
 	}
 
 	for platform, entry := range platforms {
-		tool.Platforms[platform] = entry
+		version.Platforms[platform] = entry
 	}
 
 	// Save and load
@@ -476,11 +644,13 @@ func TestLockFile_MultiplePlatforms(t *testing.T) {
 
 	loadedTool := loaded.Tools["hashicorp/terraform"]
 	require.NotNil(t, loadedTool)
-	assert.Len(t, loadedTool.Platforms, 4)
+	loadedVersion := loadedTool.Versions["1.13.4"]
+	require.NotNil(t, loadedVersion)
+	assert.Len(t, loadedVersion.Platforms, 4)
 
 	// Verify each platform
 	for platform, expectedEntry := range platforms {
-		actualEntry := loadedTool.Platforms[platform]
+		actualEntry := loadedVersion.Platforms[platform]
 		require.NotNil(t, actualEntry, "platform %s should exist", platform)
 		assert.Equal(t, expectedEntry.URL, actualEntry.URL)
 		assert.Equal(t, expectedEntry.Checksum, actualEntry.Checksum)
@@ -496,8 +666,8 @@ func TestLockFile_MultipleTools(t *testing.T) {
 
 	// Add terraform
 	tf := lf.GetOrCreateTool("hashicorp/terraform")
-	tf.Version = "1.13.4"
-	tf.Platforms["darwin_arm64"] = &PlatformEntry{
+	tfVersion := tf.GetOrCreateVersion("1.13.4")
+	tfVersion.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "https://example.com/terraform.zip",
 		Checksum: "sha256:terraform_checksum",
 		Size:     95842304,
@@ -505,8 +675,8 @@ func TestLockFile_MultipleTools(t *testing.T) {
 
 	// Add kubectl
 	kubectl := lf.GetOrCreateTool("kubernetes/kubectl")
-	kubectl.Version = "1.34.1"
-	kubectl.Platforms["darwin_arm64"] = &PlatformEntry{
+	kubectlVersion := kubectl.GetOrCreateVersion("1.34.1")
+	kubectlVersion.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "https://example.com/kubectl",
 		Checksum: "sha256:kubectl_checksum",
 		Size:     45678901,
@@ -514,8 +684,8 @@ func TestLockFile_MultipleTools(t *testing.T) {
 
 	// Add opentofu
 	tofu := lf.GetOrCreateTool("opentofu/opentofu")
-	tofu.Version = "1.10.6"
-	tofu.Platforms["darwin_arm64"] = &PlatformEntry{
+	tofuVersion := tofu.GetOrCreateVersion("1.10.6")
+	tofuVersion.Platforms["darwin_arm64"] = &PlatformEntry{
 		URL:      "https://example.com/tofu.zip",
 		Checksum: "sha256:tofu_checksum",
 		Size:     89123456,
@@ -533,7 +703,7 @@ func TestLockFile_MultipleTools(t *testing.T) {
 	assert.NotNil(t, loaded.Tools["kubernetes/kubectl"])
 	assert.NotNil(t, loaded.Tools["opentofu/opentofu"])
 
-	assert.Equal(t, "1.13.4", loaded.Tools["hashicorp/terraform"].Version)
-	assert.Equal(t, "1.34.1", loaded.Tools["kubernetes/kubectl"].Version)
-	assert.Equal(t, "1.10.6", loaded.Tools["opentofu/opentofu"].Version)
+	assert.Contains(t, loaded.Tools["hashicorp/terraform"].Versions, "1.13.4")
+	assert.Contains(t, loaded.Tools["kubernetes/kubectl"].Versions, "1.34.1")
+	assert.Contains(t, loaded.Tools["opentofu/opentofu"].Versions, "1.10.6")
 }
