@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
@@ -346,4 +347,215 @@ func TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry(t *testing.T) {
 	assert.Equal(t, 2, errorCount, "each colliding combination is still its own failed file")
 	assert.Equal(t, []string{"deploy.yaml"}, failedPaths, "the source entry is named once, not once per failed combination")
 	assert.True(t, errors.Is(entryErr, errUtils.ErrScaffoldDuplicateOutputPath), entryErr)
+}
+
+// TestProcessSingleFileEntry_WriteFailureReturnsFailedPath proves a
+// non-matrix file that collides with an already-claimed output path (the
+// same checkDuplicateRenderedPath guard matrix combinations use) is
+// reported as one failed file, mirroring processMatrixedFileEntry's own
+// failure counting for the non-matrix dispatch branch.
+func TestProcessSingleFileEntry_WriteFailureReturnsFailedPath(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{Path: "deploy.yaml", Target: "deploy.yaml"}
+	scaffoldConfig := &config.ScaffoldConfig{}
+	// Pre-claim deploy.yaml's rendered path under a different source file,
+	// so checkDuplicateRenderedPath refuses this entry's own write.
+	seenRenderedPaths := map[string]string{"deploy.yaml": "other.yaml"}
+
+	successCount, errorCount, failedPaths, err := ui.processSingleFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, seenRenderedPaths,
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 1, errorCount)
+	assert.Equal(t, []string{"deploy.yaml"}, failedPaths)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldDuplicateOutputPath), err)
+}
+
+// TestProcessSingleFileEntry_SkippedFileCountsAsNeitherSuccessNorFailure
+// proves a non-matrix file whose rendered path is one of ShouldSkipFile's
+// sentinel values (here "false", as a plain field's rendered target might
+// be) is neither a success nor a failure -- distinct from spec.When's own
+// earlier skip check higher up in processSingleFileEntry, which never
+// reaches this far.
+func TestProcessSingleFileEntry_SkippedFileCountsAsNeitherSuccessNorFailure(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{Path: "deploy.yaml", Target: "false"}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, err := ui.processSingleFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 0, errorCount)
+	assert.Empty(t, failedPaths)
+	assert.NoError(t, err)
+	_, statErr := os.Stat(filepath.Join(targetDir, "false"))
+	assert.True(t, os.IsNotExist(statErr), "a skipped rendered path must not be written")
+}
+
+// TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath proves a
+// matrix entry whose axis expression fails to resolve (here, an
+// `answers.`-prefixed dot-path pointing at a key the answers map doesn't
+// have) is reported as one failed file with the underlying error preserved,
+// the same shape a per-combination write failure already gets in
+// TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry -- but raised
+// before any combination is even resolved, so there's nothing to loop over.
+func TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: {{ .matrix.environment }}\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{
+		Path:   "deploy.yaml",
+		Target: "deploy/{{ .matrix.environment }}.yaml",
+		Matrix: map[string]any{"environment": "answers.missing"},
+	}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 1, errorCount)
+	assert.Equal(t, []string{"deploy.yaml"}, failedPaths)
+	assert.True(t, errors.Is(entryErr, errUtils.ErrScaffoldMatrixSourceNotFound), entryErr)
+}
+
+// TestProcessSingleFileEntry_ExistingFileWithoutForceReturnsFailedPath
+// proves a non-matrix file that collides with a real pre-existing file on
+// disk (as opposed to TestProcessSingleFileEntry_WriteFailureReturnsFailedPath's
+// in-run duplicate-target collision) is reported as one failed file too --
+// this is the only way to reach ProcessFile's own error, which
+// reportWriteResult's default branch (a write failure that isn't a skip)
+// has to handle distinctly from a skip or an in-run duplicate.
+func TestProcessSingleFileEntry_ExistingFileWithoutForceReturnsFailedPath(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "deploy.yaml"), []byte("pre-existing"), 0o644))
+
+	file := templates.File{Path: "deploy.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{Path: "deploy.yaml", Target: "deploy.yaml"}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, err := ui.processSingleFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 1, errorCount)
+	assert.Equal(t, []string{"deploy.yaml"}, failedPaths)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "file already exists")
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "deploy.yaml"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "pre-existing", string(content), "the pre-existing file must be left untouched")
+}
+
+// TestProcessSingleFileEntry_DryRunReportsCreateAndUpdateStatus proves
+// --dry-run's "(would create)" vs "(would update)" label -- reportWriteResult's
+// only DryRun-gated branch -- is driven by whether the target already
+// exists, for both a brand-new file and one that would overwrite an
+// existing file.
+func TestProcessSingleFileEntry_DryRunReportsCreateAndUpdateStatus(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "existing.yaml"), []byte("old"), 0o644))
+
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	// force=true, update=false: skips handleExistingFile's ErrFileExists
+	// guard and its git-backed 3-way-merge branch, going straight to
+	// writeNewFile -- which, in dry-run mode, computes but skips the actual
+	// write regardless. Neither sub-case below writes to disk.
+	newFile := templates.File{Path: "new.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	newSpec := config.FileSpec{Path: "new.yaml", Target: "new.yaml"}
+	successCount, errorCount, _, err := ui.processSingleFileEntry(
+		newFile, newSpec, newSpec.Target, targetDir, true, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, successCount)
+	assert.Equal(t, 0, errorCount)
+	_, statErr := os.Stat(filepath.Join(targetDir, "new.yaml"))
+	assert.True(t, os.IsNotExist(statErr), "dry-run must not actually write the new file")
+
+	existingFile := templates.File{Path: "existing.yaml", Content: "environment: staging\n", IsTemplate: true, Permissions: 0o644}
+	existingSpec := config.FileSpec{Path: "existing.yaml", Target: "existing.yaml"}
+	successCount, errorCount, _, err = ui.processSingleFileEntry(
+		existingFile, existingSpec, existingSpec.Target, targetDir, true, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, successCount)
+	assert.Equal(t, 0, errorCount)
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "existing.yaml"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "old", string(content), "dry-run must not actually overwrite the existing file")
+
+	output := ui.output.String()
+	assert.Contains(t, output, dryRunCreateStatus)
+	assert.Contains(t, output, dryRunUpdateStatus)
+}
+
+// TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate proves
+// writeOneOutput's own path-rendering fallback: when outputTemplate itself
+// fails to parse as a Go template (an author typo, not a missing answer --
+// a missing answer renders as "<no value>" rather than erroring), the error
+// status line names the raw, unrendered template string rather than an
+// empty path or a panic.
+func TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	const malformedTarget = "deploy/{{ .matrix.region"
+	file := templates.File{Path: "deploy.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{Path: "deploy.yaml", Target: malformedTarget}
+	scaffoldConfig := &config.ScaffoldConfig{}
+
+	successCount, errorCount, failedPaths, err := ui.processSingleFileEntry(
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.Equal(t, 0, successCount)
+	assert.Equal(t, 1, errorCount)
+	assert.Equal(t, []string{"deploy.yaml"}, failedPaths)
+	require.Error(t, err)
+	assert.Contains(t, ui.output.String(), malformedTarget)
+}
+
+// TestProcessMatrixRow_PrunedRowWithMalformedTargetFallsBackToRawTemplate
+// mirrors TestProcessSingleFileEntry_MalformedTargetFallsBackToRawTemplate
+// for processMatrixRow's own copy of the same fallback, reached only when
+// the row is pruned by `when:` -- rendering the path there is purely for
+// the skip line's display, since a pruned row never reaches writeOneOutput
+// at all.
+func TestProcessMatrixRow_PrunedRowWithMalformedTargetFallsBackToRawTemplate(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+
+	const malformedTarget = "deploy/{{ .matrix.region"
+	file := templates.File{Path: "deploy.yaml", Content: "environment: dev\n", IsTemplate: true, Permissions: 0o644}
+	spec := config.FileSpec{
+		Path:   "deploy.yaml",
+		Target: malformedTarget,
+		Matrix: map[string]any{"region": []string{"us-east-1"}},
+		When:   condition.Must("false"),
+	}
+
+	success, failed, causeErr := ui.processMatrixRow(
+		file, spec, spec.Target, targetDir, false, false, &config.ScaffoldConfig{}, map[string]interface{}{}, map[string]string{"region": "us-east-1"}, []string{"{{", "}}"}, make(map[string]string),
+	)
+
+	assert.False(t, success)
+	assert.False(t, failed)
+	assert.NoError(t, causeErr)
+	assert.Contains(t, ui.output.String(), malformedTarget)
 }

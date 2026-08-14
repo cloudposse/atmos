@@ -377,6 +377,81 @@ func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
 	assert.ErrorContains(t, err, "region")
 }
 
+// TestValidateMatrixAxisValueRejectsEmptyStringSlice and
+// TestValidateMatrixAxisValueRejectsEmptyAnySlice are direct unit tests of
+// validateMatrixAxisValue's two empty-list branches, for the same reason as
+// TestValidateMatrixAxisValueRejectsNonStringElement above: an empty literal
+// axis list is already rejected earlier by JSON Schema validation on the
+// LoadScaffoldConfigFromContent path (see "empty literal axis" in
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix), which would never reach
+// either branch. []string and []any take separate branches in
+// validateMatrixAxisValue (a decoded YAML list is []any, not []string, but
+// the []string case exists for any caller that already has a typed slice),
+// so both need their own empty-list case.
+func TestValidateMatrixAxisValueRejectsEmptyStringSlice(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []string{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+// TestValidateMatrixAxisValueRejectsUnsupportedType is a direct unit test of
+// validateMatrixAxisValue's default branch (a value that's neither a string
+// nor a list at all, e.g. a bool) -- same defense-in-depth rationale as the
+// tests above: JSON Schema's oneOf already rejects a non-string/non-array
+// axis value on the LoadScaffoldConfigFromContent path (see "axis of
+// unsupported type" in TestLoadScaffoldConfigRejectsInvalidFileMatrix).
+func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+// TestValidateFileMatrixRejectsMissingTarget is a direct unit test of
+// validateFileMatrix's own file.Target == "" check, called in-package
+// rather than through LoadScaffoldConfigFromContent: a missing target is
+// already rejected earlier by JSON Schema's required-property rule on that
+// path (see "matrix without target" in
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix), which would never reach
+// this function at all.
+func TestValidateFileMatrixRejectsMissingTarget(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{Spec: ScaffoldSpec{Files: []FileSpec{
+		{Path: "deploy.yaml", Matrix: MatrixAxes{"region": []any{"us-east-1"}}},
+	}}}
+
+	err := validateFileMatrix(scaffoldConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixTargetRequired)
+	assert.ErrorContains(t, err, "deploy.yaml")
+}
+
+// TestValidateFileMatrixSkipsFilesWithoutMatrix proves a file entry with no
+// matrix: at all (the common case -- most scaffold files aren't matrixed)
+// is left alone by validateFileMatrix, through the real
+// LoadScaffoldConfigFromContent path: a template mixing a plain file
+// alongside a matrixed one -- exactly the shape examples/scaffolding-matrix
+// and examples/scaffolding use -- must load without error.
+func TestValidateFileMatrixSkipsFilesWithoutMatrix(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: vendor.yaml\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        region: [us-east-1]\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 2)
+	assert.Empty(t, scaffoldConfig.Spec.Files[0].Matrix)
+	assert.NotEmpty(t, scaffoldConfig.Spec.Files[1].Matrix)
+}
+
 func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
 	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
