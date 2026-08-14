@@ -8,16 +8,16 @@
 consumer uses" — had two independent defects:
 
 1. **Collision**: it replaced `/` and `\` in a component name with a
-   single `-`, so `app/local` and `app-local` both resolved to the same
-   workdir (`dev-app-local`). `Service.Provision` writes component files,
-   metadata, and Terraform state directly into whatever `BuildPath`
-   returns, so two entirely distinct components would silently share all
-   three.
+  single `-`, so `app/local` and `app-local` both resolved to the same
+  workdir (`dev-app-local`). `Service.Provision` writes component files,
+  metadata, and Terraform state directly into whatever `BuildPath`
+  returns, so two entirely distinct components would silently share all
+  three.
 2. **Traversal**: it sanitized the *component* name but never validated
-   the *stack* name, which is concatenated into the same directory name
-   (`fmt.Sprintf("%s-%s", stack, component)`). A stack value containing
-   enough `../` segments (e.g. `../../../../../../evil`) could resolve a
-   path outside `basePath` entirely.
+  the *stack* name, which is concatenated into the same directory name
+  (`fmt.Sprintf("%s-%s", stack, component)`). A stack value containing
+  enough `../` segments (e.g. `../../../../../../evil`) could resolve a
+  path outside `basePath` entirely.
 
 Both `component` and `stack` originate from user-controlled YAML (stack
 manifests / custom command config), so both are realistic inputs, not just
