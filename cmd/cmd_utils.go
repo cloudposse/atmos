@@ -1281,6 +1281,15 @@ func executeCustomCommand(
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
 			return runErr
 		}
+		// Use cmd.Context() so cancellation (e.g. Ctrl-C on the top-level Cobra invocation)
+		// propagates into step execution and container runtime operations;
+		// context.Background() would let them run to completion after the user has already
+		// cancelled. cmd.Context() is nil only when this command is invoked directly in tests
+		// without going through Cobra's Execute().
+		executionCtx := cmd.Context()
+		if executionCtx == nil {
+			executionCtx = context.Background()
+		}
 		// runExtendedStep converts step to a schema.WorkflowStep and routes it through the
 		// registered pkg/runner/step handlers (used for genuinely-extended step types like
 		// input/confirm/choose, and for "script" steps with no active container override).
@@ -1306,7 +1315,7 @@ func executeCustomCommand(
 			}
 
 			// Execute the extended step.
-			_, execErr := executor.Execute(context.Background(), &workflowStep)
+			_, execErr := executor.Execute(executionCtx, &workflowStep)
 			return execErr
 		}
 		runStep := func() error {
@@ -1327,7 +1336,7 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
 					return runCommandStep(func(stdout, stderr io.Writer) error {
-						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+						return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
 							Workflow:      commandConfig.Name,
 							WorkflowPath:  atmosConfig.CliConfigPath,
 							BasePath:      atmosConfig.BasePath,
@@ -1377,7 +1386,7 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
 					return runCommandStep(func(stdout, stderr io.Writer) error {
-						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+						return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
 							Workflow:      commandConfig.Name,
 							WorkflowPath:  atmosConfig.CliConfigPath,
 							BasePath:      atmosConfig.BasePath,
