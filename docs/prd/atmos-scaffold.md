@@ -593,12 +593,15 @@ registered as a zero-argument template function rather than a data field — Go'
 template grammar only chains `.field` access off of `.` or a `$var`, never off a
 bare identifier, but it does chain off a bare identifier's function-call result,
 which is what lets `answers.environments` parse as "call `answers()`, then select
-`.environments`." The expression's rendered text is then parsed back into a list by
-splitting on whitespace (tolerating Go's default slice-formatting brackets, e.g.
-`[a b c]`). This means an individual axis value containing whitespace (e.g. a map
-key with a space in it) would be split into multiple values — an accepted limitation
-of computed axes, not something worth engineering around for a rare edge case; avoid
-whitespace in values meant to become axis entries.
+`.environments`." Because `text/template` execution can only produce text, not the
+typed list a function like `collectKeys` returns, the expression's pipeline gets
+`toJson` appended internally before execution, and the rendered JSON is decoded back
+into a list — so a value containing whitespace, commas, or quotes survives intact,
+with no escaping rule for template authors to learn or a custom encoding to maintain.
+This requires an axis expression to be exactly one value-producing action (no
+surrounding literal text, no `if`/`range`/`with`, no variable assignment);
+`RenderMatrixAxisExpression` rejects anything else with a clear error before ever
+rendering it.
 
 **Behavior**:
 - Expanding the Cartesian product is stable and deterministic (sorted per axis), so

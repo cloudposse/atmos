@@ -206,12 +206,13 @@ func whitespaceAxisEmbedsConfig() *templates.Configuration {
 	}
 }
 
-// TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace
-// documents a known, accepted limitation: an axis expression's rendered
-// result is parsed by splitting on whitespace, so a value that itself
-// contains whitespace is split into multiple axis values rather than kept
-// intact. See "Computed axes" in docs/prd/atmos-scaffold.md.
-func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *testing.T) {
+// TestExecuteWithSetup_FilesMatrixComputedAxisValueWithWhitespacePreserved
+// proves a computed axis value containing whitespace (e.g. an
+// answers.environments key like "us east") survives end-to-end as one axis
+// value, not two -- the real regression test for the toJson-based
+// RenderMatrixAxisExpression fix, exercised through the actual generation
+// pipeline rather than a mocked AxisRenderer.
+func TestExecuteWithSetup_FilesMatrixComputedAxisValueWithWhitespacePreserved(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
 
@@ -225,14 +226,11 @@ func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *te
 	err := ui.executeWithSetup(whitespaceAxisEmbedsConfig(), targetDir, false, false, true, "", cmdTemplateValues, []string{"{{", "}}"})
 	require.NoError(t, err)
 
-	// "us east" is split into "us" and "east", each becoming its own
-	// combination -- not kept intact as one value.
 	for _, tc := range []struct {
 		relPath string
 		want    string
 	}{
-		{filepath.Join("deploy", "us.yaml"), "environment: us\n"},
-		{filepath.Join("deploy", "east.yaml"), "environment: east\n"},
+		{filepath.Join("deploy", "us east.yaml"), "environment: us east\n"},
 		{filepath.Join("deploy", "dev.yaml"), "environment: dev\n"},
 	} {
 		content, readErr := os.ReadFile(filepath.Join(targetDir, tc.relPath))
@@ -246,7 +244,7 @@ func TestExecuteWithSetup_FilesMatrixComputedAxisValueContainingWhitespace(t *te
 	for _, entry := range entries {
 		gotNames = append(gotNames, entry.Name())
 	}
-	assert.ElementsMatch(t, []string{"dev.yaml", "us.yaml", "east.yaml"}, gotNames)
+	assert.ElementsMatch(t, []string{"dev.yaml", "us east.yaml"}, gotNames)
 }
 
 func TestExecuteWithSetup_FilesMatrixDuplicateTargetFails(t *testing.T) {
