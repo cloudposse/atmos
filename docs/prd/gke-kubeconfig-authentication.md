@@ -71,7 +71,7 @@ The default kubeconfig path is Atmos-owned under the XDG config directory. `upda
 - The identity needs permission to describe the target cluster, normally including `container.clusters.get`.
 - The configured GCP provider must be able to obtain or refresh the OAuth2 access token used by Atmos.
 - Kubernetes RBAC authorization is separate; a valid Google access token does not itself grant Kubernetes permissions.
-- Tokens are short lived, returned only on exec-plugin stdout, and never stored in kubeconfig.
+- Tokens are short-lived, returned only on exec-plugin stdout, and never stored in kubeconfig.
 
 ## Non-Goals
 

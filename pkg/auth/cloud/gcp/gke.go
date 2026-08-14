@@ -88,7 +88,10 @@ func DescribeCluster(ctx context.Context, client GKEClient, projectID, location,
 	if endpoint == "" {
 		return nil, fmt.Errorf("%w: cluster %s returned an empty API endpoint", errUtils.ErrGKEDescribeCluster, resourceName)
 	}
-	if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
+	if strings.HasPrefix(endpoint, "http://") {
+		return nil, fmt.Errorf("%w: cluster %s returned a non-TLS API endpoint", errUtils.ErrGKEDescribeCluster, resourceName)
+	}
+	if !strings.HasPrefix(endpoint, "https://") {
 		endpoint = "https://" + endpoint
 	}
 
@@ -143,7 +146,7 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 
 // GetToken returns a GCP OAuth2 access token for Kubernetes ExecCredential output.
 func GetToken(creds types.ICredentials) (string, time.Time, error) {
-	defer perf.Track(nil, "gcp.GetGKEToken")()
+	defer perf.Track(nil, "gcp.GetToken")()
 
 	gcpCreds, ok := creds.(*types.GCPCredentials)
 	if !ok {

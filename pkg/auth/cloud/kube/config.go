@@ -278,10 +278,7 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
-	userName := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
-	if info.AccountID != "" {
-		userName += "-" + info.AccountID
-	}
+	userName := UserName(info)
 
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = contextName
@@ -316,6 +313,15 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	}
 
 	return config
+}
+
+// UserName returns the shared exec-plugin username for a cluster entry.
+func UserName(info *ClusterInfo) string {
+	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
+	if info.AccountID != "" {
+		name += "-" + info.AccountID
+	}
+	return name
 }
 
 // DefaultKubeconfigPath returns the XDG-compliant default kubeconfig path.

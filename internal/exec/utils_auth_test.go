@@ -772,6 +772,8 @@ func TestGetMergedAuthConfigWithFetcher_PreservesGlobalGKEIntegration(t *testing
 	assert.Equal(t, "gcp/adc", result.Providers["example-provider"].Kind)
 	require.Contains(t, result.Identities, "example-deployer")
 	assert.True(t, result.Identities["example-deployer"].Default)
+	assert.Equal(t, "gcp/project", result.Identities["example-deployer"].Kind)
+	assert.Equal(t, "example-provider", result.Identities["example-deployer"].Provider)
 	require.Contains(t, result.Integrations, "example-gke")
 	assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
 }

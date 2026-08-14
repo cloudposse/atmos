@@ -2,6 +2,7 @@ package gke
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,11 +18,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const execCredentialAPIVersion = "client.authentication.k8s.io/v1beta1"
+
+//go:embed markdown/atmos_gcp_gke_token_usage.md
+var tokenUsageMarkdown string
 
 var (
 	initCliConfigFn        = cfg.InitCliConfig
@@ -34,10 +39,13 @@ var tokenCmd = &cobra.Command{
 	Use:          "token",
 	Short:        "Generate a GKE bearer token for kubectl",
 	Long:         "Generate a Kubernetes ExecCredential from an Atmos-managed GCP identity. This command is normally invoked by kubectl from an Atmos-generated kubeconfig.",
+	Example:      tokenUsageMarkdown,
 	Args:         cobra.NoArgs,
 	RunE:         executeTokenCommand,
 	SilenceUsage: true,
 }
+
+var tokenParser *flags.StandardParser
 
 type execCredential struct {
 	APIVersion string               `json:"apiVersion"`
@@ -142,6 +150,9 @@ func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
 
 // init registers the token command and its identity flag.
 func init() {
-	tokenCmd.Flags().StringP("identity", "i", "", "Atmos GCP identity to authenticate with")
+	tokenParser = flags.NewStandardParser(
+		flags.WithStringFlag("identity", "i", "", "Atmos GCP identity to authenticate with"),
+	)
+	tokenParser.RegisterFlags(tokenCmd)
 	GkeCmd.AddCommand(tokenCmd)
 }

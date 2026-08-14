@@ -399,6 +399,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	}
 	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = true
 		if authManager != nil {
 			assert.Equal(t, "example-deployer", info.Identity, "component identity must resolve before the full processing pass")
 		}
@@ -419,16 +420,45 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, operation, nil)
 		require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
 	}
+
+	// Disabled components skip identity setup even when they declare the guard.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		t.Fatal("disabled components must not resolve identity")
+		return nil, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = false
+		return info, nil
+	}
+	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "disabled-component"}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationApply, nil))
+	assert.False(t, info.ComponentIsEnabled)
+
+	// Invalid guard types fail closed for enabled cluster operations.
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": "true"}
+		info.ComponentIsEnabled = true
+		return info, nil
+	}
+	err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationApply, nil)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentAuth)
 }
 
 // TestRequireIdentityForOperation verifies the GKE guard applies to every path
 // that contacts a cluster while offline rendering and diff baselines remain offline.
 func TestRequireIdentityForOperation(t *testing.T) {
 	guarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
 		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true},
 	}
 	unguarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
 		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
+	}
+	invalid := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": "true"},
 	}
 
 	tests := []struct {
@@ -437,6 +467,7 @@ func TestRequireIdentityForOperation(t *testing.T) {
 		operation Operation
 		flags     map[string]any
 		want      bool
+		wantErr   error
 	}{
 		{name: "template stays offline", info: guarded, operation: OperationTemplate, want: false},
 		{name: "live diff requires identity", info: guarded, operation: OperationDiff, want: true},
@@ -446,12 +477,20 @@ func TestRequireIdentityForOperation(t *testing.T) {
 		{name: "apply requires identity", info: guarded, operation: OperationApply, want: true},
 		{name: "delete requires identity", info: guarded, operation: OperationDelete, want: true},
 		{name: "disabled guard preserves ambient apply", info: unguarded, operation: OperationApply, want: false},
-		{name: "missing guard preserves ambient apply", info: &schema.ConfigAndStacksInfo{}, operation: OperationApply, want: false},
+		{name: "missing guard preserves ambient apply", info: &schema.ConfigAndStacksInfo{ComponentIsEnabled: true}, operation: OperationApply, want: false},
+		{name: "disabled component skips guard", info: &schema.ConfigAndStacksInfo{ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true}}, operation: OperationApply, want: false},
+		{name: "non-boolean guard fails closed", info: invalid, operation: OperationApply, wantErr: errUtils.ErrInvalidComponentAuth},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, requireIdentityForOperation(tt.info, tt.operation, tt.flags))
+			got, err := requireIdentityForOperation(tt.info, tt.operation, tt.flags)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

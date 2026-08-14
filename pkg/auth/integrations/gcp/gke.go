@@ -167,7 +167,11 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 	if contextName == "" {
 		contextName = clusterID
 	}
-	userName := "atmos-gke-" + g.cluster.Name + "-" + g.cluster.ProjectID + "-" + g.cluster.Location
+	userName := kube.UserName(gcpCloud.BuildKubeClusterInfo(&gcpCloud.GKEClusterInfo{
+		Name:      g.cluster.Name,
+		ProjectID: g.cluster.ProjectID,
+		Location:  g.cluster.Location,
+	}, g.identity))
 	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
@@ -186,7 +190,9 @@ func (g *GKEIntegration) Environment() (map[string]string, error) {
 	}
 	env := map[string]string{"KUBECONFIG": mgr.GetPath(), "KUBE_CONFIG_PATH": mgr.GetPath()}
 	if server, ok := gkeExpectedServers.Load(g.expectedServerKey(mgr.GetPath())); ok {
-		env[kube.ExpectedServerEnv] = server.(string)
+		if endpoint, isString := server.(string); isString {
+			env[kube.ExpectedServerEnv] = endpoint
+		}
 	}
 	return env, nil
 }

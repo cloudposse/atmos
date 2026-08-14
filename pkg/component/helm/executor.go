@@ -132,36 +132,57 @@ func executeSingle(
 	if err != nil {
 		return err
 	}
-	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	guarded := requireIdentityForOperation(info, operation, ctx.Flags)
-	internalEnvRestore := func() {}
-	if guarded {
-		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
-	}
-	authEnvRestore, err := applyAuthEnvironment(info)
+	restoreEnvironment, err := setupExecutionEnvironment(info, operation, ctx.Flags, tenv.EnvVars())
 	if err != nil {
-		internalEnvRestore()
-		envRestore()
 		return err
 	}
+	defer restoreEnvironment()
+
+	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
+}
+
+// setupExecutionEnvironment composes component, toolchain, auth, and endpoint-guard
+// environment changes and returns one restore function in reverse application order.
+func setupExecutionEnvironment(
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+	toolchainEnv []string,
+) (func(), error) {
+	envRestore := applyEnvironment(info.ComponentEnvSection, toolchainEnv)
+	internalEnvRestore := func() {}
+	authEnvRestore := func() {}
 	guardEnvRestore := func() {}
-	if guarded {
-		if os.Getenv(kube.ExpectedServerEnv) == "" { //nolint:forbidigo // Integration environment was just applied to this process.
-			authEnvRestore()
-			internalEnvRestore()
-			envRestore()
-			return fmt.Errorf("%w: the selected identity did not provision a GKE endpoint", errUtils.ErrKubernetesIdentityRequired)
-		}
-		guardEnvRestore = applyEnvironment(map[string]any{kube.EndpointGuardEnv: "true"}, nil)
-	}
-	defer func() {
+	restore := func() {
 		guardEnvRestore()
 		authEnvRestore()
 		internalEnvRestore()
 		envRestore()
-	}()
+	}
 
-	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
+	guarded, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	if guarded {
+		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
+	}
+	resolvedAuthEnvRestore, err := applyAuthEnvironment(info)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	authEnvRestore = resolvedAuthEnvRestore
+	if guarded {
+		if os.Getenv(kube.ExpectedServerEnv) == "" { //nolint:forbidigo // Integration environment was just applied to this process.
+			restore()
+			return nil, fmt.Errorf("%w: the selected identity did not provision a GKE endpoint", errUtils.ErrKubernetesIdentityRequired)
+		}
+		guardEnvRestore = applyEnvironment(map[string]any{kube.EndpointGuardEnv: "true"}, nil)
+	}
+
+	return restore, nil
 }
 
 // runWithHooks runs the before/after hooks around chart rendering and the operation.
@@ -439,7 +460,11 @@ func processStacksWithAuth(
 		if err != nil {
 			return err
 		}
-		if requireIdentityForOperation(&discovered, operation, flags) {
+		required, err := requireIdentityForOperation(&discovered, operation, flags)
+		if err != nil {
+			return err
+		}
+		if required {
 			*info = discovered
 			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
 				return errUtils.ErrKubernetesIdentityRequired
@@ -457,7 +482,11 @@ func processStacksWithAuth(
 	}
 
 	*info = processedInfo
-	if !requireIdentityForOperation(info, operation, flags) {
+	required, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		return err
+	}
+	if !required {
 		return nil
 	}
 	if authManager == nil || info.Identity == "" {
@@ -472,16 +501,22 @@ func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // requireIdentityForOperation reports whether this Helm path must fail closed.
-func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) bool {
-	if !operationContactsCluster(operation, flags) {
-		return false
+func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) (bool, error) {
+	if !operationContactsCluster(operation, flags) || info == nil || !info.ComponentIsEnabled {
+		return false, nil
 	}
-	if info != nil && info.ComponentAuthSection != nil {
-		if componentRequired, ok := info.ComponentAuthSection["require_identity"].(bool); ok {
-			return componentRequired
-		}
+	if info.ComponentAuthSection == nil {
+		return false, nil
 	}
-	return false
+	value, exists := info.ComponentAuthSection["require_identity"]
+	if !exists {
+		return false, nil
+	}
+	required, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: auth.require_identity must be a boolean, got %T", errUtils.ErrInvalidComponentAuth, value)
+	}
+	return required, nil
 }
 
 // operationContactsCluster reports whether the selected operation and baseline

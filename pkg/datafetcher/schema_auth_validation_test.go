@@ -181,6 +181,40 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			name: "native helm component with identity guard",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "native helm identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
+		{
 			name: "component with empty auth",
 			manifest: map[string]interface{}{
 				"components": map[string]interface{}{

@@ -46,6 +46,7 @@ func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
 			err := verifyExpectedKubernetesEndpoint(cli.New())
 			if tt.wantErr {
 				require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
+				assert.Contains(t, err.Error(), "https://other.invalid")
 				assert.Contains(t, err.Error(), "https://example.invalid")
 				return
 			}

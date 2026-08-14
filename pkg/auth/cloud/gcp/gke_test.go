@@ -105,6 +105,7 @@ func TestDescribeClusterErrors(t *testing.T) {
 		{name: "API error", client: &fakeGKEClient{err: errors.New("permission denied")}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "permission denied"},
 		{name: "missing cluster", client: &fakeGKEClient{}, wantErr: errUtils.ErrGKEClusterNotFound, wantDetail: "example-cluster"},
 		{name: "missing endpoint", client: &fakeGKEClient{cluster: &container.Cluster{MasterAuth: &container.MasterAuth{ClusterCaCertificate: testCAData}}}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "empty API endpoint"},
+		{name: "plaintext endpoint", client: &fakeGKEClient{cluster: &container.Cluster{Endpoint: "http://gke.example.invalid", MasterAuth: &container.MasterAuth{ClusterCaCertificate: testCAData}}}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "non-TLS API endpoint"},
 		{name: "missing master auth", client: &fakeGKEClient{cluster: &container.Cluster{Endpoint: "203.0.113.10"}}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "no CA certificate"},
 		{name: "missing CA", client: &fakeGKEClient{cluster: &container.Cluster{Endpoint: "203.0.113.10", MasterAuth: &container.MasterAuth{}}}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "no CA certificate"},
 		{name: "malformed CA", client: &fakeGKEClient{cluster: &container.Cluster{Endpoint: "203.0.113.10", MasterAuth: &container.MasterAuth{ClusterCaCertificate: "%%%"}}}, wantErr: errUtils.ErrGKEDescribeCluster, wantDetail: "malformed base64 CA"},

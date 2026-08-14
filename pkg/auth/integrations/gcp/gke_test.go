@@ -111,6 +111,12 @@ func TestGKEIntegrationEnvironment(t *testing.T) {
 	assert.Equal(t, path, env["KUBECONFIG"])
 	assert.Equal(t, path, env["KUBE_CONFIG_PATH"])
 	assert.NotContains(t, env, kube.ExpectedServerEnv)
+
+	gkeIntegration := integration.(*GKEIntegration)
+	gkeExpectedServers.Store(gkeIntegration.expectedServerKey(path), 42)
+	env, err = integration.Environment()
+	require.NoError(t, err)
+	assert.NotContains(t, env, kube.ExpectedServerEnv, "invalid cached endpoint types must not panic or reach the environment")
 }
 
 // installGKEExecutionFakes installs test-scoped GKE API dependencies.
