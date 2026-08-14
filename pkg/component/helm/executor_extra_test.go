@@ -369,7 +369,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		return info, nil
 	}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate, nil))
 	assert.True(t, info.ComponentIsEnabled)
 
 	// Issue #3: a cluster operation resolves component auth even without an explicit identity, so the
@@ -387,7 +387,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, sentinel
 	}
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "example-admin"}, OperationTemplate)
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "example-admin"}, OperationTemplate, nil)
 	require.ErrorIs(t, err, sentinel)
 
 	// The opt-in guard resolves a component default even when no CLI identity was supplied.
@@ -404,29 +404,56 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		}
 		return info, nil
 	}
-	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "example-component"}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationApply))
-	assert.Equal(t, "example-deployer", info.Identity)
-	assert.NotNil(t, info.AuthManager)
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		info = &schema.ConfigAndStacksInfo{ComponentFromArg: "example-component"}
+		require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, operation, nil))
+		assert.Equal(t, "example-deployer", info.Identity)
+		assert.NotNil(t, info.AuthManager)
+	}
 
 	// Without a resolvable component default, the opt-in guard fails closed.
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, nil
 	}
-	err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationDelete)
-	require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, operation, nil)
+		require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
+	}
 }
 
-// TestRequireIdentityForOperation verifies the GKE guard applies only to mutating operations.
+// TestRequireIdentityForOperation verifies the GKE guard applies to every path
+// that contacts a cluster while offline rendering and diff baselines remain offline.
 func TestRequireIdentityForOperation(t *testing.T) {
-	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationTemplate))
-	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{}, OperationApply))
-	assert.False(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{
-		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
-	}, OperationApply))
-	assert.True(t, requireIdentityForOperation(&schema.ConfigAndStacksInfo{
+	guarded := &schema.ConfigAndStacksInfo{
 		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true},
-	}, OperationDelete))
+	}
+	unguarded := &schema.ConfigAndStacksInfo{
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
+	}
+
+	tests := []struct {
+		name      string
+		info      *schema.ConfigAndStacksInfo
+		operation Operation
+		flags     map[string]any
+		want      bool
+	}{
+		{name: "template stays offline", info: guarded, operation: OperationTemplate, want: false},
+		{name: "live diff requires identity", info: guarded, operation: OperationDiff, want: true},
+		{name: "explicit release diff requires identity", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: againstRelease}, want: true},
+		{name: "manifest diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagFromManifest: "baseline.yaml"}, want: false},
+		{name: "target diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: "target"}, want: false},
+		{name: "apply requires identity", info: guarded, operation: OperationApply, want: true},
+		{name: "delete requires identity", info: guarded, operation: OperationDelete, want: true},
+		{name: "disabled guard preserves ambient apply", info: unguarded, operation: OperationApply, want: false},
+		{name: "missing guard preserves ambient apply", info: &schema.ConfigAndStacksInfo{}, operation: OperationApply, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, requireIdentityForOperation(tt.info, tt.operation, tt.flags))
+		})
+	}
 }
 
 func TestApplyAuthEnvironment(t *testing.T) {

@@ -3878,7 +3878,7 @@
           "properties": {
             "require_identity": {
               "type": "boolean",
-              "description": "Require an Atmos Auth identity for cluster-mutating operations and reject ambient kubeconfig access."
+              "description": "Require an Atmos Auth identity for Helm operations that contact a Kubernetes cluster and reject ambient kubeconfig access."
             },
             "realm": {
               "type": "string",

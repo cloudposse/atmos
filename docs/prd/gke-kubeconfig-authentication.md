@@ -42,7 +42,7 @@ The process cache key also includes kubeconfig path, mode, update behavior, cont
 
 ## Helm Safety Guard
 
-Native Helm preserves its current ambient-kubeconfig behavior by default. A GKE component can opt into fail-closed targeting with `auth.require_identity: true` and a component-level default identity. For guarded apply/deploy/delete operations, Atmos resolves that default when no CLI identity was supplied, requires the GKE integration to provision an expected endpoint, and compares it with the effective Helm REST configuration before contacting the cluster.
+Native Helm preserves its current ambient-kubeconfig behavior by default. A GKE component can opt into fail-closed targeting with `auth.require_identity: true` and a component-level default identity. For every guarded path that contacts a cluster—live plan/diff, apply/deploy, and delete/destroy—Atmos resolves that default when no CLI identity was supplied, requires the GKE integration to provision an expected endpoint, and compares it with the effective Helm REST configuration before contacting the cluster. Template/render and plans using an explicitly offline baseline (`--from-manifest` or a non-cluster `--against=target`) do not contact Kubernetes and therefore do not require an identity.
 
 A concrete component can disable an inherited guard while retaining the rest of its inherited auth configuration:
 

@@ -103,7 +103,7 @@ func executeSingle(
 	info *schema.ConfigAndStacksInfo,
 	operation Operation,
 ) error {
-	if err := processStacksWithAuth(atmosConfig, info, operation); err != nil {
+	if err := processStacksWithAuth(atmosConfig, info, operation, ctx.Flags); err != nil {
 		return err
 	}
 	if !info.ComponentIsEnabled {
@@ -133,7 +133,7 @@ func executeSingle(
 		return err
 	}
 	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	guarded := requireIdentityForOperation(info, operation)
+	guarded := requireIdentityForOperation(info, operation, ctx.Flags)
 	internalEnvRestore := func() {}
 	if guarded {
 		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
@@ -418,7 +418,12 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 }
 
 // processStacksWithAuth resolves component auth settings before full stack processing.
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
+func processStacksWithAuth(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+) error {
 	var authManager auth.AuthManager
 	if hasExplicitIdentity(info) {
 		var err error
@@ -426,15 +431,15 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 		if err != nil {
 			return err
 		}
-	} else if operation == OperationApply || operation == OperationDelete {
+	} else if operationContactsCluster(operation, flags) {
 		// Discover the effective component auth block without evaluating templates or
 		// YAML functions. This keeps the ordinary ambient path unchanged while allowing
-		// an opt-in guard to resolve its component default before the full processing pass.
+		// an opt-in guard to resolve its component default before a cluster-contacting path.
 		discovered, err := processStacks(atmosConfig, *info, true, false, false, nil, nil)
 		if err != nil {
 			return err
 		}
-		if requireIdentityForOperation(&discovered, operation) {
+		if requireIdentityForOperation(&discovered, operation, flags) {
 			*info = discovered
 			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
 				return errUtils.ErrKubernetesIdentityRequired
@@ -452,7 +457,7 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 
 	*info = processedInfo
-	if !requireIdentityForOperation(info, operation) {
+	if !requireIdentityForOperation(info, operation, flags) {
 		return nil
 	}
 	if authManager == nil || info.Identity == "" {
@@ -466,9 +471,9 @@ func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
 	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
 }
 
-// requireIdentityForOperation reports whether the Helm operation must fail closed.
-func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation) bool {
-	if operation != OperationApply && operation != OperationDelete {
+// requireIdentityForOperation reports whether this Helm path must fail closed.
+func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) bool {
+	if !operationContactsCluster(operation, flags) {
 		return false
 	}
 	if info != nil && info.ComponentAuthSection != nil {
@@ -477,6 +482,23 @@ func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Ope
 		}
 	}
 	return false
+}
+
+// operationContactsCluster reports whether the selected operation and baseline
+// need Kubernetes API access. Template and explicitly offline diff baselines do not.
+func operationContactsCluster(operation Operation, flags map[string]any) bool {
+	switch operation {
+	case OperationApply, OperationDelete:
+		return true
+	case OperationDiff:
+		if flagString(flags, flagFromManifest) != "" {
+			return false
+		}
+		against := flagString(flags, flagAgainst)
+		return against == "" || against == againstRelease
+	default:
+		return false
+	}
 }
 
 func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
