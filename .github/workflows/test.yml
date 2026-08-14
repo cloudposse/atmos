@@ -414,7 +414,7 @@ jobs:
     needs: [build, test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # `atmos test download-coverage-shards` (below) runs `gh run download`,
+    # `atmos test coverage download-shards` (below) runs `gh run download`,
     # which hits the REST API for artifacts of this run and needs actions:read
     # - unlike actions/download-artifact, which authenticates via the ambient
     # artifact-service token and doesn't need it.
@@ -439,18 +439,19 @@ jobs:
       # combined file. Collating them into one Codecov report has to happen on
       # a single machine (this job stays a single job, not a matrix), but the
       # downloads themselves are independent - dogfood Atmos's own `matrix`
-      # step (.atmos.d/test.yaml's download-coverage-shards command, modeled
-      # on examples/parallel-steps/workflows/parallel.yaml) to fan them out
-      # concurrently with native per-shard retry, instead of hand-rolling a
-      # shell background/wait loop or reaching for GitHub Actions' native
-      # `parallel:` step group (shipped 2026-06-25, but rejected by this
-      # repo's vendored actionlint - see pkg/ci/validate/githubactions - which
-      # predates that syntax as of its latest release, v1.7.12/2026-03-30).
+      # step (.atmos.d/test.yaml's `test coverage download-shards` command,
+      # modeled on examples/parallel-steps/workflows/parallel.yaml) to fan
+      # them out concurrently with native per-shard retry, instead of
+      # hand-rolling a shell background/wait loop or reaching for GitHub
+      # Actions' native `parallel:` step group (shipped 2026-06-25, but
+      # rejected by this repo's vendored actionlint - see
+      # pkg/ci/validate/githubactions - which predates that syntax as of its
+      # latest release, v1.7.12/2026-03-30).
       - name: Download linux shard coverage artifacts
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
-        run: atmos test download-coverage-shards
+        run: atmos test coverage download-shards
 
       - name: Upload coverage report to Codecov
         timeout-minutes: 10

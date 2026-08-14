@@ -88,30 +88,6 @@ commands:
           - type: atmos
             command: test acceptance --cover
 
-      - name: download-coverage-shards
-        description: >-
-          Download every Linux shard's coverage artifact from this workflow run
-          in parallel (CI-only; collates before the Codecov upload since Codecov
-          aggregation happens from a single job).
-        steps:
-          - name: shards
-            type: matrix
-            # Keep this list in sync with .github/workflows/test.yml's
-            # env.TEST_SHARD_COUNT and the `test` job's matrix.shard.
-            matrix:
-              shard: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-            steps:
-              - name: download
-                type: shell
-                retry:
-                  max_attempts: 3
-                  initial_delay: 15s
-                  backoff_strategy: constant
-                command: >-
-                  gh run download "$GITHUB_RUN_ID"
-                  -n "acceptance-coverage-linux-shard-{{ .matrix.shard }}"
-                  -D "$GITHUB_WORKSPACE"
-
       - name: parser-coverage
         description: Verify function parser coverage is at least 90%
         env: *go_auto_env
@@ -167,6 +143,30 @@ commands:
             command: go test -coverprofile=coverage.out ${TEST:-$(go list ./...)} ${TESTARGS:-}
           - type: shell
             command: go tool cover -html=coverage.out -o coverage.html
+        commands:
+          - name: download-shards
+            description: >-
+              Download every Linux shard's coverage artifact from this workflow
+              run in parallel (CI-only; collates before the Codecov upload
+              since Codecov aggregation happens from a single job).
+            steps:
+              - name: shards
+                type: matrix
+                # Keep this list in sync with .github/workflows/test.yml's
+                # env.TEST_SHARD_COUNT and the `test` job's matrix.shard.
+                matrix:
+                  shard: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+                steps:
+                  - name: download
+                    type: shell
+                    retry:
+                      max_attempts: 3
+                      initial_delay: 15s
+                      backoff_strategy: constant
+                    command: >-
+                      gh run download "$GITHUB_RUN_ID"
+                      -n "acceptance-coverage-linux-shard-{{ .matrix.shard }}"
+                      -D "$GITHUB_WORKSPACE"
 
       - name: race
         description: Run quick tests with race detector and shuffled order
