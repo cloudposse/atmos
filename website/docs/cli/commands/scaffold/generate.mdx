@@ -137,6 +137,26 @@ spec:
 path. Two files (matrixed or not) rendering to the same output path is a hard error, never a
 silent overwrite.
 
+An axis doesn't need to come from a `multiselect` at all — a plain free-text answer is just a
+string, and any Sprig/Gomplate function can split it into a list:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments_csv
+      type: input
+      label: Comma-separated list of environments
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: '{{ splitList "," answers.environments_csv }}'
+```
+
+Typing `dev,staging,production` at the prompt generates the same three files a `multiselect`
+with those three options would — except the values aren't limited to a fixed,
+template-author-declared list.
+
 When an axis's values aren't already list-shaped anywhere in `answers` — e.g. an answer is itself
 a map of structured values rather than a flat `multiselect` — compute the list with
 `collectKeys`, a template function available (alongside every Sprig/Gomplate function) to axis

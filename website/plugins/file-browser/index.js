@@ -135,6 +135,7 @@ const TAGS_MAP = {
   'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
+  'scaffolding-matrix': ['Scaffold'],
 };
 
 // Display labels for the `metadata.category` slug used by SKILL.md front matter
@@ -245,6 +246,10 @@ const DOCS_MAP = {
   scaffolding: [
     { label: 'Init Command', url: '/cli/commands/init' },
     { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
+  'scaffolding-matrix': [
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+    { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
