@@ -120,6 +120,7 @@ If no target directory is specified, you will be prompted for one.`,
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
+		mergeDriver := v.GetString("merge-driver")
 		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
@@ -169,6 +170,7 @@ If no target directory is specified, you will be prompted for one.`,
 			ref:            ref,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
+			mergeDriver:    mergeDriver,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -189,6 +191,7 @@ type scaffoldGenerateOptions struct {
 	ref            string
 	git            bool
 	mergeStrategy  string
+	mergeDriver    string
 	skipHooks      func(string) bool
 }
 
@@ -239,6 +242,8 @@ func init() {
 		flags.WithStringFlag("ref", "", "", "Git ref for a template repository source (sugar for ?ref=)"),
 		flags.WithBoolFlag("git", "", false, "Initialize a git repository and create the initial commit"),
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
+		flags.WithStringFlag("merge-driver", "", "auto", "Merge driver for --update: auto (YAML-aware for .yaml/.yml, text otherwise, default), text (force line-oriented text merge for every file)"),
+		flags.WithValidValues("merge-driver", "auto", "text"),
 		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
@@ -258,6 +263,7 @@ func init() {
 		flags.WithEnvVars("ref", "ATMOS_SCAFFOLD_REF"),
 		flags.WithEnvVars("git", "ATMOS_SCAFFOLD_GIT"),
 		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
+		flags.WithEnvVars("merge-driver", "ATMOS_SCAFFOLD_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
@@ -345,6 +351,12 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 	scaffoldUI.SetConflictStrategy(conflictStrategy)
+
+	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
+	if err != nil {
+		return err
+	}
+	scaffoldUI.SetMergeDriver(mergeDriver)
 
 	// Select template (interactive or by name)
 	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
