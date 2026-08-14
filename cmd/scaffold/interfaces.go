@@ -13,6 +13,9 @@ import (
 // driving the real interactive TUI (prompts, huh forms) end to end.
 type ScaffoldUI interface {
 	SetConflictStrategy(strategy merge.ConflictStrategy)
+	// SetMergeDriver selects the merger used by scaffold updates (YAML-aware
+	// auto-detection vs. forcing the line-oriented text merger).
+	SetMergeDriver(driver merge.Driver)
 	SetDryRun(dryRun bool)
 	SetSkipHooks(skip func(string) bool)
 	PromptForTemplate(templateType string, templates interface{}) (string, error)
