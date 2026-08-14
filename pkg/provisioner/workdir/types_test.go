@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestBuildPath covers BuildPath's instance-name resolution: it must prefer
@@ -87,7 +90,7 @@ func TestBuildPath(t *testing.T) {
 			component:       "ecs/cluster",
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-ecs-cluster"},
+			want:            []string{"terraform", "fixtures-ecs--cluster"},
 		},
 		{
 			name:          "nested atmos_component instance name does not add a path segment",
@@ -98,7 +101,7 @@ func TestBuildPath(t *testing.T) {
 			componentConfig: map[string]any{
 				"atmos_component": "ecs/cluster-inherited-instance",
 			},
-			want: []string{"terraform", "fixtures-ecs-cluster-inherited-instance"},
+			want: []string{"terraform", "fixtures-ecs--cluster-inherited-instance"},
 		},
 		{
 			// "\" is Windows' real path separator: a component name
@@ -111,7 +114,7 @@ func TestBuildPath(t *testing.T) {
 			component:       `ecs\cluster`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-ecs-cluster"},
+			want:            []string{"terraform", "fixtures-ecs--cluster"},
 		},
 		{
 			// A component name crafted to escape the workdir root via
@@ -124,15 +127,43 @@ func TestBuildPath(t *testing.T) {
 			component:       `..\..\evil`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-..-..-evil"},
+			want:            []string{"terraform", "fixtures-..--..--evil"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildPath(tt.basePath, tt.componentType, tt.component, tt.stack, tt.componentConfig)
+			got, err := BuildPath(tt.basePath, tt.componentType, tt.component, tt.stack, tt.componentConfig)
+			require.NoError(t, err)
 			want := filepath.Join(append([]string{tt.basePath, WorkdirPath}, tt.want...)...)
 			assert.Equal(t, want, got)
 		})
 	}
+}
+
+// TestBuildPath_NoCollisionBetweenSlashAndHyphen is a regression test for a naive
+// "/" -> "-" substitution: it would make "app/local" and "app-local" both resolve to the
+// same workdir ("dev-app-local"), so two entirely distinct components would silently share
+// files, metadata, and Terraform state (Service.Provision writes directly into whatever
+// BuildPath returns). Encoding "/" as "--" instead of "-" keeps them distinct.
+func TestBuildPath_NoCollisionBetweenSlashAndHyphen(t *testing.T) {
+	slashPath, err := BuildPath("/base", "terraform", "app/local", "dev", map[string]any{})
+	require.NoError(t, err)
+
+	hyphenPath, err := BuildPath("/base", "terraform", "app-local", "dev", map[string]any{})
+	require.NoError(t, err)
+
+	assert.NotEqual(t, slashPath, hyphenPath,
+		"a component named %q must not resolve to the same workdir as a component named %q", "app/local", "app-local")
+}
+
+// TestBuildPath_RejectsStackTraversal verifies BuildPath rejects a stack name containing
+// ".." segments instead of silently resolving a workdir path outside basePath. Both the
+// stack and component name can originate from user-controlled YAML.
+func TestBuildPath_RejectsStackTraversal(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", "../../../../../../evil", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }

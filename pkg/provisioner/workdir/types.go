@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -120,15 +121,19 @@ const (
 	WorkdirReprovisionedKey = "_workdir_reprovisioned"
 )
 
-// BuildPath constructs the canonical workdir path for a component instance.
-// It uses atmos_component (the instance name) from componentConfig when available,
-// falling back to the provided component name. This ensures all provisioners
-// (workdir, source, JIT) use the same directory for a given component instance.
-// Both "/" and "\" in the resolved component name are replaced with "-" (see
-// the inline comment below for the path-depth and containment rationale).
+// BuildPath constructs the canonical workdir path for a component instance and validates
+// that it stays contained within basePath. It uses atmos_component (the instance name) from
+// componentConfig when available, falling back to the provided component name. This ensures
+// all provisioners (workdir, source, JIT) use the same directory for a given component
+// instance. Both "/" and "\" in the resolved component name are encoded (see
+// escapeComponentNameForPath) rather than left as real path segments, and the final path is
+// verified to fall within basePath (see containWithinBase) -- component and stack names can
+// both originate from user-controlled YAML, and either could otherwise resolve outside
+// basePath via filepath.Join's implicit Clean(). Returns errUtils.ErrPathTraversal if the
+// resolved path escapes basePath.
 //
 // Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
-func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) string {
+func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) (string, error) {
 	defer perf.Track(nil, "workdir.BuildPath")()
 
 	// Use atmos_component (instance name) for path isolation.
@@ -156,9 +161,55 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	// filepath.Join/Clean treat it as real ".."-traversal segments there,
 	// escaping the intended workdir root. Stripping it on every platform also
 	// keeps a given component name's workdir path identical across OSes.
-	workdirComponent = strings.ReplaceAll(workdirComponent, "/", "-")
-	workdirComponent = strings.ReplaceAll(workdirComponent, "\\", "-")
+	workdirComponent = escapeComponentNameForPath(workdirComponent)
 
 	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
-	return filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+	rawPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+
+	return containWithinBase(rawPath, basePath)
+}
+
+// escapeComponentNameForPath encodes name so it can be used as a single filesystem path
+// segment without colliding with a differently-named component. Each "/" and "\" is replaced
+// with "--" (a doubled hyphen) rather than a single "-", so a name containing a path
+// separator can never collide with an otherwise-identical name that uses a literal hyphen in
+// its place -- e.g. "app/local" and "app-local" (which a naive "/" -> "-" substitution would
+// both turn into "app-local", sharing one workdir -- and its files, metadata, and Terraform
+// state -- between two distinct components) now encode to "app--local" and "app-local"
+// respectively. "/" and "\" intentionally share the same encoding so a component name's
+// workdir path stays identical across OSes (see
+// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md for that original rationale).
+//
+// This is not a fully injective encoding: a component name containing a literal "--" could
+// still collide with a differently-placed "/" or "\". That's a deliberate trade-off -- a
+// scheme that's collision-free for every possible input would have to also escape single "-"
+// characters, which would change the on-disk workdir name for the overwhelming majority of
+// real components (kebab-case, single-hyphen names are the standard Atmos naming
+// convention), not just the rare ones containing a path separator.
+func escapeComponentNameForPath(name string) string {
+	replaced := strings.ReplaceAll(name, "/", "--")
+	return strings.ReplaceAll(replaced, "\\", "--")
+}
+
+// containWithinBase verifies that path, once absolutized, is contained within base (equal to
+// it, or nested under it, once base is also absolutized). Returns errUtils.ErrPathTraversal
+// if not. On success it returns path unchanged (not the absolutized form), preserving
+// BuildPath's existing return format for callers that pass a relative basePath. This is a
+// best-effort, lexical-only guard -- symlinks are not resolved, matching the scope of the
+// containment guards this replaces in pkg/terraform/output/config.go and
+// internal/terraform_backend/terraform_backend_local.go.
+func containWithinBase(path, base string) (string, error) {
+	absPath, errPath := filepath.Abs(path)
+	if errPath != nil {
+		return "", fmt.Errorf("%w: failed to resolve workdir path %q: %w", errUtils.ErrPathTraversal, path, errPath)
+	}
+	absBase, errBase := filepath.Abs(base)
+	if errBase != nil {
+		return "", fmt.Errorf("%w: failed to resolve base path %q: %w", errUtils.ErrPathTraversal, base, errBase)
+	}
+	sep := string(filepath.Separator)
+	if absPath == absBase || strings.HasPrefix(absPath, absBase+sep) {
+		return path, nil
+	}
+	return "", fmt.Errorf("%w: workdir path %q escapes base path %q", errUtils.ErrPathTraversal, absPath, absBase)
 }

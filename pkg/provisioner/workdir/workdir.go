@@ -243,7 +243,15 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md) patched, so a nested
 	// component name (e.g. "app/local-nested") created a real nested directory instead of
 	// a sanitized sibling.
-	workdirPath := BuildPath(basePath, "terraform", component, stack, nil)
+	workdirPath, err := BuildPath(basePath, "terraform", component, stack, nil)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
+			WithCause(err).
+			WithExplanation("failed to resolve workdir path").
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
 
 	if err := s.fs.MkdirAll(workdirPath, DirPermissions); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).

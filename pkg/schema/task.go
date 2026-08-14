@@ -863,9 +863,15 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// Without this, `with:` only reaches the plain mapstructure struct
 	// decode below (which has no notion of the polymorphism) and
 	// Build/Run/Push/Inspect stay nil regardless of what `with:` contains.
+	// withoutTaskMapKey copies m rather than mutating it in place: the normalize* calls
+	// above all return m unchanged (not a copy) when a task has no structured
+	// output/prompt/steps to normalize -- the common case -- so m can still be the
+	// caller's own map (e.g. Viper's live merged config tree). delete(m, ...) here would
+	// then remove "with"/"container" from that shared map, losing the override for any
+	// later decode of the same configuration.
 	withValue, hasWith := m["with"]
 	if hasWith {
-		delete(m, "with")
+		m = withoutTaskMapKey(m, "with")
 	}
 
 	// `container:` is likewise polymorphic (a mapping config, or a bare
@@ -882,7 +888,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// `with:` is pulled out above.
 	containerValue, hasContainer := m["container"]
 	if hasContainer {
-		delete(m, "container")
+		m = withoutTaskMapKey(m, "container")
 	}
 
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{

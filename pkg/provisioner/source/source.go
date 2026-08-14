@@ -399,5 +399,5 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
+	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
 }

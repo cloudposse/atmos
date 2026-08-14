@@ -57,10 +57,14 @@ atmos describe component consumer-nested-state --stack dev
 
 # FIXED: local, non-source nested component now sanitizes identically to
 # workdir.BuildPath (createWorkdirDirectory delegates to it). Expect the
-# sanitized sibling .workdir/terraform/dev-app-local-nested/ (NOT a real
-# nested .workdir/terraform/dev-app/local-nested/ directory), and state
-# landing at .context/tfstate/dev/app-local-nested/ at the fixture root
-# (NOT nested one level short at .workdir/.context/tfstate/...):
+# sanitized sibling .workdir/terraform/dev-app--local-nested/ (NOT a real
+# nested .workdir/terraform/dev-app/local-nested/ directory -- BuildPath
+# encodes "/" as "--", a doubled hyphen, so it can't collide with a
+# differently-named component whose name contains a literal single hyphen
+# in the same spot), and state landing at .context/tfstate/dev/app-local-nested/
+# at the fixture root (a separate, hand-configured backend.local.path in this
+# fixture's stack config, unrelated to BuildPath's own encoding) (NOT nested
+# one level short at .workdir/.context/tfstate/...):
 atmos terraform apply "app/local-nested" --stack dev
 find .workdir/terraform -maxdepth 1 -mindepth 1 -type d
 find .workdir -name terraform.tfstate -not -path "*/.terraform/*"

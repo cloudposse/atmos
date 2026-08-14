@@ -344,20 +344,36 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		assert.Equal(t, "eg-test-demo", result["id"])
 	}
 
-	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
-		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
-		assertJITStateFound(t, "demo-null-label", "null-label")
-	})
-
-	t.Run("nested component name does not shift the workdir root", func(t *testing.T) {
-		// BuildPath must sanitize "/" in the component name to a single path
-		// segment (demo-ecs-cluster), not a real subdirectory (demo-ecs/cluster)
-		// -- otherwise this nested component's workdir sits one level deeper
-		// than a flat component's at the same stack, and any path computed
-		// relative to it (e.g. a relative local backend path) silently climbs
-		// to a different ancestor.
-		assertJITStateFound(t, "demo-ecs-cluster", "ecs/cluster")
-	})
+	jitWorkdirScenarios := []struct {
+		name          string
+		workdirName   string
+		componentName string
+	}{
+		{
+			// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
+			name:          "state exists, no _workdir_path (describe path — provisioner not yet run)",
+			workdirName:   "demo-null-label",
+			componentName: "null-label",
+		},
+		{
+			// BuildPath must sanitize "/" in the component name to a single path
+			// segment (demo-ecs--cluster), not a real subdirectory (demo-ecs/cluster)
+			// -- otherwise this nested component's workdir sits one level deeper
+			// than a flat component's at the same stack, and any path computed
+			// relative to it (e.g. a relative local backend path) silently climbs
+			// to a different ancestor. "/" encodes to "--" (a doubled hyphen), not a
+			// single "-", so this can never collide with a differently-named
+			// component that uses a literal hyphen in the same spot.
+			name:          "nested component name does not shift the workdir root",
+			workdirName:   "demo-ecs--cluster",
+			componentName: "ecs/cluster",
+		},
+	}
+	for _, tt := range jitWorkdirScenarios {
+		t.Run(tt.name, func(t *testing.T) {
+			assertJITStateFound(t, tt.workdirName, tt.componentName)
+		})
+	}
 
 	t.Run("_workdir_path set (apply path — provisioner already ran)", func(t *testing.T) {
 		tempDir := t.TempDir()

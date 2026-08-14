@@ -1185,6 +1185,30 @@ func TestDecodeTaskFromMap_EmptyMap(t *testing.T) {
 	assert.Equal(t, TaskTypeShell, task.Type)
 }
 
+// TestDecodeTaskFromMap_DoesNotMutateCallerMap verifies that decoding a task with no
+// structured output/prompt/steps (the case where normalizeTaskOutputMap/
+// normalizeTaskPromptMap/normalizeTaskStepsMap all return the input map unchanged, not a
+// copy) does not delete "with"/"container" from the caller's own map. The caller's map can
+// be Viper's live merged config tree, so an in-place delete here would silently drop the
+// with/container override for any later decode of the same configuration.
+func TestDecodeTaskFromMap_DoesNotMutateCallerMap(t *testing.T) {
+	m := map[string]any{
+		"type": TaskTypeShell,
+		"with": map[string]any{
+			"context": "app",
+		},
+		"container": map[string]any{
+			"image": "golang:1.24",
+		},
+	}
+
+	_, err := decodeTaskFromMap(m, 0)
+	require.NoError(t, err)
+
+	assert.Contains(t, m, "with", "decodeTaskFromMap must not delete \"with\" from the caller's map")
+	assert.Contains(t, m, "container", "decodeTaskFromMap must not delete \"container\" from the caller's map")
+}
+
 // TestTasksDecodeHook_IgnoresNonTasksTarget verifies the hook's early-out guards:
 // it must not touch data unless converting to the Tasks type from a slice.
 func TestTasksDecodeHook_IgnoresNonTasksTarget(t *testing.T) {

@@ -621,7 +621,8 @@ func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.
 	require.True(t, ok, "WorkdirPathKey must be set to a string")
 
 	// The single canonical formula every workdir caller must share.
-	expectedPath := BuildPath(tempDir, "terraform", "app/local-nested", "dev", componentConfig)
+	expectedPath, err := BuildPath(tempDir, "terraform", "app/local-nested", "dev", componentConfig)
+	require.NoError(t, err)
 	assert.Equal(t, expectedPath, gotPath, "createWorkdirDirectory must sanitize nested component names identically to BuildPath")
 
 	// Guard against a nested directory ("app/local-nested" -> real subdirectories) being
@@ -629,6 +630,43 @@ func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.
 	unsanitizedPath := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-app", "local-nested")
 	_, statErr := os.Stat(unsanitizedPath)
 	assert.True(t, os.IsNotExist(statErr), "workdir must not be created as a nested directory: %s", unsanitizedPath)
+}
+
+// TestServiceProvision_RejectsStackTraversal is a regression test proving Service.Provision
+// rejects a stack name crafted to escape BasePath (e.g. "../../../../evil") instead of
+// creating a directory outside it. The atmos_stack value, like atmos_component, comes from
+// user-controlled YAML. No FileSystem mock expectations are set, so an unexpected MkdirAll
+// call (i.e. the guard failing to fire) would fail the test on its own.
+func TestServiceProvision_RejectsStackTraversal(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"atmos_component": "vpc",
+		"component":       "vpc",
+		"atmos_stack":     "../../../../../../evil",
+		"component_path":  "/custom/path/to/component",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	_, ok := componentConfig[WorkdirPathKey]
+	assert.False(t, ok, "WorkdirPathKey must not be set when the derived path escapes BasePath")
 }
 
 func TestServiceProvision_EmptyBasePath(t *testing.T) {

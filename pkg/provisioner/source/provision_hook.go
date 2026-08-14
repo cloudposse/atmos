@@ -300,7 +300,10 @@ func determineSourceTargetDirectory(
 			basePath = "."
 		}
 
-		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
+		workdirPath, err := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
+		if err != nil {
+			return "", false, err
+		}
 		return workdirPath, true, nil
 	}
 
