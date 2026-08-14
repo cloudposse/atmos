@@ -366,7 +366,7 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 // element" above), so this exercises the function as a defense-in-depth
 // backstop instead.
 func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5})
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5}, defaultAxisDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
@@ -381,14 +381,14 @@ func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
 // []string exists for a caller that already has a typed slice -- so both
 // need their own case.
 func TestValidateMatrixAxisValueRejectsEmptyStringSlice(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []string{})
+	err := validateMatrixAxisValue("deploy.yaml", "region", []string{}, defaultAxisDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
 }
 
 func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []any{})
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{}, defaultAxisDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
@@ -400,7 +400,7 @@ func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
 // the tests above (see "axis of unsupported type" in
 // TestLoadScaffoldConfigRejectsInvalidFileMatrix).
 func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", true)
+	err := validateMatrixAxisValue("deploy.yaml", "region", true, defaultAxisDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
@@ -460,4 +460,21 @@ func TestLoadScaffoldConfigAcceptsTemplateExpressionAxis(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, scaffoldConfig.Spec.Files, 1)
 	assert.Equal(t, "{{ collectKeys answers.environments }}", scaffoldConfig.Spec.Files[0].Matrix["environment"])
+}
+
+// TestLoadScaffoldConfigAcceptsTemplateExpressionAxisWithCustomDelimiters
+// guards against validateMatrixAxisStringValue hardcoding the default "{{"
+// delimiter: a scaffold that overrides spec.delimiters must recognize a
+// matrix axis expression written in its own delimiters, not just the
+// default Go template ones.
+func TestLoadScaffoldConfigAcceptsTemplateExpressionAxisWithCustomDelimiters(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n" +
+		"  delimiters: [\"[[\", \"]]\"]\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/[[ .matrix.environment ]].yaml\"\n" +
+		"      matrix:\n        environment: '[[ collectKeys answers.environments ]]'\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "[[ collectKeys answers.environments ]]", scaffoldConfig.Spec.Files[0].Matrix["environment"])
 }

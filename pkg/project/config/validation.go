@@ -110,6 +110,28 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 // root reference into the answers map -- see validateFileMatrix.
 const answersPrefix = "answers."
 
+// defaultLeftDelimiter and defaultRightDelimiter are the Go template
+// delimiters assumed when a scaffold declares no override -- mirrors
+// pkg/generator/engine's own defaults (duplicated rather than imported: that
+// package already imports this one, so importing it back would cycle).
+const (
+	defaultLeftDelimiter  = "{{"
+	defaultRightDelimiter = "}}"
+)
+
+// defaultAxisDelimiters returns delimiters unchanged when it's a valid
+// two-element pair with both sides non-empty, otherwise the default
+// "{{"/"}}" -- mirrors pkg/generator/engine's defaultAxisDelimiters so a
+// matrix axis expression is recognized here using the same delimiters
+// ExpandMatrix/RenderMatrixAxisExpression will actually use at generation
+// time.
+func defaultAxisDelimiters(delimiters []string) []string {
+	if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
+		return []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
+	return delimiters
+}
+
 // validateFileMatrix statically validates each spec.files[] entry's matrix
 // configuration: target is required when matrix is set, and every axis is
 // either a non-empty literal list or an `answers.`-prefixed dot-path
@@ -119,6 +141,7 @@ const answersPrefix = "answers."
 // plus the one constraint schema can't express: the `answers.` prefix
 // requirement.
 func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
+	delimiters := defaultAxisDelimiters(scaffoldConfig.Spec.Delimiters)
 	for i := range scaffoldConfig.Spec.Files {
 		file := &scaffoldConfig.Spec.Files[i]
 		if len(file.Matrix) == 0 {
@@ -128,7 +151,7 @@ func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 			return fmt.Errorf("%w: file %q", errUtils.ErrScaffoldMatrixTargetRequired, file.Path)
 		}
 		for axis, value := range file.Matrix {
-			if err := validateMatrixAxisValue(file.Path, axis, value); err != nil {
+			if err := validateMatrixAxisValue(file.Path, axis, value, delimiters); err != nil {
 				return err
 			}
 		}
@@ -143,10 +166,10 @@ func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
 // the list from nested/structured answer data. A template expression's
 // actual rendered result can only be checked once real answers are known, at
 // generation time -- this only confirms the string looks like one.
-func validateMatrixAxisValue(filePath, axis string, value any) error {
+func validateMatrixAxisValue(filePath, axis string, value any, delimiters []string) error {
 	switch v := value.(type) {
 	case string:
-		return validateMatrixAxisStringValue(filePath, axis, v)
+		return validateMatrixAxisStringValue(filePath, axis, v, delimiters)
 	case []string:
 		return validateMatrixAxisNonEmpty(filePath, axis, len(v))
 	case []any:
@@ -158,9 +181,12 @@ func validateMatrixAxisValue(filePath, axis string, value any) error {
 
 // validateMatrixAxisStringValue validates a string axis value: either an
 // `answers.<path>` dot-path or a Go-template expression (see
-// validateMatrixAxisValue's doc comment).
-func validateMatrixAxisStringValue(filePath, axis, v string) error {
-	if strings.HasPrefix(v, answersPrefix) || strings.Contains(v, "{{") {
+// validateMatrixAxisValue's doc comment). delimiters is the scaffold's own
+// configured left/right pair (see defaultAxisDelimiters), so a custom
+// delimiter like `[[ ... ]]` is recognized as an expression instead of being
+// rejected for not starting with `answers.`.
+func validateMatrixAxisStringValue(filePath, axis, v string, delimiters []string) error {
+	if strings.HasPrefix(v, answersPrefix) || strings.Contains(v, delimiters[0]) {
 		return nil
 	}
 	return fmt.Errorf("%w: file %q axis %q: %q is neither a template expression nor does it start with %q", errUtils.ErrScaffoldMatrixAxisInvalid, filePath, axis, v, answersPrefix)
