@@ -3,7 +3,6 @@
 #
 # One copy of this file is generated per region entered (free text, comma-
 # separated) in the extra_regions_csv answer, split into a matrix axis via
-# Sprig's splitList -- see scaffold.yaml's `matrix` entry for region.yaml,
-# and README.md's "Dynamic File Generation (matrix)" section.
+# Sprig's splitList -- see scaffold.yaml's `matrix` entry for region.yaml.
 vars:
   region: "{{ .matrix.region }}"

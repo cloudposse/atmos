@@ -647,14 +647,14 @@ Initial generation:
 Update (atmos scaffold generate --update):
 1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
 2. Load each file's base content directly from that git ref (no on-disk base
-   storage/snapshot — GitBaseStorage.LoadBase reads the blob straight out of
-   git)
+    storage/snapshot — GitBaseStorage.LoadBase reads the blob straight out of
+    git)
 3. Load current files (ours - with user changes)
 4. Re-render template with updated version (theirs)
 5. Perform 3-way merge (base, ours, theirs), honoring --merge-strategy
-   (manual/ours/theirs) for any genuine conflict
+    (manual/ours/theirs) for any genuine conflict
 6. Write merged content (skipped in --dry-run; the merge still runs so
-   conflicts are still reported)
+    conflicts are still reported)
 ```
 
 **Note**: this shipped as a git-ref-based design, not the `.atmos/scaffold/base/`
@@ -672,37 +672,37 @@ implementation.
 
 **Tasks**:
 1. Create `cmd/scaffold/` package
-   - `scaffold.go` - Parent command and subcommands
-   - `scaffold-schema.json` - Template validation schema
-   - `scaffold_test.go` - Command tests
+    - `scaffold.go` - Parent command and subcommands
+    - `scaffold-schema.json` - Template validation schema
+    - `scaffold_test.go` - Command tests
 2. Implement `scaffold generate` subcommand
-   - Interactive template selection
-   - Non-interactive mode with arguments
-   - Variable substitution via `--set` flags
-   - Force overwrite mode (`--force`)
-   - Dry-run mode (`--dry-run`)
+    - Interactive template selection
+    - Non-interactive mode with arguments
+    - Variable substitution via `--set` flags
+    - Force overwrite mode (`--force`)
+    - Dry-run mode (`--dry-run`)
 3. Implement `scaffold list` subcommand
-   - Display available templates in table format
-   - Show embedded and custom templates
+    - Display available templates in table format
+    - Show embedded and custom templates
 4. Implement `scaffold validate` subcommand
-   - Validate scaffold.yaml files
-   - Check required fields and structure
+    - Validate scaffold.yaml files
+    - Check required fields and structure
 5. Create embedded templates
-   - terraform-component
-   - stack-config
-   - workflow (GitHub Actions)
+    - terraform-component
+    - stack-config
+    - workflow (GitHub Actions)
 6. Add support for custom templates in atmos.yaml
-   - Parse `scaffold.templates` section
-   - Load templates from local directories
-   - Merge with embedded templates
+    - Parse `scaffold.templates` section
+    - Load templates from local directories
+    - Merge with embedded templates
 7. Reuse `pkg/generator` infrastructure
-   - Template rendering engine
-   - File processing
-   - Interactive UI/prompts
+    - Template rendering engine
+    - File processing
+    - Interactive UI/prompts
 8. Write comprehensive tests
-   - Unit tests for all subcommands
-   - Integration tests for generation flows
-   - Template validation tests
+    - Unit tests for all subcommands
+    - Integration tests for generation flows
+    - Template validation tests
 
 **Deliverables**:
 - Fully functional `atmos scaffold generate` command
@@ -722,12 +722,12 @@ supplies the same template/target-dir on `--update` as on initial generation.
 **What shipped**:
 1. `--update` (and `--base-ref`) flags on `generate`
 2. 3-way merge integrated into file handling (`pkg/generator/merge`), with
-   `--merge-strategy=manual|ours|theirs` for conflict resolution
+    `--merge-strategy=manual|ours|theirs` for conflict resolution
 3. `--dry-run` combined with `--update` runs the real merge and previews
-   would-create/would-update/conflict status without writing files
+    would-create/would-update/conflict status without writing files
 4. Path-traversal and symlink-write protection (`validateWriteTarget` in
-   `pkg/generator/engine/templating.go`), so a write can't escape the target
-   directory through a symlinked intermediate path or destination
+    `pkg/generator/engine/templating.go`), so a write can't escape the target
+    directory through a symlinked intermediate path or destination
 5. Test coverage for update scenarios
 
 **Not shipped from the original plan**: scaffold auto-detection, a

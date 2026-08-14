@@ -50,29 +50,6 @@ each resolved combination is available as `.matrix.<axis>` anywhere a file entry
 the output path, in `when:`, and inside the generated file's own content — so a file can name
 itself and branch on its own combination.
 
-### Free-text answers
-
-The "typed in by hand" case works too. An axis doesn't need to be a `multiselect` at all — a
-plain free-text answer is just a string, and any Sprig function can split it into a list,
-`splitList` included:
-
-```yaml
-spec:
-  fields:
-    - name: environments_csv
-      type: input
-      label: Comma-separated list of environments
-  files:
-    - path: deploy.yaml
-      target: "deploy/{{ .matrix.environment }}.yaml"
-      matrix:
-        environment: '{{ splitList "," answers.environments_csv }}'
-```
-
-Typing `dev,staging,production` at the prompt generates the same three files as the `multiselect`
-example above — except now the values aren't limited to options a template author had to list in
-advance.
-
 ### Computed axes
 
 Real answers aren't always a flat, pre-selected list. An environment might carry its own set of
@@ -103,5 +80,5 @@ Add `matrix:` to any `spec.files[]` entry alongside `target:`, using a literal l
 ## Get Involved
 
 See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) docs for the full reference,
-try it against the [scaffolding example](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding),
+try it against the [scaffolding-matrix example](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding-matrix),
 or [open an issue](https://github.com/cloudposse/atmos/issues) with feedback.

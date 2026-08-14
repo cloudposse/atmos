@@ -2,7 +2,6 @@
 # Auto-generated stack configuration for the "{{ .matrix.environment }}" environment.
 #
 # One copy of this file is generated per selected environment -- see
-# scaffold.yaml's `matrix` entry for environment.yaml, and README.md's
-# "Dynamic File Generation (matrix)" section.
+# scaffold.yaml's `matrix` entry for environment.yaml.
 vars:
   environment: "{{ .matrix.environment }}"
