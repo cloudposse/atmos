@@ -1117,7 +1117,7 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 					},
 				},
 			},
-			expectedInPath: "dev-vpc-from-metadata",
+			expectedInPath: "dev-vpc-hfrom-hmetadata",
 		},
 		{
 			name: "component from vars fallback",
@@ -1132,7 +1132,7 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 					},
 				},
 			},
-			expectedInPath: "dev-vpc-from-vars",
+			expectedInPath: "dev-vpc-hfrom-hvars",
 		},
 	}
 
@@ -1196,7 +1196,7 @@ func TestServiceProvision_MissingStackName(t *testing.T) {
 func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc-fallback")
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc-hfallback")
 	err := os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
@@ -1231,7 +1231,7 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 
 	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
-	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-fallback")
+	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-hfallback")
 }
 
 // TestDefaultHasher_HashDir_WithSubdirectories tests hashing with nested directories.

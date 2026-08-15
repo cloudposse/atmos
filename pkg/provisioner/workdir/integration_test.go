@@ -98,7 +98,7 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	// Verify workdir path was set with exact stack-component naming.
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok, "workdir path should be set")
-	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-test-component")
+	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath("test-component"))
 	assert.Equal(t, expectedWorkdir, workdirPath)
 
 	// Verify the workdir was created.
@@ -379,7 +379,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 				return
 			}
 
-			expectedName := "dev-" + component
+			expectedName := "dev-" + escapeComponentNameForPath(component)
 			if !strings.Contains(workdirPath, expectedName) {
 				errors <- fmt.Errorf("component %s: expected path to contain %s, got %s", component, expectedName, workdirPath)
 				return
@@ -399,7 +399,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 
 	// Verify all workdirs were created independently.
 	for _, comp := range components {
-		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+comp)
+		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath(comp))
 		_, err := os.Stat(workdirPath)
 		assert.NoError(t, err, "workdir for %s should exist", comp)
 
@@ -485,7 +485,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 		workdirPaths[instance.atmosComponent] = workdirPath
 
 		// Verify the workdir uses the atmos_component name (instance name), not the base component.
-		expectedName := "dev-" + instance.atmosComponent
+		expectedName := "dev-" + escapeComponentNameForPath(instance.atmosComponent)
 		assert.Contains(t, workdirPath, expectedName,
 			"workdir path should contain %s, got %s", expectedName, workdirPath)
 
@@ -510,7 +510,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 
 	// Verify all expected workdirs exist.
 	for _, instance := range componentInstances {
-		expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+instance.atmosComponent)
+		expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath(instance.atmosComponent))
 		_, err := os.Stat(expectedWorkdir)
 		assert.NoError(t, err, "expected workdir should exist at %s", expectedWorkdir)
 
@@ -633,7 +633,7 @@ func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
 	// Must use atmos_component (s3-bucket-logs), NOT the base component (s3-bucket).
-	expectedSuffix := filepath.Join("terraform", "prod-s3-bucket-logs")
+	expectedSuffix := filepath.Join("terraform", "prod-"+escapeComponentNameForPath("s3-bucket-logs"))
 	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
 		"workdir path %s should end with %s", workdirPath, expectedSuffix)
 }
@@ -823,8 +823,9 @@ func TestConcurrentComponentInstances(t *testing.T) {
 			}
 
 			// Verify instance name is in path (not base component name).
-			if !strings.Contains(wdPath, "prod-"+instanceName) {
-				errCh <- fmt.Errorf("instance %s: expected path with prod-%s, got %s", instanceName, instanceName, wdPath)
+			expectedPrefix := "prod-" + escapeComponentNameForPath(instanceName)
+			if !strings.Contains(wdPath, expectedPrefix) {
+				errCh <- fmt.Errorf("instance %s: expected path with %s, got %s", instanceName, expectedPrefix, wdPath)
 				return
 			}
 
@@ -1043,7 +1044,7 @@ func TestProductionFlowWithComponentInfo(t *testing.T) {
 	require.True(t, ok, "workdir path should be set")
 
 	// Verify workdir uses the instance name (atmos_component).
-	expectedSuffix := filepath.Join("terraform", "prod-elasticache-redis-cluster-1")
+	expectedSuffix := filepath.Join("terraform", "prod-"+escapeComponentNameForPath("elasticache-redis-cluster-1"))
 	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
 		"workdir path %s should end with %s", workdirPath, expectedSuffix)
 
@@ -1103,7 +1104,7 @@ func TestSourcePathUsesBaseComponentNotInstance(t *testing.T) {
 	require.True(t, ok)
 
 	// Workdir should be named after the instance.
-	assert.Contains(t, workdirPath, "dev-rds-primary")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("rds-primary"))
 
 	// Content should come from the base component directory.
 	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))
@@ -1147,7 +1148,7 @@ func TestSourceComponentFallsBackToWorkdirComponent(t *testing.T) {
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok)
-	assert.Contains(t, workdirPath, "dev-simple-vpc")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("simple-vpc"))
 }
 
 // TestSourceComponentFallsBackWhenNoComponentKeys verifies that when only atmos_component
@@ -1187,7 +1188,7 @@ func TestSourceComponentFallsBackWhenNoComponentKeys(t *testing.T) {
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok)
-	assert.Contains(t, workdirPath, "dev-standalone-lambda")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("standalone-lambda"))
 
 	// Verify content was copied from the atmos_component path.
 	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))

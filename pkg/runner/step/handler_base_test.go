@@ -107,7 +107,7 @@ func TestBaseHandler_ValidateRequired(t *testing.T) {
 			name     string
 			step     *schema.WorkflowStep
 			field    string
-			wantType string // empty means step.Type == "" -- the "(type ...)" clause must be omitted
+			wantType string // empty means step.Type == "" -- the "(type ...)" clause must be omitted.
 		}{
 			{
 				name:     "typed step",

@@ -219,7 +219,7 @@ func TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) 
 	)
 	require.NoError(t, err)
 	assert.True(t, isWorkdir)
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-hcluster-hcodepipeline-hiac")
 	assert.Equal(t, expected, targetDir)
 }
 

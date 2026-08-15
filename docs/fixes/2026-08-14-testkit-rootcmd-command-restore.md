@@ -50,7 +50,13 @@ mandates for all `cmd` tests.
   removes (via `RootCmd.RemoveCommand`) any command present on `RootCmd` now
   that wasn't present in the snapshot — restoring `RootCmd`'s command set to
   what it was when the test started, regardless of which test(s) registered
-  commands in between.
+  commands in between. A follow-up CodeRabbit pass on the same PR caught
+  that this only handled additions: a test that removed a snapshot command
+  via `RootCmd.RemoveCommand` left it gone for every later test.
+  `restoreRootCmdCommands` now also re-adds any snapshot command whose
+  `Parent()` is no longer `RootCmd` — Cobra's `RemoveCommand` clears the
+  removed command's `Parent()`, so that's an unambiguous "this one was
+  removed" signal, and `AddCommand` restores it.
 - `docs/fixes/2026-08-05-custom-command-container-with-block-dropped.md`:
   removed the "pre-existing and out of scope" claim and corrected the vague
   "another test in the cmd package" attribution to name the actual general
@@ -75,6 +81,11 @@ mandates for all `cmd` tests.
   `NewTestKit` snapshot, asserts they're present mid-test, then asserts after
   the subtest's cleanup runs that the added commands are gone and the
   original commands are unchanged.
+- Added `TestTestKit_RootCmdCommandRemovalRestoration` (`cmd/testkit_test.go`),
+  confirmed failing pre-fix and passing post-fix: registers a command in an
+  outer `NewTestKit`'s snapshot, removes it inside a *nested* `NewTestKit`
+  subtest, and asserts the outer test sees it restored once the nested
+  subtest's cleanup runs.
 
 ## Follow-ups
 

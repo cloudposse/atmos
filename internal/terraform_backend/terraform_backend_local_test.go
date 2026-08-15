@@ -350,22 +350,24 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		componentName string
 	}{
 		{
-			// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
+			// BuildPath("tempDir", "terraform", "null-label", "demo", sections) →
+			// tempDir/.workdir/terraform/demo-null-hlabel ("-" escapes to "-h").
 			name:          "state exists, no _workdir_path (describe path — provisioner not yet run)",
-			workdirName:   "demo-null-label",
+			workdirName:   "demo-null-hlabel",
 			componentName: "null-label",
 		},
 		{
 			// BuildPath must sanitize "/" in the component name to a single path
-			// segment (demo-ecs--cluster), not a real subdirectory (demo-ecs/cluster)
+			// segment (demo-ecs-scluster), not a real subdirectory (demo-ecs/cluster)
 			// -- otherwise this nested component's workdir sits one level deeper
 			// than a flat component's at the same stack, and any path computed
 			// relative to it (e.g. a relative local backend path) silently climbs
-			// to a different ancestor. "/" encodes to "--" (a doubled hyphen), not a
-			// single "-", so this can never collide with a differently-named
-			// component that uses a literal hyphen in the same spot.
+			// to a different ancestor. "/" encodes to "-s" and a literal "-" encodes
+			// to "-h" (escaped before separators are encoded), so this can never
+			// collide with a differently-named component that uses a literal hyphen
+			// in the same spot.
 			name:          "nested component name does not shift the workdir root",
-			workdirName:   "demo-ecs--cluster",
+			workdirName:   "demo-ecs-scluster",
 			componentName: "ecs/cluster",
 		},
 	}
@@ -498,7 +500,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 	t.Run("_workdir_path escaping BasePath falls through to derived path", func(t *testing.T) {
 		tempDir := t.TempDir()
 		// Create state at the DERIVED workdir path (not the escaping path).
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-hlabel",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
@@ -538,7 +540,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		require.NoError(t, os.Chdir(tempDir))
 		defer func() { _ = os.Chdir(origDir) }()
 
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-hlabel",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),

@@ -659,7 +659,7 @@ func TestDetermineTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
 	// Pass the base component name, but expect the workdir to use atmos_component (instance name).
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig)
 	require.NoError(t, err)
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-hcluster-hcodepipeline-hiac")
 	assert.Equal(t, expected, result)
 }
 

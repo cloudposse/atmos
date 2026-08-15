@@ -182,8 +182,9 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 }
 
 // restoreRootCmdCommands removes every command currently on RootCmd that
-// wasn't present in the given snapshot, restoring RootCmd's command set to
-// what it was when the snapshot was taken.
+// wasn't present in the given snapshot, and re-adds every snapshot command a
+// test removed (e.g. via RootCmd.RemoveCommand), restoring RootCmd's command
+// set to what it was when the snapshot was taken.
 func restoreRootCmdCommands(original []*cobra.Command) {
 	originalSet := make(map[*cobra.Command]bool, len(original))
 	for _, c := range original {
@@ -192,6 +193,14 @@ func restoreRootCmdCommands(original []*cobra.Command) {
 	for _, c := range RootCmd.Commands() {
 		if !originalSet[c] {
 			RootCmd.RemoveCommand(c)
+		}
+	}
+	// Cobra's RemoveCommand clears the removed command's Parent(); AddCommand sets it
+	// back to the new parent. So a snapshot command whose Parent() is no longer RootCmd
+	// was removed by the test and must be re-added.
+	for _, c := range original {
+		if c.Parent() != RootCmd {
+			RootCmd.AddCommand(c)
 		}
 	}
 }

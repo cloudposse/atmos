@@ -12,7 +12,10 @@ consumer uses" — had two independent defects:
   workdir (`dev-app-local`). `Service.Provision` writes component files,
   metadata, and Terraform state directly into whatever `BuildPath`
   returns, so two entirely distinct components would silently share all
-  three.
+  three. (A first pass at this fix replaced `/`/`\` with `--` instead of
+  `-`; CodeRabbit correctly flagged that a component literally named
+  `app--local` still collided with `app/local` under that scheme — see
+  Context below.)
 2. **Traversal**: it sanitized the *component* name but never validated
   the *stack* name, which is concatenated into the same directory name
   (`fmt.Sprintf("%s-%s", stack, component)`). A stack value containing
@@ -61,21 +64,40 @@ itself instead, so every caller gets it automatically, and simplified the
 two existing ad hoc guards down to a single error check now that `BuildPath`
 guarantees containment.
 
+**Second pass.** A follow-up CodeRabbit review on the same PR caught that
+the collision fix's first pass — encoding `/`/`\` as `--` while leaving
+literal `-` untouched — was still not injective: a component literally
+named `app--local` (a real, if less common, naming pattern) collided with
+`app/local`, both encoding to `app--local`. Closing that residual gap
+requires escaping the literal hyphen too, which changes the on-disk workdir
+name for essentially every existing kebab-case component (the trade-off the
+first pass's doc comment explicitly chose to avoid) — but a security/data-
+integrity finding that's still collidable, even on a narrower input, isn't
+an acceptable trade-off. Replaced the `--` scheme with a fully injective
+one: escape the literal hyphen *before* encoding separators, using a
+distinct two-character tag for each (`-h` for a literal hyphen, `-s` for
+either separator) so `-` never appears unescaped in the output and every
+encoded name is unambiguous.
+
 ## Changes
 
 - `pkg/provisioner/workdir/types.go`:
   - `BuildPath` now returns `(string, error)` instead of `string`.
-  - New `escapeComponentNameForPath` encodes `/` and `\` in the component
-    name as `--` (a doubled hyphen) instead of a single `-`, so a name
-    containing a path separator can never collide with a differently-named
-    component that uses a literal hyphen in the same spot (`app/local` →
-    `app--local`, distinct from `app-local` → `app-local`). This isn't a
-    fully injective encoding — a component name containing a literal `--`
-    could still collide with a differently-placed separator — a deliberate
-    trade-off documented in the function's comment: fully escaping single
-    `-` too would change the on-disk workdir name for the overwhelming
-    majority of real (kebab-case, single-hyphen) components, not just the
-    rare ones containing a separator.
+  - New `escapeComponentNameForPath` injectively encodes the component name:
+    every literal `-` is escaped to `-h`, and every `/`/`\` is encoded to
+    `-s`, in a single left-to-right pass (`strings.Builder` over runes, not
+    sequential `strings.ReplaceAll` calls, which would let an escaped
+    hyphen and an encoded separator become ambiguous when adjacent).
+    Because `-` never appears unescaped in the output, every `-` in an
+    encoded name unambiguously starts a two-character escape token, so no
+    two distinct component names can ever produce the same encoded segment
+    — `app/local` → `app-slocal`, `app-local` → `app-hlocal`, `app--local`
+    → `app-h-hlocal`, all distinct. This does change the on-disk workdir
+    name for existing components with hyphens (e.g. `my-component` →
+    `my-hcomponent`); an existing `.workdir/` cache is effectively
+    invalidated the first time each component is next provisioned, but
+    re-provisioning is a normal, self-healing operation (a fresh sync plus
+    `terraform init`), not user-visible data loss.
   - New `containWithinBase` absolutizes the derived path and `basePath` for
     comparison and returns `errUtils.ErrPathTraversal` if the derived path
     doesn't fall within `basePath`. On success it returns the path
@@ -105,8 +127,9 @@ guarantees containment.
   workflow):
   - `TestBuildPath_NoCollisionBetweenSlashAndHyphen`
     (`pkg/provisioner/workdir/types_test.go`) — asserts `BuildPath` with
-    component `app/local` and component `app-local` produce different
-    paths.
+    component names `app/local`, `app-local`, and `app--local` all produce
+    pairwise-distinct paths (the third case is the one the first-pass `--`
+    encoding still collided on).
   - `TestBuildPath_RejectsStackTraversal`
     (`pkg/provisioner/workdir/types_test.go`) — asserts `BuildPath` rejects
     a `../`-laden stack name with `errUtils.ErrPathTraversal`.
@@ -121,25 +144,45 @@ guarantees containment.
   - Updated `TestBuildPath`'s existing table cases (nested/backslash
     component names) and
     `TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath` for
-    the new `--` encoding.
+    the final `-h`/`-s` encoding.
   - Updated `TestReadTerraformBackendLocal_JITWorkdir`'s nested-component
     subtest (`internal/terraform_backend/terraform_backend_local_test.go`,
     also converted to a table-driven case per a separate, unrelated
     CodeRabbit nitpick on the same PR) for the new encoding.
+  - Updated every other hardcoded expected-workdir-name assertion this
+    encoding change touched, across
+    `pkg/provisioner/workdir/integration_test.go`,
+    `pkg/provisioner/source/{source,provision_hook}_test.go`,
+    `pkg/terraform/output/config_test.go`, and
+    `pkg/component/workdir_path_test.go` — the latter's
+    `TestBuildAndResolveWorkdirPath_*` tests were switched to compute their
+    expected path via the real `workdir.BuildPath` instead of a hand-rolled
+    `stack+"-"+component` string, so they can't go stale again the same
+    way.
 - `go build ./...` — clean.
 - `gofumpt -l` on all changed files — clean.
 - `go test ./pkg/provisioner/... ./internal/terraform_backend/...
   ./pkg/terraform/output/... ./pkg/component/... ./pkg/schema/...
-  ./cmd/terraform/workdir/...` (full packages, not just the new tests) —
-  all pass.
+  ./cmd/terraform/workdir/... ./pkg/runner/step/... ./internal/exec/...`
+  (full packages, not just the new tests) — all pass.
 - `./custom-gcl run --new-from-rev=origin/main` — 0 issues.
-- Updated `tests/fixtures/scenarios/source-provisioner-workdir-nested/README.md`'s
-  documented expected workdir directory name for its `app/local-nested`
-  manual-testing case (`dev-app-local-nested` → `dev-app--local-nested`);
-  the fixture's separate, hand-configured `backend.local.path` (unrelated
-  to `BuildPath`, a literal string in the stack YAML) is unaffected since
-  it depends only on path *depth*, not the encoded component name's exact
-  characters.
+- Updated `tests/fixtures/scenarios/source-provisioner-workdir-nested/README.md`
+  and its `stacks/deploy/dev.yaml` comments for the final encoding (e.g.
+  `dev-app-slocal-hnested` for `app/local-nested`, `dev-ecs-scluster` for
+  `ecs/cluster`); the fixture's separate, hand-configured
+  `backend.local.path` (unrelated to `BuildPath`, a literal string in the
+  stack YAML) is unaffected since it depends only on path *depth*, not the
+  encoded component name's exact characters.
+- Noted but did not fix: `CleanWorkdir` (`pkg/provisioner/workdir/clean.go`)
+  has its own separate, unsanitized `fmt.Sprintf("%s-%s", stack, component)`
+  formula — never routed through `BuildPath`/`escapeComponentNameForPath` at
+  all. It already diverged from `BuildPath` for `/`-containing component
+  names before this fix; this fix widens that divergence to include
+  ordinary hyphenated names too, so `atmos`'s workdir-clean path can no
+  longer find the directory `Service.Provision` actually created for any
+  such component. Out of scope for this CodeRabbit-driven fix (not
+  flagged, and `clean.go` untouched by the current diff) — flagged to the
+  user as a pre-existing, now-larger inconsistency worth its own follow-up.
 
 ## Follow-ups
 

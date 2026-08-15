@@ -318,7 +318,8 @@ func TestBuildAndResolveWorkdirPath_ExistingDir(t *testing.T) {
 	componentName := "null-label-exports"
 	subpath := "exports"
 
-	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	expectedRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	expectedCandidate := filepath.Join(expectedRoot, subpath)
 	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -352,7 +353,8 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypes(t *testing.T) {
 			stack := "dev"
 			componentName := "my-component"
 
-			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			expectedRoot, err := provWorkdir.BuildPath(basePath, componentType, componentName, stack, nil)
+			require.NoError(t, err)
 			require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
 
 			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
@@ -392,7 +394,8 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath(t *testing.T) {
 			// segments so we never feed forward slashes into filepath.Join.
 			subpathYAML := "modules/foo"
 
-			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			workdirRoot, err := provWorkdir.BuildPath(basePath, componentType, componentName, stack, nil)
+			require.NoError(t, err)
 			expectedCandidate := filepath.Join(workdirRoot, "modules", "foo")
 			require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -422,7 +425,8 @@ func TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "demo-cluster-codepipeline-iac"
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	// Note: no "demo-cluster-codepipeline" subdirectory inside root.
 
@@ -450,12 +454,10 @@ func TestBuildAndResolveWorkdirPath_NonExistentDir(t *testing.T) {
 		BaseComponentPath: "exports",
 		ComponentSection:  map[string]any{},
 	}
-	expectedRoot := filepath.Join(
-		atmosConfig.BasePath,
-		provWorkdir.WorkdirPath,
-		cfg.TerraformComponentType,
-		info.Stack+"-"+info.FinalComponent,
+	expectedRoot, err := provWorkdir.BuildPath(
+		atmosConfig.BasePath, cfg.TerraformComponentType, info.FinalComponent, info.Stack, nil,
 	)
+	require.NoError(t, err)
 
 	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)

@@ -25,8 +25,8 @@ components:
     # Pre-fix: workdir was .workdir/terraform/dev-ecs/cluster/ (4 segments
     # below fixture root -- one deeper than "vpc" above), so the SAME 3
     # "../" would land one directory short of the fixture root.
-    # Post-fix: workdir is .workdir/terraform/dev-ecs-cluster/ (sanitized to
-    # a single segment), matching vpc's depth exactly.
+    # Post-fix: workdir is .workdir/terraform/dev-ecs-scluster/ ("/" encodes
+    # to "-s", collapsing to a single segment), matching vpc's depth exactly.
     "ecs/cluster":
       source:
         uri: "./source-modules/mock"
@@ -59,7 +59,7 @@ components:
     # source-based provisioning with workdir enabled. determineSourceTargetDirectory
     # (pkg/provisioner/source/provision_hook.go) routes this case through
     # workdir.BuildPath, which now sanitizes ".." into a literal, harmless path
-    # segment (e.g. "dev-..-escape-test") rather than letting it resolve as
+    # segment (e.g. "dev-..-sescape-htest") rather than letting it resolve as
     # real traversal -- expect a safe, sanitized workdir, not an actual escape.
     "../escape-test":
       source:
@@ -89,10 +89,10 @@ components:
       backend:
         local:
           # Same "../../../" prefix, and same intended destination pattern,
-          # as vpc/ecs-cluster/ecs-cluster-subnet above -- see whether it
-          # lands in the same .context/tfstate/dev/... ancestor, or one
-          # level short (under .workdir/) because this component's workdir
-          # is actually 4 segments deep, not 3.
+          # as vpc/ecs-cluster/ecs-cluster-subnet above. Post-fix this
+          # component's workdir is dev-app-slocal-hnested, a single segment
+          # at the same depth as vpc, so the prefix reaches the same
+          # .context/tfstate/dev/... ancestor.
           path: "../../../.context/tfstate/dev/app-local-nested/terraform.tfstate"
       vars:
         environment: "dev-app-local-nested"

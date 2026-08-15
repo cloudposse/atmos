@@ -651,7 +651,7 @@ func TestExtractComponentPath(t *testing.T) {
 					"workdir": map[string]any{"enabled": true},
 				},
 			},
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc"),
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-hvpc"),
 		},
 		{
 			name:     "component with folder prefix",

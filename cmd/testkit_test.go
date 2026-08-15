@@ -228,6 +228,34 @@ func TestTestKit_RootCmdCommandsRestoration(t *testing.T) {
 	}
 }
 
+// TestTestKit_RootCmdCommandRemovalRestoration verifies that a command present in a test's
+// RootCmd snapshot is re-added if that test (or a nested one) removes it via
+// RootCmd.RemoveCommand. The restoreRootCmdCommands helper previously only removed commands
+// *added* after the snapshot; a snapshot command removed mid-test stayed gone for every later
+// test.
+func TestTestKit_RootCmdCommandRemovalRestoration(t *testing.T) {
+	tk := NewTestKit(t) // Outer snapshot includes the command registered below.
+
+	original := &cobra.Command{Use: "testkit-removal-target"}
+	RootCmd.AddCommand(original)
+	require.Contains(tk, rootCmdCommandNames(tk), "testkit-removal-target")
+
+	t.Run("nested test removes an original command", func(t *testing.T) {
+		innerTk := NewTestKit(t) // Inner snapshot also includes "testkit-removal-target".
+
+		RootCmd.RemoveCommand(original)
+
+		assert.NotContains(innerTk, rootCmdCommandNames(innerTk), "testkit-removal-target",
+			"command should be removed mid-test")
+		// Cleanup happens automatically when this subtest ends.
+	})
+
+	// The nested test's cleanup must restore the command it removed (present in its own
+	// snapshot), not leave it gone for the rest of the outer test.
+	assert.Contains(t, rootCmdCommandNames(t), "testkit-removal-target",
+		"a command removed inside a nested NewTestKit test must be restored by that test's cleanup")
+}
+
 // Note: Viper restoration tests were removed because viper.Set(key, nil) breaks BindPFlag connections.
 // Viper state isolation between tests requires a different approach (e.g., temporary viper instances)
 // which is out of scope for the current TestKit implementation. Tests that need viper isolation

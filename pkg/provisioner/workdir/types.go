@@ -169,26 +169,34 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	return containWithinBase(rawPath, basePath)
 }
 
-// escapeComponentNameForPath encodes name so it can be used as a single filesystem path
-// segment without colliding with a differently-named component. Each "/" and "\" is replaced
-// with "--" (a doubled hyphen) rather than a single "-", so a name containing a path
-// separator can never collide with an otherwise-identical name that uses a literal hyphen in
-// its place -- e.g. "app/local" and "app-local" (which a naive "/" -> "-" substitution would
-// both turn into "app-local", sharing one workdir -- and its files, metadata, and Terraform
-// state -- between two distinct components) now encode to "app--local" and "app-local"
-// respectively. "/" and "\" intentionally share the same encoding so a component name's
-// workdir path stays identical across OSes (see
+// escapeComponentNameForPath injectively encodes name so it can be used as a single
+// filesystem path segment without colliding with any other name. Every "-" is escaped to
+// "-h" *before* "/" and "\" are encoded to "-s" ("h" for the literal hyphen, "s" for either
+// path separator -- they intentionally share one code so a component name's workdir path
+// stays identical across OSes, see
 // docs/fixes/2026-08-05-workdir-nested-component-path-depth.md for that original rationale).
-//
-// This is not a fully injective encoding: a component name containing a literal "--" could
-// still collide with a differently-placed "/" or "\". That's a deliberate trade-off -- a
-// scheme that's collision-free for every possible input would have to also escape single "-"
-// characters, which would change the on-disk workdir name for the overwhelming majority of
-// real components (kebab-case, single-hyphen names are the standard Atmos naming
-// convention), not just the rare ones containing a path separator.
+// Escaping the literal hyphen first is what makes this injective: "-" never appears
+// unescaped in the output, so every "-" in an encoded name is unambiguously the start of a
+// two-character escape token, and no two distinct inputs can ever encode to the same output.
+// A single "/" -> "-" substitution (or even "/" -> "--") does not have this property: e.g.
+// "app/local" and "app-local" would both encode to "app-local" (single-hyphen scheme) or
+// "app/local" and "app--local" would both encode to "app--local" (double-hyphen scheme) --
+// either way, two distinct components would share one workdir, and therefore its files,
+// metadata, and Terraform state.
 func escapeComponentNameForPath(name string) string {
-	replaced := strings.ReplaceAll(name, "/", "--")
-	return strings.ReplaceAll(replaced, "\\", "--")
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch r {
+		case '-':
+			b.WriteString("-h")
+		case '/', '\\':
+			b.WriteString("-s")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // containWithinBase verifies that path, once absolutized, is contained within base (equal to

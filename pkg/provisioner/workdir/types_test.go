@@ -43,7 +43,7 @@ func TestBuildPath(t *testing.T) {
 			componentConfig: map[string]any{
 				"atmos_component": "vpc-inherited-instance",
 			},
-			want: []string{"terraform", "dev-vpc-inherited-instance"},
+			want: []string{"terraform", "dev-vpc-hinherited-hinstance"},
 		},
 		{
 			name:          "falls back to component when atmos_component is empty string",
@@ -90,7 +90,7 @@ func TestBuildPath(t *testing.T) {
 			component:       "ecs/cluster",
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-ecs--cluster"},
+			want:            []string{"terraform", "fixtures-ecs-scluster"},
 		},
 		{
 			name:          "nested atmos_component instance name does not add a path segment",
@@ -101,7 +101,7 @@ func TestBuildPath(t *testing.T) {
 			componentConfig: map[string]any{
 				"atmos_component": "ecs/cluster-inherited-instance",
 			},
-			want: []string{"terraform", "fixtures-ecs--cluster-inherited-instance"},
+			want: []string{"terraform", "fixtures-ecs-scluster-hinherited-hinstance"},
 		},
 		{
 			// "\" is Windows' real path separator: a component name
@@ -114,7 +114,7 @@ func TestBuildPath(t *testing.T) {
 			component:       `ecs\cluster`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-ecs--cluster"},
+			want:            []string{"terraform", "fixtures-ecs-scluster"},
 		},
 		{
 			// A component name crafted to escape the workdir root via
@@ -127,7 +127,7 @@ func TestBuildPath(t *testing.T) {
 			component:       `..\..\evil`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-..--..--evil"},
+			want:            []string{"terraform", "fixtures-..-s..-sevil"},
 		},
 	}
 
@@ -141,20 +141,31 @@ func TestBuildPath(t *testing.T) {
 	}
 }
 
-// TestBuildPath_NoCollisionBetweenSlashAndHyphen is a regression test for a naive
-// "/" -> "-" substitution: it would make "app/local" and "app-local" both resolve to the
-// same workdir ("dev-app-local"), so two entirely distinct components would silently share
-// files, metadata, and Terraform state (Service.Provision writes directly into whatever
-// BuildPath returns). Encoding "/" as "--" instead of "-" keeps them distinct.
+// TestBuildPath_NoCollisionBetweenSlashAndHyphen is a regression test for two collision-prone
+// component-name encodings: a naive "/" -> "-" substitution would make "app/local" and
+// "app-local" both resolve to "dev-app-local", and a "/" -> "--" substitution (escaping the
+// separator but not the literal hyphen) would still make "app/local" and "app--local" both
+// resolve to "dev-app--local". Either way, two entirely distinct components would silently
+// share one workdir -- and its files, metadata, and Terraform state (Service.Provision
+// writes directly into whatever BuildPath returns). The injective encoding
+// escapeComponentNameForPath uses instead (escaping the literal hyphen before the separator)
+// keeps all three distinct.
 func TestBuildPath_NoCollisionBetweenSlashAndHyphen(t *testing.T) {
-	slashPath, err := BuildPath("/base", "terraform", "app/local", "dev", map[string]any{})
-	require.NoError(t, err)
+	names := []string{"app/local", "app-local", "app--local"}
+	paths := make(map[string]string, len(names))
 
-	hyphenPath, err := BuildPath("/base", "terraform", "app-local", "dev", map[string]any{})
-	require.NoError(t, err)
+	for _, name := range names {
+		path, err := BuildPath("/base", "terraform", name, "dev", map[string]any{})
+		require.NoError(t, err)
+		paths[name] = path
+	}
 
-	assert.NotEqual(t, slashPath, hyphenPath,
-		"a component named %q must not resolve to the same workdir as a component named %q", "app/local", "app-local")
+	for i, a := range names {
+		for _, b := range names[i+1:] {
+			assert.NotEqual(t, paths[a], paths[b],
+				"a component named %q must not resolve to the same workdir as a component named %q", a, b)
+		}
+	}
 }
 
 // TestBuildPath_RejectsStackTraversal verifies BuildPath rejects a stack name containing
