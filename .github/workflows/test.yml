@@ -188,9 +188,10 @@ jobs:
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
-        # across these shards by hashing each test case's name (ATMOS_TEST_SHARD /
-        # ATMOS_TEST_SHARD_COUNT below); keep this list and env.TEST_SHARD_COUNT in
-        # sync if the shard count ever changes.
+        # across these shards by bin-packing each test case's workdir
+        # (assignWorkdirsToShards, see ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT
+        # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
+        # count ever changes.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     # Sharding splits the acceptance suite's runtime across parallel jobs, but each
     # shard still pays the same fixed per-job overhead (checkout, toolchain installs,
@@ -198,7 +199,20 @@ jobs:
     # shards real headroom above their expected fraction of the pre-sharding budgets
     # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
     # on this comment) rather than dividing those numbers by the shard count exactly.
-    timeout-minutes: 40
+    #
+    # Shard 1 also absorbs every non-`tests` package (the ~400 fast unit-test
+    # packages) plus every ./tests top-level test other than TestCLICommands
+    # unrestricted (see the "Acceptance tests"/"Acceptance tests with coverage"
+    # steps below), so it does meaningfully more work than shards 2-10 by
+    # design - confirmed by a real run: shard 1's windows leg needed over 40m
+    # total and was still running package tests when force-cancelled at the
+    # (then-uniform) 40m ceiling, while every other shard finished in single
+    # digits of minutes. Give shard 1 real headroom instead of the uniform
+    # budget; revisit if this still isn't enough, or consider splitting the
+    # non-`tests` packages/other top-level tests across shards too (would need
+    # separate go test invocations per group, since a shared -run=^TestCLICommands$
+    # would otherwise silently zero out any other packages sharing that invocation).
+    timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -333,7 +347,7 @@ jobs:
       # they run exactly once per OS instead of on every shard; shards 2+ only run
       # ./tests.
       - name: Acceptance tests with coverage
-        timeout-minutes: 40
+        timeout-minutes: ${{ matrix.shard == 1 && 60 || 40 }}
         if: matrix.flavor.target == 'linux'
         shell: bash
         env:
@@ -371,8 +385,12 @@ jobs:
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Give Windows
         # real slack per shard too; macOS shards finish faster so their budget
-        # stays lower.
-        timeout-minutes: ${{ matrix.flavor.target == 'windows' && 40 || 30 }}
+        # stays lower. Shard 1 absorbs every non-`tests` package plus every
+        # ./tests top-level test other than TestCLICommands (see the comment
+        # on the job's matrix above), so it needs more headroom than other
+        # shards regardless of OS - confirmed by a real run where shard 1 on
+        # windows needed over 40m and was still running when cancelled.
+        timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 40 || 30) }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         # GitHub Actions runs `run:` steps via pwsh on Windows by default; this
         # step's bash `if`/`[ ]` syntax needs bash explicitly (see the other
