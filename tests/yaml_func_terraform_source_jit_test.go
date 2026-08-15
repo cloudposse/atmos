@@ -114,7 +114,7 @@ func seedStateFile(t *testing.T, cwd string) {
   "resources": []
 }
 `
-	stateDir := filepath.Join(cwd, ".workdir", "terraform", "test-producer-from-source", "terraform.tfstate.d", "test")
+	stateDir := filepath.Join(cwd, ".workdir", "terraform", "test-producer-hfrom-hsource", "terraform.tfstate.d", "test")
 	require.NoError(t, os.MkdirAll(stateDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateContent), 0o644))
 }
@@ -208,7 +208,7 @@ func TestTerraformOutputJITWorkdirFromSource(t *testing.T) {
 	tfoutput.ResetWorkdirProvisionCache()
 	e.ResetStateCache()
 
-	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer-from-source")
+	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer-hfrom-hsource")
 
 	// Remove any prior workdir so we verify it is freshly created.
 	require.NoError(t, os.RemoveAll(workdirPath))

@@ -87,7 +87,7 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 
 	// Create the target directory so delete has something to operate on.
 	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>.
-	targetDir := ".workdir/terraform/dev-vpc-remote-workdir"
+	targetDir := ".workdir/terraform/dev-vpc-hremote-hworkdir"
 	require.NoError(t, os.MkdirAll(targetDir, 0o755))
 	t.Cleanup(func() {
 		_ = os.RemoveAll(".workdir")
@@ -127,7 +127,7 @@ func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 	})
 	require.NoError(t, cmd.Execute(), "terraform generate varfile should succeed")
 
-	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports")
+	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-hlabel-hexports")
 	rootInfo, statErr := os.Stat(workdirRoot)
 	require.NoError(t, statErr, "workdir root should exist at %s after provisioning", workdirRoot)
 	require.True(t, rootInfo.IsDir(), "workdir root should be a directory")
@@ -218,7 +218,7 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	// Anchor the suffix assertion to the specific "Working directory:" line so
 	// a regression that prints the suffix on a different line (e.g. only on
 	// "Component path:") does not silently pass.
-	expectedSuffix := filepath.Join("dev-null-label-exports", "exports")
+	expectedSuffix := filepath.Join("dev-null-hlabel-hexports", "exports")
 	var workingDirLine string
 	for _, line := range strings.Split(output, "\n") {
 		if strings.Contains(line, "Working directory:") {
