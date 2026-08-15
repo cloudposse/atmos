@@ -17,10 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,11 +32,8 @@ data:
 `
 
 func TestRunOperationDispatchesWithSummaries(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-	t.Cleanup(data.Reset)
-
+	// The data writer is initialized once for the package in TestMain; do not reset it here, or
+	// later tests that emit an apply/delete status line would panic on an uninitialized writer.
 	originalRender := renderChartManifest
 	originalApply := applyHelmRelease
 	originalDelete := deleteHelmRelease
