@@ -44,6 +44,24 @@ func sanitizeNetworkToken(s string) string {
 	return b.String()
 }
 
+// HasExplicitNetworkOverride reports whether runArgs already sets an explicit
+// --network (e.g. --network=host, --network none, --network container:x, or a
+// user's own network name). Callers should skip AttachSharedNetwork when this
+// is true and respect the user's choice instead: Docker/Podman reject combining
+// a network mode like host/none with an additional --network attachment, so
+// injecting the shared network alongside an explicit override would break the
+// container create outright, not just be redundant.
+func HasExplicitNetworkOverride(runArgs []string) bool {
+	defer perf.Track(nil, "container.HasExplicitNetworkOverride")()
+
+	for _, arg := range runArgs {
+		if arg == "--network" || strings.HasPrefix(arg, "--network=") {
+			return true
+		}
+	}
+	return false
+}
+
 // AttachSharedNetwork best-effort joins networks to the stack's shared network
 // with name as a DNS alias, so peers (other components.container instances and
 // emulators in the same stack) can resolve it by name. Prefers Atmos's own

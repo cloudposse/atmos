@@ -8,6 +8,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestHasExplicitNetworkOverride(t *testing.T) {
+	cases := []struct {
+		name    string
+		runArgs []string
+		want    bool
+	}{
+		{name: "nil run_args", runArgs: nil, want: false},
+		{name: "unrelated run_args", runArgs: []string{"--rm", "-v", "/a:/b"}, want: false},
+		{name: "space form", runArgs: []string{"--network", "host"}, want: true},
+		{name: "equals form", runArgs: []string{"--network=host"}, want: true},
+		{name: "user's own network name", runArgs: []string{"--network=my-net"}, want: true},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, HasExplicitNetworkOverride(tt.runArgs))
+		})
+	}
+}
+
 func TestStackNetworkName(t *testing.T) {
 	cases := map[string]string{
 		"local":       "atmos-local",

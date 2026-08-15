@@ -64,6 +64,11 @@ scaled/replica DNS, and network teardown/reference-counting (matches the existin
   `vars.Env["ATMOS_STACK"]` → `""`, mirroring the existing pattern in `emulator.go`/`tflint.go`/`store.go`);
   `executeRun` calls `AttachSharedNetwork` with that stack and `containerStepIdentity(step.Name)` (defaults
   to `"step"`) as the alias, skipping attachment entirely when no stack resolves.
+- `pkg/container/stack_network.go`: new `HasExplicitNetworkOverride(runArgs)` — Docker/Podman reject
+  combining a network mode like `host`/`none` with an additional `--network` attachment, so a workflow step
+  already using `run_args: [--network=host]` would otherwise start failing outright once it also got the
+  shared-network `--network` flag. `executeRun` now checks this before calling `AttachSharedNetwork`, so an
+  explicit `--network` in `run_args` always wins and the shared network is skipped for that step.
 - Docs: `docs/prd/git-server-emulator.md` and the relevant `website/docs/*.mdx` pages updated for the
   renamed/unified network, the new automatic-networking behavior, and workflow step coverage.
 
@@ -92,6 +97,12 @@ scaled/replica DNS, and network teardown/reference-counting (matches the existin
 
 - Compose-parity features intentionally deferred: top-level `networks:`, `external: true` networks,
   per-network `aliases:`, scaled/replica DNS, and network teardown/reference-counting on `down`/`rm`.
+- Native `components.container` (`ExecuteUp`/`ExecuteRun` in `pkg/component/container/executor.go`) never
+  wires `run.run_args` into the container create args at all — a pre-existing gap, not introduced by this
+  change, confirmed by grep. This means there's currently no way to request host networking (or any other
+  raw runtime flag) for a native container component the way workflow `type: container` steps already can
+  via `run_args`. Not fixed here since it's a separate, unrelated gap — the `AttachSharedNetwork` guard this
+  change adds (`HasExplicitNetworkOverride`) is ready to use once `run_args` is wired there too.
 - Workflow `type: container, action: build`/`push`/`inspect` steps don't join the network (only `run`
   starts a container that could reach peers). This matches the actual need — build/push/inspect don't
   talk to other stack services — so it isn't tracked as a gap.

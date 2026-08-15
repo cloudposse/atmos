@@ -92,6 +92,43 @@ func TestContainerHandlerExecuteRunAttachesSharedNetwork(t *testing.T) {
 	assert.Contains(t, createLine, "--network-alias\tdev-smoke")
 }
 
+func TestContainerHandlerExecuteRunHostNetworkOverrideSkipsSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "dev",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+			RunArgs:  []string{"--network=host"},
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	for _, line := range args {
+		assert.False(t, strings.HasPrefix(line, "network\t"), "explicit --network override must not also get the shared network: %q", line)
+		assert.NotContains(t, line, "--network\tatmos-dev", "explicit --network override must not also get the shared network alias")
+	}
+
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a create invocation")
+	assert.Contains(t, createLine, "--network=host", "the user's explicit run_args override must still be applied")
+}
+
 func TestContainerHandlerExecuteRunNoStackSkipsSharedNetwork(t *testing.T) {
 	installStepFakeDocker(t)
 	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")

@@ -273,6 +273,10 @@ and [emulator components](/stacks/components/emulator) in that stack use, so a `
 by name (e.g. `http://dev-api:8080`) with no extra configuration. A step with no stack in scope gets no
 network attachment.
 
+If you need host networking or your own network instead, set it explicitly in `run_args` (e.g.
+`run_args: [--network=host]`) — an explicit `--network` there always wins, and Atmos skips the automatic
+shared-network attachment for that step entirely rather than conflicting with it.
+
 ```yaml
 steps:
   - name: smoke
