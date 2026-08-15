@@ -32,6 +32,15 @@ type actionContext struct {
 var newActionContext = func(namespace string) (*actionContext, error) {
 	settings := newSettings()
 
+	// Set the namespace on the settings so Helm's RESTClientGetter installs namespace-less
+	// manifests into it. Setting only the install/upgrade action's Namespace is not enough:
+	// charts whose manifests omit metadata.namespace inherit the getter's namespace, which
+	// otherwise defaults to the kubeconfig context (usually "default") rather than the
+	// component's configured namespace. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+	if namespace != "" {
+		settings.SetNamespace(namespace)
+	}
+
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
 		return nil, fmt.Errorf("failed to initialize Helm configuration: %w", err)
