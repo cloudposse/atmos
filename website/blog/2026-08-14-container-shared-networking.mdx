@@ -1,0 +1,88 @@
+---
+slug: container-shared-networking
+title: "Containers, Emulators, and Run Steps Now Resolve Each Other by Name"
+authors: [osterman]
+tags: [feature]
+---
+
+Bring up two containers in the same environment and the first thing you hit is that they can't
+find each other. Docker's default bridge network hands out a private IP to each container but
+gives you no way to resolve a sibling by name, so you either hardcode IPs that change on every
+restart, or reach for `docker network create` and wire up the aliases yourself. Docker Compose
+solved this years ago by giving every project its own network and naming each service after
+itself. Atmos containers had no equivalent — every one landed on the default bridge, reachable
+only through published host ports.
+
+<!--truncate-->
+
+## The Problem
+
+A container component's `run` config could publish ports to the host, but two container
+components in the same stack — or a container and a [local emulator](/stacks/components/emulator)
+— had no way to talk to each other directly. A workflow step that spun up a one-shot container to
+run tests against those services hit the same wall. The only fix was manual: create a network by
+hand, or fall back to routing everything through the host.
+
+## The Fix
+
+Every container component, one-shot container run, and stack-scoped workflow `type: container`
+step now automatically joins a shared network for its stack and gets a predictable DNS alias — no
+configuration required. It's the same idea as the network Docker Compose creates for a project,
+scoped to your Atmos stack instead.
+
+- A component named `api` in stack `dev` is reachable at `dev-api`.
+- An emulator and a container component in the same stack land on the same network, so either can
+  resolve the other by name.
+- A workflow `run` step that resolves a stack (its own `stack:` field, or the workflow's
+  `--stack`/`ATMOS_STACK`) joins that same network too, so a test-runner step can hit
+  `http://dev-api:8080` directly.
+
+It's best-effort: if the container runtime can't create or join a network, everything still runs —
+you just lose the ability to resolve peers by name, and host-published ports keep working exactly
+as before.
+
+## How to Use It
+
+Nothing to turn on. Bring up two services in the same stack and reference one from the other by its
+`<stack>-<component>` alias:
+
+```yaml
+components:
+  container:
+    api:
+      image: localhost:5001/api:latest
+      run:
+        ports:
+          - host: 8080
+            container: 80
+
+    worker:
+      image: localhost:5001/worker:latest
+      run:
+        command: ./worker --api-url=http://dev-api:80
+```
+
+```bash
+atmos container up api -s dev
+atmos container up worker -s dev
+# worker resolves dev-api on the shared network — no host port juggling needed.
+```
+
+The same alias works from a workflow `run` step scoped to the same stack:
+
+```yaml
+steps:
+  - name: smoke
+    type: container
+    action: run
+    stack: dev
+    with:
+      image: curlimages/curl
+      command: curl -f http://dev-api:80/health
+```
+
+## Get Involved
+
+Try it out with a couple of container components or an emulator in the same stack. Questions or
+ideas? Start a thread in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions), or
+open an issue in the [issue tracker](https://github.com/cloudposse/atmos/issues).

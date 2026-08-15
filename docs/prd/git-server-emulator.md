@@ -53,9 +53,9 @@ A fresh Gitea boots installed-but-empty. `Manager.bootstrapGitIfNeeded`
 after the Vault bootstrap, makes it ready:
 
 1. Create a throwaway admin user (`atmos`/`atmos`) via the in-container Gitea CLI,
-   run as the image's `git` account. Idempotent — "user already exists" is success.
+  run as the image's `git` account. Idempotent — "user already exists" is success.
 2. Create an auto-initialized `deployments` repository via the Gitea API over the
-   live host port. Idempotent — a 409 conflict is success.
+  live host port. Idempotent — a 409 conflict is success.
 
 Credentials are throwaway-local and embedded in the configured remote URL; there is
 no secret to protect.
