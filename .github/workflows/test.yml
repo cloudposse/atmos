@@ -335,6 +335,7 @@ jobs:
       - name: Acceptance tests with coverage
         timeout-minutes: 40
         if: matrix.flavor.target == 'linux'
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
@@ -345,13 +346,25 @@ jobs:
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
           COVERAGE_OUT: coverage-shard-${{ matrix.shard }}.out
         run: |
+          # TestCLICommands's own subtests are sharded internally (via
+          # ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT, see tests/cli_test.go).
+          # But `./tests` also has ~280 OTHER top-level test functions that
+          # aren't part of that loop at all - without -run restricting shards
+          # 2+ to just TestCLICommands, every one of those ~280 tests would
+          # rerun on all 10 shards, both wasting most of the sharding's CI-time
+          # benefit and multiplying any flaky test's exposure 10x (this is
+          # exactly what caused widespread shard failures on
+          # TestToolchainAquaTools_NonExistentToolError - a standalone test,
+          # unrelated to sharding, that ran needlessly on every shard).
           if [ "${{ matrix.shard }}" = "1" ]; then
             OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
             export TEST="./tests $OTHER_PACKAGES"
+            export TESTARGS="-skip=^TestTerraformRegistryCache$"
           else
             export TEST="./tests"
+            export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
           fi
-          TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
+          atmos test acceptance --cover
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
@@ -361,21 +374,29 @@ jobs:
         # stays lower.
         timeout-minutes: ${{ matrix.flavor.target == 'windows' && 40 || 30 }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        # GitHub Actions runs `run:` steps via pwsh on Windows by default; this
+        # step's bash `if`/`[ ]` syntax needs bash explicitly (see the other
+        # steps in this file, e.g. "Get dependencies"/"Build"/"Version" above,
+        # that already do this for the same reason).
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-          TESTARGS: "-skip=^TestTerraformRegistryCache$"
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
         run: |
+          # See the "Acceptance tests with coverage" step above for why shards
+          # 2+ restrict to -run=^TestCLICommands$.
           if [ "${{ matrix.shard }}" = "1" ]; then
             OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
             export TEST="./tests $OTHER_PACKAGES"
+            export TESTARGS="-skip=^TestTerraformRegistryCache$"
           else
             export TEST="./tests"
+            export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
           fi
           atmos test acceptance
 
