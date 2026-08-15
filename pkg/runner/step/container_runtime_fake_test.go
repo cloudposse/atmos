@@ -58,6 +58,65 @@ func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
 	assert.Equal(t, "container-id", res.Metadata["container_id"])
 }
 
+func TestContainerHandlerExecuteRunAttachesSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "dev",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.Contains(t, args, "network\tcreate\tatmos-dev")
+
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a create invocation")
+	assert.Contains(t, createLine, "--network\tatmos-dev")
+	assert.Contains(t, createLine, "--network-alias\tdev-smoke")
+}
+
+func TestContainerHandlerExecuteRunNoStackSkipsSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name: "smoke",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.NotContains(t, args, "network\tcreate\tatmos-default", "no stack in scope should mean no network attachment")
+	for _, line := range args {
+		assert.False(t, strings.HasPrefix(line, "network\t"), "no stack in scope should mean no network attachment: %q", line)
+	}
+}
+
 func TestContainerHandlerExecuteBuildWithFakeDocker(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}

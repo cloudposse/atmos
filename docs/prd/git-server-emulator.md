@@ -65,14 +65,19 @@ no secret to protect.
 For a controller inside the k3s emulator to pull from the Gitea emulator, the two
 containers must resolve each other by name. A new optional runtime capability,
 `NetworkEnsurer` (`pkg/container/network.go`, implemented by the Docker and Podman
-runtimes), idempotently creates a per-stack user network
-(`atmos-emulator-<stack>`). `Manager.attachSharedNetwork` joins every emulator
-container to it with `--network-alias <component>`, so peers resolve each other
-(e.g. `http://gitserver:3000`). It is **best-effort**: when the runtime cannot
+runtimes), idempotently creates a per-stack user network (`atmos-<stack>`, via
+`container.StackNetworkName`). `Manager.attachSharedNetwork` joins every emulator
+container to it with `--network-alias <stack>-<component>`
+(`container.StackNetworkAlias`), so peers resolve each other (e.g.
+`http://dev-gitserver:3000`). The same shared network and naming is used by native
+`components.container` instances and stack-scoped workflow `type: container` steps
+(`pkg/runner/step/container_run.go`), so an emulator, a plain container, and a
+workflow-driven one-shot container can all resolve each other too — see
+`pkg/container/stack_network.go`. It is **best-effort**: when the runtime cannot
 create a network the container falls back to the default bridge — single-emulator
 use is unaffected (host port publishing still works); only cross-container name
-resolution is lost. This is the most environment-sensitive piece (Docker vs
-rootless Podman vs the macOS VM).
+resolution is lost. This is the most
+environment-sensitive piece (Docker vs rootless Podman vs the macOS VM).
 
 ### Push vs. pull addressing
 

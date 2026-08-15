@@ -47,6 +47,7 @@ type EphemeralConfig struct {
 	WorkspaceReadOnly bool
 	Mounts            []Mount
 	Ports             []PortBinding
+	Networks          []NetworkAttachment
 	Env               []string
 	User              string
 	Labels            map[string]string
@@ -215,6 +216,7 @@ func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {
 		WorkspaceFolder: config.WorkspaceFolder,
 		Mounts:          mounts,
 		Ports:           config.Ports,
+		Networks:        config.Networks,
 		User:            config.User,
 		Labels:          config.Labels,
 		RunArgs:         config.RunArgs,

@@ -693,13 +693,13 @@ func TestGetNetworkIPsFromInspect(t *testing.T) {
 	data := map[string]interface{}{
 		"NetworkSettings": map[string]interface{}{
 			"Networks": map[string]interface{}{
-				"atmos-emulator-local": map[string]interface{}{"IPAddress": "172.20.0.2"},
-				"bridge":               map[string]interface{}{"IPAddress": ""},
+				"atmos-local": map[string]interface{}{"IPAddress": "172.20.0.2"},
+				"bridge":      map[string]interface{}{"IPAddress": ""},
 			},
 		},
 	}
 
 	got := getNetworkIPsFromInspect(data)
 
-	assert.Equal(t, map[string]string{"atmos-emulator-local": "172.20.0.2"}, got)
+	assert.Equal(t, map[string]string{"atmos-local": "172.20.0.2"}, got)
 }

@@ -90,6 +90,23 @@ Each instance is named and labeled from its canonical address `<stack>/container
 
 `atmos container list` shows a running/stopped/unknown indicator for each container component.
 
+## Networking
+
+Every container component in a stack automatically joins that stack's shared network and gets a DNS
+alias of `<stack>-<component>`, so containers can reach each other by name without any configuration —
+similar to the default network Docker Compose creates for a project. [Emulator components](/stacks/components/emulator)
+join the same per-stack network, so a plain container and an emulator in the same stack can resolve each
+other too (e.g. a container's `run.command` connecting to `http://dev-localstack:4566`).
+
+This applies to both `atmos container up` (long-lived) and `atmos container run` (one-shot) containers,
+and to a workflow's [`type: container` step](/workflows/steps/type/container#run) when the step resolves a
+stack — so a workflow-driven test runner can reach these services by the same `<stack>-<component>` alias.
+It's best-effort: if the container runtime can't create or join a network, the container falls back to
+the default bridge — the container still runs, it's just unreachable by name from its stack peers (host
+port publishing via `run.ports` is unaffected either way). The shared network is created once per stack
+and is never deleted by Atmos, matching Docker Compose's own behavior of only removing a project's network
+on `down`.
+
 ## Compositions
 
 A composition groups components into a system. Declare membership with the `composition` field; the

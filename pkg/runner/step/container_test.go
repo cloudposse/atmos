@@ -69,6 +69,75 @@ func TestContainerHandlerBuildConfig(t *testing.T) {
 // (directories, sockets) must never be mounted — mounting SHELL=/bin/zsh or a
 // 1Password agent socket broke `podman create` with "statfs … operation not
 // supported".
+func TestResolveContainerStepStack(t *testing.T) {
+	tests := []struct {
+		name    string
+		step    *schema.WorkflowStep
+		flags   map[string]string
+		env     map[string]string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:  "step stack wins over flag and env",
+			step:  &schema.WorkflowStep{Stack: "dev"},
+			flags: map[string]string{"stack": "flag-stack"},
+			env:   map[string]string{"ATMOS_STACK": "env-stack"},
+			want:  "dev",
+		},
+		{
+			name:  "flag wins over env when step stack unset",
+			step:  &schema.WorkflowStep{},
+			flags: map[string]string{"stack": "flag-stack"},
+			env:   map[string]string{"ATMOS_STACK": "env-stack"},
+			want:  "flag-stack",
+		},
+		{
+			name: "falls back to ATMOS_STACK env",
+			step: &schema.WorkflowStep{},
+			env:  map[string]string{"ATMOS_STACK": "env-stack"},
+			want: "env-stack",
+		},
+		{
+			name: "empty when nothing resolves a stack",
+			step: &schema.WorkflowStep{},
+			want: "",
+		},
+		{
+			name:    "propagates template resolution errors",
+			step:    &schema.WorkflowStep{Stack: "{{ .steps.missing.value"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vars := NewVariables()
+			for k, v := range tt.flags {
+				vars.Flags[k] = v
+			}
+			vars.Env = map[string]string{}
+			for k, v := range tt.env {
+				vars.Env[k] = v
+			}
+
+			got, err := resolveContainerStepStack(tt.step, vars)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestContainerStepIdentity(t *testing.T) {
+	assert.Equal(t, "smoke", containerStepIdentity("smoke"))
+	assert.Equal(t, "step", containerStepIdentity(""))
+	assert.Equal(t, "step", containerStepIdentity("   "))
+}
+
 func TestCredentialFileMounts(t *testing.T) {
 	dir := t.TempDir()
 

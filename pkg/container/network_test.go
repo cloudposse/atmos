@@ -15,7 +15,7 @@ func TestNetworkCreateResult(t *testing.T) {
 
 	t.Run("already-exists output is idempotent success", func(t *testing.T) {
 		err := errors.New("exit status 125")
-		// Docker: "Error response from daemon: network atmos-emulator-local already exists".
+		// Docker: "Error response from daemon: network atmos-local already exists".
 		require.NoError(t, networkCreateResult(err, "Error response from daemon: network X already exists"))
 	})
 

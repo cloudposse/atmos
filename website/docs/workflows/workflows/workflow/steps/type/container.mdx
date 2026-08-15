@@ -266,6 +266,13 @@ steps:
 
 `action: run` runs a one-shot container, and is the default when `action` is omitted.
 
+When the step resolves a stack (its own `stack:` field, the workflow's `--stack` flag/`ATMOS_STACK`, in
+that order), the container automatically joins that stack's shared network and gets a
+`<stack>-<step-name>` DNS alias — the same shared network [container components](/stacks/components/container)
+and [emulator components](/stacks/components/emulator) in that stack use, so a `run` step can reach them
+by name (e.g. `http://dev-api:8080`) with no extra configuration. A step with no stack in scope gets no
+network attachment.
+
 ```yaml
 steps:
   - name: smoke

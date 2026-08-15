@@ -53,6 +53,14 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 	}
 	applyRuntimeEnv(runtime, vars)
 
+	stack, err := resolveContainerStepStack(step, vars)
+	if err != nil {
+		return nil, fmt.Errorf("step '%s': failed to resolve stack: %w", step.Name, err)
+	}
+	if stack != "" {
+		container.AttachSharedNetwork(ctx, runtime, &config.Networks, stack, containerStepIdentity(step.Name))
+	}
+
 	result, err := container.RunEphemeralContainer(ctx, runtime, config)
 	if result == nil {
 		return nil, err
@@ -173,6 +181,37 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 func (h *ContainerHandler) buildConfig(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*container.EphemeralConfig, error) {
 	config, _, err := h.buildRunConfig(ctx, step, vars)
 	return config, err
+}
+
+// resolveContainerStepStack resolves the stack a `type: container, action: run`
+// step's ephemeral container should join for shared networking: the step's own
+// `stack:` override, falling back to the workflow's --stack flag/ATMOS_STACK env
+// (the same precedence pkg/runner/step's other stack-aware step types use, e.g.
+// resolveStoreStack), and finally "" -- a step with no stack context in scope
+// gets no network attachment, the same as it always has, rather than guessing.
+func resolveContainerStepStack(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	stack := step.Stack
+	if stack == "" {
+		stack = vars.Flags["stack"]
+	}
+	if stack == "" {
+		stack = vars.Env["ATMOS_STACK"]
+	}
+	if stack == "" {
+		return "", nil
+	}
+	return vars.Resolve(stack)
+}
+
+// containerStepIdentity is the network alias identity for a container step,
+// defaulting to "step" like containerStepName so an unnamed step still gets a
+// usable (if generic) alias.
+func containerStepIdentity(stepName string) string {
+	name := strings.TrimSpace(stepName)
+	if name == "" {
+		return "step"
+	}
+	return name
 }
 
 // effectiveRunStep resolves the run configuration from the step's `with:` block
