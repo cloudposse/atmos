@@ -427,10 +427,16 @@ func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operat
 	return operationRequiresCluster(operation)
 }
 
-// operationRequiresCluster reports whether an operation contacts the cluster (everything except the
-// offline template render).
+// operationRequiresCluster reports whether an operation contacts the cluster. It uses an explicit
+// allowlist (apply/diff/delete) rather than "not template" so that an unsupported operation does not
+// trigger authentication before runOperation can return ErrHelmUnsupportedOperation.
 func operationRequiresCluster(operation Operation) bool {
-	return operation != OperationTemplate
+	switch operation {
+	case OperationApply, OperationDiff, OperationDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {

@@ -32,11 +32,13 @@ func TestNewSettings_IsolatesRepositoryConfigWhenEnvUnset(t *testing.T) {
 
 // When the user explicitly sets the HELM_REPOSITORY_* env vars, atmos must not override them.
 func TestNewSettings_RespectsExplicitRepositoryEnv(t *testing.T) {
-	t.Setenv("HELM_REPOSITORY_CONFIG", "/custom/repositories.yaml")
-	t.Setenv("HELM_REPOSITORY_CACHE", "/custom/cache")
+	configPath := filepath.Join(t.TempDir(), "repositories.yaml")
+	cachePath := filepath.Join(t.TempDir(), "repository")
+	t.Setenv("HELM_REPOSITORY_CONFIG", configPath)
+	t.Setenv("HELM_REPOSITORY_CACHE", cachePath)
 
 	s := newSettings()
 
-	require.Equal(t, "/custom/repositories.yaml", s.RepositoryConfig)
-	require.Equal(t, "/custom/cache", s.RepositoryCache)
+	require.Equal(t, configPath, s.RepositoryConfig)
+	require.Equal(t, cachePath, s.RepositoryCache)
 }

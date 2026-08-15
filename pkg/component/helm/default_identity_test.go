@@ -24,6 +24,7 @@ func TestShouldSetupComponentAuth(t *testing.T) {
 		{"diff with no identity resolves default", "", OperationDiff, true},
 		{"delete with no identity resolves default", "", OperationDelete, true},
 		{"template with no identity stays offline", "", OperationTemplate, false},
+		{"unsupported op with no identity does not need cluster", "", Operation("bogus"), false},
 		{"explicit identity always sets up auth (template)", "dev", OperationTemplate, true},
 		{"explicit identity always sets up auth (apply)", "dev", OperationApply, true},
 	}
@@ -41,4 +42,7 @@ func TestOperationRequiresCluster(t *testing.T) {
 	require.True(t, operationRequiresCluster(OperationDiff))
 	require.True(t, operationRequiresCluster(OperationApply))
 	require.True(t, operationRequiresCluster(OperationDelete))
+	// An unsupported operation must not require cluster auth, so runOperation can surface
+	// ErrHelmUnsupportedOperation instead of an auth error.
+	require.False(t, operationRequiresCluster(Operation("bogus")))
 }

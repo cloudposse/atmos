@@ -6,10 +6,11 @@
 ## Summary
 
 Four related usability/correctness issues in the experimental native Helm implementation, all
-surfaced while deploying real charts to an AKS cluster. They are grouped in one change because they
-share a common shape: Atmos was configuring the Helm *action* objects but not the Helm `EnvSettings`
-that Helm actually reads for repository resolution, namespacing, and identity. Each fix is small and
-backward compatible.
+surfaced while deploying real charts to an AKS cluster. Each fix is small and backward compatible.
+Two of them (repository resolution and namespacing) come from Atmos configuring the Helm *action*
+objects but not the Helm `EnvSettings` that Helm actually reads; one adds missing operation output;
+and the default-identity fix is in Atmos's own authentication setup (`processStacksWithAuth` /
+`setupComponentAuthForCLI`), not Helm settings.
 
 1. Repository config/cache inherited (and mutated) the user's global Helm config.
 2. `atmos helm apply` / `delete` succeeded silently (no status output).
