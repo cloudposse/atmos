@@ -95,14 +95,16 @@ func TestParseTestOutput_WithSkip(t *testing.T) {
 }
 
 func TestParseTestOutput_SummaryFallback(t *testing.T) {
-	// No per-run lines captured; only the summary line is present.
+	// No per-run lines captured; only the summary line is present. A synthesized
+	// row still populates Runs so the CI summary's results table renders.
 	result := ParseTestOutput("Success! 2 passed, 0 failed.\n")
 	data := testData(t, result)
 
 	assert.Equal(t, 2, data.Total)
 	assert.Equal(t, 2, data.Pass)
 	assert.Equal(t, 0, data.Fail)
-	assert.Empty(t, data.Runs)
+	require.Len(t, data.Runs, 1)
+	assert.Equal(t, testStatusPass, data.Runs[0].Status)
 }
 
 func TestParseTestOutput_FailureSummaryFallback(t *testing.T) {
@@ -113,6 +115,18 @@ func TestParseTestOutput_FailureSummaryFallback(t *testing.T) {
 	assert.Equal(t, 3, data.Total)
 	assert.Equal(t, 1, data.Pass)
 	assert.Equal(t, 2, data.Fail)
+	require.Len(t, data.Runs, 1)
+	assert.Equal(t, testStatusFail, data.Runs[0].Status)
+}
+
+func TestParseTestOutput_SummaryFallback_ZeroTotal(t *testing.T) {
+	// No per-run lines and no summary match; nothing ran, so no row should be
+	// synthesized -- a phantom row would misrepresent an empty result as a test.
+	result := ParseTestOutput("terraform init...\n")
+	data := testData(t, result)
+
+	assert.Equal(t, 0, data.Total)
+	assert.Empty(t, data.Runs)
 }
 
 func TestParseTestOutput_Empty(t *testing.T) {
