@@ -8,11 +8,11 @@ Four related usability/correctness fixes in the experimental native Helm impleme
 (`pkg/component/helm`; `atmos helm template/diff/apply/delete`), all surfaced while deploying real charts
 to an AKS cluster:
 
-1. **Repository config/cache isolation** - stop inheriting (and mutating) the user's global Helm config.
-2. **Status output** - `apply`/`delete` print a status line instead of succeeding silently.
-3. **Default identity** - cluster operations resolve the stack's default identity, so `--identity` is no
-   longer required.
-4. **Namespace** - namespace-less charts install into the configured namespace, not the kubeconfig default.
+- **1. Repository config/cache isolation** - stop inheriting (and mutating) the user's global Helm config.
+- **2. Status output** - `apply`/`delete` print a status line instead of succeeding silently.
+- **3. Default identity** - cluster operations resolve the stack's default identity, so `--identity` is
+  no longer required.
+- **4. Namespace** - namespace-less charts install into the configured namespace, not the kubeconfig default.
 
 Each fix is small and backward compatible. Fixes 1 and 4 share a root cause (Atmos set the Helm *action*
 fields but not the Helm `EnvSettings`); fix 2 was missing output; fix 3 is in Atmos auth setup.
@@ -45,23 +45,23 @@ passed the namespace to `cfg.Init` and `installRelease` set `action.Install.Name
 
 All in `pkg/component/helm`:
 
-1. **Isolation.** `newSettings` is now `defaultSettings` = `cli.New()` + `isolateRepositoryConfig`, which
-   points `RepositoryConfig`/`RepositoryCache` at an Atmos-managed XDG location (`<xdg-config>/atmos/helm`,
-   `<xdg-cache>/atmos/helm/repository`) unless `HELM_REPOSITORY_CONFIG`/`HELM_REPOSITORY_CACHE` is set.
-   Mirrors the existing kubeconfig isolation; explicit env vars still win.
-2. **Status output.** `runOperation` calls `emitOperationStatus` after a successful apply/delete, which
-   writes a one-line status via `ui.Success` - the UI channel (stderr), per `docs/io-and-ui-output.md`; the
-   data channel (stdout) is reserved for pipeable output. `ui.Success` renders markdown inline, so the
-   release/namespace/chart are backticked and the chart note uses `((muted))` styling.
-   `formatOperationStatus` returns empty for template/diff, so nothing is emitted there or on error.
-3. **Default identity.** `processStacksWithAuth` takes the operation and calls `setupComponentAuthForCLI`
-   when `shouldSetupComponentAuth` is true: for an explicit identity, or any cluster operation
-   (`operationRequiresCluster`, an explicit allowlist of apply/diff/delete so an unsupported operation
-   surfaces `ErrHelmUnsupportedOperation` instead of an auth error). `setupTerraformAuth` auto-detects the
-   stack default identity. Template stays offline; a component with no auth keeps the ambient `KUBECONFIG`.
-4. **Namespace.** `newActionContext` calls `settings.SetNamespace(namespace)` before building the
-   `RESTClientGetter`, so namespace-less manifests install into the component's configured namespace. An
-   empty namespace leaves Helm's own default untouched; charts with an explicit namespace are unaffected.
+- **1. Isolation.** `newSettings` is now `defaultSettings` = `cli.New()` + `isolateRepositoryConfig`,
+  which points `RepositoryConfig`/`RepositoryCache` at an Atmos-managed XDG location
+  (`<xdg-config>/atmos/helm`, `<xdg-cache>/atmos/helm/repository`) unless `HELM_REPOSITORY_CONFIG`/
+  `HELM_REPOSITORY_CACHE` is set. Mirrors the existing kubeconfig isolation; explicit env vars still win.
+- **2. Status output.** `runOperation` calls `emitOperationStatus` after a successful apply/delete, which
+  writes a one-line status via `ui.Success` - the UI channel (stderr), per `docs/io-and-ui-output.md`;
+  the data channel (stdout) is reserved for pipeable output. `ui.Success` renders markdown inline, so the
+  release/namespace/chart are backticked and the chart note uses `((muted))` styling.
+  `formatOperationStatus` returns empty for template/diff, so nothing is emitted there or on error.
+- **3. Default identity.** `processStacksWithAuth` takes the operation and calls `setupComponentAuthForCLI`
+  when `shouldSetupComponentAuth` is true: for an explicit identity, or any cluster operation
+  (`operationRequiresCluster`, an explicit allowlist of apply/diff/delete so an unsupported operation
+  surfaces `ErrHelmUnsupportedOperation` instead of an auth error). `setupTerraformAuth` auto-detects the
+  stack default identity. Template stays offline; a component with no auth keeps the ambient `KUBECONFIG`.
+- **4. Namespace.** `newActionContext` calls `settings.SetNamespace(namespace)` before building the
+  `RESTClientGetter`, so namespace-less manifests install into the component's configured namespace. An
+  empty namespace leaves Helm's own default untouched; charts with an explicit namespace are unaffected.
 
 ## Validation
 
