@@ -213,9 +213,12 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 	err = RunInstall("terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the tool was added to .tool-versions (it uses DefaultToolVersionsFilePath which is .tool-versions in HOME)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (the
+	// path actually configured above via VersionsFile) -- NOT the bare
+	// DefaultToolVersionsFilePath constant, which is CWD-relative (the package source
+	// directory under `go test`, not this test's isolated tempDir) and can otherwise
+	// silently pick up unrelated content left behind by whatever last wrote there.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.Contains(t, updatedToolVersions.Tools["terraform"], "1.11.4")
@@ -254,9 +257,10 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 	err = RunInstall("terraform@1.11.4", true, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the new version is first (default) in .tool-versions (uses DefaultToolVersionsFilePath)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the new version is first (default) in .tool-versions. Read back from
+	// toolVersionsPath (see TestRunInstall_WithValidToolSpec for why not
+	// DefaultToolVersionsFilePath).
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.Equal(t, "1.11.4", updatedToolVersions.Tools["terraform"][0])
@@ -325,10 +329,10 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	err = RunInstall("hashicorp/terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the tool was added to .tool-versions (uses DefaultToolVersionsFilePath)
-	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (see
+	// TestRunInstall_WithValidToolSpec for why not DefaultToolVersionsFilePath).
+	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	// Check for either key - the implementation may normalize to the shorter form
 	terraformKey := ""
@@ -373,9 +377,12 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	err = RunInstall("terraform@latest", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify a version was added (we can't predict the exact version, but it should be there)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify a version was added (we can't predict the exact version, but it should be
+	// there). Read back from toolVersionsPath (see TestRunInstall_WithValidToolSpec for
+	// why not DefaultToolVersionsFilePath) -- this test's loose assertions (no exact
+	// version check) mean the bug that path caused elsewhere wouldn't have failed here,
+	// just silently passed against the wrong file.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.NotEmpty(t, updatedToolVersions.Tools["terraform"])

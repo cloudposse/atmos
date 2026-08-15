@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/azure"  // Register azure/acr and azure/aks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"

@@ -725,3 +725,57 @@ func TestIsValidSHA(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateVersionSpec covers the accept/reject boundary ValidateVersionSpec
+// draws between literal release tags (accepted, however vendor-specific their
+// shape) and SemVer range/constraint syntax (rejected).
+func TestValidateVersionSpec(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		wantErr bool
+	}{
+		// Accepted: literal tags, including vendor-prefixed formats that don't
+		// match bare semver (jq tags its releases "jq-1.7.1", not "1.7.1").
+		// A prior version of this validation incorrectly rejected these by
+		// requiring ParseVersionSpec's strict semver shape.
+		{"bare semver", "1.7.1", false},
+		{"v-prefixed semver", "v1.7.1", false},
+		{"vendor-prefixed tag (jq)", "jq-1.7.1", false},
+		{"vendor-prefixed tag with words", "release-2024.01", false},
+		{"latest", "latest", false},
+		{"pr prefix", "pr:2038", false},
+		{"sha prefix", "sha:ceb7526", false},
+		{"ref prefix", "ref:main", false},
+		{"ref prefix with slash", "ref:heads/main", false},
+
+		// Rejected: SemVer range/constraint syntax — the confirmed bug this
+		// guards against (silently accepted, then a raw HTTP 404 at install).
+		{"caret range", "^1.7.0", true},
+		{"tilde-arrow range", "~>1.7.0", true},
+		{"gte range", ">=1.7.0", true},
+		{"lte range", "<=1.7.0", true},
+		{"compound range", ">=1.0.0,<2.0.0", true},
+		{"or range", "1.0.0 || 2.0.0", true},
+		{"wildcard", "1.*", true},
+
+		// Rejected: malformed explicit-prefix forms.
+		{"pr prefix non-numeric", "pr:abc", true},
+		{"sha prefix too short", "sha:ab", true},
+
+		// Rejected: empty.
+		{"empty", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateVersionSpec(tt.version)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
