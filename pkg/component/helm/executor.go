@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -58,7 +59,10 @@ var (
 	applyHelmRelease         = applyRelease
 	deleteHelmRelease        = deleteRelease
 	setupRepositories        = setupHelmRepositories
-	writeStatusLine          = data.Writeln
+	// writeStatusLine emits human-readable apply/delete status on the UI channel (stderr) via the ui
+	// layer - not data.Write (stdout), which is reserved for pipeable command data. See
+	// docs/io-and-ui-output.md. ui.Success renders markdown inline (backticks, `((muted))`).
+	writeStatusLine = ui.Success
 )
 
 // renderTimeout bounds a single chart render/locate (which may download remote charts).
@@ -530,7 +534,7 @@ func emitOperationStatus(operation Operation, summary map[string]any, opErr erro
 	if msg == "" {
 		return
 	}
-	_ = writeStatusLine(msg)
+	writeStatusLine(msg)
 }
 
 // formatOperationStatus builds the one-line status message for apply/delete from the operation
@@ -540,13 +544,13 @@ func formatOperationStatus(operation Operation, summary map[string]any) string {
 	namespace, _ := summary["namespace"].(string)
 	switch operation {
 	case OperationApply:
-		msg := fmt.Sprintf("Applied Helm release %q to namespace %q", release, namespace)
+		msg := fmt.Sprintf("Applied Helm release `%s` to namespace `%s`", release, namespace)
 		if chart, ok := summary["chart"].(string); ok && chart != "" {
-			msg += fmt.Sprintf(" (chart %s)", chart)
+			msg += fmt.Sprintf(" ((chart `%s`))", chart)
 		}
 		return msg
 	case OperationDelete:
-		return fmt.Sprintf("Deleted Helm release %q from namespace %q", release, namespace)
+		return fmt.Sprintf("Deleted Helm release `%s` from namespace `%s`", release, namespace)
 	default:
 		return ""
 	}

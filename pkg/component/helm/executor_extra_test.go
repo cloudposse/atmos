@@ -41,7 +41,7 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	originalWriteStatus := writeStatusLine
 	// The delete operation now emits a status line; stub the writer so the test does not depend on
 	// the data package writer being initialized.
-	writeStatusLine = func(string) error { return nil }
+	writeStatusLine = func(string) {}
 	t.Cleanup(func() {
 		initCliConfig = originalInit
 		processStacks = originalProcess

@@ -37,7 +37,7 @@ func TestEmitOperationStatus(t *testing.T) {
 			var captured string
 			var called bool
 			orig := writeStatusLine
-			writeStatusLine = func(s string) error { called = true; captured = s; return nil }
+			writeStatusLine = func(s string) { called = true; captured = s }
 			t.Cleanup(func() { writeStatusLine = orig })
 
 			emitOperationStatus(tc.operation, summary, tc.opErr)
@@ -61,9 +61,11 @@ func TestFormatOperationStatus(t *testing.T) {
 	apply := formatOperationStatus(OperationApply, summary)
 	require.Contains(t, apply, "echo-server")
 	require.Contains(t, strings.ToLower(apply), "namespace")
+	// The release/namespace are markdown-backticked so ui.Success renders them as inline code.
+	require.Contains(t, apply, "`echo-server`")
 
 	del := formatOperationStatus(OperationDelete, summary)
-	require.Contains(t, del, "echo-server")
+	require.Contains(t, del, "`echo-server`")
 
 	require.Empty(t, formatOperationStatus(OperationTemplate, summary))
 	require.Empty(t, formatOperationStatus(OperationDiff, summary))
