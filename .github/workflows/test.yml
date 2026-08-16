@@ -372,15 +372,23 @@ jobs:
         run: |
           if [ "${{ matrix.shard }}" = "1" ]; then
             TESTARGS_TESTS="-skip=^TestTerraformRegistryCache$"
+            # github.com/cloudposse/atmos/cmd (pinned into this shard's package
+            # slice below) blank-imports every registered CLI subcommand to
+            # wire up the command registry, so compiling its test binary alone
+            # can take 15m+ - confirmed as the cause of a windows shard hitting
+            # go test's own default -timeout 40m with zero packages finished
+            # (compiling cmd took 78s on macOS but ran past 40m on windows,
+            # which is already documented elsewhere in this file as the
+            # slowest target for compiling this dependency tree). Give this
+            # invocation real headroom, comfortably under the step's own
+            # timeout-minutes above.
+            PKG_GO_TEST_TIMEOUT="55m"
           else
             TESTARGS_TESTS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
+            PKG_GO_TEST_TIMEOUT=""
           fi
-          # github.com/cloudposse/atmos/cmd (bare) blank-imports every registered
-          # CLI subcommand to wire up the command registry, so compiling its test
-          # binary alone takes 15m+ - confirmed as the cause of a windows shard
-          # hitting its step timeout with its package slice still compiling and
-          # zero packages finished. Pin it out of the round-robin pool and always
-          # run it on shard 1, which has the most timeout headroom.
+          # Pin github.com/cloudposse/atmos/cmd out of the round-robin pool and
+          # always run it on shard 1, which has the most timeout headroom.
           SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
           if [ "${{ matrix.shard }}" = "1" ]; then
             SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
@@ -392,7 +400,7 @@ jobs:
 
           if [ -n "$SHARD_PACKAGES" ]; then
             COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-pkgs.out" \
-              TEST="$SHARD_PACKAGES" TESTARGS="" \
+              TEST="$SHARD_PACKAGES" TESTARGS="" GO_TEST_TIMEOUT="$PKG_GO_TEST_TIMEOUT" \
               atmos test acceptance --cover
           fi
 
@@ -443,10 +451,14 @@ jobs:
           atmos test acceptance
 
           # See the "Acceptance tests with coverage" step above for why
-          # github.com/cloudposse/atmos/cmd is pinned to shard 1.
+          # github.com/cloudposse/atmos/cmd is pinned to shard 1, and why shard
+          # 1's package invocation overrides GO_TEST_TIMEOUT (confirmed
+          # necessary here too: a windows shard 1 run hit go test's default
+          # -timeout 40m with cmd still compiling and no package "ok" printed).
           SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
           if [ "${{ matrix.shard }}" = "1" ]; then
             SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
+            export GO_TEST_TIMEOUT="55m"
           fi
           if [ -n "$SHARD_PACKAGES" ]; then
             export TEST="$SHARD_PACKAGES"
