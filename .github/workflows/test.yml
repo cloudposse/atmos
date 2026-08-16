@@ -375,7 +375,16 @@ jobs:
           else
             TESTARGS_TESTS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
           fi
-          SHARD_PACKAGES=$(go list ./... | grep -v '/tests$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          # github.com/cloudposse/atmos/cmd (bare) blank-imports every registered
+          # CLI subcommand to wire up the command registry, so compiling its test
+          # binary alone takes 15m+ - confirmed as the cause of a windows shard
+          # hitting its step timeout with its package slice still compiling and
+          # zero packages finished. Pin it out of the round-robin pool and always
+          # run it on shard 1, which has the most timeout headroom.
+          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
+          fi
 
           COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-tests.out" \
             TEST="./tests" TESTARGS="$TESTARGS_TESTS" \
@@ -433,7 +442,12 @@ jobs:
           export TEST="./tests"
           atmos test acceptance
 
-          SHARD_PACKAGES=$(go list ./... | grep -v '/tests$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          # See the "Acceptance tests with coverage" step above for why
+          # github.com/cloudposse/atmos/cmd is pinned to shard 1.
+          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
+          fi
           if [ -n "$SHARD_PACKAGES" ]; then
             export TEST="$SHARD_PACKAGES"
             export TESTARGS=""
