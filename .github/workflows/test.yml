@@ -342,10 +342,21 @@ jobs:
       #
       # ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT are read by tests/cli_test.go's
       # TestCLICommands to run only this shard's slice of the ~388 CLI-driven test
-      # cases (see testShard/testCaseShard). TEST is set per shard: shard 1 also
-      # picks up every non-`tests` package (the ~400 fast unit-test packages) so
-      # they run exactly once per OS instead of on every shard; shards 2+ only run
-      # ./tests.
+      # cases (see testShard/testCaseShard). `./tests` also has ~280 OTHER
+      # top-level test functions that aren't part of that loop - shards 2+
+      # restrict to -run=^TestCLICommands$ so those don't rerun on every shard
+      # (this is exactly what caused widespread TestToolchainAquaTools_NonExistentToolError
+      # shard failures before the restriction existed: multiplying a flaky
+      # test's exposure 10x).
+      #
+      # Every non-`tests` package (the ~400 fast unit-test packages) is split
+      # across all 10 shards too, instead of dumping them all on shard 1 (which
+      # made it 2-3x slower than every other shard - confirmed by a real run).
+      # Since -run=^TestCLICommands$ would silently zero out any other
+      # package's tests if it shared a `go test` invocation with ./tests, each
+      # shard runs two separate `go test` calls - one for ./tests, one for
+      # this shard's package slice - and (for the coverage-enabled step below)
+      # merges their coverage into the one file the `coverage` job expects.
       - name: Acceptance tests with coverage
         timeout-minutes: ${{ matrix.shard == 1 && 60 || 40 }}
         if: matrix.flavor.target == 'linux'
@@ -358,44 +369,43 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
-          COVERAGE_OUT: coverage-shard-${{ matrix.shard }}.out
         run: |
-          # TestCLICommands's own subtests are sharded internally (via
-          # ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT, see tests/cli_test.go).
-          # But `./tests` also has ~280 OTHER top-level test functions that
-          # aren't part of that loop at all - without -run restricting shards
-          # 2+ to just TestCLICommands, every one of those ~280 tests would
-          # rerun on all 10 shards, both wasting most of the sharding's CI-time
-          # benefit and multiplying any flaky test's exposure 10x (this is
-          # exactly what caused widespread shard failures on
-          # TestToolchainAquaTools_NonExistentToolError - a standalone test,
-          # unrelated to sharding, that ran needlessly on every shard).
           if [ "${{ matrix.shard }}" = "1" ]; then
-            OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
-            export TEST="./tests $OTHER_PACKAGES"
-            export TESTARGS="-skip=^TestTerraformRegistryCache$"
-            # go test's own -timeout (hardcoded to 40m in scripts/collect-coverage.sh,
-            # overridable via GO_TEST_TIMEOUT) has to grow along with this step's/job's
-            # GitHub Actions timeout-minutes above - otherwise `go test` panics with
-            # "test timed out after 40m0s" well before the outer CI timeout would ever
-            # fire, which is exactly what happened here before this override existed.
-            export GO_TEST_TIMEOUT="55m"
+            TESTARGS_TESTS="-skip=^TestTerraformRegistryCache$"
           else
-            export TEST="./tests"
-            export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
+            TESTARGS_TESTS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
           fi
-          atmos test acceptance --cover
+          SHARD_PACKAGES=$(go list ./... | grep -v '/tests$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+
+          COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-tests.out" \
+            TEST="./tests" TESTARGS="$TESTARGS_TESTS" \
+            atmos test acceptance --cover
+
+          if [ -n "$SHARD_PACKAGES" ]; then
+            COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-pkgs.out" \
+              TEST="$SHARD_PACKAGES" TESTARGS="" \
+              atmos test acceptance --cover
+          fi
+
+          # Merge both coverage files into the single per-shard file the
+          # `coverage` job downloads - same head/tail text-append technique
+          # scripts/collect-coverage.sh already uses internally.
+          {
+            head -n 1 "coverage-shard-${{ matrix.shard }}-tests.out"
+            tail -n +2 "coverage-shard-${{ matrix.shard }}-tests.out"
+            if [ -f "coverage-shard-${{ matrix.shard }}-pkgs.out" ]; then
+              tail -n +2 "coverage-shard-${{ matrix.shard }}-pkgs.out"
+            fi
+          } > "coverage-shard-${{ matrix.shard }}.out"
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Give Windows
         # real slack per shard too; macOS shards finish faster so their budget
-        # stays lower. Shard 1 absorbs every non-`tests` package plus every
-        # ./tests top-level test other than TestCLICommands (see the comment
-        # on the job's matrix above), so it needs more headroom than other
-        # shards regardless of OS - confirmed by a real run where shard 1 on
-        # windows needed over 40m and was still running when cancelled.
+        # stays lower. Shard 1 still does somewhat more work than other shards
+        # (see the "Acceptance tests with coverage" step above), so it keeps
+        # extra headroom regardless of OS.
         timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 40 || 30) }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         # GitHub Actions runs `run:` steps via pwsh on Windows by default; this
@@ -413,18 +423,22 @@ jobs:
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
         run: |
           # See the "Acceptance tests with coverage" step above for why shards
-          # 2+ restrict to -run=^TestCLICommands$, and why shard 1 overrides
-          # GO_TEST_TIMEOUT.
+          # 2+ restrict to -run=^TestCLICommands$, and why every shard runs
+          # ./tests and its package slice as two separate go test calls.
           if [ "${{ matrix.shard }}" = "1" ]; then
-            OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
-            export TEST="./tests $OTHER_PACKAGES"
             export TESTARGS="-skip=^TestTerraformRegistryCache$"
-            export GO_TEST_TIMEOUT="55m"
           else
-            export TEST="./tests"
             export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
           fi
+          export TEST="./tests"
           atmos test acceptance
+
+          SHARD_PACKAGES=$(go list ./... | grep -v '/tests$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          if [ -n "$SHARD_PACKAGES" ]; then
+            export TEST="$SHARD_PACKAGES"
+            export TESTARGS=""
+            atmos test acceptance
+          fi
 
       - name: Upload coverage report artifact
         if: matrix.flavor.target == 'linux' && hashFiles(format('coverage-shard-{0}.out', matrix.shard)) != ''
