@@ -73,7 +73,7 @@ commands:
               if [ "{{ .Flags.cover }}" = "true" ]; then
                 scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
               else
-                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
+                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout "${GO_TEST_TIMEOUT:-40m}"
               fi
 
       - name: acc

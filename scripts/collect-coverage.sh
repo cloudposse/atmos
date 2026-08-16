@@ -21,7 +21,7 @@ mkdir -p "$COVERAGE_DIR/integration"
 # default) so multiple shards' profiles remain mergeable/aggregatable
 # downstream instead of silently mixing covermodes.
 GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST \
-	-cover -covermode=atomic -coverpkg=./... $TESTARGS -timeout 40m \
+	-cover -covermode=atomic -coverpkg=./... $TESTARGS -timeout "${GO_TEST_TIMEOUT:-40m}" \
 	-coverprofile="$COVERAGE_DIR/unit.txt"
 
 # Convert subprocess binary coverage to text format if it exists

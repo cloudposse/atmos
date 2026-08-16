@@ -374,6 +374,12 @@ jobs:
             OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
             export TEST="./tests $OTHER_PACKAGES"
             export TESTARGS="-skip=^TestTerraformRegistryCache$"
+            # go test's own -timeout (hardcoded to 40m in scripts/collect-coverage.sh,
+            # overridable via GO_TEST_TIMEOUT) has to grow along with this step's/job's
+            # GitHub Actions timeout-minutes above - otherwise `go test` panics with
+            # "test timed out after 40m0s" well before the outer CI timeout would ever
+            # fire, which is exactly what happened here before this override existed.
+            export GO_TEST_TIMEOUT="55m"
           else
             export TEST="./tests"
             export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
@@ -407,11 +413,13 @@ jobs:
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
         run: |
           # See the "Acceptance tests with coverage" step above for why shards
-          # 2+ restrict to -run=^TestCLICommands$.
+          # 2+ restrict to -run=^TestCLICommands$, and why shard 1 overrides
+          # GO_TEST_TIMEOUT.
           if [ "${{ matrix.shard }}" = "1" ]; then
             OTHER_PACKAGES=$(go list ./... | grep -v '/tests$')
             export TEST="./tests $OTHER_PACKAGES"
             export TESTARGS="-skip=^TestTerraformRegistryCache$"
+            export GO_TEST_TIMEOUT="55m"
           else
             export TEST="./tests"
             export TESTARGS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
