@@ -141,6 +141,29 @@ jobs:
         run: |
           atmos build version --target=${{ matrix.target }}
 
+      # github.com/cloudposse/atmos/cmd blank-imports every registered CLI
+      # subcommand to wire up the command registry, so compiling ITS test
+      # binary alone can take 15m+ on windows (its linker is dramatically
+      # slower for large binaries than linux/macos - see this job's own
+      # timeout comment above). Compiling it here reuses the local Go build
+      # cache this same job/runner just warmed compiling the real atmos
+      # binary above (which already compiles cmd and everything it imports),
+      # so the incremental cost of also compiling cmd's test files is small -
+      # instead of paying the full cold-cache compile inside the acceptance
+      # test matrix, whose whole point is finishing in well under 10 minutes
+      # per shard. The `test` job's shard 1 downloads this binary (bundled
+      # into the same build-artifacts-<target> artifact below) and executes
+      # it directly instead of running `go test ./cmd` from source.
+      - name: Pre-compile cmd package test binary
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        shell: bash
+        run: |
+          # -covermode=atomic (not just -cover, which defaults to "set") to stay
+          # consistent with -covermode=atomic pinned in scripts/collect-coverage.sh -
+          # mixing modes across the coverage files that later get merged together
+          # would be invalid.
+          go test -c -covermode=atomic -o "build/cmd.test${{ matrix.target == 'windows' && '.exe' || '' }}" ./cmd
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -201,17 +224,16 @@ jobs:
     # on this comment) rather than dividing those numbers by the shard count exactly.
     #
     # Shard 1 also absorbs every non-`tests` package (the ~400 fast unit-test
-    # packages) plus every ./tests top-level test other than TestCLICommands
-    # unrestricted (see the "Acceptance tests"/"Acceptance tests with coverage"
-    # steps below), so it does meaningfully more work than shards 2-10 by
-    # design - confirmed by a real run: shard 1's windows leg needed over 40m
-    # total and was still running package tests when force-cancelled at the
-    # (then-uniform) 40m ceiling, while every other shard finished in single
-    # digits of minutes. Give shard 1 real headroom instead of the uniform
-    # budget; revisit if this still isn't enough, or consider splitting the
-    # non-`tests` packages/other top-level tests across shards too (would need
-    # separate go test invocations per group, since a shared -run=^TestCLICommands$
-    # would otherwise silently zero out any other packages sharing that invocation).
+    # packages, split round-robin across all 10 shards - see the "Acceptance
+    # tests"/"Acceptance tests with coverage" steps below) plus every ./tests
+    # top-level test other than TestCLICommands unrestricted, so it still does
+    # somewhat more work than shards 2-10 by design. It used to also compile
+    # github.com/cloudposse/atmos/cmd from a cold cache (15m+ on windows,
+    # confirmed by a real run that hit this ceiling with cmd still compiling),
+    # but that's now precompiled once in the `build` job and just executed
+    # here as a binary - this elevated budget is now a safety margin, not a
+    # measured requirement; trim it once a few runs confirm shard 1 no longer
+    # needs it.
     timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -372,27 +394,16 @@ jobs:
         run: |
           if [ "${{ matrix.shard }}" = "1" ]; then
             TESTARGS_TESTS="-skip=^TestTerraformRegistryCache$"
-            # github.com/cloudposse/atmos/cmd (pinned into this shard's package
-            # slice below) blank-imports every registered CLI subcommand to
-            # wire up the command registry, so compiling its test binary alone
-            # can take 15m+ - confirmed as the cause of a windows shard hitting
-            # go test's own default -timeout 40m with zero packages finished
-            # (compiling cmd took 78s on macOS but ran past 40m on windows,
-            # which is already documented elsewhere in this file as the
-            # slowest target for compiling this dependency tree). Give this
-            # invocation real headroom, comfortably under the step's own
-            # timeout-minutes above.
-            PKG_GO_TEST_TIMEOUT="55m"
           else
             TESTARGS_TESTS="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
-            PKG_GO_TEST_TIMEOUT=""
           fi
-          # Pin github.com/cloudposse/atmos/cmd out of the round-robin pool and
-          # always run it on shard 1, which has the most timeout headroom.
+          # github.com/cloudposse/atmos/cmd is excluded from the round-robin
+          # pool entirely and run as a precompiled test binary on shard 1
+          # instead (see the `build` job's "Pre-compile cmd package test
+          # binary" step) - compiling its test binary from a cold cache can
+          # take 15m+ on windows, which would defeat the point of a
+          # <10m-per-shard matrix if paid here.
           SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
-          if [ "${{ matrix.shard }}" = "1" ]; then
-            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
-          fi
 
           COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-tests.out" \
             TEST="./tests" TESTARGS="$TESTARGS_TESTS" \
@@ -400,18 +411,36 @@ jobs:
 
           if [ -n "$SHARD_PACKAGES" ]; then
             COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-pkgs.out" \
-              TEST="$SHARD_PACKAGES" TESTARGS="" GO_TEST_TIMEOUT="$PKG_GO_TEST_TIMEOUT" \
+              TEST="$SHARD_PACKAGES" TESTARGS="" \
               atmos test acceptance --cover
           fi
 
-          # Merge both coverage files into the single per-shard file the
-          # `coverage` job downloads - same head/tail text-append technique
-          # scripts/collect-coverage.sh already uses internally.
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            chmod +x "${{ github.workspace }}/cmd.test"
+            # cmd was compiled with coverage instrumentation (above), so it always
+            # tries to write coverage data and warns on stderr/stdout if GOCOVERDIR
+            # isn't set - several of its own tests re-exec themselves as a
+            # subprocess (the CLAUDE.md-mandated cross-platform pattern) and assert
+            # exact stdout/stderr content, so that warning breaks them. `go test`
+            # normally sets GOCOVERDIR itself (inherited by the subprocess via
+            # os.Environ()); set it explicitly here since we're running the
+            # compiled binary directly, not via `go test`.
+            CMD_GOCOVERDIR=$(mktemp -d)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=10m)
+            go tool covdata textfmt -i="$CMD_GOCOVERDIR" -o="coverage-shard-${{ matrix.shard }}-cmd.out"
+          fi
+
+          # Merge every coverage file produced above into the single per-shard
+          # file the `coverage` job downloads - same head/tail text-append
+          # technique scripts/collect-coverage.sh already uses internally.
           {
             head -n 1 "coverage-shard-${{ matrix.shard }}-tests.out"
             tail -n +2 "coverage-shard-${{ matrix.shard }}-tests.out"
             if [ -f "coverage-shard-${{ matrix.shard }}-pkgs.out" ]; then
               tail -n +2 "coverage-shard-${{ matrix.shard }}-pkgs.out"
+            fi
+            if [ -f "coverage-shard-${{ matrix.shard }}-cmd.out" ]; then
+              tail -n +2 "coverage-shard-${{ matrix.shard }}-cmd.out"
             fi
           } > "coverage-shard-${{ matrix.shard }}.out"
 
@@ -451,19 +480,27 @@ jobs:
           atmos test acceptance
 
           # See the "Acceptance tests with coverage" step above for why
-          # github.com/cloudposse/atmos/cmd is pinned to shard 1, and why shard
-          # 1's package invocation overrides GO_TEST_TIMEOUT (confirmed
-          # necessary here too: a windows shard 1 run hit go test's default
-          # -timeout 40m with cmd still compiling and no package "ok" printed).
+          # github.com/cloudposse/atmos/cmd is excluded here and run as a
+          # precompiled test binary on shard 1 instead.
           SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
-          if [ "${{ matrix.shard }}" = "1" ]; then
-            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/cmd")
-            export GO_TEST_TIMEOUT="55m"
-          fi
           if [ -n "$SHARD_PACKAGES" ]; then
             export TEST="$SHARD_PACKAGES"
             export TESTARGS=""
             atmos test acceptance
+          fi
+
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            CMD_TEST_BIN="${{ github.workspace }}/cmd.test${{ matrix.flavor.target == 'windows' && '.exe' || '' }}"
+            if [ "${{ matrix.flavor.target }}" != "windows" ]; then
+              chmod +x "$CMD_TEST_BIN"
+            fi
+            # cmd was compiled with coverage instrumentation (see the `build` job),
+            # so it always tries to write coverage data and warns on stderr/stdout
+            # if GOCOVERDIR isn't set - several of its own tests re-exec themselves
+            # as a subprocess and assert exact stdout/stderr content, so that
+            # warning breaks them even though this step doesn't collect coverage.
+            CMD_GOCOVERDIR=$(mktemp -d)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=10m)
           fi
 
       - name: Upload coverage report artifact
