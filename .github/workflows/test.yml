@@ -157,6 +157,15 @@ jobs:
       - name: Pre-compile cmd package test binary
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
+        env:
+          # cmd transitively pulls in github.com/bearsh/hid (hardware security
+          # key support), which needs cgo + libudev to build with CGO enabled -
+          # not installed on these runners. `atmos build binary` above already
+          # builds with CGO disabled (see .atmos.d/test.yaml's CGO_ENABLED "0"
+          # convention for the same reason); this raw `go test -c` invocation
+          # needs the same setting explicitly, since it doesn't go through that
+          # command.
+          CGO_ENABLED: "0"
         run: |
           # -covermode=atomic (not just -cover, which defaults to "set") to stay
           # consistent with -covermode=atomic pinned in scripts/collect-coverage.sh -
