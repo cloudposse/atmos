@@ -434,8 +434,13 @@ jobs:
             # normally sets GOCOVERDIR itself (inherited by the subprocess via
             # os.Environ()); set it explicitly here since we're running the
             # compiled binary directly, not via `go test`.
+            # -test.timeout is generous (not just compensating for
+            # macOS's ~78s total): actually *running* cmd's tests, most of
+            # which spawn subprocesses, is measurably slower on windows (higher
+            # process-spawn overhead) than the ~10m first assumed - confirmed by
+            # a real "panic: test timed out after 10m0s" failure here.
             CMD_GOCOVERDIR=$(mktemp -d)
-            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=10m)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=30m)
             go tool covdata textfmt -i="$CMD_GOCOVERDIR" -o="coverage-shard-${{ matrix.shard }}-cmd.out"
           fi
 
@@ -508,8 +513,10 @@ jobs:
             # if GOCOVERDIR isn't set - several of its own tests re-exec themselves
             # as a subprocess and assert exact stdout/stderr content, so that
             # warning breaks them even though this step doesn't collect coverage.
+            # See the "Acceptance tests with coverage" step above for why
+            # -test.timeout is generous (confirmed necessary on windows).
             CMD_GOCOVERDIR=$(mktemp -d)
-            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=10m)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=30m)
           fi
 
       - name: Upload coverage report artifact
