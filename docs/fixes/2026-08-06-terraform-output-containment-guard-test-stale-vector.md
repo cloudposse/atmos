@@ -19,9 +19,13 @@ open instead of the one that's now closed.
 formatting the workdir directory name. That sanitization is a side effect
 that also happens to neutralize `..`-based traversal via the component
 argument: a component name like `../../../../evil` now collapses into the
-single literal segment `..-..-..-..-evil` (no `/` left for the OS to
+single literal segment `..-s..-s..-s..-sevil` (no `/` left for the OS to
 interpret as a parent-directory reference), so it can no longer escape
-`BasePath` through `filepath.Join`.
+`BasePath` through `filepath.Join`. (`BuildPath`'s component-name encoding
+has evolved since this fix landed -- see
+`docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`
+for the current scheme; the segment shown here reflects that current
+encoding, not the one in place when this fix was written.)
 
 `extractComponentPath`'s containment guard
 (`pkg/terraform/output/config.go`) exists precisely to catch a derived

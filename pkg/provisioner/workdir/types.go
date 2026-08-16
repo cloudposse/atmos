@@ -155,12 +155,13 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	// the same sanitization already used for backend template context (see
 	// internal/exec/terraform_generate_backends.go).
 	//
-	// "\" is sanitized identically and unconditionally (not just on Windows):
-	// it is Windows' real path separator, so a crafted or copy-pasted
-	// component name containing it (e.g. "..\\..\\evil") would otherwise let
+	// "\" is sanitized unconditionally (not just on Windows): it is Windows'
+	// real path separator, so a crafted or copy-pasted component name
+	// containing it (e.g. "..\\..\\evil") would otherwise let
 	// filepath.Join/Clean treat it as real ".."-traversal segments there,
-	// escaping the intended workdir root. Stripping it on every platform also
-	// keeps a given component name's workdir path identical across OSes.
+	// escaping the intended workdir root. Stripping it on every platform
+	// also keeps a given component name's encoded workdir segment
+	// deterministic regardless of which OS Atmos runs on.
 	workdirComponent = escapeComponentNameForPath(workdirComponent)
 
 	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
@@ -171,18 +172,24 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 
 // escapeComponentNameForPath injectively encodes name so it can be used as a single
 // filesystem path segment without colliding with any other name. Every "-" is escaped to
-// "-h" *before* "/" and "\" are encoded to "-s" ("h" for the literal hyphen, "s" for either
-// path separator -- they intentionally share one code so a component name's workdir path
-// stays identical across OSes, see
-// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md for that original rationale).
-// Escaping the literal hyphen first is what makes this injective: "-" never appears
-// unescaped in the output, so every "-" in an encoded name is unambiguously the start of a
-// two-character escape token, and no two distinct inputs can ever encode to the same output.
-// A single "/" -> "-" substitution (or even "/" -> "--") does not have this property: e.g.
-// "app/local" and "app-local" would both encode to "app-local" (single-hyphen scheme) or
-// "app/local" and "app--local" would both encode to "app--local" (double-hyphen scheme) --
-// either way, two distinct components would share one workdir, and therefore its files,
-// metadata, and Terraform state.
+// "-h" *before* "/" is encoded to "-s" and "\" to "-b" -- each of the three special
+// characters gets its own two-character token, so "-" never appears unescaped in the output.
+// Every "-" in an encoded name is therefore unambiguously the start of a two-character escape
+// token, and no two distinct inputs can ever encode to the same output: e.g. "app/local",
+// "app-local", "app--local", and `app\local` all encode to four distinct segments
+// ("app-slocal", "app-hlocal", "app-h-hlocal", "app-blocal"). A single "/" -> "-" substitution
+// (or "/" -> "--", or mapping "/" and "\" to the same code) does not have this property --
+// each of those would let two distinct component names collide on one workdir, and therefore
+// share its files, metadata, and Terraform state.
+//
+// "/" and "\" get distinct codes rather than sharing one: earlier revisions of this function
+// aliased them on the theory that doing so was necessary to keep a *single* component name's
+// encoding identical regardless of which OS Atmos runs on. That's not actually true --
+// encoding happens in this Go loop, never delegated to the OS-dependent path/filepath
+// package, so a given name's encoded output is already fully deterministic across OSes
+// whether or not "/" and "\" share a code. Giving them distinct codes costs nothing and
+// closes the collision between two real (if unusual) component names differing only in which
+// separator they use.
 func escapeComponentNameForPath(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))
@@ -190,8 +197,10 @@ func escapeComponentNameForPath(name string) string {
 		switch r {
 		case '-':
 			b.WriteString("-h")
-		case '/', '\\':
+		case '/':
 			b.WriteString("-s")
+		case '\\':
+			b.WriteString("-b")
 		default:
 			b.WriteRune(r)
 		}

@@ -33,7 +33,10 @@ For `component == "app/local-nested"` this yields
 `.workdir/terraform/dev-app/local-nested/` — `filepath.Join` treats the `/`
 in the component name as a real path separator, producing two directory
 levels where every other caller (via the now-fixed `BuildPath`) produces
-one sanitized segment (`dev-app-local-nested`). Confirmed via a real
+one sanitized segment (`dev-app-slocal-hnested` under `BuildPath`'s current
+encoding -- see
+`docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`;
+it was `dev-app-local-nested` when this fix was written). Confirmed via a real
 `atmos terraform apply "app/local-nested" --stack dev` run against the
 `tests/fixtures/scenarios/source-provisioner-workdir-nested` fixture: the
 workdir landed nested one level too deep, and state written to a relative

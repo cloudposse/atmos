@@ -527,10 +527,12 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 func TestCleanWorkdir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Create a workdir structure using stack-component naming.
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-test-component")
-	err := os.MkdirAll(workdirPath, 0o755)
+	// Create a workdir structure at the path BuildPath actually derives for this
+	// (hyphenated) component/stack pair -- not a hand-rolled "stack-component" string,
+	// which would silently drift from BuildPath's real encoding again.
+	workdirPath, err := BuildPath(tempDir, "terraform", "test-component", "dev", nil)
 	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create a file in the workdir.
 	err = os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644)
@@ -547,6 +549,53 @@ func TestCleanWorkdir(t *testing.T) {
 	// Verify the workdir was removed.
 	_, err = os.Stat(workdirPath)
 	assert.True(t, os.IsNotExist(err), "workdir should be removed")
+}
+
+// TestCleanWorkdir_FindsProvisionedHyphenatedComponent is a regression test proving
+// CleanWorkdir can locate and remove a workdir that Service.Provision actually created for a
+// component whose name contains a literal hyphen. CleanWorkdir previously reimplemented the
+// stack-component naming formula directly (fmt.Sprintf("%s-%s", stack, component)) instead of
+// delegating to BuildPath, so once BuildPath started injectively encoding literal hyphens
+// (escaping "-" to "-h"), CleanWorkdir could no longer find what Provision had created for any
+// ordinarily-named (kebab-case) component -- only components with no "-" in their name at all
+// happened to still match.
+func TestCleanWorkdir_FindsProvisionedHyphenatedComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "my-hyphenated-component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"component":   "my-hyphenated-component",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	_, statErr := os.Stat(provisionedPath)
+	require.NoError(t, statErr, "provisioned workdir must exist before cleaning")
+
+	require.NoError(t, CleanWorkdir(atmosConfig, "my-hyphenated-component", "dev"))
+
+	_, statErr = os.Stat(provisionedPath)
+	assert.True(t, os.IsNotExist(statErr), "CleanWorkdir must remove the workdir Provision actually created")
 }
 
 // TestCleanAllWorkdirs tests the CleanAllWorkdirs function.

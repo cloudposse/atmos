@@ -105,16 +105,19 @@ func TestBuildPath(t *testing.T) {
 		},
 		{
 			// "\" is Windows' real path separator: a component name
-			// containing it must sanitize identically to "/", or
+			// containing it must sanitize to a single segment, or
 			// filepath.Join/Clean would treat it as real directory
-			// segments (including ".."-traversal) on that platform.
+			// segments (including ".."-traversal) on that platform. It
+			// gets its own "-b" token, distinct from "/"'s "-s", so
+			// `ecs\cluster` and "ecs/cluster" never collide -- see
+			// TestBuildPath_NoCollisionBetweenSlashAndBackslash.
 			name:            "backslash-containing component name does not add a path segment",
 			basePath:        "/base",
 			componentType:   "terraform",
 			component:       `ecs\cluster`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-ecs-scluster"},
+			want:            []string{"terraform", "fixtures-ecs-bcluster"},
 		},
 		{
 			// A component name crafted to escape the workdir root via
@@ -127,7 +130,7 @@ func TestBuildPath(t *testing.T) {
 			component:       `..\..\evil`,
 			stack:           "fixtures",
 			componentConfig: map[string]any{},
-			want:            []string{"terraform", "fixtures-..-s..-sevil"},
+			want:            []string{"terraform", "fixtures-..-b..-bevil"},
 		},
 	}
 
@@ -166,6 +169,23 @@ func TestBuildPath_NoCollisionBetweenSlashAndHyphen(t *testing.T) {
 				"a component named %q must not resolve to the same workdir as a component named %q", a, b)
 		}
 	}
+}
+
+// TestBuildPath_NoCollisionBetweenSlashAndBackslash is a regression test for an earlier
+// revision of escapeComponentNameForPath that mapped both "/" and "\" to the same "-s" token
+// (on the theory that doing so was necessary for cross-OS determinism, which isn't true --
+// see the function's doc comment). Under that scheme, a component literally named
+// `ecs\cluster` and one named "ecs/cluster" both encoded to "ecs-scluster" and would share a
+// workdir. "/" and "\" now get distinct tokens ("-s" and "-b").
+func TestBuildPath_NoCollisionBetweenSlashAndBackslash(t *testing.T) {
+	slashPath, err := BuildPath("/base", "terraform", "ecs/cluster", "dev", map[string]any{})
+	require.NoError(t, err)
+
+	backslashPath, err := BuildPath("/base", "terraform", `ecs\cluster`, "dev", map[string]any{})
+	require.NoError(t, err)
+
+	assert.NotEqual(t, slashPath, backslashPath,
+		"a component named %q must not resolve to the same workdir as a component named %q", "ecs/cluster", `ecs\cluster`)
 }
 
 // TestBuildPath_RejectsStackTraversal verifies BuildPath rejects a stack name containing

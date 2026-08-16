@@ -225,6 +225,17 @@ commands:
 	t.Setenv("ATMOS_BASE_PATH", tempDir)
 	t.Chdir(tempDir)
 
+	// Install the same fake, logging `docker` executable the container-override tests use, so
+	// this test can prove the negative: `container: false` must not invoke it at all. Without
+	// this, the marker-file assertion below only proves the host command ran -- it doesn't
+	// prove docker was never also invoked (e.g. by a regression that runs the step both places).
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: "docker",
+		Mode: testhelpers.FakeContainerRuntimeStep,
+	})
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err, "container: false must not break loading the entire atmos.yaml")
 
@@ -236,4 +247,8 @@ commands:
 	content, err := os.ReadFile(markerPath)
 	require.NoError(t, err, "the step must have run on the host")
 	assert.Equal(t, "host\n", string(content))
+
+	_, statErr := os.Stat(argsPath)
+	assert.True(t, os.IsNotExist(statErr),
+		"container: false must never invoke docker -- the fake runtime's argument log should not exist")
 }

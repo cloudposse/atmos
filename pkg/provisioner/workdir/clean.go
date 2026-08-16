@@ -22,7 +22,10 @@ const (
 )
 
 // CleanWorkdir removes the working directory for a specific component in a stack.
-// The workdir name follows the stack-component naming convention (e.g., "dev-vpc").
+// Delegates to BuildPath -- the single canonical formula every workdir consumer must share --
+// rather than reimplementing the stack-component naming convention, so this can always find
+// what Service.Provision actually created (see BuildPath's doc comment for the component-name
+// encoding that makes this necessary for hyphenated or nested component names).
 func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
 	defer perf.Track(atmosConfig, "workdir.CleanWorkdir")()
 
@@ -31,9 +34,15 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack strin
 		basePath = "."
 	}
 
-	// Construct workdir name using stack-component naming convention.
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
+	workdirPath, err := BuildPath(basePath, "terraform", component, stack, nil)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrWorkdirClean).
+			WithCause(err).
+			WithExplanation("failed to resolve component workdir path").
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
 
 	// Check if workdir exists.
 	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
