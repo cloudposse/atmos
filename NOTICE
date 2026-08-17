@@ -1694,7 +1694,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.46.2/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.48.0/LICENSE
 
   - github.com/go-errors/errors
     License: MIT
