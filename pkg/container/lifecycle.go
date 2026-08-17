@@ -166,7 +166,8 @@ func logReusedNetworkMismatch(id, name string, config *NamedConfig) {
 		return
 	}
 	log.Debug("reusing existing container; its network attachments are not reconciled -- "+
-		"run 'atmos container down' and 'up' again to pick up shared networking changes",
+		fmt.Sprintf("run 'atmos container down %s -s %s' and 'up' again to pick up shared networking changes",
+			config.Component, config.Stack),
 		"container", id, "name", name)
 }
 
