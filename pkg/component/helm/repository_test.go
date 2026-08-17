@@ -181,11 +181,19 @@ func TestSetupHelmRepositories_NoRepositoriesReturnsNil(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestSetupHelmRepositories_EmptyRepoFileConfigReturnsNil verifies that an
-// empty (but explicitly set) HELM_REPOSITORY_CONFIG short-circuits before any
-// filesystem access, per the "if repoFile == \"\" { return nil }" guard.
+// TestSetupHelmRepositories_EmptyRepoFileConfigReturnsNil verifies that an empty
+// RepositoryConfig short-circuits before any filesystem access, per the
+// "if repoFile == \"\" { return nil }" guard. Because newSettings now isolates the
+// repository config to an atmos-managed path (issue #1), the empty config is produced by
+// stubbing newSettings rather than by an empty HELM_REPOSITORY_CONFIG env var.
 func TestSetupHelmRepositories_EmptyRepoFileConfigReturnsNil(t *testing.T) {
-	t.Setenv("HELM_REPOSITORY_CONFIG", "")
+	orig := newSettings
+	t.Cleanup(func() { newSettings = orig })
+	newSettings = func() *cli.EnvSettings {
+		s := cli.New()
+		s.RepositoryConfig = ""
+		return s
+	}
 
 	err := setupHelmRepositories([]chartRepository{{Name: "example", URL: "https://example.com"}})
 	assert.NoError(t, err)
