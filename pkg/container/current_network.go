@@ -86,13 +86,17 @@ func envString(name string) string {
 }
 
 // firstReachableNetwork returns the first network name that isn't empty,
-// "host", or "none" -- those aren't usable for container-to-container DNS.
+// "host", "none", or "bridge" -- those aren't usable for container-to-container
+// DNS. "bridge" specifically is Docker's default network, which (unlike a
+// user-defined bridge network) doesn't support embedded DNS/--network-alias
+// resolution at all, so picking it would make AttachSharedNetwork report
+// success while name resolution silently never works.
 func firstReachableNetwork(networks []string) string {
 	defer perf.Track(nil, "container.firstReachableNetwork")()
 
 	for _, network := range networks {
 		switch network {
-		case "", "host", "none":
+		case "", "host", "none", "bridge":
 			continue
 		default:
 			return network

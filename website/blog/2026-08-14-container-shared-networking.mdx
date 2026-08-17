@@ -35,7 +35,7 @@ scoped to your Atmos stack instead.
   resolve the other by name.
 - A workflow `run` step that resolves a stack (its own `stack:` field, or the workflow's
   `--stack`/`ATMOS_STACK`) joins that same network too, so a test-runner step can hit
-  `http://dev-api:8080` directly.
+  `http://dev-api:80` directly.
 
 It's best-effort: if the container runtime can't create or join a network, everything still runs —
 you just lose the ability to resolve peers by name, and host-published ports keep working exactly

@@ -14,6 +14,11 @@ import (
 func TestFirstReachableNetwork(t *testing.T) {
 	assert.Equal(t, "github_network_123", firstReachableNetwork([]string{"", "none", "host", "github_network_123"}))
 	assert.Empty(t, firstReachableNetwork([]string{"", "none", "host"}))
+	// Docker's default "bridge" network doesn't support embedded DNS/aliases,
+	// so it must be skipped in favor of a user-defined network even when it
+	// sorts first in the inspection results.
+	assert.Equal(t, "my-user-defined-net", firstReachableNetwork([]string{"bridge", "my-user-defined-net"}))
+	assert.Empty(t, firstReachableNetwork([]string{"bridge"}))
 }
 
 func TestPreferCurrentContainerNetwork(t *testing.T) {

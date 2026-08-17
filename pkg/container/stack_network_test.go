@@ -20,6 +20,8 @@ func TestHasExplicitNetworkOverride(t *testing.T) {
 		{name: "space form", runArgs: []string{"--network", "host"}, want: true},
 		{name: "equals form", runArgs: []string{"--network=host"}, want: true},
 		{name: "user's own network name", runArgs: []string{"--network=my-net"}, want: true},
+		{name: "--net alias, space form", runArgs: []string{"--net", "host"}, want: true},
+		{name: "--net alias, equals form", runArgs: []string{"--net=host"}, want: true},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
