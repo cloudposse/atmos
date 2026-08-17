@@ -167,7 +167,21 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
 	rawPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
 
-	return containWithinBase(rawPath, basePath)
+	// stack is not escaped like workdirComponent above, so a stack name such
+	// as "../../components" folds enough ".." segments into workdirName to
+	// climb back out of the componentType directory (or .workdir itself)
+	// while the result still lands inside basePath -- e.g.
+	// "<basePath>/.workdir/terraform/../../components-foo" resolves to
+	// "<basePath>/components-foo". Checking containment against basePath
+	// alone would accept that, letting a crafted stack name write into an
+	// arbitrary sibling directory of .workdir instead of the intended
+	// per-component-type workdir root. Validate against that narrower,
+	// canonical root (itself always safely nested under basePath, since
+	// componentType is a fixed, trusted caller-supplied constant such as
+	// "terraform", not user-controlled input) to close that gap.
+	typeRoot := filepath.Join(basePath, WorkdirPath, componentType)
+
+	return containWithinBase(rawPath, typeRoot)
 }
 
 // escapeComponentNameForPath injectively encodes name so it can be used as a single

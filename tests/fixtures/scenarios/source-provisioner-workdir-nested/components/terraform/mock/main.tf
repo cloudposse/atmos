@@ -1,8 +1,9 @@
-# Local, network-free "source" module. source-provisioner-workdir-nested's
-# components vendor this directory via source.uri (a plain local relative
-# path resolved against the process CWD -- see pkg/provisioner/source/vendor.go
-# IsLocalPath/localDirectorySource, which copies directly without go-getter,
-# so no network access is required to exercise the JIT source+workdir path).
+# LOCAL (non-source) component. Unlike source-modules/mock/main.tf (which is
+# vendored via source.uri -- see pkg/provisioner/source/vendor.go
+# IsLocalPath/localDirectorySource), this directory IS the component itself:
+# it is referenced directly via `metadata.component: mock` (e.g.
+# "app/local-nested", consumer-flat-output/-state, consumer-nested-output/
+# -state in stacks/deploy/dev.yaml) and is never vendored or copied.
 
 variable "environment" {
   type        = string
@@ -11,8 +12,8 @@ variable "environment" {
 }
 
 output "component_type" {
-  value       = "source-provisioner-workdir-nested-mock"
-  description = "Marker output proving this state came from the vendored source module."
+  value       = "source-provisioner-workdir-nested-local"
+  description = "Marker output proving this state came from the local (non-vendored) component, distinct from source-modules/mock's vendored marker."
 }
 
 output "environment" {

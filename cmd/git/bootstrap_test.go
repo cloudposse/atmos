@@ -206,6 +206,17 @@ func TestCIGitCloneBootstrapRequestedFromRawArgs(t *testing.T) {
 			ciDetected:  true,
 			wantRequest: false,
 		},
+		{
+			// Regression: --config is a real global persistent flag (not a
+			// clone-specific flag), so the throwaway command tree must
+			// inherit it or clone.ParseFlags rejects it as unknown, wrongly
+			// disqualifying the bootstrap. The referenced file need not
+			// exist -- this only exercises flag parsing, not config loading.
+			name:        "--config inherited root flag is accepted",
+			rawArgs:     []string{"--config", "missing.yaml"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
 	}
 
 	for _, tt := range tests {

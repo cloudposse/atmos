@@ -200,6 +200,20 @@ func TestBuildPath_RejectsStackTraversal(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }
 
+// TestBuildPath_RejectsPartialStackTraversalWithinBasePath verifies BuildPath rejects a stack
+// name whose ".." segments climb back out of the .workdir/<componentType> root while the
+// resolved path still lands inside basePath -- e.g. "../../components" against
+// "<basePath>/.workdir/terraform/" resolves to "<basePath>/components-vpc", which is contained
+// in basePath but escapes the canonical per-component-type workdir root, and would previously
+// slip past a containment check against basePath alone.
+func TestBuildPath_RejectsPartialStackTraversalWithinBasePath(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", "../../components", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
 // TestBuildPath_AcceptsFilesystemRootBasePath is a regression test for containWithinBase's
 // prior absBase+separator prefix check: when basePath resolves to a filesystem root, absBase
 // already ends in the separator, so absBase+sep produced a doubled separator ("//" on Unix,

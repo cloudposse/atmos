@@ -72,10 +72,18 @@ func CICloneBootstrapRequested(cmd *cobra.Command, args []string) bool {
 // argument and wrongly disqualify the bootstrap. It also honors an explicit
 // --ci/--ci=false on rawArgs, which a purely environment-based check could
 // not see.
+//
+// The throwaway root also carries the real global persistent flags (e.g.
+// --config, --chdir) via a fresh GlobalOptionsBuilder, since this bootstrap
+// check runs before RootCmd's own PersistentFlags are attached to it. Without
+// them, an otherwise-valid invocation like `atmos git clone --config
+// missing.yaml` would fail clone.ParseFlags with "unknown flag" and this
+// function would wrongly report false, deferring CI bootstrap detection.
 func CIGitCloneBootstrapRequestedFromRawArgs(rawArgs []string) bool {
 	root := &cobra.Command{Use: "atmos"}
 	git := &cobra.Command{Use: gitCmd.Name()}
 	clone := &cobra.Command{Use: cloneCmd.Name()}
+	flags.NewGlobalOptionsBuilder().Build().RegisterPersistentFlags(root)
 	newCloneParser().RegisterFlags(clone)
 	root.AddCommand(git)
 	git.AddCommand(clone)
