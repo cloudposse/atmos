@@ -22,6 +22,10 @@ var (
 	// in tests.
 	ProcessRunsInContainer = defaultProcessRunsInContainer
 	readProcFile           = os.ReadFile
+	// Wraps os.Hostname, overridable in tests so the "hostname can't be
+	// determined" fallback in CurrentContainerNetwork is exercisable without
+	// depending on an actual OS-level failure.
+	currentHostname = os.Hostname
 )
 
 // CurrentContainerNetwork returns the network Atmos's own process is attached
@@ -36,7 +40,7 @@ func CurrentContainerNetwork(ctx context.Context, runtime Runtime) string {
 	if !PreferCurrentContainerNetwork() || runtime == nil {
 		return ""
 	}
-	hostname, err := os.Hostname()
+	hostname, err := currentHostname()
 	if err != nil || hostname == "" {
 		return ""
 	}

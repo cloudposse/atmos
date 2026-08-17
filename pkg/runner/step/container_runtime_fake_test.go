@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -56,6 +57,30 @@ func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
 	assert.Equal(t, "run stdout\n", res.Metadata["stdout"])
 	assert.Equal(t, 0, res.Metadata[exitCodeMetadata])
 	assert.Equal(t, "container-id", res.Metadata["container_id"])
+}
+
+// TestContainerHandlerExecuteRunStackResolutionErrorPropagates covers executeRun's
+// error path when resolveContainerStepStack fails (e.g. an unresolvable `stack:`
+// template) -- the error must be wrapped in errUtils.ErrContainerStepResolveStack
+// and returned rather than silently ignored or causing the container to run
+// without shared networking.
+func TestContainerHandlerExecuteRunStackResolutionErrorPropagates(t *testing.T) {
+	installStepFakeDocker(t)
+	h := &ContainerHandler{}
+
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "{{ .steps.missing.value",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrContainerStepResolveStack)
+	assert.Nil(t, res)
 }
 
 func TestContainerHandlerExecuteRunAttachesSharedNetwork(t *testing.T) {

@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -133,5 +134,107 @@ func stubCurrentNetworkDetection(t *testing.T, inContainer bool) func() {
 	return func() {
 		ProcessRunsInContainer = origProcessRunsInContainer
 		readProcFile = origReadProcFile
+	}
+}
+
+// erroringInspectRuntime is a Runtime whose Inspect always fails, used to cover
+// CurrentContainerNetwork's "inspect failure" fallback.
+type erroringInspectRuntime struct {
+	Runtime
+}
+
+func (erroringInspectRuntime) Inspect(context.Context, string) (*Info, error) {
+	return nil, errors.New("inspect failed")
+}
+
+// TestCurrentContainerNetwork_InspectFailureOrNilInfoFallsBackToEmpty covers the
+// two ways runtime.Inspect can fail to yield usable data -- an error, or a nil
+// Info with no error (e.g. an unknown container ID) -- confirming both make
+// CurrentContainerNetwork fail soft to "" instead of panicking on a nil
+// dereference or propagating the error.
+func TestCurrentContainerNetwork_InspectFailureOrNilInfoFallsBackToEmpty(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	restore := stubCurrentNetworkDetection(t, true)
+	defer restore()
+
+	t.Run("inspect returns an error", func(t *testing.T) {
+		got := CurrentContainerNetwork(context.Background(), erroringInspectRuntime{})
+		assert.Empty(t, got)
+	})
+
+	t.Run("inspect returns nil info without an error", func(t *testing.T) {
+		got := CurrentContainerNetwork(context.Background(), staticInspectRuntime{info: nil})
+		assert.Empty(t, got)
+	})
+}
+
+// TestCurrentContainerNetwork_UndeterminableHostnameFallsBackToEmpty covers the
+// "hostname can't be determined" short-circuit: even when the process is
+// (or claims to be) containerized and the runtime would otherwise resolve a
+// network, an unresolvable hostname must still make CurrentContainerNetwork
+// fail soft to "" rather than propagate the error or call Inspect at all.
+func TestCurrentContainerNetwork_UndeterminableHostnameFallsBackToEmpty(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	restore := stubCurrentNetworkDetection(t, true)
+	defer restore()
+
+	origHostname := currentHostname
+	currentHostname = func() (string, error) { return "", assert.AnError }
+	defer func() { currentHostname = origHostname }()
+
+	inspected := false
+	got := CurrentContainerNetwork(context.Background(), inspectSpyRuntime{
+		staticInspectRuntime: staticInspectRuntime{info: &Info{Networks: []string{"ci-runner-net"}}},
+		onInspect:            func() { inspected = true },
+	})
+
+	assert.Empty(t, got)
+	assert.False(t, inspected, "Inspect must not be called when the hostname can't be determined")
+}
+
+type inspectSpyRuntime struct {
+	staticInspectRuntime
+	onInspect func()
+}
+
+func (r inspectSpyRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
+	r.onInspect()
+	return r.staticInspectRuntime.Inspect(ctx, containerID)
+}
+
+// TestDefaultProcessRunsInContainer exercises the real (non-stubbed) detection
+// heuristic directly. The dockerenv/containerenv marker-file checks are real
+// filesystem lookups (no seam in this codebase, and the sandboxed/CI hosts this
+// suite runs on aren't themselves Docker/Podman containers), so this asserts the
+// heuristic falls through to the /proc/1/cgroup marker scan, which readProcFile
+// makes fully controllable.
+func TestDefaultProcessRunsInContainer(t *testing.T) {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		t.Skip("host itself has /.dockerenv; marker-file short-circuit would dominate the result")
+	}
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		t.Skip("host itself has /run/.containerenv; marker-file short-circuit would dominate the result")
+	}
+
+	origReadProcFile := readProcFile
+	defer func() { readProcFile = origReadProcFile }()
+
+	tests := []struct {
+		name    string
+		content []byte
+		err     error
+		want    bool
+	}{
+		{name: "cgroup file unreadable", err: os.ErrNotExist, want: false},
+		{name: "cgroup with no container markers", content: []byte("0::/\n"), want: false},
+		{name: "cgroup with docker marker", content: []byte("0::/docker/abc123\n"), want: true},
+		{name: "cgroup with kubepods marker", content: []byte("0::/kubepods/besteffort/pod1\n"), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			readProcFile = func(string) ([]byte, error) { return tt.content, tt.err }
+			assert.Equal(t, tt.want, defaultProcessRunsInContainer())
+		})
 	}
 }

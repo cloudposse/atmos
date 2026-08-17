@@ -78,16 +78,23 @@ func TestStackNetworkAlias_CollisionResistance(t *testing.T) {
 }
 
 // fakeNetworkRuntime is a Runtime that also implements NetworkEnsurer,
-// recording EnsureNetwork calls.
+// recording EnsureNetwork calls. When inspectInfo is set, it also answers
+// Inspect so tests can drive AttachSharedNetwork's "prefer the current
+// container network" path.
 type fakeNetworkRuntime struct {
 	Runtime
-	ensured []string
-	err     error
+	ensured     []string
+	err         error
+	inspectInfo *Info
 }
 
 func (f *fakeNetworkRuntime) EnsureNetwork(_ context.Context, name string) error {
 	f.ensured = append(f.ensured, name)
 	return f.err
+}
+
+func (f *fakeNetworkRuntime) Inspect(context.Context, string) (*Info, error) {
+	return f.inspectInfo, nil
 }
 
 // plainRuntime is a Runtime without the NetworkEnsurer capability.
@@ -123,6 +130,24 @@ func TestAttachSharedNetwork(t *testing.T) {
 		AttachSharedNetwork(context.Background(), &plainRuntime{}, &networks, "dev", "gitserver")
 		assert.Empty(t, networks)
 	})
+}
+
+// TestAttachSharedNetwork_PrefersCurrentContainerNetwork proves that when Atmos's
+// own process is itself detected as containerized (CurrentContainerNetwork
+// resolves a usable network), AttachSharedNetwork joins that network directly
+// instead of creating/ensuring a dedicated per-stack network -- so a job
+// container that starts a sibling container can still reach it.
+func TestAttachSharedNetwork_PrefersCurrentContainerNetwork(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+
+	rt := &fakeNetworkRuntime{inspectInfo: &Info{Networks: []string{"none", "ci-runner-net"}}}
+	var networks []NetworkAttachment
+	AttachSharedNetwork(context.Background(), rt, &networks, "dev", "gitserver")
+
+	assert.Empty(t, rt.ensured, "EnsureNetwork must not be called when the current container network is usable")
+	assert.Equal(t, []NetworkAttachment{
+		{Name: "ci-runner-net", Aliases: []string{"dev-gitserver"}},
+	}, networks)
 }
 
 // TestAttachSharedNetwork_SharesNetworkAcrossKinds proves the actual unification
