@@ -16,10 +16,11 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
 GitHub Actions and get rich job summaries, status checks, output variables, pull-request plan
-comments, and stored planfile verification — no extra actions required. And because every command is **git-aware**, the same
-CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs across
-repositories, and commit results back to your source of truth. Kubernetes components also write
-native job summaries, with a deliberately smaller v1 surface.
+comments, and stored planfile verification without wrapper actions. PR comments require
+`ci.comments.enabled: true` and `pull-requests: write`. And because every command is **git-aware**,
+the same CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs
+across repositories, and commit results back to your source of truth. Kubernetes components also
+write native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
 :::note Replaces the old `cloudposse/github-action-*` Actions
