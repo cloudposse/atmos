@@ -1318,6 +1318,27 @@ func executeCustomCommand(
 			_, execErr := executor.Execute(executionCtx, &workflowStep)
 			return execErr
 		}
+		// runContainerOverrideStep routes a step-level `container:` override through the same
+		// pkg/workflow session/merge logic internal/exec/workflow_utils.go uses for
+		// workflow-file container steps, shared by both the "shell" and "script" cases below
+		// (which differ only in the workflowStep and the command shown in output/logs).
+		runContainerOverrideStep := func(workflowStep *schema.WorkflowStep, displayCommand string) error {
+			return runCommandStep(func(stdout, stderr io.Writer) error {
+				return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
+					Workflow:      commandConfig.Name,
+					WorkflowPath:  atmosConfig.CliConfigPath,
+					BasePath:      atmosConfig.BasePath,
+					WorkflowDef:   &schema.WorkflowDefinition{},
+					Step:          workflowStep,
+					HostWorkDir:   stepWorkDir,
+					Command:       displayCommand,
+					StepEnv:       env,
+					RuntimeEnv:    env,
+					StdoutCapture: stdout,
+					StderrCapture: stderr,
+				})
+			})
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1335,21 +1356,7 @@ func executeCustomCommand(
 				// the step's own `container:` block is the whole config.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
-					return runCommandStep(func(stdout, stderr io.Writer) error {
-						return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
-							Workflow:      commandConfig.Name,
-							WorkflowPath:  atmosConfig.CliConfigPath,
-							BasePath:      atmosConfig.BasePath,
-							WorkflowDef:   &schema.WorkflowDefinition{},
-							Step:          &workflowStep,
-							HostWorkDir:   stepWorkDir,
-							Command:       commandToRun,
-							StepEnv:       env,
-							RuntimeEnv:    env,
-							StdoutCapture: stdout,
-							StderrCapture: stderr,
-						})
-					})
+					return runContainerOverrideStep(&workflowStep, commandToRun)
 				}
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 					return process.RunShellStep(executionCtx, &process.ShellSessionSpec{
@@ -1385,21 +1392,7 @@ func executeCustomCommand(
 				// of wrapping the display command in `sh -lc`.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
-					return runCommandStep(func(stdout, stderr io.Writer) error {
-						return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
-							Workflow:      commandConfig.Name,
-							WorkflowPath:  atmosConfig.CliConfigPath,
-							BasePath:      atmosConfig.BasePath,
-							WorkflowDef:   &schema.WorkflowDefinition{},
-							Step:          &workflowStep,
-							HostWorkDir:   stepWorkDir,
-							Command:       process.FormatScriptDisplay(step.Interpreter, step.Script),
-							StepEnv:       env,
-							RuntimeEnv:    env,
-							StdoutCapture: stdout,
-							StderrCapture: stderr,
-						})
-					})
+					return runContainerOverrideStep(&workflowStep, process.FormatScriptDisplay(step.Interpreter, step.Script))
 				}
 				return runExtendedStep(workflowStep)
 			case schema.TaskTypeExec:
