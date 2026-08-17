@@ -26,6 +26,11 @@ var (
 	// determined" fallback in CurrentContainerNetwork is exercisable without
 	// depending on an actual OS-level failure.
 	currentHostname = os.Hostname
+	// Wraps the os.Stat-based marker-file check used by
+	// defaultProcessRunsInContainer, overridable in tests so the
+	// /.dockerenv and /run/.containerenv short-circuits are exercisable
+	// without depending on whether the test host itself is containerized.
+	markerFileExists = defaultMarkerFileExists
 )
 
 // CurrentContainerNetwork returns the network Atmos's own process is attached
@@ -102,10 +107,10 @@ func firstReachableNetwork(networks []string) string {
 func defaultProcessRunsInContainer() bool {
 	defer perf.Track(nil, "container.defaultProcessRunsInContainer")()
 
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	if markerFileExists("/.dockerenv") {
 		return true
 	}
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
+	if markerFileExists("/run/.containerenv") {
 		return true
 	}
 
@@ -120,4 +125,13 @@ func defaultProcessRunsInContainer() bool {
 		}
 	}
 	return false
+}
+
+// defaultMarkerFileExists reports whether path exists on disk, used to detect
+// the conventional /.dockerenv and /run/.containerenv container marker files.
+func defaultMarkerFileExists(path string) bool {
+	defer perf.Track(nil, "container.defaultMarkerFileExists")()
+
+	_, err := os.Stat(path)
+	return err == nil
 }

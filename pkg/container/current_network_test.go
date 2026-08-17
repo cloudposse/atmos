@@ -203,21 +203,20 @@ func (r inspectSpyRuntime) Inspect(ctx context.Context, containerID string) (*In
 }
 
 // TestDefaultProcessRunsInContainer exercises the real (non-stubbed) detection
-// heuristic directly. The dockerenv/containerenv marker-file checks are real
-// filesystem lookups (no seam in this codebase, and the sandboxed/CI hosts this
-// suite runs on aren't themselves Docker/Podman containers), so this asserts the
-// heuristic falls through to the /proc/1/cgroup marker scan, which readProcFile
-// makes fully controllable.
+// heuristic directly. The dockerenv/containerenv marker-file checks go through
+// the markerFileExists seam, so this suite runs deterministically regardless of
+// whether the test host itself is containerized -- it stubs the marker files as
+// absent to assert the heuristic falls through to the /proc/1/cgroup marker
+// scan, which readProcFile makes fully controllable.
 func TestDefaultProcessRunsInContainer(t *testing.T) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		t.Skip("host itself has /.dockerenv; marker-file short-circuit would dominate the result")
-	}
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
-		t.Skip("host itself has /run/.containerenv; marker-file short-circuit would dominate the result")
-	}
-
+	origMarkerFileExists := markerFileExists
 	origReadProcFile := readProcFile
-	defer func() { readProcFile = origReadProcFile }()
+	defer func() {
+		markerFileExists = origMarkerFileExists
+		readProcFile = origReadProcFile
+	}()
+
+	markerFileExists = func(string) bool { return false }
 
 	tests := []struct {
 		name    string
@@ -235,6 +234,39 @@ func TestDefaultProcessRunsInContainer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			readProcFile = func(string) ([]byte, error) { return tt.content, tt.err }
 			assert.Equal(t, tt.want, defaultProcessRunsInContainer())
+		})
+	}
+}
+
+// TestDefaultProcessRunsInContainer_MarkerFilePresentShortCircuits covers the
+// marker-file-present path directly: when either /.dockerenv or
+// /run/.containerenv is reported present, defaultProcessRunsInContainer must
+// return true without ever consulting /proc/1/cgroup.
+func TestDefaultProcessRunsInContainer_MarkerFilePresentShortCircuits(t *testing.T) {
+	origMarkerFileExists := markerFileExists
+	origReadProcFile := readProcFile
+	defer func() {
+		markerFileExists = origMarkerFileExists
+		readProcFile = origReadProcFile
+	}()
+
+	tests := []struct {
+		name       string
+		presentFor string
+	}{
+		{name: "dockerenv present", presentFor: "/.dockerenv"},
+		{name: "containerenv present", presentFor: "/run/.containerenv"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			markerFileExists = func(path string) bool { return path == tt.presentFor }
+			readProcFile = func(string) ([]byte, error) {
+				t.Fatal("readProcFile must not be called when a marker file short-circuits detection")
+				return nil, nil
+			}
+
+			assert.True(t, defaultProcessRunsInContainer())
 		})
 	}
 }
