@@ -503,7 +503,25 @@ jobs:
           # binary" step) - compiling its test binary from a cold cache can
           # take 15m+ on windows, which would defeat the point of a
           # <10m-per-shard matrix if paid here.
-          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          #
+          # internal/exec and tests/testhelpers are also excluded from the
+          # round-robin pool and pinned to their own shards instead of left to
+          # land wherever round-robin happens to put them: a real windows run
+          # measured internal/exec's own tests at 930s (15.5m) and
+          # tests/testhelpers at 413s - both round-robinned onto shard 1's
+          # slice, compounding with cmd and the unrestricted ./tests run there
+          # into a single-shard bottleneck. internal/exec houses the actual
+          # atmos terraform/packer execution logic, so that cost is plausibly
+          # real toolchain/provisioning work rather than a bug - pinning it to
+          # its own shard (instead of shard 1) at least stops it from stacking
+          # with everything else that's already heavy there.
+          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$|^github\.com/cloudposse/atmos/internal/exec$|^github\.com/cloudposse/atmos/tests/testhelpers$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          if [ "${{ matrix.shard }}" = "2" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/internal/exec")
+          fi
+          if [ "${{ matrix.shard }}" = "3" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/tests/testhelpers")
+          fi
 
           COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-tests.out" \
             TEST="./tests" TESTARGS="$TESTARGS_TESTS" \
@@ -525,13 +543,11 @@ jobs:
             # normally sets GOCOVERDIR itself (inherited by the subprocess via
             # os.Environ()); set it explicitly here since we're running the
             # compiled binary directly, not via `go test`.
-            # -test.timeout is generous (not just compensating for
-            # macOS's ~78s total): actually *running* cmd's tests, most of
-            # which spawn subprocesses, is measurably slower on windows (higher
-            # process-spawn overhead) than the ~10m first assumed - confirmed by
-            # a real "panic: test timed out after 10m0s" failure here.
+            # The cmd suite normally finishes in roughly 1-2 minutes. Keep a
+            # 10-minute test-binary ceiling so a blocked test produces a Go
+            # timeout stack instead of consuming this step's full budget.
             CMD_GOCOVERDIR=$(mktemp -d)
-            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=30m)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=10m)
             go tool covdata textfmt -i="$CMD_GOCOVERDIR" -o="coverage-shard-${{ matrix.shard }}-cmd.out"
           fi
 
@@ -586,8 +602,15 @@ jobs:
 
           # See the "Acceptance tests with coverage" step above for why
           # github.com/cloudposse/atmos/cmd is excluded here and run as a
-          # precompiled test binary on shard 1 instead.
-          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          # precompiled test binary on shard 1 instead, and why internal/exec
+          # and tests/testhelpers are pinned to shards 2 and 3 respectively.
+          SHARD_PACKAGES=$(go list ./... | grep -v -E '/tests$|^github\.com/cloudposse/atmos/cmd$|^github\.com/cloudposse/atmos/internal/exec$|^github\.com/cloudposse/atmos/tests/testhelpers$' | awk -v s="${{ matrix.shard }}" -v n="$TEST_SHARD_COUNT" 'NR % n == (s - 1)')
+          if [ "${{ matrix.shard }}" = "2" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/internal/exec")
+          fi
+          if [ "${{ matrix.shard }}" = "3" ]; then
+            SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/tests/testhelpers")
+          fi
           if [ -n "$SHARD_PACKAGES" ]; then
             export TEST="$SHARD_PACKAGES"
             export TESTARGS=""
@@ -604,10 +627,10 @@ jobs:
             # if GOCOVERDIR isn't set - several of its own tests re-exec themselves
             # as a subprocess and assert exact stdout/stderr content, so that
             # warning breaks them even though this step doesn't collect coverage.
-            # See the "Acceptance tests with coverage" step above for why
-            # -test.timeout is generous (confirmed necessary on windows).
+            # Use the same bounded cmd-suite timeout as Linux so a blocked test
+            # fails with a useful Go stack before the outer step timeout.
             CMD_GOCOVERDIR=$(mktemp -d)
-            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=30m)
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=10m)
           fi
 
       - name: Upload coverage report artifact
