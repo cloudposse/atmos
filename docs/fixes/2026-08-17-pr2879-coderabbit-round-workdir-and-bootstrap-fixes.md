@@ -62,12 +62,15 @@ reply, not a code change.
 
 - `pkg/provisioner/source/source.go`: added `.WithCause(err)` to both
   `resolveExistingSymlinks` error branches in `validateWithinComponentBasePath`.
-- `pkg/provisioner/workdir/types.go`: `BuildPath` now rejects a `stack` value containing `/` or
-  `\` outright (new `validateStackForPath` helper) instead of only checking containment after
-  the fact. Rejecting rather than escaping (unlike the component name's
-  `escapeComponentNameForPath`) avoids changing the on-disk path for the overwhelmingly common
-  case of a stack name containing a literal `-` (e.g. `us-east-1-dev`). Also extracted
-  `resolveWorkdirComponentName` to keep `BuildPath` under the repo's function-length lint limit.
+- `pkg/provisioner/workdir/types.go`: `BuildPath` now rejects a `stack` value containing a
+  literal `.` or `..` path segment outright (new `validateStackForPath` helper) instead of only
+  checking containment after the fact. Rejecting the specific dot segments rather than escaping
+  the whole value (unlike the component name's `escapeComponentNameForPath`), or rejecting every
+  `/`/`\` (this fix's first revision — see Follow-ups), avoids changing the on-disk path for the
+  common case of a stack name containing a literal `-` (e.g. `us-east-1-dev`) or a real, existing
+  "/"-nesting convention (e.g. `deploy/test`, used by `cmd/terraform/migrate`'s own test
+  fixtures). Also extracted `resolveWorkdirComponentName` to keep `BuildPath` under the repo's
+  function-length lint limit.
 - `pkg/provisioner/workdir/clean.go`: `CleanWorkdir` now takes a `componentConfig map[string]any`
   parameter, forwarded to `BuildPath`; `CleanOptions` gained a matching `ComponentConfig` field.
 - `cmd/terraform/workdir/workdir_helpers.go`: `WorkdirManager`'s `CleanWorkdir`, `GetWorkdirInfo`,
@@ -125,7 +128,22 @@ reply, not a code change.
 
 ## Follow-ups
 
-None. Writing the legacy-workdir-migration regression test surfaced a separate, pre-existing gap
-— `SyncDir` deleting a component's local-backend `terraform.tfstate` on every re-provision —
-initially deferred here as out of scope for a workdir-*path* fix. Fixed directly instead; see
-`docs/fixes/2026-08-17-workdir-sync-deletes-local-backend-state.md`.
+None currently open. Two issues surfaced after this fix's first commit, both fixed directly in
+follow-up commits on the same branch rather than left open:
+
+- Writing the legacy-workdir-migration regression test surfaced a separate, pre-existing gap —
+  `SyncDir` deleting a component's local-backend `terraform.tfstate` on every re-provision —
+  initially deferred here as out of scope for a workdir-*path* fix. See
+  `docs/fixes/2026-08-17-workdir-sync-deletes-local-backend-state.md`.
+- CI (`cmd/terraform/migrate`'s own tests, and `tests/cli_workdir_test.go`'s
+  `TestCLIWorkdirCommands/clean_specific`) caught a real regression in `validateStackForPath`'s
+  first revision: rejecting *every* stack value containing `/` or `\` broke the legitimate,
+  already-tested `deploy/test`-style stack-nesting convention, since only a `.`/`..` *segment*
+  is actually a collision/traversal risk — plain `/`-nesting is not. Narrowed to reject only
+  `.`/`..` segments (see the Changes section above); `tests/cli_workdir_test.go`'s
+  `testWorkdirShow`/`testWorkdirDescribe`/`testWorkdirCleanSpecific` fixtures, which hand-rolled
+  a pre-escaping workdir path for a hyphenated component name, were also updated to compute
+  their expected path via `BuildPath` instead (the same class of fixture drift `CleanWorkdir`'s
+  fix above addressed) — `testWorkdirShow`/`testWorkdirDescribe` had been silently masking their
+  own breakage via a weak `assert.Contains` check that passed on the error output too, now
+  tightened to `require.NoError`.

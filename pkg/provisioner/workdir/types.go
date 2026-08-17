@@ -126,14 +126,14 @@ const (
 // componentConfig when available, falling back to the provided component name. This ensures
 // all provisioners (workdir, source, JIT) use the same directory for a given component
 // instance. "/" and "\" in the resolved component name are encoded (see
-// escapeComponentNameForPath) rather than left as real path segments; the same characters in
-// stack are rejected outright rather than encoded, to avoid changing the on-disk path (and
-// invalidating existing local state) for the common case of a stack name containing a literal
-// "-". The final path is verified to fall within basePath (see containWithinBase) --
-// component and stack names can both originate from user-controlled YAML, and either could
-// otherwise resolve outside basePath (or alias another stack's workdir) via filepath.Join's
-// implicit Clean(). Returns errUtils.ErrPathTraversal if stack contains "/"/"\" or the
-// resolved path escapes basePath.
+// escapeComponentNameForPath) rather than left as real path segments; stack instead only has
+// its "."/".." path segments rejected (see validateStackForPath) -- a real "/" elsewhere in
+// stack, e.g. "deploy/test", is a supported nesting convention and is left alone, becoming a
+// real subdirectory exactly as it always has. The final path is verified to fall within
+// basePath (see containWithinBase) -- component and stack names can both originate from
+// user-controlled YAML, and either could otherwise resolve outside basePath (or alias another
+// stack's workdir) via filepath.Join's implicit Clean(). Returns errUtils.ErrPathTraversal if
+// stack contains a "."/".." segment or the resolved path escapes basePath.
 //
 // Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
 func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) (string, error) {
@@ -150,10 +150,10 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 	// containWithinBase is kept as a defense-in-depth check against typeRoot
 	// (itself always safely nested under basePath, since componentType is a
 	// fixed, trusted caller-supplied constant such as "terraform", not
-	// user-controlled input) even though rejecting "/"/"\" in stack and
-	// escaping workdirComponent above should already make escape impossible
-	// -- it costs nothing and protects against a future change to either
-	// guard reintroducing a real separator.
+	// user-controlled input) even though rejecting "."/".." segments in
+	// stack and escaping workdirComponent above should already make escape
+	// impossible -- it costs nothing and protects against a future change
+	// to either guard reintroducing a real traversal segment.
 	typeRoot := filepath.Join(basePath, WorkdirPath, componentType)
 
 	return containWithinBase(rawPath, typeRoot)
@@ -189,30 +189,43 @@ func resolveWorkdirComponentName(component string, componentConfig map[string]an
 	return escapeComponentNameForPath(workdirComponent)
 }
 
-// validateStackForPath rejects a stack name containing "/" or "\" instead of escaping it (as
-// resolveWorkdirComponentName does for the component name).
+// validateStackForPath rejects a stack name containing a "." or ".." path segment (split on
+// both "/" and "\"), instead of escaping the whole value the way resolveWorkdirComponentName
+// does for the component name.
 //
 // A stack name is just as user-controlled as a component name, and without this check, a
-// value such as "team/../prod" still contains a real "/" when workdirName is built --
+// value such as "team/../prod" still contains a real ".." segment when workdirName is built --
 // filepath.Join's implicit Clean() then folds "team/../" away, silently aliasing stack
 // "team/../prod" onto the same workdir as stack "prod", so two distinct stack configurations
-// would share one workdir (and therefore its files, metadata, and Terraform state). Rejecting
-// outright (instead of encoding, as the component name is) avoids changing the on-disk path --
-// and therefore invalidating existing local Terraform state -- for the overwhelmingly common
-// case of a stack name that merely contains a literal "-" (e.g. "us-east-1-dev"), which is not
-// a path-separator character and carries no traversal risk on its own. Real "/"/"\" in a stack
-// name is not a supported Atmos naming convention (stack manifests use "/" for file paths,
-// never for the resolved stack name itself), so rejecting it costs no legitimate use case.
+// would share one workdir (and therefore its files, metadata, and Terraform state).
+//
+// A stack containing "/" without a "."/".." segment -- e.g. "deploy/test", a real,
+// already-tested naming convention in this codebase -- is not rejected: it becomes a real
+// nested directory ("<typeRoot>/deploy/test-<component>") exactly as it always has (stack was
+// never escaped like the component name; only ".."'s Clean()-folding is a distinct-path-alias
+// risk, plain "/" nesting is not). Rejecting only dot segments, rather than every "/" or "\"
+// (this function's earlier revision), avoids breaking that existing convention while still
+// closing the collision: "deploy/test" and "deploy" can never alias each other through
+// Clean(), only "x/../y" and "y" can.
 func validateStackForPath(stack string) error {
-	if strings.ContainsAny(stack, `/\`) {
-		return errUtils.Build(errUtils.ErrPathTraversal).
-			WithExplanationf("Stack name `%s` must not contain '/' or '\\'", stack).
-			WithHint("Remove any path-separator characters from the stack name").
-			WithContext("stack", stack).
-			Err()
+	for _, segment := range strings.FieldsFunc(stack, isPathSeparator) {
+		if segment == "." || segment == ".." {
+			return errUtils.Build(errUtils.ErrPathTraversal).
+				WithExplanationf("Stack name `%s` must not contain a '.' or '..' path segment", stack).
+				WithHint("Remove any '.' or '..' segments from the stack name").
+				WithContext("stack", stack).
+				Err()
+		}
 	}
 
 	return nil
+}
+
+// isPathSeparator reports whether r is "/" or "\", the two characters filepath.Join treats as
+// path separators regardless of the host OS (filepath.Separator alone would miss the other
+// platform's separator when a stack name is crafted or copy-pasted across OSes).
+func isPathSeparator(r rune) bool {
+	return r == '/' || r == '\\'
 }
 
 // escapeComponentNameForPath injectively encodes name so it can be used as a single
