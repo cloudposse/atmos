@@ -381,7 +381,7 @@ Task: "Unit tests for UploadExecMetadata (single-request + chunked) in pkg/pro/a
 
 1. Complete Phase 1: Setup
 2. Complete Phase 2: Foundational (CRITICAL — blocks all stories; includes the batching
-   rework T004/T005/T008/T009)
+  rework T004/T005/T008/T009)
 3. Complete Phase 3: User Story 1
 4. **STOP and VALIDATE**: every command in CI+Pro reports async, with zero effect
   elsewhere
@@ -392,11 +392,11 @@ Task: "Unit tests for UploadExecMetadata (single-request + chunked) in pkg/pro/a
 1. Setup + Foundational (with batching rework) → foundation ready
 2. Add US1 → validate independently → MVP demoable (async visibility for all commands)
 3. Add US2 → validate independently → critical commands now block reliably on the
-   complete (possibly chunked) delivery
+  complete (possibly chunked) delivery
 4. Add US3 → validate independently → plan/apply records gain structured summary + chunked
-   itemized data
+  itemized data
 5. Polish (Pact contract handoff including the chunked interaction, docs, coverage, lint)
-   → ready for `/pull-request`
+  → ready for `/pull-request`
 
 ### Notes
 
