@@ -205,7 +205,8 @@
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
       "github_oidc": {},
-      "git_sts": {}
+      "git_sts": {},
+      "exec": {}
     },
     "telemetry": {
       "enabled": true,
