@@ -67,7 +67,7 @@ require (
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
 	github.com/gabriel-vasile/mimetype v1.4.13
-	github.com/getsentry/sentry-go v0.46.2
+	github.com/getsentry/sentry-go v0.48.0
 	github.com/getsops/sops/v3 v3.13.1
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -142,7 +142,7 @@ require (
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
 	google.golang.org/grpc v1.82.1
-	gopkg.in/ini.v1 v1.67.2
+	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v4 v4.2.1
