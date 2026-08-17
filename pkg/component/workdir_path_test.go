@@ -543,6 +543,29 @@ func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 		"non-ENOENT stat failures must wrap ErrWorkdirProvision")
 }
 
+// TestBuildAndResolveWorkdirPath_PathTraversalPropagates verifies that when the
+// stack name attempts to escape basePath (e.g. via "../" segments), the
+// errUtils.ErrPathTraversal returned by provWorkdir.BuildPath propagates through
+// BuildAndResolveWorkdirPath as ("", false, err) instead of being silently
+// swallowed. Mirrors provWorkdir.TestBuildPath_RejectsStackTraversal but exercises
+// this package's own error-handling branch added alongside BuildPath's (string,
+// error) signature change.
+func TestBuildAndResolveWorkdirPath_PathTraversalPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "vpc",
+		Stack:            "../../../../../../evil",
+		ComponentSection: map[string]any{},
+	}
+
+	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrPathTraversal),
+		"a stack name escaping basePath must surface ErrPathTraversal, not be silently resolved")
+	assert.False(t, exists)
+	assert.Empty(t, candidate)
+}
+
 // ProvisionAndResolveComponentPath ──────────────────────────────────────────.
 
 // TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the

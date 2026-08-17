@@ -249,6 +249,35 @@ func TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent(t *testing.T
 	assert.Equal(t, expected, targetDir)
 }
 
+// TestDetermineSourceTargetDirectory_WorkdirPathTraversalPropagates verifies that when
+// atmos_stack contains enough "../" segments to escape BasePath, the errUtils.ErrPathTraversal
+// returned by workdir.BuildPath propagates through determineSourceTargetDirectory as
+// ("", false, err) instead of being silently swallowed or resolving outside BasePath.
+func TestDetermineSourceTargetDirectory_WorkdirPathTraversalPropagates(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		// Enough "../" segments to escape any plausible t.TempDir() nesting depth.
+		"atmos_stack": "../../../../../../../../evil",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "vpc", componentConfig,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.False(t, isWorkdir)
+	assert.Empty(t, targetDir)
+}
+
 func TestNeedsProvisioning(t *testing.T) {
 	sourceSpec := &schema.VendorComponentSource{
 		Uri:     "github.com/test/repo//src",

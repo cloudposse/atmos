@@ -58,6 +58,23 @@ func TestCleanWorkdir_EmptyBasePath(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestCleanWorkdir_PathTraversalWrapsErrWorkdirClean verifies that when stack contains enough
+// "../" segments to escape BasePath, the errUtils.ErrPathTraversal returned by BuildPath is
+// wrapped in errUtils.ErrWorkdirClean (with component/stack context) rather than being
+// propagated raw or silently ignored -- CleanWorkdir must never remove anything outside
+// BasePath. Exercises CleanWorkdir's `if err != nil` branch added alongside BuildPath's
+// (string, error) signature change.
+func TestCleanWorkdir_PathTraversalWrapsErrWorkdirClean(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Enough "../" segments to escape any plausible t.TempDir() nesting depth.
+	err := CleanWorkdir(atmosConfig, "vpc", "../../../../../../../../evil")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
 func TestCleanAllWorkdirs_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 

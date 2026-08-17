@@ -610,4 +610,44 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			assert.Equal(t, "eg-test-demo", result["id"], "should only read from within BasePath")
 		}
 	})
+
+	t.Run("atmos_stack with path traversal escaping BasePath falls through to static path", func(t *testing.T) {
+		// Security regression test: unlike atmos_component (whose "/" is now encoded to "-s"
+		// by workdir.escapeComponentNameForPath and so can no longer traverse), atmos_stack is
+		// not escaped at all -- it is only rejected by BuildPath's containWithinBase guard.
+		// A stack value with enough "../" segments to actually escape BasePath must cause
+		// provWorkdir.BuildPath to return errUtils.ErrPathTraversal, which
+		// resolveLocalBackendComponentPath must catch and fall through to the static path
+		// rather than propagating the error or resolving outside BasePath.
+		tempDir := t.TempDir()
+
+		// Place state at the static path (fallback) -- NOT at any traversal-constructed path.
+		staticDir := filepath.Join(tempDir, "components", "terraform", "vpc", "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(staticDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(staticDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			// Enough "../" segments to escape any plausible t.TempDir() nesting depth,
+			// mirroring provWorkdir.TestBuildPath_RejectsStackTraversal.
+			"atmos_stack":     "../../../../../../../../evil",
+			"atmos_component": "null-label",
+			"component":       "vpc", // used by static fallback: TerraformDirAbsolutePath + component
+			"workspace":       "demo",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected fallthrough to the static path when the derived workdir path escapes BasePath")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"], "should only read from within BasePath")
+	})
 }

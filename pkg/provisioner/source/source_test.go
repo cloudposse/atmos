@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -362,6 +363,36 @@ func TestValidateWithinComponentBasePath_BaseItselfIsSymlink(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestValidateWithinComponentBasePath_SymlinkResolutionErrorPropagates verifies that a
+// non-ENOENT failure while resolving symlinks in targetDir's ancestors (e.g. permission denied
+// on an intermediate directory) is surfaced as a wrapped ErrPathTraversal rather than being
+// silently treated the same as "ancestor does not exist yet" and skipped. This exercises
+// resolveExistingSymlinks's `!os.IsNotExist(err)` branch: EvalSymlinks cannot even determine
+// whether "sub" exists under an unsearchable "guarded" directory, so it fails with a permission
+// error rather than ENOENT.
+func TestValidateWithinComponentBasePath_SymlinkResolutionErrorPropagates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Chmod cannot deny directory traversal on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("test relies on POSIX permission denial; root bypasses chmod")
+	}
+	componentBasePath := t.TempDir()
+	guardedDir := filepath.Join(componentBasePath, "guarded")
+	require.NoError(t, os.MkdirAll(guardedDir, 0o755))
+	require.NoError(t, os.Chmod(guardedDir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(guardedDir, 0o755) })
+
+	// targetDir does not exist; its "guarded" ancestor does, but with no search (execute)
+	// permission, so resolving whether "sub" exists underneath it fails with EACCES rather
+	// than ENOENT.
+	targetDir := filepath.Join(guardedDir, "sub", "vpc")
+
+	err := validateWithinComponentBasePath(targetDir, componentBasePath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
 func TestGetComponentBasePath(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -660,6 +691,36 @@ func TestDetermineTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig)
 	require.NoError(t, err)
 	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-hcluster-hcodepipeline-hiac")
+	assert.Equal(t, expected, result)
+}
+
+// TestDetermineTargetDirectory_WorkdirEnabledEmptyBasePath verifies buildWorkdirPath's default
+// of "." when atmosConfig.BasePath is empty: the resulting workdir path must be relative
+// (rooted at "."), not silently error out or resolve to an absolute path derived from an empty
+// string. Exercises buildWorkdirPath's `if basePath == "" { basePath = "." }` branch.
+func TestDetermineTargetDirectory_WorkdirEnabledEmptyBasePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		// BasePath intentionally left empty.
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
+	require.NoError(t, err)
+	// workdir.BuildPath(".", ...) resolves relative to "." rather than erroring.
+	expected := filepath.Join(workdir.WorkdirPath, "terraform", "dev-vpc")
 	assert.Equal(t, expected, result)
 }
 
