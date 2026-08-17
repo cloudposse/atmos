@@ -38,6 +38,10 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	originalHooks := getHooks
 	originalCI := runCIHooks
 	originalDelete := deleteHelmRelease
+	originalWriteStatus := writeStatusLine
+	// The delete operation now emits a status line; stub the writer so the test does not depend on
+	// the data package writer being initialized.
+	writeStatusLine = func(string) {}
 	t.Cleanup(func() {
 		initCliConfig = originalInit
 		processStacks = originalProcess
@@ -46,6 +50,7 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 		getHooks = originalHooks
 		runCIHooks = originalCI
 		deleteHelmRelease = originalDelete
+		writeStatusLine = originalWriteStatus
 	})
 
 	initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -357,22 +362,32 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		setupComponentAuthForCLI = originalAuth
 	})
 
-	// Without an identity, no auth manager is created and processStacks runs.
+	// Without an identity, an offline template render creates no auth manager and processStacks runs.
 	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 		assert.Nil(t, authManager)
 		info.ComponentIsEnabled = true
 		return info, nil
 	}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate))
 	assert.True(t, info.ComponentIsEnabled)
+
+	// Issue #3: a cluster operation resolves component auth even without an explicit identity, so the
+	// stack's default-identity binding is honored (like `atmos terraform`).
+	authSetupCalled := false
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		authSetupCalled = true
+		return nil, nil
+	}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply))
+	assert.True(t, authSetupCalled, "cluster ops must resolve component auth even without --identity")
 
 	// With an identity, a setup failure propagates before processStacks runs.
 	sentinel := errors.New("auth failed")
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, sentinel
 	}
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"})
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"}, OperationApply)
 	require.ErrorIs(t, err, sentinel)
 }
 
