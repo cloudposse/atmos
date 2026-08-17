@@ -215,6 +215,13 @@ func escapeComponentNameForPath(name string) string {
 // best-effort, lexical-only guard -- symlinks are not resolved, matching the scope of the
 // containment guards this replaces in pkg/terraform/output/config.go and
 // internal/terraform_backend/terraform_backend_local.go.
+//
+// Uses filepath.Rel rather than an absBase+separator prefix check: when base resolves to a
+// filesystem root (e.g. "/" on Unix, `C:\` on Windows), absBase already ends in the
+// separator, so absBase+sep produces a doubled separator ("//", `C:\\`) that no real path
+// under that root ever has -- a prefix check would then reject every legitimate path. Mirrors
+// pkg/provisioner/source/source.go's isWithinBase, the same pattern already established
+// elsewhere in this codebase for the same problem.
 func containWithinBase(path, base string) (string, error) {
 	absPath, errPath := filepath.Abs(path)
 	if errPath != nil {
@@ -225,7 +232,8 @@ func containWithinBase(path, base string) (string, error) {
 		return "", fmt.Errorf("%w: failed to resolve base path %q: %w", errUtils.ErrPathTraversal, base, errBase)
 	}
 	sep := string(filepath.Separator)
-	if absPath == absBase || strings.HasPrefix(absPath, absBase+sep) {
+	rel, errRel := filepath.Rel(absBase, absPath)
+	if errRel == nil && rel != ".." && !strings.HasPrefix(rel, ".."+sep) {
 		return path, nil
 	}
 	return "", fmt.Errorf("%w: workdir path %q escapes base path %q", errUtils.ErrPathTraversal, absPath, absBase)

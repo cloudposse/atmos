@@ -318,8 +318,13 @@ func TestBuildAndResolveWorkdirPath_ExistingDir(t *testing.T) {
 	componentName := "null-label-exports"
 	subpath := "exports"
 
-	expectedRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
-	require.NoError(t, err)
+	// Independent oracle: hand-computed rather than via provWorkdir.BuildPath, so this test
+	// still catches a regression in BuildPath's own encoding. Both this setup and
+	// BuildAndResolveWorkdirPath itself would otherwise call the same BuildPath -- if it
+	// silently produced the wrong segment, setup and assertion would agree with each other
+	// (and each other only) without ever exercising the real encoding contract.
+	// "null-label-exports" injectively encodes to "null-hlabel-hexports" (literal "-" -> "-h").
+	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-hlabel-hexports")
 	expectedCandidate := filepath.Join(expectedRoot, subpath)
 	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -353,8 +358,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypes(t *testing.T) {
 			stack := "dev"
 			componentName := "my-component"
 
-			expectedRoot, err := provWorkdir.BuildPath(basePath, componentType, componentName, stack, nil)
-			require.NoError(t, err)
+			// Independent oracle: "my-component" hand-encodes to "my-hcomponent"
+			// (literal "-" -> "-h"), computed here rather than via
+			// provWorkdir.BuildPath so this still catches a regression in
+			// BuildPath's own encoding.
+			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-hcomponent")
 			require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
 
 			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
@@ -394,8 +402,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath(t *testing.T) {
 			// segments so we never feed forward slashes into filepath.Join.
 			subpathYAML := "modules/foo"
 
-			workdirRoot, err := provWorkdir.BuildPath(basePath, componentType, componentName, stack, nil)
-			require.NoError(t, err)
+			// Independent oracle: "my-component" hand-encodes to "my-hcomponent"
+			// (literal "-" -> "-h"), computed here rather than via
+			// provWorkdir.BuildPath so this still catches a regression in
+			// BuildPath's own encoding.
+			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-hcomponent")
 			expectedCandidate := filepath.Join(workdirRoot, "modules", "foo")
 			require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -425,8 +436,11 @@ func TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "demo-cluster-codepipeline-iac"
-	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
-	require.NoError(t, err)
+	// Independent oracle: "demo-cluster-codepipeline-iac" hand-encodes to
+	// "demo-hcluster-hcodepipeline-hiac" (literal "-" -> "-h"), computed here
+	// rather than via provWorkdir.BuildPath so this still catches a
+	// regression in BuildPath's own encoding.
+	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-demo-hcluster-hcodepipeline-hiac")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	// Note: no "demo-cluster-codepipeline" subdirectory inside root.
 
@@ -454,10 +468,11 @@ func TestBuildAndResolveWorkdirPath_NonExistentDir(t *testing.T) {
 		BaseComponentPath: "exports",
 		ComponentSection:  map[string]any{},
 	}
-	expectedRoot, err := provWorkdir.BuildPath(
-		atmosConfig.BasePath, cfg.TerraformComponentType, info.FinalComponent, info.Stack, nil,
-	)
-	require.NoError(t, err)
+	// Independent oracle: "missing-component" hand-encodes to
+	// "missing-hcomponent" (literal "-" -> "-h"), computed here rather than
+	// via provWorkdir.BuildPath so this still catches a regression in
+	// BuildPath's own encoding.
+	expectedRoot := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-missing-hcomponent")
 
 	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)

@@ -93,6 +93,31 @@ This also surfaced (in the same review round) that `CleanWorkdir`
 (`pkg/provisioner/workdir/clean.go`) had never been routed through
 `BuildPath`/`escapeComponentNameForPath` at all — see Changes below.
 
+**Fourth pass.** A fourth CodeRabbit review round on the same PR caught two
+more issues:
+
+1. `containWithinBase`'s `absBase+sep` prefix check breaks when `basePath`
+  resolves to a filesystem root (`/` on Unix, `` C:\ `` on Windows): `absBase`
+  already ends in the separator there, so `absBase+sep` produces a doubled
+  separator (`//`, `` C:\\ ``) that no real path under that root ever has,
+  rejecting every legitimate workdir path derived from a root `basePath`.
+  Replaced the prefix check with `filepath.Rel`, mirroring the same pattern
+  already established for the same problem in
+  `pkg/provisioner/source/source.go`'s `isWithinBase`.
+2. The third pass's claim (in this doc's own Validation section, previously)
+  that switching `pkg/component/workdir_path_test.go`'s `TestBuildAndResolveWorkdirPath_*`
+  tests to compute their expected path via the real `workdir.BuildPath`
+  meant they "can't go stale again the same way" was itself a mistake:
+  `BuildAndResolveWorkdirPath` (the function under test) also calls
+  `BuildPath` internally, so if `BuildPath`'s encoding were ever wrong
+  again, both the test's setup and its assertion would derive the same
+  wrong path and agree with each other — the test would pass regardless.
+  Replaced those `BuildPath`-derived expected paths with independent,
+  hand-computed literal strings (e.g. `"my-component"` → `"my-hcomponent"`)
+  for every encoding-sensitive assertion, keeping `BuildPath` only for
+  setup steps that just need a real directory on disk, not for the
+  comparison oracle.
+
 ## Changes
 
 - `pkg/provisioner/workdir/types.go`:
@@ -116,7 +141,10 @@ This also surfaced (in the same review round) that `CleanWorkdir`
     comparison and returns `errUtils.ErrPathTraversal` if the derived path
     doesn't fall within `basePath`. On success it returns the path
     unchanged (not the absolutized form), preserving `BuildPath`'s existing
-    return format for callers that pass a relative `basePath`.
+    return format for callers that pass a relative `basePath`. Uses
+    `filepath.Rel` rather than an `absBase+separator` prefix check (fourth
+    pass — see Context), so a filesystem-root `basePath` is handled
+    correctly.
 - `pkg/provisioner/workdir/workdir.go` (`createWorkdirDirectory`),
   `pkg/provisioner/source/source.go` (`buildWorkdirPath`),
   `pkg/provisioner/source/provision_hook.go`
@@ -176,11 +204,7 @@ This also surfaced (in the same review round) that `CleanWorkdir`
     `pkg/provisioner/workdir/integration_test.go`,
     `pkg/provisioner/source/{source,provision_hook}_test.go`,
     `pkg/terraform/output/config_test.go`, and
-    `pkg/component/workdir_path_test.go` — the latter's
-    `TestBuildAndResolveWorkdirPath_*` tests were switched to compute their
-    expected path via the real `workdir.BuildPath` instead of a hand-rolled
-    `stack+"-"+component` string, so they can't go stale again the same
-    way.
+    `pkg/component/workdir_path_test.go`.
 - `go build ./...` — clean.
 - `gofumpt -l` on all changed files — clean.
 - `go test ./pkg/provisioner/... ./internal/terraform_backend/...
@@ -210,6 +234,24 @@ This also surfaced (in the same review round) that `CleanWorkdir`
   to create its fixture directory via `BuildPath` instead of a hand-rolled
   `stack-component` string, for the same reason as the `component` package
   tests above.
+
+- `TestBuildPath_AcceptsFilesystemRootBasePath`
+  (`pkg/provisioner/workdir/types_test.go`, fourth pass) — asserts `BuildPath`
+  accepts a Unix filesystem-root `basePath` (`/`, skipped on Windows) and a
+  Windows volume-root `basePath` (`` C:\ ``, skipped elsewhere). Confirmed
+  failing pre-fix (rejected with `errUtils.ErrPathTraversal` under the old
+  prefix check) and passing post-fix.
+- `pkg/component/workdir_path_test.go`'s five `TestBuildAndResolveWorkdirPath_*`
+  encoding-sensitive tests (fourth pass) — `ExistingDir`, `AllComponentTypes`,
+  `AllComponentTypesWithSubpath`, `InheritancePointerFallsBack`,
+  `NonExistentDir` — now assert against independent, hand-computed literal
+  expected paths instead of a `BuildPath`-derived oracle; `BuildPath` is
+  still used for setup where a scenario needs a real on-disk fixture without
+  itself testing the encoding formula (e.g. `AllComponentTypesWithSubpath`'s
+  subpath join). All five re-verified passing after the change.
+- `go build ./...`, `gofumpt -l` on all fourth-pass changed files, and
+  `go test ./pkg/component/... ./pkg/provisioner/workdir/...` — all clean.
+- `./custom-gcl run --new-from-rev=origin/main` — 0 issues.
 
 ## Follow-ups
 

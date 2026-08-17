@@ -2,6 +2,7 @@ package workdir
 
 import (
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -197,4 +198,35 @@ func TestBuildPath_RejectsStackTraversal(t *testing.T) {
 	_, err := BuildPath(base, "terraform", "vpc", "../../../../../../evil", map[string]any{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestBuildPath_AcceptsFilesystemRootBasePath is a regression test for containWithinBase's
+// prior absBase+separator prefix check: when basePath resolves to a filesystem root, absBase
+// already ends in the separator, so absBase+sep produced a doubled separator ("//" on Unix,
+// `C:\\` on Windows) that no real path under that root ever has, rejecting every legitimate
+// workdir path derived from a root basePath.
+func TestBuildPath_AcceptsFilesystemRootBasePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		basePath    string
+		windowsOnly bool
+		unixOnly    bool
+	}{
+		{name: "unix filesystem root", basePath: "/", unixOnly: true},
+		{name: "windows volume root", basePath: `C:\`, windowsOnly: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.windowsOnly && runtime.GOOS != "windows" {
+				t.Skip("only meaningful on Windows")
+			}
+			if tt.unixOnly && runtime.GOOS == "windows" {
+				t.Skip("only meaningful on non-Windows")
+			}
+			_, err := BuildPath(tt.basePath, "terraform", "vpc", "dev", map[string]any{})
+			require.NoError(t, err,
+				"a legitimate workdir path under a filesystem-root basePath must not be rejected as a traversal")
+		})
+	}
 }
