@@ -124,7 +124,8 @@ func cleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 func cleanSpecificWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
 	defer perf.Track(atmosConfig, "workdir.cleanSpecificWorkdir")()
 
-	if err := workdirManager.CleanWorkdir(atmosConfig, component, stack); err != nil {
+	componentConfig := resolveComponentConfig(atmosConfig, component, stack)
+	if err := workdirManager.CleanWorkdir(atmosConfig, component, stack, componentConfig); err != nil {
 		return err
 	}
 

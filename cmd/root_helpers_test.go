@@ -775,6 +775,29 @@ func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
 			ciEnabled: false,
 			wantErr:   true,
 		},
+		{
+			// Regression for the exact scenario CodeRabbit flagged: a CI clone
+			// with both a missing/invalid profile (ErrProfileNotFound here)
+			// and a malformed clone flag (--depth not-a-number) must not
+			// return this profile error -- doing so would make Execute()
+			// (cmd/root.go) return it immediately, before RootCmd.Execute()
+			// ever reaches Cobra's own flag parser, so the user would never
+			// see Cobra's clean "invalid argument ... for --depth" error.
+			// wantErr=false here means the profile error is tolerated so
+			// control reaches Cobra, not that provisioning succeeds.
+			name:      "malformed --depth flag tolerates profile not found so Cobra can report it",
+			args:      []string{"atmos", "git", "clone", "--depth", "not-a-number"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			// Same as above, but outside a detected CI provider: a malformed
+			// clone flag must defer to Cobra's error regardless of CI.
+			name:      "malformed --depth flag tolerates profile not found outside CI too",
+			args:      []string{"atmos", "git", "clone", "--depth", "not-a-number"},
+			ciEnabled: false,
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -201,10 +201,26 @@ func TestCIGitCloneBootstrapRequestedFromRawArgs(t *testing.T) {
 			wantRequest: false,
 		},
 		{
-			name:        "malformed flag value returns false, deferring to RunE",
+			// Regression: this must be true, not false. A false result here
+			// makes handleConfigInitErrorWithArgs (cmd/root.go) return an
+			// unrelated config/profile error immediately, never reaching
+			// RootCmd.Execute() -- so Cobra's own clean "invalid argument for
+			// --depth" error is never shown. Reporting true lets that error
+			// surface as intended, whether or not CI is actually detected:
+			// see "malformed flag value returns true regardless of CI"
+			// below for the non-CI case.
+			name:        "malformed flag value returns true, deferring to RunE",
 			rawArgs:     []string{"--depth", "not-a-number"},
 			ciDetected:  true,
-			wantRequest: false,
+			wantRequest: true,
+		},
+		{
+			// A malformed clone flag must defer to Cobra's own error even
+			// outside CI -- no config/profile error should ever preempt it.
+			name:        "malformed flag value returns true regardless of CI",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  false,
+			wantRequest: true,
 		},
 		{
 			// Regression: --config is a real global persistent flag (not a

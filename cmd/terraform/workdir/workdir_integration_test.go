@@ -312,7 +312,7 @@ func TestShowCmd_Integration_WorkdirExists(t *testing.T) {
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev").Return(&WorkdirInfo{
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev", gomock.Any()).Return(&WorkdirInfo{
 		Name:        "dev-vpc",
 		Component:   "vpc",
 		Stack:       "dev",
@@ -327,7 +327,7 @@ func TestShowCmd_Integration_WorkdirExists(t *testing.T) {
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := workdirManager.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev")
+	result, err := workdirManager.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "dev-vpc", result.Name)
 }
@@ -362,13 +362,13 @@ func TestCleanCmd_Integration_Specific(t *testing.T) {
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanWorkdir(gomock.Any(), "vpc", "dev").Return(nil)
+	mock.EXPECT().CleanWorkdir(gomock.Any(), "vpc", "dev", gomock.Any()).Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	err := workdirManager.CleanWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
+	err := workdirManager.CleanWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev", nil)
 	require.NoError(t, err)
 }
 
@@ -390,13 +390,13 @@ func TestDescribeCmd_Integration_WorkdirExists(t *testing.T) {
 `
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return(expectedManifest, nil)
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev", gomock.Any()).Return(expectedManifest, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := workdirManager.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
+	result, err := workdirManager.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "components:")
 }

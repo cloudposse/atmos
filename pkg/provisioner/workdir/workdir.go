@@ -253,6 +253,8 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 			Err()
 	}
 
+	s.migrateLegacyWorkdir(basePath, component, stack, workdirPath)
+
 	if err := s.fs.MkdirAll(workdirPath, DirPermissions); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
 			WithCause(err).
@@ -262,6 +264,41 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 	}
 
 	return workdirPath, nil
+}
+
+// legacyWorkdirName reproduces the pre-escaping "%s-%s" workdir-name formula BuildPath used
+// before it started injectively encoding component (see escapeComponentNameForPath's doc
+// comment). Used only by migrateLegacyWorkdir to locate a workdir an earlier Atmos version may
+// have created under that formula.
+func legacyWorkdirName(stack, component string) string {
+	return fmt.Sprintf("%s-%s", stack, component)
+}
+
+// migrateLegacyWorkdir renames a workdir found at the pre-escaping path onto newPath, so a
+// component whose name needs escaping (e.g. a literal "-", "/", or "\") doesn't silently lose
+// an existing workdir -- and any local Terraform state inside it -- the first time it's
+// provisioned under the current, injectively-encoded BuildPath formula. Best-effort: logs and
+// leaves both paths alone on any error, or when newPath already exists (never overwrites a
+// workdir that's already been (re)provisioned at the new path), or when the two formulas
+// already agree (the overwhelmingly common case: a component/stack pair with no characters
+// that need escaping resolves to the same path either way, so there is nothing to migrate).
+func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath string) {
+	defer perf.Track(nil, "workdir.Service.migrateLegacyWorkdir")()
+
+	legacyPath := filepath.Join(basePath, WorkdirPath, "terraform", legacyWorkdirName(stack, component))
+	if legacyPath == newPath {
+		return
+	}
+	if !s.fs.Exists(legacyPath) || s.fs.Exists(newPath) {
+		return
+	}
+
+	if err := s.fs.Rename(legacyPath, newPath); err != nil {
+		log.Debug("Failed to migrate legacy workdir to its new encoded path; provisioning will create a fresh workdir instead",
+			"legacy_path", legacyPath, "new_path", newPath, "error", err)
+		return
+	}
+	log.Debug("Migrated legacy workdir to its new encoded path", "legacy_path", legacyPath, "new_path", newPath)
 }
 
 // syncLocalToWorkdir syncs local component files to workdir using incremental per-file checksums.

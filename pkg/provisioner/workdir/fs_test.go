@@ -552,3 +552,47 @@ func TestSyncDir_PreservesLockFiles(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dstDir, ".dev-vpc.terraform.lock.hcl"))
 	assert.True(t, os.IsNotExist(err), "source per-instance lock must not be synced into the workdir")
 }
+
+// TestSyncDir_PreservesLocalBackendState is a regression test for a local-backend component's
+// actual Terraform state being silently deleted on every re-provision: before this fix,
+// deleteRemovedFiles treated "terraform.tfstate" (and its backup) as an orphaned file -- absent
+// from the source component directory, so eligible for removal -- since only
+// "terraform.tfstate.d/" (the *workspace-specific* state directory) and lock files were
+// protected. The default workspace's state file, written directly into the workdir root, was
+// not. Mirrors TestSyncDir_PreservesLockFiles' shape for the analogous state-file case.
+func TestSyncDir_PreservesLocalBackendState(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	// Source: component code only -- state is never part of the source tree.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("resource {}"), 0o644))
+
+	// Workdir already holds real local-backend state from a prior apply (not present in source).
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "terraform.tfstate"), []byte(`{"version":4}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "terraform.tfstate.backup"), []byte(`{"version":4,"serial":1}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, ".terraform.tfstate.lock.info"), []byte(`{"ID":"lock"}`), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+	_, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+
+	// main.tf is synced.
+	_, err = os.Stat(filepath.Join(dstDir, "main.tf"))
+	assert.NoError(t, err)
+
+	// The workdir's real state, its backup, and the lock marker all survive the sync.
+	state, err := os.ReadFile(filepath.Join(dstDir, "terraform.tfstate"))
+	require.NoError(t, err, "local-backend state must not be deleted by sync")
+	assert.Equal(t, `{"version":4}`, string(state))
+
+	backup, err := os.ReadFile(filepath.Join(dstDir, "terraform.tfstate.backup"))
+	require.NoError(t, err, "local-backend state backup must not be deleted by sync")
+	assert.Equal(t, `{"version":4,"serial":1}`, string(backup))
+
+	_, err = os.Stat(filepath.Join(dstDir, ".terraform.tfstate.lock.info"))
+	assert.NoError(t, err, "state lock marker must not be deleted by sync")
+}

@@ -1,0 +1,131 @@
+# Fix: Address CodeRabbit round on PR #2879 (workdir path safety, CleanWorkdir, CI clone bootstrap)
+
+**Date:** 2026-08-17
+
+## Summary
+
+CodeRabbit left 8 review comments on PR #2879 (branch `osterman/test-container-fields-ignored`).
+Each was verified against current code (not just the diff CodeRabbit saw) before acting, since
+comments on a moving branch are often stale. 6 were real and fixed here; 2 were stale (the code
+already did what CodeRabbit wanted, or the underlying claim didn't hold) and need only a thread
+reply, not a code change.
+
+## Context
+
+- **Fixed, minor:** `pkg/provisioner/source/source.go`'s `validateWithinComponentBasePath`
+  discarded the underlying filesystem error (`EACCES`, `ENOTDIR`, etc.) when
+  `resolveExistingSymlinks` failed, losing troubleshooting detail.
+- **Fixed, security:** `workdir.BuildPath` validated `stack` only against escaping `basePath`
+  entirely, missing an in-bounds collision: a stack value containing a real `/` — e.g.
+  `team/../prod` — folded to the same workdir as stack `prod` via `filepath.Join`'s implicit
+  `Clean()`, letting two distinct stack configs silently share one workdir's files, metadata,
+  and Terraform state.
+- **Fixed, correctness:** `pkg/provisioner/workdir.CleanWorkdir` passed `nil` for
+  `componentConfig` to `BuildPath`, so it never honored an `atmos_component` instance-name
+  override — for a component provisioned under such an override, cleanup derived the *base*
+  component's path, found nothing there, and silently reported success without removing the
+  real workdir. Investigating this surfaced a deeper, related bug: the actual CLI-wired
+  implementation (`cmd/terraform/workdir/workdir_helpers.go`'s `DefaultWorkdirManager`) doesn't
+  call `pkg/provisioner/workdir.CleanWorkdir`/`BuildPath` at all — it has its own separate,
+  never-updated `fmt.Sprintf("%s-%s", stack, component)` formula in `CleanWorkdir`,
+  `GetWorkdirInfo`, and (transitively) `DescribeWorkdir`, meaning `atmos terraform workdir
+  clean/get/describe` couldn't find *any* hyphenated component's real workdir, not just the
+  `atmos_component`-override case CodeRabbit flagged.
+- **Fixed, scoped:** the hyphen/separator-escaping `BuildPath` change (from an earlier round of
+  this same PR, see `docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`)
+  changes the on-disk path for any component name needing escaping, so a workdir an earlier
+  commit of this branch created under the pre-escaping formula becomes unreachable the next time
+  that component is provisioned — silent state loss for a local-backend component, since the JIT
+  workdir is Terraform's actual working directory in that case.
+- **Fixed, small:** `cmd/git/bootstrap.go`'s `CIGitCloneBootstrapRequestedFromRawArgs` returned
+  `false` on a clone flag-parse error, with a comment claiming this "defers the actual error to
+  the command's own RunE." It didn't: `cmd/root.go`'s `handleConfigInitErrorWithArgs` only
+  swallows an unrelated config/profile error and lets control reach Cobra's real flag parser
+  when this function returns `true`; returning `false` let the unrelated error win instead,
+  and `Execute()` returns it immediately without Cobra ever seeing the malformed flag.
+- **Fixed, changelog:** the strict-YAML-decoding change (rejecting unknown fields under
+  container `with:`/`driver:`) and the workdir path-encoding change are both real, user-facing
+  breaking changes from this PR with no changelog/blog post; added one.
+- **Stale, no fix:** `docs/fixes/2026-08-07-config-load-and-container-validation-error-visibility.md`'s
+  `run.pull: sometimes` error example — verified `pkg/runner/step/container.go`'s
+  `invalidContainerField` really does build the error via sentinel `ErrStepFieldRequired`
+  ("required field missing for step") for *all* invalid container field values, not just
+  missing ones, so the doc already matches current code output exactly.
+- **Stale, no fix:** `pkg/schema/task.go`'s `yamlNodeFromMapValue` and Viper key lowercasing —
+  verified `commands:` (which carries `with:`/`container:` for custom commands) is extracted
+  separately in `pkg/config/load.go`, bypassing Viper's key-insensitive merge entirely, so
+  nested `env:`/`build_args:` keys already arrive case-preserved; confirmed by an existing
+  passing test (`TestCustomCommandContainerStepMappingOverrideDecodesFully`) that loads through
+  the real `InitCliConfig` path.
+
+## Changes
+
+- `pkg/provisioner/source/source.go`: added `.WithCause(err)` to both
+  `resolveExistingSymlinks` error branches in `validateWithinComponentBasePath`.
+- `pkg/provisioner/workdir/types.go`: `BuildPath` now rejects a `stack` value containing `/` or
+  `\` outright (new `validateStackForPath` helper) instead of only checking containment after
+  the fact. Rejecting rather than escaping (unlike the component name's
+  `escapeComponentNameForPath`) avoids changing the on-disk path for the overwhelmingly common
+  case of a stack name containing a literal `-` (e.g. `us-east-1-dev`). Also extracted
+  `resolveWorkdirComponentName` to keep `BuildPath` under the repo's function-length lint limit.
+- `pkg/provisioner/workdir/clean.go`: `CleanWorkdir` now takes a `componentConfig map[string]any`
+  parameter, forwarded to `BuildPath`; `CleanOptions` gained a matching `ComponentConfig` field.
+- `cmd/terraform/workdir/workdir_helpers.go`: `WorkdirManager`'s `CleanWorkdir`, `GetWorkdirInfo`,
+  and `DescribeWorkdir` now take `componentConfig` and delegate to `provWorkdir.BuildPath`
+  instead of their own hand-rolled formula. New `resolveComponentConfig` helper (best-effort,
+  via `internal/exec.ExecuteDescribeComponent`) resolves it from the current stack config,
+  falling back to `nil` when the component can no longer be described — e.g. an orphaned workdir
+  for a component since removed from stack manifests — so cleanup of stale workdirs still works.
+  `cmd/terraform/workdir/workdir_clean.go`, `workdir_show.go`, `workdir_describe.go` updated to
+  call it. Regenerated `mock_workdir_manager_test.go` via `go generate`.
+- `pkg/provisioner/workdir/interfaces.go`, `fs.go`: added `FileSystem.Rename` (and
+  `DefaultFileSystem` implementation); regenerated `mock_interfaces_test.go`.
+- `pkg/provisioner/workdir/workdir.go`: new `migrateLegacyWorkdir`, called from
+  `createWorkdirDirectory` before creating a fresh directory — checks for a sibling at the
+  pre-escaping path and renames it forward if the new (encoded) path doesn't already exist.
+  Best-effort: logs and proceeds to a fresh `MkdirAll` on any error.
+- `cmd/git/bootstrap.go`: `CIGitCloneBootstrapRequestedFromRawArgs` returns `true` (not `false`)
+  on a clone flag-parse error, so the caller tolerates an unrelated config/profile error and
+  lets Cobra's own parser report the malformed flag.
+- `website/blog/2026-08-17-container-config-validation-and-workdir-path-encoding.mdx`: new
+  changelog post covering both the strict-decode and workdir-path-encoding breaking changes.
+- `docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`: added an "Update
+  (2026-08-17)" section documenting the three points above that continue that fix, plus a
+  Follow-ups note on the pre-existing sync-deletion gap found below.
+
+## Validation
+
+- `go build ./...` — clean, after every change.
+- `go vet ./...` — clean.
+- `atmos lint --changed` (patch-scoped `./custom-gcl run --new-from-rev=origin/main`) — 0 issues,
+  re-run after each round of fixes.
+- `go test ./pkg/provisioner/... ./cmd/terraform/workdir/... ./pkg/terraform/output/...
+  ./internal/terraform_backend/... ./pkg/component/... ./pkg/schema/... ./pkg/runner/step/...
+  ./cmd ./cmd/git/...` — all pass, including:
+  - New: `TestBuildPath_RejectsStackContainingSlash`/`_RejectsStackContainingBackslash`/
+    `_AllowsHyphenatedStackName`, `TestContainWithinBase_RejectsEscapingPath`
+    (`pkg/provisioner/workdir/types_test.go`).
+  - New: `TestCleanWorkdir_HonorsAtmosComponentOverride`/
+    `_NilComponentConfigMissesAtmosComponentInstance` (`pkg/provisioner/workdir/clean_test.go`)
+    — the latter documents the pre-fix failure mode as a regression guard.
+  - New: `TestServiceProvision_MigratesPreExistingLegacyWorkdir`
+    (`pkg/provisioner/workdir/integration_test.go`) — end-to-end: pre-creates a workdir at the
+    legacy path with a marker provider-lock file, provisions, and asserts the directory was
+    renamed (not recreated) with its contents intact.
+  - New: `TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists`/`_SkipsWhenLegacyPathMissing`/
+    `_ToleratesRenameError` (`pkg/provisioner/workdir/workdir_test.go`) — mock-level edge cases.
+  - New: two rows on `TestHandleConfigInitError_CIGitCloneBootstrap` and two on
+    `TestCIGitCloneBootstrapRequestedFromRawArgs` covering the malformed-`--depth`-with-
+    invalid-profile scenario, both in and out of a detected CI provider.
+  - Updated ~40 existing call sites across 5 `cmd/terraform/workdir/*_test.go` files and
+    `pkg/provisioner/workdir/{clean,integration,workdir}_test.go` for the new
+    `componentConfig`/`Rename` mock signatures.
+- `cd website && npm run build` — succeeds; the one broken-anchor warning it reports is
+  pre-existing and on an unrelated page (`/changelog/mcp-for-ai-coding-assistants`).
+
+## Follow-ups
+
+None. Writing the legacy-workdir-migration regression test surfaced a separate, pre-existing gap
+— `SyncDir` deleting a component's local-backend `terraform.tfstate` on every re-provision —
+initially deferred here as out of scope for a workdir-*path* fix. Fixed directly instead; see
+`docs/fixes/2026-08-17-workdir-sync-deletes-local-backend-state.md`.

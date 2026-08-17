@@ -189,9 +189,11 @@ func TestBuildPath_NoCollisionBetweenSlashAndBackslash(t *testing.T) {
 		"a component named %q must not resolve to the same workdir as a component named %q", "ecs/cluster", `ecs\cluster`)
 }
 
-// TestBuildPath_RejectsStackTraversal verifies BuildPath rejects a stack name containing
-// ".." segments instead of silently resolving a workdir path outside basePath. Both the
-// stack and component name can originate from user-controlled YAML.
+// TestBuildPath_RejectsStackTraversal verifies BuildPath rejects a stack name containing a
+// real "/" -- including one embedding ".." segments, e.g. "../../../../../../evil" -- instead
+// of silently letting filepath.Join's implicit Clean() fold it into a workdir path outside
+// (or aliasing another stack's path within) the intended root. Both the stack and component
+// name can originate from user-controlled YAML.
 func TestBuildPath_RejectsStackTraversal(t *testing.T) {
 	base := t.TempDir()
 
@@ -200,16 +202,60 @@ func TestBuildPath_RejectsStackTraversal(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }
 
-// TestBuildPath_RejectsPartialStackTraversalWithinBasePath verifies BuildPath rejects a stack
-// name whose ".." segments climb back out of the .workdir/<componentType> root while the
-// resolved path still lands inside basePath -- e.g. "../../components" against
-// "<basePath>/.workdir/terraform/" resolves to "<basePath>/components-vpc", which is contained
-// in basePath but escapes the canonical per-component-type workdir root, and would previously
-// slip past a containment check against basePath alone.
-func TestBuildPath_RejectsPartialStackTraversalWithinBasePath(t *testing.T) {
+// TestBuildPath_RejectsStackContainingSlash is a regression test for the collision CodeRabbit
+// flagged: a stack name containing a real "/" that stays within basePath after
+// filepath.Join's implicit Clean() -- e.g. "team/../prod" naively joins to the same path as
+// stack "prod" -- so two distinct stack configurations would silently share one workdir (and
+// therefore its files, metadata, and Terraform state). BuildPath rejects any stack containing
+// "/" or "\" outright (rather than encoding it, as it does for workdirComponent) specifically
+// to avoid changing the on-disk path -- and invalidating existing local state -- for the
+// common case of a stack name that merely contains a literal "-" (e.g. "us-east-1-dev").
+func TestBuildPath_RejectsStackContainingSlash(t *testing.T) {
 	base := t.TempDir()
 
-	_, err := BuildPath(base, "terraform", "vpc", "../../components", map[string]any{})
+	_, err := BuildPath(base, "terraform", "vpc", "team/../prod", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestBuildPath_RejectsStackContainingBackslash mirrors
+// TestBuildPath_RejectsStackContainingSlash for "\", Windows' real path separator -- rejected
+// unconditionally (not just on Windows) so a stack name's rejection is deterministic regardless
+// of which OS Atmos runs on.
+func TestBuildPath_RejectsStackContainingBackslash(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", `team\..\prod`, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestBuildPath_AllowsHyphenatedStackName is a regression test guarding against reintroducing
+// the blast radius a full injective encoding of stack (mirroring workdirComponent's
+// escapeComponentNameForPath) would have: since stack is only rejected for "/"/"\", not
+// escaped, a stack name containing a literal "-" -- extremely common, e.g. "us-east-1-dev" --
+// must resolve to the same on-disk path it always has, not a re-encoded one that would orphan
+// every existing workdir for a hyphenated stack on upgrade.
+func TestBuildPath_AllowsHyphenatedStackName(t *testing.T) {
+	base := t.TempDir()
+
+	path, err := BuildPath(base, "terraform", "vpc", "us-east-1-dev", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(base, WorkdirPath, "terraform", "us-east-1-dev-vpc"), path)
+}
+
+// TestContainWithinBase_RejectsEscapingPath is a direct unit test for containWithinBase's own
+// rejection branch, kept as defense-in-depth coverage now that BuildPath's stack rejection and
+// workdirComponent escaping should already prevent any real ".." from reaching it in practice.
+// Exercises the function directly with a path that lexically escapes base, bypassing BuildPath
+// entirely, to confirm the guard itself still works if a future caller (or a change to either
+// guard above) ever reintroduces a real separator.
+func TestContainWithinBase_RejectsEscapingPath(t *testing.T) {
+	base := t.TempDir()
+	typeRoot := filepath.Join(base, WorkdirPath, "terraform")
+	escapingPath := filepath.Join(typeRoot, "..", "..", "evil")
+
+	_, err := containWithinBase(escapingPath, typeRoot)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }

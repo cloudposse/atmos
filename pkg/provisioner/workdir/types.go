@@ -125,17 +125,58 @@ const (
 // that it stays contained within basePath. It uses atmos_component (the instance name) from
 // componentConfig when available, falling back to the provided component name. This ensures
 // all provisioners (workdir, source, JIT) use the same directory for a given component
-// instance. Both "/" and "\" in the resolved component name are encoded (see
-// escapeComponentNameForPath) rather than left as real path segments, and the final path is
-// verified to fall within basePath (see containWithinBase) -- component and stack names can
-// both originate from user-controlled YAML, and either could otherwise resolve outside
-// basePath via filepath.Join's implicit Clean(). Returns errUtils.ErrPathTraversal if the
+// instance. "/" and "\" in the resolved component name are encoded (see
+// escapeComponentNameForPath) rather than left as real path segments; the same characters in
+// stack are rejected outright rather than encoded, to avoid changing the on-disk path (and
+// invalidating existing local state) for the common case of a stack name containing a literal
+// "-". The final path is verified to fall within basePath (see containWithinBase) --
+// component and stack names can both originate from user-controlled YAML, and either could
+// otherwise resolve outside basePath (or alias another stack's workdir) via filepath.Join's
+// implicit Clean(). Returns errUtils.ErrPathTraversal if stack contains "/"/"\" or the
 // resolved path escapes basePath.
 //
 // Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
 func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) (string, error) {
 	defer perf.Track(nil, "workdir.BuildPath")()
 
+	if err := validateStackForPath(stack); err != nil {
+		return "", err
+	}
+
+	workdirComponent := resolveWorkdirComponentName(component, componentConfig)
+	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
+	rawPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+
+	// containWithinBase is kept as a defense-in-depth check against typeRoot
+	// (itself always safely nested under basePath, since componentType is a
+	// fixed, trusted caller-supplied constant such as "terraform", not
+	// user-controlled input) even though rejecting "/"/"\" in stack and
+	// escaping workdirComponent above should already make escape impossible
+	// -- it costs nothing and protects against a future change to either
+	// guard reintroducing a real separator.
+	typeRoot := filepath.Join(basePath, WorkdirPath, componentType)
+
+	return containWithinBase(rawPath, typeRoot)
+}
+
+// resolveWorkdirComponentName resolves the instance-name override (atmos_component) from
+// componentConfig, falling back to component, then escapes the result for use as a single
+// filesystem path segment.
+//
+// A nested component name (e.g. "ecs/cluster") must not add an extra path segment:
+// filepath.Join would otherwise turn it into a real subdirectory, making the workdir one level
+// deeper than a flat component's at the same stack. That silently changes how many ".." a
+// relative backend path (or any other path computed relative to the workdir) needs to reach
+// the same ancestor, so equivalent components would write state under different roots solely
+// because one component name contains "/". Mirror the same sanitization already used for
+// backend template context (see internal/exec/terraform_generate_backends.go).
+//
+// "\" is sanitized unconditionally (not just on Windows): it is Windows' real path separator,
+// so a crafted or copy-pasted component name containing it (e.g. "..\\..\\evil") would
+// otherwise let filepath.Join/Clean treat it as real ".."-traversal segments there, escaping
+// the intended workdir root. Stripping it on every platform also keeps a given component
+// name's encoded workdir segment deterministic regardless of which OS Atmos runs on.
+func resolveWorkdirComponentName(component string, componentConfig map[string]any) string {
 	// Use atmos_component (instance name) for path isolation.
 	// When metadata.component differs from the instance name (e.g., inherited components),
 	// atmos_component contains the unique instance name while component/metadata.component
@@ -145,43 +186,33 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 		workdirComponent = atmosComponent
 	}
 
-	// A nested component name (e.g. "ecs/cluster") must not add an extra path
-	// segment: filepath.Join would otherwise turn it into a real subdirectory,
-	// making the workdir one level deeper than a flat component's at the same
-	// stack. That silently changes how many ".." a relative backend path (or
-	// any other path computed relative to the workdir) needs to reach the
-	// same ancestor, so equivalent components would write state under
-	// different roots solely because one component name contains "/". Mirror
-	// the same sanitization already used for backend template context (see
-	// internal/exec/terraform_generate_backends.go).
-	//
-	// "\" is sanitized unconditionally (not just on Windows): it is Windows'
-	// real path separator, so a crafted or copy-pasted component name
-	// containing it (e.g. "..\\..\\evil") would otherwise let
-	// filepath.Join/Clean treat it as real ".."-traversal segments there,
-	// escaping the intended workdir root. Stripping it on every platform
-	// also keeps a given component name's encoded workdir segment
-	// deterministic regardless of which OS Atmos runs on.
-	workdirComponent = escapeComponentNameForPath(workdirComponent)
+	return escapeComponentNameForPath(workdirComponent)
+}
 
-	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
-	rawPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+// validateStackForPath rejects a stack name containing "/" or "\" instead of escaping it (as
+// resolveWorkdirComponentName does for the component name).
+//
+// A stack name is just as user-controlled as a component name, and without this check, a
+// value such as "team/../prod" still contains a real "/" when workdirName is built --
+// filepath.Join's implicit Clean() then folds "team/../" away, silently aliasing stack
+// "team/../prod" onto the same workdir as stack "prod", so two distinct stack configurations
+// would share one workdir (and therefore its files, metadata, and Terraform state). Rejecting
+// outright (instead of encoding, as the component name is) avoids changing the on-disk path --
+// and therefore invalidating existing local Terraform state -- for the overwhelmingly common
+// case of a stack name that merely contains a literal "-" (e.g. "us-east-1-dev"), which is not
+// a path-separator character and carries no traversal risk on its own. Real "/"/"\" in a stack
+// name is not a supported Atmos naming convention (stack manifests use "/" for file paths,
+// never for the resolved stack name itself), so rejecting it costs no legitimate use case.
+func validateStackForPath(stack string) error {
+	if strings.ContainsAny(stack, `/\`) {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Stack name `%s` must not contain '/' or '\\'", stack).
+			WithHint("Remove any path-separator characters from the stack name").
+			WithContext("stack", stack).
+			Err()
+	}
 
-	// stack is not escaped like workdirComponent above, so a stack name such
-	// as "../../components" folds enough ".." segments into workdirName to
-	// climb back out of the componentType directory (or .workdir itself)
-	// while the result still lands inside basePath -- e.g.
-	// "<basePath>/.workdir/terraform/../../components-foo" resolves to
-	// "<basePath>/components-foo". Checking containment against basePath
-	// alone would accept that, letting a crafted stack name write into an
-	// arbitrary sibling directory of .workdir instead of the intended
-	// per-component-type workdir root. Validate against that narrower,
-	// canonical root (itself always safely nested under basePath, since
-	// componentType is a fixed, trusted caller-supplied constant such as
-	// "terraform", not user-controlled input) to close that gap.
-	typeRoot := filepath.Join(basePath, WorkdirPath, componentType)
-
-	return containWithinBase(rawPath, typeRoot)
+	return nil
 }
 
 // escapeComponentNameForPath injectively encodes name so it can be used as a single

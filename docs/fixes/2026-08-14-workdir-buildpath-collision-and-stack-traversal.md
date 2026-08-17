@@ -253,6 +253,64 @@ more issues:
   `go test ./pkg/component/... ./pkg/provisioner/workdir/...` — all clean.
 - `./custom-gcl run --new-from-rev=origin/main` — 0 issues.
 
+## Update (2026-08-17)
+
+A later CodeRabbit review round on the same PR raised three further points against this fix;
+addressed here rather than in a new file since two are direct continuations of it.
+
+1. **Stack collision, not just traversal.** The original fix validated `stack` only against
+  `containWithinBase` (catching a stack value that climbs *out* of `basePath`, e.g.
+  `../../../../../../evil`), but a stack containing a real `/` that stays *within* `basePath`
+  after `filepath.Join`'s implicit `Clean()` — e.g. `team/../prod` — still aliased the same
+  workdir as stack `prod`, undetected. Fixed in `BuildPath` (`types.go`,
+  `validateStackForPath`): `stack` is now rejected outright (not escaped, unlike
+  `workdirComponent`) whenever it contains `/` or `\`. Escaping was deliberately not chosen
+  here even though it's the same technique already used for the component name: it would
+  change the on-disk path for the overwhelmingly common case of a stack name containing a
+  literal `-` (e.g. `us-east-1-dev`), reopening exactly the kind of existing-workdir
+  invalidation point 3 below addresses. Rejecting is free of that cost since real `/`/`\` in a
+  resolved stack name isn't a supported Atmos naming convention. New tests:
+  `TestBuildPath_RejectsStackContainingSlash`, `_RejectsStackContainingBackslash`,
+  `_AllowsHyphenatedStackName` (`types_test.go`).
+2. **`CleanWorkdir`'s fix didn't reach the CLI.** `pkg/provisioner/workdir.CleanWorkdir` (fixed
+  above to use `BuildPath`) turned out to have zero production callers — `atmos terraform
+  workdir clean/get/describe` go through `cmd/terraform/workdir/workdir_helpers.go`'s
+  `DefaultWorkdirManager`, which had its own **separate**, never-updated
+  `fmt.Sprintf("%s-%s", stack, component)` formula in `CleanWorkdir`, `GetWorkdirInfo`, and
+  (transitively) `DescribeWorkdir`. That means the CLI's clean/get/describe commands couldn't
+  find *any* hyphenated or `atmos_component`-overridden component's real workdir, not just the
+  override case CodeRabbit flagged. All three now delegate to `BuildPath` and accept the
+  resolved `componentConfig` (via a new `resolveComponentConfig` helper that falls back to
+  `nil` when the component can no longer be described — e.g. an orphaned workdir for a
+  component since removed from stack manifests — so cleanup of stale workdirs still works).
+3. **Legacy on-disk paths orphaned by the hyphen re-encoding.** `escapeComponentNameForPath`
+  (this doc's collision fix) changes the on-disk segment for any component name needing
+  escaping, so a workdir an earlier Atmos version created under the pre-escaping formula
+  becomes unreachable the moment that component is next provisioned. The "self-healing, not
+  data loss" framing in this doc's Changes section holds for the common case (workdir is just
+  a synced copy of component source + generated backend config), but not for a **local backend**
+  component: `pkg/terraform/output/config.go` resolves the JIT workdir as Terraform's actual
+  working directory, so a `backend "local"` component's `terraform.tfstate` lives inside it.
+  Fixed with a scoped, best-effort migration in `createWorkdirDirectory`
+  (`workdir.go`, `migrateLegacyWorkdir`): before creating a fresh directory at the new encoded
+  path, it checks for a sibling at the pre-escaping path and renames it forward if the new path
+  doesn't already exist. A full migration framework was judged unnecessary since
+  `escapeComponentNameForPath` is itself unreleased (only exists on this branch, confirmed via
+  `git merge-base --is-ancestor` against `origin/main`) — but the rename still matters for
+  anyone who provisioned a workdir on an earlier commit of this same branch. New tests:
+  `TestServiceProvision_MigratesPreExistingLegacyWorkdir` (`integration_test.go`),
+  `TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists`, `_SkipsWhenLegacyPathMissing`,
+  `_ToleratesRenameError` (`workdir_test.go`).
+
 ## Follow-ups
 
-None.
+Point 3 above surfaced a separate, pre-existing gap while writing its regression test:
+`syncLocalToWorkdir`'s `SyncDir` step (`fs.go`, `deleteRemovedFiles`) deletes any workdir file
+not present in the source component directory, and only protects the workspace-specific
+`terraform.tfstate.d/` directory and provider lock files (`shouldSkipSyncFile`) from that —
+**not** a plain `terraform.tfstate` at the workdir root (the default workspace's state). That
+means a local-backend, default-workspace component's state is deleted on every re-provision
+today, independent of this fix or the hyphen re-encoding. Not fixed here: out of scope for a
+workdir-*path* fix, and changing sync's delete behavior deserves its own dedicated tests and
+consideration of what else besides `.terraform.lock.hcl` should be protected. Flagged for the
+user to decide on a follow-up.

@@ -214,6 +214,7 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 	resolvedTarget, err := resolveExistingSymlinks(absTarget)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
 			WithExplanationf("Failed to resolve symlinks for component target directory `%s`", targetDir).
 			WithContext("target_dir", absTarget).
 			Err()
@@ -221,6 +222,7 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 	resolvedBase, err := resolveExistingSymlinks(absBase)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
 			WithExplanationf("Failed to resolve symlinks for component base path `%s`", componentBasePath).
 			WithContext("component_base_path", absBase).
 			Err()

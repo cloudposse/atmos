@@ -89,10 +89,18 @@ func CIGitCloneBootstrapRequestedFromRawArgs(rawArgs []string) bool {
 	git.AddCommand(clone)
 
 	if err := clone.ParseFlags(rawArgs); err != nil {
-		// Malformed flags: match CICloneBootstrapRequested's existing
-		// philosophy (resolveCICloneMode) of deferring the actual error to
-		// the command's own RunE rather than reporting it here.
-		return false
+		// Malformed flags: rawArgs still names "git clone", so report the
+		// bootstrap shape as present rather than absent. The caller
+		// (handleConfigInitErrorWithArgs in cmd/root.go) only reaches Cobra's
+		// own RunE -- where the real parseCloneFlags would report this same
+		// error cleanly -- when this function returns true; returning false
+		// here previously let an unrelated config/profile error win instead,
+		// since Execute() returns handleConfigInitError's result immediately
+		// without ever calling RootCmd.Execute(). Reporting true unconditionally
+		// (not just for CI) is intentional: no config or profile error should
+		// ever preempt Cobra's own flag-parsing error for a malformed clone
+		// invocation, in CI or otherwise.
+		return true
 	}
 	return CICloneBootstrapRequested(clone, clone.Flags().Args())
 }

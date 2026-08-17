@@ -23,6 +23,17 @@ const (
 	// Suffix shared by the canonical .terraform.lock.hcl and the per-instance
 	// .<stack>-<component>.terraform.lock.hcl that Atmos manages.
 	terraformLockFileSuffix = ".terraform.lock.hcl"
+	// The default (non-workspace) local backend's state and backup files.
+	// "terraform.tfstate.d/<workspace>/" holds every other workspace's state and is already
+	// protected as a directory (terraformWorkspaceStateDir); these two are the default
+	// workspace's equivalent, written directly into the workdir root.
+	terraformStateFile       = "terraform.tfstate"
+	terraformStateBackupFile = "terraform.tfstate.backup"
+	// Terraform/OpenTofu's transient local-backend lock marker, present only while an
+	// operation holds the state lock. Sync should never run concurrently with one, but
+	// skipping it costs nothing and avoids sync fighting over a file it doesn't own if that
+	// assumption is ever violated.
+	terraformStateLockInfoFile = ".terraform.tfstate.lock.info"
 )
 
 // copyDir recursively copies a directory from src to dst.
@@ -52,6 +63,13 @@ func (f *DefaultFileSystem) RemoveAll(path string) error {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.RemoveAll")()
 
 	return os.RemoveAll(path)
+}
+
+// Rename moves oldPath to newPath.
+func (f *DefaultFileSystem) Rename(oldPath, newPath string) error {
+	defer perf.Track(nil, "workdir.DefaultFileSystem.Rename")()
+
+	return os.Rename(oldPath, newPath)
 }
 
 // Exists checks if a path exists.
@@ -222,12 +240,26 @@ func shouldSkipSyncDir(relPath string) bool {
 	}
 }
 
-// shouldSkipSyncFile reports whether relPath is a Terraform dependency lock file
-// (canonical .terraform.lock.hcl or a per-instance .<stack>-<component>.terraform.lock.hcl).
-// Lock files are owned by the providers-lock restore/persist lifecycle, so the source→workdir
-// sync must neither copy them in nor delete the workdir's own.
+// shouldSkipSyncFile reports whether relPath is a file the source→workdir sync must never copy
+// in or delete: a Terraform dependency lock file (canonical .terraform.lock.hcl or a
+// per-instance .<stack>-<component>.terraform.lock.hcl, owned by the providers-lock
+// restore/persist lifecycle), or the default workspace's local-backend state file
+// (terraform.tfstate), its backup (terraform.tfstate.backup), or its transient lock marker
+// (.terraform.tfstate.lock.info). Without this, a local-backend component's actual Terraform
+// state -- real infrastructure history, not a regenerable artifact -- was silently deleted by
+// deleteRemovedFiles on every re-provision, since sync otherwise treats anything absent from
+// the source component directory as an orphan to remove.
 func shouldSkipSyncFile(relPath string) bool {
-	return strings.HasSuffix(filepath.Base(relPath), terraformLockFileSuffix)
+	base := filepath.Base(relPath)
+	if strings.HasSuffix(base, terraformLockFileSuffix) {
+		return true
+	}
+	switch base {
+	case terraformStateFile, terraformStateBackupFile, terraformStateLockInfoFile:
+		return true
+	default:
+		return false
+	}
 }
 
 // copyFile copies a single file from src to dst.

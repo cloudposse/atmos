@@ -25,7 +25,7 @@ func TestCleanWorkdir_Success(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify workdir removed.
@@ -38,7 +38,7 @@ func TestCleanWorkdir_NotFound(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	// Should not error when workdir doesn't exist.
-	err := CleanWorkdir(atmosConfig, "nonexistent", "dev")
+	err := CleanWorkdir(atmosConfig, "nonexistent", "dev", nil)
 	require.NoError(t, err)
 }
 
@@ -54,7 +54,7 @@ func TestCleanWorkdir_EmptyBasePath(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 
-	err := CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 }
 
@@ -69,10 +69,60 @@ func TestCleanWorkdir_PathTraversalWrapsErrWorkdirClean(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	// Enough "../" segments to escape any plausible t.TempDir() nesting depth.
-	err := CleanWorkdir(atmosConfig, "vpc", "../../../../../../../../evil")
+	err := CleanWorkdir(atmosConfig, "vpc", "../../../../../../../../evil", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestCleanWorkdir_HonorsAtmosComponentOverride is a regression test for the bug CodeRabbit
+// flagged: CleanWorkdir must be given the instance's componentConfig (carrying
+// "atmos_component") so BuildPath derives the same path Service.Provision actually created.
+// Without it, cleanup for a component provisioned under an atmos_component override would
+// derive the base component's path instead, find nothing there, and silently report success
+// without removing the real workdir.
+func TestCleanWorkdir_HonorsAtmosComponentOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	componentConfig := map[string]any{"atmos_component": "s3-bucket-logs"}
+
+	// Service.Provision derives the workdir path from the instance name
+	// ("s3-bucket-logs"), not the base component name ("s3-bucket") -- compute it the same
+	// way (via BuildPath) rather than hand-constructing the escaped path here.
+	instanceWorkdirPath, err := BuildPath(tmpDir, "terraform", "s3-bucket", "dev", componentConfig)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(instanceWorkdirPath, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err = CleanWorkdir(atmosConfig, "s3-bucket", "dev", componentConfig)
+	require.NoError(t, err)
+
+	// The actual instance workdir must be removed, not silently left behind.
+	_, err = os.Stat(instanceWorkdirPath)
+	assert.True(t, os.IsNotExist(err), "instance workdir should be removed")
+}
+
+// TestCleanWorkdir_NilComponentConfigMissesAtmosComponentInstance documents the failure mode
+// TestCleanWorkdir_HonorsAtmosComponentOverride guards against: passing nil componentConfig
+// (the pre-fix behavior) derives the base component's path, which is never the actual instance
+// workdir, so the real workdir is left behind while CleanWorkdir still reports success.
+func TestCleanWorkdir_NilComponentConfigMissesAtmosComponentInstance(t *testing.T) {
+	tmpDir := t.TempDir()
+	componentConfig := map[string]any{"atmos_component": "s3-bucket-logs"}
+
+	instanceWorkdirPath, err := BuildPath(tmpDir, "terraform", "s3-bucket", "dev", componentConfig)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(instanceWorkdirPath, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err = CleanWorkdir(atmosConfig, "s3-bucket", "dev", nil)
+	require.NoError(t, err, "CleanWorkdir reports success even though it looked at the wrong path")
+
+	// The real instance workdir is untouched -- this is the bug, preserved here as a
+	// regression guard against silently reintroducing it.
+	_, err = os.Stat(instanceWorkdirPath)
+	assert.NoError(t, err, "instance workdir is left behind when componentConfig is nil")
 }
 
 func TestCleanAllWorkdirs_Success(t *testing.T) {
@@ -215,7 +265,7 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.Error(t, err, "expected permission error to occur")
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }

@@ -543,7 +543,7 @@ func TestCleanWorkdir(t *testing.T) {
 	}
 
 	// Clean the workdir using component and stack.
-	err = CleanWorkdir(atmosConfig, "test-component", "dev")
+	err = CleanWorkdir(atmosConfig, "test-component", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify the workdir was removed.
@@ -592,10 +592,135 @@ func TestCleanWorkdir_FindsProvisionedHyphenatedComponent(t *testing.T) {
 	_, statErr := os.Stat(provisionedPath)
 	require.NoError(t, statErr, "provisioned workdir must exist before cleaning")
 
-	require.NoError(t, CleanWorkdir(atmosConfig, "my-hyphenated-component", "dev"))
+	require.NoError(t, CleanWorkdir(atmosConfig, "my-hyphenated-component", "dev", componentConfig))
 
 	_, statErr = os.Stat(provisionedPath)
 	assert.True(t, os.IsNotExist(statErr), "CleanWorkdir must remove the workdir Provision actually created")
+}
+
+// TestServiceProvision_MigratesPreExistingLegacyWorkdir is a regression test for the
+// orphaned-workdir problem CodeRabbit flagged: BuildPath's hyphen/separator escaping (see
+// escapeComponentNameForPath) changed the on-disk path for any component whose name needs
+// escaping, so a workdir an earlier Atmos version created under the pre-escaping "%s-%s"
+// formula would otherwise become unreachable the first time it's provisioned again. Provision
+// must instead find and migrate (rename) that pre-existing legacy workdir onto the new encoded
+// path, not start fresh.
+//
+// The marker file uses the ".terraform.lock.hcl" suffix because syncLocalToWorkdir's SyncDir
+// step (which always runs immediately after migration, as part of the same Provision call)
+// deletes any workdir file not present in the source component directory except files
+// shouldSkipSyncFile protects -- provider lock files and, as of the fix below, local-backend
+// state (see TestServiceProvision_PreservesLocalBackendStateAcrossReprovision).
+func TestServiceProvision_MigratesPreExistingLegacyWorkdir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "my-hyphenated-component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// Simulate a workdir an earlier Atmos version created under the pre-escaping formula,
+	// containing a marker file standing in for a real per-instance provider lock file.
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", "my-hyphenated-component"))
+	require.NoError(t, os.MkdirAll(legacyPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyPath, ".terraform.lock.hcl"), []byte("# pre-existing lock"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "my-hyphenated-component",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	require.NotEqual(t, legacyPath, provisionedPath, "this test only proves something when the two formulas actually differ")
+
+	// The legacy directory is gone (renamed away, not left behind as an orphan)...
+	_, statErr := os.Stat(legacyPath)
+	assert.True(t, os.IsNotExist(statErr), "legacy workdir must be migrated away, not left behind")
+
+	// ...and its content survived the move rather than being recreated from scratch.
+	lockBytes, err := os.ReadFile(filepath.Join(provisionedPath, ".terraform.lock.hcl"))
+	require.NoError(t, err, "migrated workdir must retain the legacy workdir's contents")
+	assert.Equal(t, "# pre-existing lock", string(lockBytes))
+}
+
+// TestServiceProvision_PreservesLocalBackendStateAcrossReprovision is a regression test for
+// real, silent local Terraform state loss: every `terraform plan`/`apply`/`test` re-syncs the
+// workdir via Service.Provision, and syncLocalToWorkdir's SyncDir step deletes any workdir file
+// absent from the source component directory. The default workspace's local-backend state file
+// (terraform.tfstate) is never part of the source tree, so before shouldSkipSyncFile was
+// taught to protect it, a component using a local backend had its actual state deleted on the
+// very next re-provision after the apply that created it -- not a hypothetical, this is the
+// concrete "state keeps disappearing" symptom reported from dogfooding a local-backend
+// component through Atmos's workdir provisioner.
+func TestServiceProvision_PreservesLocalBackendStateAcrossReprovision(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "s3-bucket")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "s3-bucket",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// First provision (e.g. before `terraform init` for the initial apply).
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+
+	// Simulate `terraform apply` against a local backend: it writes real state directly into
+	// the workdir root, outside anything Service.Provision itself manages.
+	stateContent := `{"version":4,"serial":1,"resources":[{"type":"aws_s3_bucket"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(provisionedPath, "terraform.tfstate"), []byte(stateContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(provisionedPath, "terraform.tfstate.backup"), []byte(stateContent), 0o644))
+
+	// Re-provision, exactly as every subsequent `terraform plan`/`apply`/`test` does.
+	componentConfig = map[string]any{
+		"component":   "s3-bucket",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	gotState, err := os.ReadFile(filepath.Join(provisionedPath, "terraform.tfstate"))
+	require.NoError(t, err, "local-backend state must survive a re-provision, not be deleted as an orphaned file")
+	assert.Equal(t, stateContent, string(gotState))
+
+	_, err = os.Stat(filepath.Join(provisionedPath, "terraform.tfstate.backup"))
+	assert.NoError(t, err, "local-backend state backup must survive a re-provision")
 }
 
 // TestCleanAllWorkdirs tests the CleanAllWorkdirs function.

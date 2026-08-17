@@ -594,6 +594,8 @@ func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.
 	// Path args are asserted after Provision returns (against the real, sanitized workdir
 	// path), not pinned here, so this test fails cleanly on a clear diff rather than an
 	// opaque "unexpected call" mock error when the pre-fix, unsanitized path is used instead.
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", "app/local-nested"))
+	mockFS.EXPECT().Exists(legacyPath).Return(false)
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists("/custom/path/to/component").Return(true)
 	mockFS.EXPECT().SyncDir("/custom/path/to/component", gomock.Any(), mockHasher).Return(true, nil)
@@ -630,6 +632,86 @@ func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.
 	unsanitizedPath := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-app", "local-nested")
 	_, statErr := os.Stat(unsanitizedPath)
 	assert.True(t, os.IsNotExist(statErr), "workdir must not be created as a nested directory: %s", unsanitizedPath)
+}
+
+// TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists verifies migrateLegacyWorkdir never
+// overwrites a workdir that already exists at the new (encoded) path -- e.g. because it was
+// already migrated, or already (re)provisioned there -- even when a legacy-path directory is
+// also still present. No Rename call is expected: an unexpected call would fail the test via
+// the mock controller.
+func TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	// "vpc-logs" contains a literal "-", so its escaped (new) path differs from the legacy
+	// (unescaped) path -- required for this test to exercise anything.
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(true)
+
+	service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+}
+
+// TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing verifies migrateLegacyWorkdir does
+// nothing when no directory exists at the legacy (pre-escaping) path -- the overwhelmingly
+// common case for a fresh provision. No Exists(newPath) or Rename call is expected: only the
+// legacy-path check should run once the two formulas differ.
+func TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	mockFS.EXPECT().Exists(legacyPath).Return(false)
+
+	service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+}
+
+// TestMigrateLegacyWorkdir_ToleratesRenameError verifies a Rename failure is swallowed
+// (logged, not returned or panicked) -- migrateLegacyWorkdir is best-effort, and the caller
+// (createWorkdirDirectory) must still proceed to MkdirAll a fresh workdir at the new path
+// rather than fail provisioning outright over a failed migration.
+func TestMigrateLegacyWorkdir_ToleratesRenameError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
+
+	assert.NotPanics(t, func() {
+		service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	})
 }
 
 // TestServiceProvision_RejectsStackTraversal is a regression test proving Service.Provision
@@ -1101,11 +1183,13 @@ func TestDefaultHasher_HashDir_Deterministic(t *testing.T) {
 func TestServiceProvision_ComponentNameSources(t *testing.T) {
 	tests := []struct {
 		name            string
+		component       string
 		componentConfig map[string]any
 		expectedInPath  string
 	}{
 		{
-			name: "component from metadata",
+			name:      "component from metadata",
+			component: "vpc-from-metadata",
 			componentConfig: map[string]any{
 				"metadata": map[string]any{
 					"component": "vpc-from-metadata",
@@ -1120,7 +1204,8 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 			expectedInPath: "dev-vpc-hfrom-hmetadata",
 		},
 		{
-			name: "component from vars fallback",
+			name:      "component from vars fallback",
+			component: "vpc-from-vars",
 			componentConfig: map[string]any{
 				"vars": map[string]any{
 					"component": "vpc-from-vars",
@@ -1150,6 +1235,8 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 			mockFS := NewMockFileSystem(ctrl)
 			mockHasher := NewMockHasher(ctrl)
 
+			legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", tt.component))
+			mockFS.EXPECT().Exists(legacyPath).Return(false)
 			mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 			mockFS.EXPECT().Exists(gomock.Any()).Return(true)
 			mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
@@ -1206,6 +1293,8 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-fallback"))
+	mockFS.EXPECT().Exists(legacyPath).Return(false)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
 	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
