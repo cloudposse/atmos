@@ -166,7 +166,7 @@ commands:
                     command: >-
                       gh run download "$GITHUB_RUN_ID"
                       -n "acceptance-coverage-linux-shard-{{ .matrix.shard }}"
-                      -D "$GITHUB_WORKSPACE"
+                      -D "$GITHUB_WORKSPACE/coverage/shards/shard-{{ .matrix.shard }}"
 
       - name: race
         description: Run quick tests with race detector and shuffled order

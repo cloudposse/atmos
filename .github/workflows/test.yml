@@ -523,14 +523,23 @@ jobs:
             SHARD_PACKAGES=$(printf '%s\n%s' "$SHARD_PACKAGES" "github.com/cloudposse/atmos/tests/testhelpers")
           fi
 
-          COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-tests.out" \
+          COVERAGE_DIR="coverage/shard-${{ matrix.shard }}-tests-work" \
+            COVERAGE_DATA_OUT="coverage/shard-${{ matrix.shard }}-tests" \
+            COVERAGE_OUT="coverage/shard-${{ matrix.shard }}-tests.out" \
             TEST="./tests" TESTARGS="$TESTARGS_TESTS" \
             atmos test acceptance --cover
 
           if [ -n "$SHARD_PACKAGES" ]; then
-            COVERAGE_OUT="coverage-shard-${{ matrix.shard }}-pkgs.out" \
+            COVERAGE_DIR="coverage/shard-${{ matrix.shard }}-pkgs-work" \
+              COVERAGE_DATA_OUT="coverage/shard-${{ matrix.shard }}-pkgs" \
+              COVERAGE_OUT="coverage/shard-${{ matrix.shard }}-pkgs.out" \
               TEST="$SHARD_PACKAGES" TESTARGS="" \
               atmos test acceptance --cover
+          fi
+
+          COVERAGE_INPUTS=("coverage/shard-${{ matrix.shard }}-tests")
+          if [ -d "coverage/shard-${{ matrix.shard }}-pkgs" ]; then
+            COVERAGE_INPUTS+=("coverage/shard-${{ matrix.shard }}-pkgs")
           fi
 
           if [ "${{ matrix.shard }}" = "1" ]; then
@@ -540,30 +549,22 @@ jobs:
             # isn't set - several of its own tests re-exec themselves as a
             # subprocess (the CLAUDE.md-mandated cross-platform pattern) and assert
             # exact stdout/stderr content, so that warning breaks them. `go test`
-            # normally sets GOCOVERDIR itself (inherited by the subprocess via
-            # os.Environ()); set it explicitly here since we're running the
-            # compiled binary directly, not via `go test`.
+            # normally manages its native coverage directory itself. Set both
+            # GOCOVERDIR for re-executed subprocesses and -test.gocoverdir for
+            # the parent test binary since this runs directly, not via `go test`.
             # The cmd suite normally finishes in roughly 1-2 minutes. Keep a
             # 10-minute test-binary ceiling so a blocked test produces a Go
             # timeout stack instead of consuming this step's full budget.
-            CMD_GOCOVERDIR=$(mktemp -d)
-            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=10m)
-            go tool covdata textfmt -i="$CMD_GOCOVERDIR" -o="coverage-shard-${{ matrix.shard }}-cmd.out"
+            CMD_GOCOVERDIR="${{ github.workspace }}/coverage/shard-${{ matrix.shard }}-cmd"
+            mkdir -p "$CMD_GOCOVERDIR"
+            (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "${{ github.workspace }}/cmd.test" -test.v -test.timeout=10m -test.gocoverdir="$CMD_GOCOVERDIR")
+            COVERAGE_INPUTS+=("$CMD_GOCOVERDIR")
           fi
 
-          # Merge every coverage file produced above into the single per-shard
-          # file the `coverage` job downloads - same head/tail text-append
-          # technique scripts/collect-coverage.sh already uses internally.
-          {
-            head -n 1 "coverage-shard-${{ matrix.shard }}-tests.out"
-            tail -n +2 "coverage-shard-${{ matrix.shard }}-tests.out"
-            if [ -f "coverage-shard-${{ matrix.shard }}-pkgs.out" ]; then
-              tail -n +2 "coverage-shard-${{ matrix.shard }}-pkgs.out"
-            fi
-            if [ -f "coverage-shard-${{ matrix.shard }}-cmd.out" ]; then
-              tail -n +2 "coverage-shard-${{ matrix.shard }}-cmd.out"
-            fi
-          } > "coverage-shard-${{ matrix.shard }}.out"
+          # Preserve native counters through artifact upload. Text conversion
+          # happens only once, after all ten shards have been merged.
+          COVERAGE_DATA_OUT="coverage/shard-${{ matrix.shard }}" COVERAGE_OUT="" \
+            scripts/merge-coverage.sh "${COVERAGE_INPUTS[@]}"
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
@@ -633,14 +634,14 @@ jobs:
             (cd cmd && GOCOVERDIR="$CMD_GOCOVERDIR" "$CMD_TEST_BIN" -test.v -test.timeout=10m)
           fi
 
-      - name: Upload coverage report artifact
-        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage-shard-{0}.out', matrix.shard)) != ''
+      - name: Upload native coverage artifact
+        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
         timeout-minutes: 5
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: acceptance-coverage-linux-shard-${{ matrix.shard }}
-          path: coverage-shard-${{ matrix.shard }}.out
+          path: coverage/shard-${{ matrix.shard }}/
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -688,10 +689,9 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      # Each Linux shard uploads its own coverage-shard-N.out artifact (see the
-      # `test` job's "Upload coverage report artifact" step) instead of one
-      # combined file. Collating them into one Codecov report has to happen on
-      # a single machine (this job stays a single job, not a matrix), but the
+      # Each Linux shard uploads native covmeta/covcounters data instead of a
+      # text profile. Collating them into one Codecov report has to happen on a
+      # single machine (this job stays a single job, not a matrix), but the
       # downloads themselves are independent - dogfood Atmos's own `matrix`
       # step (.atmos.d/test.yaml's `test coverage download-shards` command,
       # modeled on examples/parallel-steps/workflows/parallel.yaml) to fan
@@ -707,6 +707,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: atmos test coverage download-shards
 
+      - name: Set up Go for native coverage merge
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      - name: Merge native coverage data
+        run: |
+          COVERAGE_INPUTS=()
+          for shard in $(seq 1 "$TEST_SHARD_COUNT"); do
+            SHARD_DIR="coverage/shards/shard-$shard"
+            SHARD_META=$(find "$SHARD_DIR" -type f -name 'covmeta.*' -print -quit)
+            if [ -z "$SHARD_META" ]; then
+              echo "No native coverage metadata found for shard $shard"
+              exit 1
+            fi
+            COVERAGE_INPUTS+=("$(dirname "$SHARD_META")")
+          done
+          COVERAGE_DATA_OUT="coverage/merged" COVERAGE_OUT="coverage.out" \
+            scripts/merge-coverage.sh "${COVERAGE_INPUTS[@]}"
+
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -714,7 +735,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage-shard-1.out,coverage-shard-2.out,coverage-shard-3.out,coverage-shard-4.out,coverage-shard-5.out,coverage-shard-6.out,coverage-shard-7.out,coverage-shard-8.out,coverage-shard-9.out,coverage-shard-10.out
+          files: coverage.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key
