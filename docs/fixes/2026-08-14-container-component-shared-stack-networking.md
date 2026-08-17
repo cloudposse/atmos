@@ -71,6 +71,11 @@ scaled/replica DNS, and network teardown/reference-counting (matches the existin
   explicit `--network` in `run_args` always wins and the shared network is skipped for that step.
 - Docs: `docs/prd/git-server-emulator.md` and the relevant `website/docs/*.mdx` pages updated for the
   renamed/unified network, the new automatic-networking behavior, and workflow step coverage.
+- `pkg/container/stack_network.go`'s `sanitizeNetworkToken` now appends a short stable hash suffix of the
+  original input whenever sanitization actually substituted a character (e.g. a stack name containing `/`),
+  so two different stack names that would otherwise sanitize to the identical token (`"deploy/prod"` and
+  `"deploy-prod"` both collapsed to `"deploy-prod"`) no longer collide on the same network/alias. Inputs
+  needing no substitution keep their exact, readable form — the common case is unaffected.
 
 ## Validation
 
@@ -93,10 +98,42 @@ scaled/replica DNS, and network teardown/reference-counting (matches the existin
   <stack>-<component>` resolves) — this environment has no container runtime available; recommend running
   this manually before release.
 
+## Known limitations
+
+- **Same-name container and emulator in one stack share one alias.** `StackNetworkAlias(stack, name)` is
+  `<stack>-<name>` with no component-kind segment, so a `components.container` instance and an `emulator`
+  instance with the identical `name` in the identical `stack` register the same `--network-alias`; whichever
+  attaches last wins that alias (Docker/Podman's embedded DNS on duplicate aliases within one network is
+  last-registration-wins, not an error — both containers still run and are still reachable by other means,
+  e.g. published ports or `docker inspect`). This was considered and intentionally not engineered around:
+  the readable, predictable `<stack>-<component>` format is the documented public contract, and the
+  precedent for kind-qualification elsewhere in this package (`RuntimeName`'s `<stack>-<component_type>-
+  <component>`) exists for *container identity* (label-based discovery, where exact-match label filtering
+  already fully disambiguates independent of name), not for a human-facing DNS alias. Avoid giving a
+  `components.container` instance and an `emulator` instance the same name within one stack; if this proves
+  to be a real-world footgun rather than a theoretical one, revisit with a kind-qualified alias (and update
+  every doc reference to the alias format accordingly).
+- **Reusing an existing container doesn't reconcile its network.** `AttachSharedNetwork` only updates the
+  `NamedConfig`/`EphemeralConfig` passed into `Up`/`UpWithRuntime` before creation. `pkg/container/lifecycle.go`'s
+  `upWithRuntime` starts (or leaves running) an already-existing named container discovered by label without
+  ever calling anything that would attach it to a *new* network — Docker/Podman have no "start" behavior that
+  reconciles network attachments, and there's no `docker network connect`-equivalent capability on the
+  `Runtime`/`NetworkEnsurer` interfaces yet. A container created before this feature shipped (or before an
+  atmos.yaml change) is not retroactively joined to the shared network, even though `ExecuteUp` reports it as
+  up. `upWithRuntime` now logs a `Debug` line when it reuses an instance and the desired config has network
+  attachments, and its doc comment states the limitation; the actionable workaround is `atmos container down
+  <component> -s <stack>` once (or an equivalent recreate), which forces the next `up` through the create
+  path where `Networks` is applied. Reconciling in place — `docker network connect` on a live container, or
+  auto-recreating when network config drifts — is a larger, separate change (new `Runtime` capability, wired
+  through both Docker and Podman, with tests covering both stopped and running reuse) left for a follow-up
+  rather than folded into this fix.
+
 ## Follow-ups
 
 - Compose-parity features intentionally deferred: top-level `networks:`, `external: true` networks,
   per-network `aliases:`, scaled/replica DNS, and network teardown/reference-counting on `down`/`rm`.
+- Reconciling shared networking onto a reused (not newly created) container instance — see "Known
+  limitations" above.
 - Native `components.container` (`ExecuteUp`/`ExecuteRun` in `pkg/component/container/executor.go`) never
   wires `run.run_args` into the container create args at all — a pre-existing gap, not introduced by this
   change, confirmed by grep. This means there's currently no way to request host networking (or any other

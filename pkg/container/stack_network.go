@@ -2,6 +2,8 @@ package container
 
 import (
 	"context"
+	"hash/fnv"
+	"strconv"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -19,7 +21,11 @@ func StackNetworkName(stack string) string {
 }
 
 // StackNetworkAlias is the DNS alias a component or emulator registers on the
-// stack's shared network.
+// stack's shared network. It is <stack>-<name>, e.g. "dev-api" -- readable by
+// design, so it intentionally omits the component kind (container, emulator, or
+// workflow step): a components.container instance and an emulator sharing both a
+// stack and a name is a narrow, user-controlled edge case (rename one of them to
+// avoid it) that isn't worth trading away the readable, predictable format for.
 func StackNetworkAlias(stack, name string) string {
 	defer perf.Track(nil, "container.StackNetworkAlias")()
 
@@ -27,21 +33,45 @@ func StackNetworkAlias(stack, name string) string {
 }
 
 // sanitizeNetworkToken reduces a string to characters valid in a docker/podman
-// network name ([a-zA-Z0-9_.-]); any other rune becomes '-'.
+// network name ([a-zA-Z0-9_.-]); any other rune becomes '-'. Distinct inputs that
+// require substitution (e.g. a stack name containing "/") get a short stable hash
+// suffix of the original, pre-sanitization input appended, so two different
+// original values -- like "deploy/prod" and "deploy-prod" -- that would otherwise
+// both sanitize to "deploy-prod" no longer collide on the same network/alias.
+// Inputs that need no substitution are left exactly as-is: the common case (stack
+// and component names using only valid characters) keeps its short, readable form.
 func sanitizeNetworkToken(s string) string {
 	var b strings.Builder
+	substituted := false
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
 			b.WriteRune(r)
 		default:
 			b.WriteRune('-')
+			substituted = true
 		}
 	}
 	if b.Len() == 0 {
 		return "default"
 	}
-	return b.String()
+	if !substituted {
+		return b.String()
+	}
+	return b.String() + "-" + hashSuffix(s)
+}
+
+// hashSuffixBase is the number base used to render hashSuffix's output, chosen for
+// a short, all-lowercase-alphanumeric suffix that's still valid in a docker/podman
+// network name.
+const hashSuffixBase = 36
+
+// hashSuffix returns a short, stable, non-cryptographic hash of s, used purely to
+// disambiguate sanitized tokens -- not for any security purpose.
+func hashSuffix(s string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(s)) // fnv's Write never returns an error.
+	return strconv.FormatUint(uint64(h.Sum32()), hashSuffixBase)
 }
 
 // HasExplicitNetworkOverride reports whether runArgs already sets an explicit

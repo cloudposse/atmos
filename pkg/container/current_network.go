@@ -49,16 +49,20 @@ func CurrentContainerNetwork(ctx context.Context, runtime Runtime) string {
 
 // PreferCurrentContainerNetwork reports whether callers should try
 // CurrentContainerNetwork before falling back to a dedicated per-stack network.
-// An explicit envUseCurrentContainerNetwork override always wins; otherwise it
-// defaults to whether Atmos itself is detected as running inside a container --
-// CurrentContainerNetwork safely returns "" when the network can't actually be
-// determined, so callers fall back to the dedicated network automatically.
+// An explicit envUseCurrentContainerNetwork override always wins -- an enabled
+// override returns true directly, without also requiring ProcessRunsInContainer's
+// heuristic to agree, since the user has explicitly asserted the current-container-
+// network path should be used. Without an override, it defaults to whether Atmos
+// itself is detected as running inside a container -- CurrentContainerNetwork
+// safely returns "" when the network can't actually be determined (e.g. a wrong
+// override on a non-containerized host), so callers fall back to the dedicated
+// network automatically either way.
 func PreferCurrentContainerNetwork() bool {
 	defer perf.Track(nil, "container.PreferCurrentContainerNetwork")()
 
 	switch strings.ToLower(strings.TrimSpace(envString(envUseCurrentContainerNetwork))) {
 	case "1", "true", "yes", "on":
-		return ProcessRunsInContainer()
+		return true
 	case "0", "false", "no", "off":
 		return false
 	}

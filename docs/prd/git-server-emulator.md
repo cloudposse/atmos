@@ -68,12 +68,15 @@ containers must resolve each other by name. A new optional runtime capability,
 runtimes), idempotently creates a per-stack user network (`atmos-<stack>`, via
 `container.StackNetworkName`). `Manager.attachSharedNetwork` joins every emulator
 container to it with `--network-alias <stack>-<component>`
-(`container.StackNetworkAlias`), so peers resolve each other (e.g.
-`http://dev-gitserver:3000`). The same shared network and naming is used by native
-`components.container` instances and stack-scoped workflow `type: container` steps
-(`pkg/runner/step/container_run.go`), so an emulator, a plain container, and a
-workflow-driven one-shot container can all resolve each other too — see
-`pkg/container/stack_network.go`. It is **best-effort**: when the runtime cannot
+(`container.StackNetworkAlias`), so peers resolve each other, e.g.
+`http://dev-gitserver:3000`. The same shared network and naming is used by native
+`components.container` instances (also `<stack>-<component>`) and by stack-scoped
+workflow `type: container` steps (`pkg/runner/step/container_run.go`), which
+instead register under `<stack>-<step-name>` — the step's own `name:`, since a
+workflow step has no component identity to key an alias off of. Either way, an
+emulator, a plain container, and a workflow-driven one-shot container can all
+resolve each other by their respective aliases — see `pkg/container/stack_network.go`.
+It is **best-effort**: when the runtime cannot
 create a network the container falls back to the default bridge — single-emulator
 use is unaffected (host port publishing still works); only cross-container name
 resolution is lost. This is the most
@@ -86,7 +89,7 @@ The same Gitea server is reached two ways:
 | | URL | Why |
 |---|---|---|
 | Atmos push (host) | `http://atmos:atmos@localhost:3000/...` | Atmos runs on the host, pushes via the published port |
-| Flux pull (in-cluster) | `http://gitserver:3000/...` | Flux runs in k3s, reaches Gitea over the shared network alias |
+| Flux pull (in-cluster) | `http://gitserver.flux-system.svc.cluster.local:3000/...` | Flux runs in k3s and reaches Gitea through a Service/EndpointSlice backed by the emulator IP (`!emulator gitserver network_ip`, itself only reachable because both containers share the `atmos-<stack>` network) |
 
 ## Example: `examples/local-gitops/`
 
@@ -114,8 +117,8 @@ A normal Atmos project that doubles as the E2E fixture (single source of truth):
 ## Validation
 
 Both E2E tests pass against real Podman (podman-machine on macOS). The full loop was
-confirmed: Flux's source-controller cloned `http://gitserver:3000/...` over the shared
-network and the Kustomization applied the pushed manifest — the ConfigMap
+confirmed: Flux's source-controller cloned `http://gitserver.flux-system.svc.cluster.local:3000/...`
+over the shared network and the Kustomization applied the pushed manifest — the ConfigMap
 `"Delivered by Atmos -> Gitea -> Flux"` appeared in the cluster.
 
 ## Risks / Open items

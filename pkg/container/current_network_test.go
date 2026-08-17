@@ -44,10 +44,10 @@ func TestPreferCurrentContainerNetwork(t *testing.T) {
 			want:            false,
 		},
 		{
-			name:            "explicit override true is still gated by containerized detection",
+			name:            "explicit override true wins even when containerized detection disagrees",
 			runsInContainer: false,
 			override:        "true",
-			want:            false,
+			want:            true,
 		},
 	}
 
@@ -97,6 +97,25 @@ func TestCurrentContainerNetwork_UndeterminableFallsBackToEmpty(t *testing.T) {
 
 	got := CurrentContainerNetwork(context.Background(), staticInspectRuntime{
 		info: &Info{Networks: []string{"host"}},
+	})
+
+	assert.Empty(t, got)
+}
+
+// TestCurrentContainerNetwork_OverrideTrueBypassesDetectionButStillFailsSoft
+// covers the "explicit override true" branch of PreferCurrentContainerNetwork
+// directly through CurrentContainerNetwork: even though ProcessRunsInContainer
+// would say false, the override forces the runtime.Inspect path -- and, on a
+// non-containerized host where Inspect naturally fails or reports no usable
+// network, CurrentContainerNetwork still returns "" rather than panicking or
+// erroring, so callers fall back to a dedicated network exactly as before.
+func TestCurrentContainerNetwork_OverrideTrueBypassesDetectionButStillFailsSoft(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	restore := stubCurrentNetworkDetection(t, false)
+	defer restore()
+
+	got := CurrentContainerNetwork(context.Background(), staticInspectRuntime{
+		info: &Info{Networks: []string{"host", "none"}},
 	})
 
 	assert.Empty(t, got)

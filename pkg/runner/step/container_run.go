@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,7 +56,7 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 
 	stack, err := resolveContainerStepStack(step, vars)
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': failed to resolve stack: %w", step.Name, err)
+		return nil, fmt.Errorf("%w: step %q: %w", errUtils.ErrContainerStepResolveStack, step.Name, err)
 	}
 	// An explicit --network in run_args (e.g. host networking) is the user's
 	// choice; attaching the shared network too would conflict with it.

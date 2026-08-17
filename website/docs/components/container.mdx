@@ -100,12 +100,14 @@ other too (e.g. a container's `run.command` connecting to `http://dev-localstack
 
 This applies to both `atmos container up` (long-lived) and `atmos container run` (one-shot) containers,
 and to a workflow's [`type: container` step](/workflows/steps/type/container#run) when the step resolves a
-stack — so a workflow-driven test runner can reach these services by the same `<stack>-<component>` alias.
-It's best-effort: if the container runtime can't create or join a network, the container falls back to
-the default bridge — the container still runs, it's just unreachable by name from its stack peers (host
-port publishing via `run.ports` is unaffected either way). The shared network is created once per stack
-and is never deleted by Atmos, matching Docker Compose's own behavior of only removing a project's network
-on `down`.
+stack. A workflow step registers under its own `<stack>-<step-name>` alias (the step's `name:`, not a
+component name — a step has no component identity to key off), so a workflow-driven test runner can be
+reached by *its* alias too, while it reaches `components.container` instances and emulators by *their*
+`<stack>-<component>` alias. It's best-effort: if the container runtime can't create or join a network, the
+container falls back to the default bridge — the container still runs, it's just unreachable by name from
+its stack peers (host port publishing via `run.ports` is unaffected either way). The shared network is
+created once per stack and is never deleted by Atmos. Unlike Docker Compose, the per-stack network remains
+after teardown.
 
 ## Compositions
 
