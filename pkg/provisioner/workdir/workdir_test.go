@@ -322,6 +322,50 @@ func TestServiceProvision_MkdirFails(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
 }
 
+// TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWorkdir is a
+// regression test for the data-loss bug where a genuine legacy-workdir Rename failure (e.g. a
+// permissions error) was swallowed, and createWorkdirDirectory fell through to MkdirAll anyway
+// -- silently creating a fresh, empty workdir at the new path and orphaning the legacy
+// directory, which may hold real Terraform state (e.g. a local-backend component's
+// terraform.tfstate). No MkdirAll expectation is set: an unexpected call would fail the test via
+// the strict mock controller, proving the caller now stops before ever reaching MkdirAll.
+func TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWorkdir(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	base := "/tmp"
+	// "vpc-logs" contains a literal "-", so its escaped (new) path differs from the legacy
+	// (unescaped) path -- required for migrateLegacyWorkdir to attempt a Rename at all.
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: base}
+	componentConfig := map[string]any{
+		"component":   "vpc-logs",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	provisionErr := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
+	require.Error(t, provisionErr)
+	assert.ErrorIs(t, provisionErr, errUtils.ErrWorkdirCreation)
+}
+
 func TestServiceProvision_SourceNotExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -659,7 +703,7 @@ func TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists(t *testing.T) {
 	mockFS.EXPECT().Exists(legacyPath).Return(true)
 	mockFS.EXPECT().Exists(newPath).Return(true)
 
-	service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.NoError(t, service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath))
 }
 
 // TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing verifies migrateLegacyWorkdir does
@@ -683,14 +727,15 @@ func TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing(t *testing.T) {
 
 	mockFS.EXPECT().Exists(legacyPath).Return(false)
 
-	service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.NoError(t, service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath))
 }
 
-// TestMigrateLegacyWorkdir_ToleratesRenameError verifies a Rename failure is swallowed
-// (logged, not returned or panicked) -- migrateLegacyWorkdir is best-effort, and the caller
-// (createWorkdirDirectory) must still proceed to MkdirAll a fresh workdir at the new path
-// rather than fail provisioning outright over a failed migration.
-func TestMigrateLegacyWorkdir_ToleratesRenameError(t *testing.T) {
+// TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure verifies a genuine Rename failure
+// (permissions, filesystem error, etc.) is returned as an error rather than swallowed --
+// migrateLegacyWorkdir is fail-closed on a real migration failure, so the caller
+// (createWorkdirDirectory) does not fall through to MkdirAll and orphan the legacy directory
+// (which may hold real Terraform state) behind a fresh, empty workdir.
+func TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -709,9 +754,9 @@ func TestMigrateLegacyWorkdir_ToleratesRenameError(t *testing.T) {
 	mockFS.EXPECT().Exists(newPath).Return(false)
 	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
 
-	assert.NotPanics(t, func() {
-		service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
-	})
+	migrateErr := service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.Error(t, migrateErr)
+	assert.Contains(t, migrateErr.Error(), "permission denied")
 }
 
 // TestServiceProvision_RejectsStackTraversal is a regression test proving Service.Provision

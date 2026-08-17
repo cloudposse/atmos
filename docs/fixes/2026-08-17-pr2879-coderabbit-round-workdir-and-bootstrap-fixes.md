@@ -83,10 +83,22 @@ reply, not a code change.
   call it. Regenerated `mock_workdir_manager_test.go` via `go generate`.
 - `pkg/provisioner/workdir/interfaces.go`, `fs.go`: added `FileSystem.Rename` (and
   `DefaultFileSystem` implementation); regenerated `mock_interfaces_test.go`.
-- `pkg/provisioner/workdir/workdir.go`: new `migrateLegacyWorkdir`, called from
-  `createWorkdirDirectory` before creating a fresh directory — checks for a sibling at the
-  pre-escaping path and renames it forward if the new (encoded) path doesn't already exist.
-  Best-effort: logs and proceeds to a fresh `MkdirAll` on any error.
+- `pkg/provisioner/workdir/workdir.go`: `migrateLegacyWorkdir`, called from
+  `createWorkdirDirectory` before creating a fresh directory, checks for a sibling at the
+  pre-escaping path and renames it forward if the new (encoded) path doesn't already exist. The
+  two "nothing to migrate" cases (the two formulas already agree, or no directory exists at the
+  legacy path) return `nil`. A genuine `Rename` failure (permissions, filesystem error, etc.) is
+  fail-closed: `migrateLegacyWorkdir` returns that error (via `fmt.Errorf`/`%w`, matching how
+  `BuildPath` and `MkdirAll`'s failures reach this function) instead of logging and swallowing
+  it, and `createWorkdirDirectory` propagates it — wrapped in `errUtils.ErrWorkdirCreation`,
+  matching its other two error paths — instead of falling through to `MkdirAll`. (Updated
+  2026-08-17, same day: the original best-effort behavior described above — logging and
+  proceeding to a fresh `MkdirAll` on any `Rename` error — was a real data-loss bug caught by a
+  later CodeRabbit review round on this same PR. Treating a real `Rename` failure the same as
+  "nothing to migrate" let provisioning create a fresh, empty workdir at the new path and
+  permanently orphan the legacy directory — which may hold real Terraform state, e.g. a
+  local-backend component's `terraform.tfstate` — with Terraform then reinitializing against
+  empty state.)
 - `cmd/git/bootstrap.go`: `CIGitCloneBootstrapRequestedFromRawArgs` returns `true` (not `false`)
   on a clone flag-parse error, so the caller tolerates an unrelated config/profile error and
   lets Cobra's own parser report the malformed flag.
@@ -116,7 +128,13 @@ reply, not a code change.
     legacy path with a marker provider-lock file, provisions, and asserts the directory was
     renamed (not recreated) with its contents intact.
   - New: `TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists`/`_SkipsWhenLegacyPathMissing`/
-    `_ToleratesRenameError` (`pkg/provisioner/workdir/workdir_test.go`) — mock-level edge cases.
+    `_ReturnsErrorOnRenameFailure` (renamed same day from `_ToleratesRenameError` once the
+    fail-closed contract landed — see the Update note above) (`pkg/provisioner/workdir/
+    workdir_test.go`) — mock-level edge cases; the rename-failure case now asserts an error is
+    returned rather than swallowed. Also new same day:
+    `TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWorkdir` — an
+    end-to-end regression test proving `Provision` returns `errUtils.ErrWorkdirCreation` and
+    never calls `MkdirAll` when the legacy-workdir rename fails.
   - New: two rows on `TestHandleConfigInitError_CIGitCloneBootstrap` and two on
     `TestCIGitCloneBootstrapRequestedFromRawArgs` covering the malformed-`--depth`-with-
     invalid-profile scenario, both in and out of a detected CI provider.

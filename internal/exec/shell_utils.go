@@ -448,6 +448,11 @@ func (w *synchronizedWriter) Write(p []byte) (int, error) {
 
 // ExecuteShellSpec configures shell execution.
 type ExecuteShellSpec struct {
+	// Context, when set, is threaded into the interpreter so cancellation
+	// (e.g. Ctrl-C on the top-level Cobra invocation) stops an in-flight
+	// shell step instead of letting it run to completion. Defaults to
+	// context.Background() when nil.
+	Context context.Context
 	Command string
 	Name    string
 	Dir     string
@@ -506,6 +511,7 @@ func ExecuteShellWithWriters(spec *ExecuteShellSpec) error {
 	}
 
 	return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		Context: spec.Context,
 		Command: spec.Command,
 		Name:    spec.Name,
 		Dir:     spec.Dir,

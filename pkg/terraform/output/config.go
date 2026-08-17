@@ -5,7 +5,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -180,15 +179,17 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 		if basePath == "" {
 			basePath = "."
 		}
-		// BuildPath itself now rejects a derived path that escapes basePath (component and
+		// BuildPath itself rejects a derived path that escapes basePath (component and
 		// stack names both come from user-controlled YAML; a value containing ../ sequences
-		// could otherwise escape BasePath via filepath.Join's implicit Clean()), so fall back
-		// to the component path on that error rather than surfacing it here.
+		// could otherwise escape BasePath via filepath.Join's implicit Clean()). Surface that
+		// error rather than silently falling back to componentPath: componentPath is the
+		// *source* component directory, and redirecting terraform there on a rejected path
+		// risks mixing up stacks or reusing the wrong local state -- exactly the collision
+		// BuildPath's validation exists to prevent. Fail closed instead (see
+		// provWorkdir.BuildPath's doc comment for the exact conditions that trigger this).
 		workdirPath, err := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
 		if err != nil {
-			log.Debug("Derived workdir path escapes project directory; using component path",
-				"base_path", basePath, "error", err)
-			return componentPath, nil
+			return "", err
 		}
 		return workdirPath, nil
 	}

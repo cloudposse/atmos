@@ -398,19 +398,15 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 	traversalStack := "../../../../../../../../../../evil"
 
 	path, err := extractComponentPath(atmosConfig, traversalSections, "vpc", traversalStack)
-	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
 
-	// The returned path must not escape BasePath.
-	absBase, _ := filepath.Abs(atmosConfig.BasePath)
-	sep := string(filepath.Separator)
-	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
-	assert.False(t, escaped,
-		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
-
-	// The guard must have fired and returned the componentPath fallback, not the
-	// workdir path. Workdir paths contain ".workdir"; the component path does not.
-	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
-		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
+	// The guard must fail closed: a rejected workdir path must surface as an
+	// error, never silently redirect to componentPath (the *source* component
+	// directory), which would risk mixing up stacks or reusing the wrong local
+	// state. The traversal is rejected by BuildPath's validateStackForPath
+	// (a "." or ".." stack path segment), which wraps errUtils.ErrPathTraversal.
+	require.Error(t, err, "containment guard must surface an error instead of falling back to componentPath")
+	require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Empty(t, path, "extractComponentPath must return an empty path on error")
 }
 
 func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {

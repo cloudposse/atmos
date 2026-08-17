@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -961,6 +962,155 @@ func TestCustomCommandIntegration_AtmosStepUsesCurrentExecutable(t *testing.T) {
 	assert.Equal(t, outputValue, string(output))
 }
 
+// cancellationOsExitStub stubs errUtils.OsExit with a panic-based interception (the same pattern
+// TestExecuteCustomCommandUnsupportedStepTypeExits uses) so a cancelled step's error -- which
+// ultimately reaches errUtils.CheckErrorPrintAndExit -- doesn't call the real os.Exit and tear down
+// the test binary. Returns a recover func to be deferred inside the goroutine running
+// customCmd.Run, which absorbs the resulting panic.
+func cancellationOsExitStub(t *testing.T) func() {
+	t.Helper()
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+	errUtils.OsExit = func(int) {
+		panic("errUtils.OsExit called")
+	}
+	return func() {
+		_ = recover()
+	}
+}
+
+// TestCustomCommandIntegration_ShellStepCancelledByContext verifies that cancelling
+// cmd.Context() (e.g. Ctrl-C on the top-level Cobra invocation) stops an in-flight plain
+// (non-tty, non-interactive) "shell" step's subprocess instead of letting it run to completion.
+// This exercises executionCtx -> process.RunShellStep's plain() branch -> e.ExecuteShellWithWriters
+// -> u.ShellRunnerWithWriters: before ExecuteShellSpec gained a Context field, that chain always
+// fell back to context.Background(), so the helper subprocess below would keep running (and write
+// its "completed" marker) after cancellation instead of being killed mid-sleep.
+func TestCustomCommandIntegration_ShellStepCancelledByContext(t *testing.T) {
+	_ = NewTestKit(t)
+	recoverExit := cancellationOsExitStub(t)
+
+	tmpDir := t.TempDir()
+	startedPath := filepath.Join(tmpDir, "started")
+	completedPath := filepath.Join(tmpDir, "completed")
+
+	testCommand := schema.Command{
+		Name:        "test-shell-step-cancel",
+		Description: "Test shell step cancellation",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandSleepMarkerHelperCommand(t, startedPath, completedPath, 2*time.Second),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-shell-step-cancel")
+	require.NotNil(t, customCmd)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	customCmd.SetContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer recoverExit()
+		customCmd.Run(customCmd, []string{})
+	}()
+
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(startedPath)
+		return statErr == nil
+	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		t.Fatal("custom command did not return after context cancellation")
+	}
+
+	_, statErr := os.Stat(completedPath)
+	assert.True(t, os.IsNotExist(statErr), "shell step subprocess should have been cancelled before writing its completion marker")
+}
+
+// TestCustomCommandIntegration_AtmosStepCancelledByContext is
+// TestCustomCommandIntegration_ShellStepCancelledByContext's counterpart for "atmos" steps. It
+// exercises executionCtx -> e.ExecuteShellCommand's execOpts, which before the fix never included
+// e.WithProcessContext(executionCtx), so ExecuteShellCommand always fell back to
+// context.Background() and the subprocess below would run to completion regardless of
+// cancellation.
+func TestCustomCommandIntegration_AtmosStepCancelledByContext(t *testing.T) {
+	_ = NewTestKit(t)
+	recoverExit := cancellationOsExitStub(t)
+
+	tmpDir := t.TempDir()
+	startedPath := filepath.Join(tmpDir, "started")
+	completedPath := filepath.Join(tmpDir, "completed")
+
+	testCommand := schema.Command{
+		Name:        "test-atmos-step-cancel",
+		Description: "Test atmos step cancellation",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandAtmosSleepMarkerHelperArgs(startedPath, completedPath, 2*time.Second),
+				Type:    "atmos",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-atmos-step-cancel")
+	require.NotNil(t, customCmd)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	customCmd.SetContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer recoverExit()
+		customCmd.Run(customCmd, []string{})
+	}()
+
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(startedPath)
+		return statErr == nil
+	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		t.Fatal("custom command did not return after context cancellation")
+	}
+
+	_, statErr := os.Stat(completedPath)
+	assert.True(t, os.IsNotExist(statErr), "atmos step subprocess should have been cancelled before writing its completion marker")
+}
+
 func TestExecuteCustomCommandUnsupportedStepTypeExits(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -1102,6 +1252,31 @@ func customCommandAtmosAttemptHelperArgs(path string) string {
 	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationAttemptHelper -- %s", encodedPath)
 }
 
+// customCommandSleepMarkerHelperCommand returns a "shell" step command invoking
+// TestCustomCommandIntegrationSleepMarkerHelper, which writes startedPath immediately, sleeps for
+// sleep, then writes completedPath -- used by cancellation tests to prove a step's subprocess was
+// killed (completedPath absent) rather than left to run to completion.
+func customCommandSleepMarkerHelperCommand(t *testing.T, startedPath, completedPath string, sleep time.Duration) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedStarted := base64.RawURLEncoding.EncodeToString([]byte(startedPath))
+	encodedCompleted := base64.RawURLEncoding.EncodeToString([]byte(completedPath))
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationSleepMarkerHelper -- %s %s %d",
+		quoteExecutablePath(exe), encodedStarted, encodedCompleted, sleep.Milliseconds())
+}
+
+// customCommandAtmosSleepMarkerHelperArgs is customCommandSleepMarkerHelperCommand's counterpart
+// for "atmos" steps, which resolve the executable themselves (see the customCommandAtmos* helpers
+// above for the same pattern).
+func customCommandAtmosSleepMarkerHelperArgs(startedPath, completedPath string, sleep time.Duration) string {
+	encodedStarted := base64.RawURLEncoding.EncodeToString([]byte(startedPath))
+	encodedCompleted := base64.RawURLEncoding.EncodeToString([]byte(completedPath))
+	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationSleepMarkerHelper -- %s %s %d",
+		encodedStarted, encodedCompleted, sleep.Milliseconds())
+}
+
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
 	separator := -1
 	for i, arg := range os.Args {
@@ -1182,6 +1357,39 @@ func TestCustomCommandIntegrationAttemptHelper(t *testing.T) {
 		attempt = parsed + 1
 	}
 	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
+	os.Exit(0)
+}
+
+// TestCustomCommandIntegrationSleepMarkerHelper is the subprocess entrypoint for
+// customCommandSleepMarkerHelperCommand / customCommandAtmosSleepMarkerHelperArgs. It writes the
+// startedPath marker immediately (so a caller waiting on it knows the subprocess is actually
+// running, not just scheduled), sleeps, then writes the completedPath marker. Cancellation tests
+// assert completedPath was never written -- proof the subprocess was killed mid-sleep rather than
+// left to run to completion.
+func TestCustomCommandIntegrationSleepMarkerHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	startedBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	completedBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	sleepMillis, err := strconv.Atoi(args[2])
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(string(startedBytes), []byte("started"), 0o600))
+	time.Sleep(time.Duration(sleepMillis) * time.Millisecond)
+	require.NoError(t, os.WriteFile(string(completedBytes), []byte("completed"), 0o600))
 	os.Exit(0)
 }
 

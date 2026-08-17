@@ -1374,6 +1374,7 @@ func executeCustomCommand(
 							stderr = io.Discard
 						}
 						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+							Context: executionCtx,
 							Command: commandToRun,
 							Name:    commandName,
 							Dir:     stepWorkDir,
@@ -1412,6 +1413,7 @@ func executeCustomCommand(
 				}
 				return runCommandStep(func(stdout, stderr io.Writer) error {
 					execOpts := []e.ShellCommandOption{
+						e.WithProcessContext(executionCtx),
 						e.WithStdoutCapture(stdout),
 						e.WithStderrCapture(stderr),
 					}

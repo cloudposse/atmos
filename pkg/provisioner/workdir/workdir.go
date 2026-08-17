@@ -253,7 +253,14 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 			Err()
 	}
 
-	s.migrateLegacyWorkdir(basePath, component, stack, workdirPath)
+	if err := s.migrateLegacyWorkdir(basePath, component, stack, workdirPath); err != nil {
+		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
+			WithCause(err).
+			WithExplanation("failed to migrate legacy workdir to its new encoded path").
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
 
 	if err := s.fs.MkdirAll(workdirPath, DirPermissions); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
@@ -277,28 +284,30 @@ func legacyWorkdirName(stack, component string) string {
 // migrateLegacyWorkdir renames a workdir found at the pre-escaping path onto newPath, so a
 // component whose name needs escaping (e.g. a literal "-", "/", or "\") doesn't silently lose
 // an existing workdir -- and any local Terraform state inside it -- the first time it's
-// provisioned under the current, injectively-encoded BuildPath formula. Best-effort: logs and
-// leaves both paths alone on any error, or when newPath already exists (never overwrites a
-// workdir that's already been (re)provisioned at the new path), or when the two formulas
-// already agree (the overwhelmingly common case: a component/stack pair with no characters
-// that need escaping resolves to the same path either way, so there is nothing to migrate).
-func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath string) {
+// provisioned under the current, injectively-encoded BuildPath formula. Returns nil (nothing to
+// migrate) when newPath already exists (never overwrites a workdir that's already been
+// (re)provisioned at the new path), or when the two formulas already agree (the overwhelmingly
+// common case: a component/stack pair with no characters that need escaping resolves to the
+// same path either way). A genuine Rename failure (permissions, filesystem error, etc.) is
+// fail-closed: it returns an error instead of silently proceeding, so the caller
+// (createWorkdirDirectory) does not fall through to MkdirAll and orphan the legacy directory --
+// which may hold real Terraform state -- behind a fresh, empty workdir.
+func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath string) error {
 	defer perf.Track(nil, "workdir.Service.migrateLegacyWorkdir")()
 
 	legacyPath := filepath.Join(basePath, WorkdirPath, "terraform", legacyWorkdirName(stack, component))
 	if legacyPath == newPath {
-		return
+		return nil
 	}
 	if !s.fs.Exists(legacyPath) || s.fs.Exists(newPath) {
-		return
+		return nil
 	}
 
 	if err := s.fs.Rename(legacyPath, newPath); err != nil {
-		log.Debug("Failed to migrate legacy workdir to its new encoded path; provisioning will create a fresh workdir instead",
-			"legacy_path", legacyPath, "new_path", newPath, "error", err)
-		return
+		return fmt.Errorf("rename legacy workdir %q to %q: %w", legacyPath, newPath, err)
 	}
 	log.Debug("Migrated legacy workdir to its new encoded path", "legacy_path", legacyPath, "new_path", newPath)
+	return nil
 }
 
 // syncLocalToWorkdir syncs local component files to workdir using incremental per-file checksums.
