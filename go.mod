@@ -142,7 +142,7 @@ require (
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
 	google.golang.org/grpc v1.82.1
-	gopkg.in/ini.v1 v1.67.2
+	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v4 v4.2.1
