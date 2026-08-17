@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFirstReachableNetwork(t *testing.T) {
@@ -269,4 +271,18 @@ func TestDefaultProcessRunsInContainer_MarkerFilePresentShortCircuits(t *testing
 			assert.True(t, defaultProcessRunsInContainer())
 		})
 	}
+}
+
+// TestDefaultMarkerFileExists exercises the real os.Stat-backed implementation
+// behind the markerFileExists seam directly (every other test in this file
+// stubs the seam instead) -- confirming it reports true for a path that
+// exists on disk and false for one that doesn't, the two states
+// defaultProcessRunsInContainer's marker-file short-circuit depends on.
+func TestDefaultMarkerFileExists(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "marker")
+	require.NoError(t, os.WriteFile(existing, nil, 0o600))
+
+	assert.True(t, defaultMarkerFileExists(existing))
+	assert.False(t, defaultMarkerFileExists(filepath.Join(dir, "does-not-exist")))
 }
