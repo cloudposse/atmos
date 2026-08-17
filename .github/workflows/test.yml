@@ -205,6 +205,116 @@ jobs:
         # exclude *.go since gofumpt/golangci-lint already own Go source formatting.
         run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format rich
 
+  # TestTerraformRegistryCache installs/removes a real cert in the OS trust
+  # store (the macOS System keychain via `sudo security`, or the Windows Root
+  # store) and takes ~8-9 minutes on its own. It used to run once per OS
+  # inside shard 1's own `test` job, serialized ahead of that shard's actual
+  # sharded work - meaning shard 1 could never finish under the <10m-per-shard
+  # target no matter how fast anything else got, since this alone ate most of
+  # that budget. Give it its own dedicated (non-sharded, 3-OS) job instead, so
+  # it runs in parallel with the full shard matrix rather than serialized
+  # inside one shard's critical path.
+  terraform-registry-cache:
+    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "ubuntu-latest", target: linux }
+          - { os: "windows-latest", target: windows }
+          - { os: "macos-15", target: macos }
+    timeout-minutes: 20
+    runs-on: ${{ matrix.flavor.os }}
+    steps:
+      - name: Check out code into the Go module directory
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
+      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: ${{ matrix.flavor.target }}
+          path: ${{ github.workspace }}
+          add-to-path: 'true'
+
+      - name: Install Packer
+        uses: ./.github/actions/setup-packer-retry
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Cache Atmos toolchain
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        continue-on-error: true
+        uses: ./actions/cache
+
+      - name: Install Terraform, OpenTofu, Helm, and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format=github
+
+      - name: Verify Terraform, OpenTofu, Helm, and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          terraform version
+          tofu version
+          helm version --short
+          helmfile version
+
+      - name: Install helm-diff plugin
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+
+      - name: Check atmos.exe integrity
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          Write-Output "PATH=$Env:PATH"
+          Write-Output "PATHEXT=$Env:PATHEXT"
+          Get-ChildItem "${{ github.workspace }}"
+          Get-Command "${{ github.workspace }}\atmos.exe"
+          atmos version
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        with:
+          go-version-file: "go.mod"
+          cache: false
+        id: go
+
+      - name: Get dependencies
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          atmos build deps
+
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 15
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
+
   # run acceptance tests
   test:
     # The job `name:` context doesn't have access to workflow-level `env`, so the
@@ -342,34 +452,15 @@ jobs:
           bash scripts/test-check-terraform-example-syntax.sh
           scripts/check-terraform-example-syntax.sh
 
-      # Runs once per OS on shard 1 only - not on every shard. It installs/removes
-      # a real cert in the OS trust store (the macOS System keychain via `sudo
-      # security`, or the Windows Root store); a concurrent run on the same VM
-      # racing dozens of other tests that make real TLS calls (provider installs,
-      # vendor pulls, GitHub API requests) can destabilize trust verification for
-      # the rest of the job - surfacing as spurious "certificate signed by unknown
-      # authority" failures on unrelated tests. Each shard is its own isolated VM,
-      # so running it once per OS (not once per shard) is about avoiding redundant
-      # 25-minute runs, not a cross-shard race.
-      - name: Terraform registry cache acceptance test
-        timeout-minutes: 25
-        if: matrix.shard == 1 && (matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft))
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
-          CGO_ENABLED: 0
-        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
-
       # NOTE: The test-case YAML files (tests/test-cases/*.yaml) are validated against
       # tests/test-cases/schema.json by the Go test `TestTestCaseSchemaValidation`, which
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
-      # TestTerraformRegistryCache runs once per OS above (shard 1 only). Skip it in
-      # both steps below on every shard so no shard executes the same trust/cache
-      # test a second time.
+      # TestTerraformRegistryCache now runs in its own dedicated
+      # `terraform-registry-cache` job (see above) instead of inside this job -
+      # skip it in every shard below so nothing here executes the same
+      # trust/cache test a second time.
       #
       # ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT are read by tests/cli_test.go's
       # TestCLICommands to run only this shard's slice of the ~388 CLI-driven test
@@ -1321,7 +1412,7 @@ jobs:
           echo "failing-check correctly returned a non-zero exit code"
 
   release:
-    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
+    needs: [test, terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:
