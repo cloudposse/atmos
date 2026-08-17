@@ -9,11 +9,14 @@ atmos_bin="${ATMOS_BIN:-atmos}"
 workspace=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$workspace"
 
+# shellcheck source=scripts/lib/acceptance-shards.sh
+source "$workspace/scripts/lib/acceptance-shards.sh"
+
 if [ "$mode" != "test" ] && [ "$mode" != "coverage" ]; then
 	echo "usage: $0 <test|coverage> <linux|macos|windows>" >&2
 	exit 1
 fi
-if [ "$target" != "linux" ] && [ "$target" != "macos" ] && [ "$target" != "windows" ]; then
+if ! acceptance_validate_target "$target"; then
 	echo "usage: $0 <test|coverage> <linux|macos|windows>" >&2
 	exit 1
 fi
@@ -21,9 +24,7 @@ if [ -z "$shard" ] || [ -z "$shard_count" ]; then
 	echo "ATMOS_TEST_SHARD and ATMOS_TEST_SHARD_COUNT are required" >&2
 	exit 1
 fi
-if ! [[ "$shard" =~ ^[0-9]+$ && "$shard_count" =~ ^[0-9]+$ ]] ||
-	[ "$shard" -lt 1 ] || [ "$shard" -gt "$shard_count" ]; then
-	echo "invalid shard $shard/$shard_count" >&2
+if ! acceptance_validate_shard "$shard" "$shard_count"; then
 	exit 1
 fi
 
@@ -31,42 +32,16 @@ fi
 # shard excludes it here. Shard 1 runs the other top-level acceptance tests.
 # Shards 2+ run only TestCLICommands; otherwise roughly 280 unsharded tests run
 # ten times, multiplying runtime and exposure to toolchain/network flakes.
-if [ "$shard" = "1" ]; then
-	tests_args="-skip=^TestTerraformRegistryCache$"
-else
-	tests_args="-run=^TestCLICommands$ -skip=^TestTerraformRegistryCache$"
-fi
+tests_args=$(acceptance_go_test_args "$shard")
 
 # Every non-tests package is round-robined across the same shard count. cmd is
 # excluded because its cold Windows test-binary link takes 15+ minutes; the
 # build job precompiles it after warming the Go cache, and shard 1 runs it.
 # internal/exec and tests/testhelpers are pinned to shards 2 and 3 because real
 # Windows runs measured them at 930s and 413s, respectively, and both otherwise
-# landed on already-heavy shard 1.
-shard_packages=$(go list ./... | awk -v shard="$shard" -v count="$shard_count" '
-	$0 ~ /\/tests$/ ||
-	$0 == "github.com/cloudposse/atmos/cmd" ||
-	$0 == "github.com/cloudposse/atmos/internal/exec" ||
-	$0 == "github.com/cloudposse/atmos/tests/testhelpers" { next }
-	{
-		eligible++
-		if (eligible % count == shard - 1) print
-	}
-')
-
-append_package() {
-	if [ -n "$shard_packages" ]; then
-		shard_packages+=$'\n'
-	fi
-	shard_packages+="$1"
-}
-
-if [ "$shard" = "2" ]; then
-	append_package "github.com/cloudposse/atmos/internal/exec"
-fi
-if [ "$shard" = "3" ]; then
-	append_package "github.com/cloudposse/atmos/tests/testhelpers"
-fi
+# landed on already-heavy shard 1. Windows executes internal/exec from the
+# precompiled build artifact, so it is not part of that target's source list.
+shard_packages=$(acceptance_shard_packages "$target" "$shard" "$shard_count")
 
 coverage_root="$workspace/coverage"
 coverage_inputs=()
@@ -94,6 +69,34 @@ run_test_group() {
 	else
 		TEST="$packages" TESTARGS="$args" "$atmos_bin" test acceptance
 	fi
+}
+
+run_windows_tests() {
+	local tests_test_bin="${TESTS_TEST_BIN:-$workspace/tests.test.exe}"
+	local binary_args
+	local -a test_args=()
+	binary_args=$(acceptance_binary_test_args "$shard")
+	read -r -a test_args <<< "$binary_args"
+
+	if [ ! -f "$tests_test_bin" ]; then
+		echo "missing precompiled tests binary: $tests_test_bin" >&2
+		return 1
+	fi
+
+	# `go test ./tests` runs the generated binary from the package directory.
+	# Preserve that working directory because the CLI suite loads test-cases and
+	# fixtures via relative paths.
+	(cd tests && "$tests_test_bin" "${test_args[@]}" -test.timeout=40m)
+}
+
+run_windows_internal_exec_tests() {
+	local exec_test_bin="${INTERNAL_EXEC_TEST_BIN:-$workspace/internal-exec.test.exe}"
+	if [ ! -f "$exec_test_bin" ]; then
+		echo "missing precompiled internal/exec binary: $exec_test_bin" >&2
+		return 1
+	fi
+
+	(cd internal/exec && "$exec_test_bin" -test.timeout=40m)
 }
 
 run_cmd_tests() {
@@ -128,9 +131,16 @@ run_cmd_tests() {
 
 # Keep ./tests separate from the package slice. Applying TestCLICommands' -run
 # filter to a combined go test invocation would silently skip package tests.
-run_test_group "tests" "./tests" "$tests_args"
+if [ "$target" = "windows" ] && [ "$mode" = "test" ]; then
+	run_windows_tests
+else
+	run_test_group "tests" "./tests" "$tests_args"
+fi
 if [ -n "$shard_packages" ]; then
 	run_test_group "pkgs" "$shard_packages" ""
+fi
+if [ "$target" = "windows" ] && [ "$mode" = "test" ] && [ "$shard" = "2" ]; then
+	run_windows_internal_exec_tests
 fi
 if [ "$shard" = "1" ]; then
 	run_cmd_tests

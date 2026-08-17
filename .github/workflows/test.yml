@@ -141,37 +141,21 @@ jobs:
         run: |
           atmos build version --target=${{ matrix.target }}
 
-      # github.com/cloudposse/atmos/cmd blank-imports every registered CLI
-      # subcommand to wire up the command registry, so compiling ITS test
-      # binary alone can take 15m+ on windows (its linker is dramatically
-      # slower for large binaries than linux/macos - see this job's own
-      # timeout comment above). Compiling it here reuses the local Go build
-      # cache this same job/runner just warmed compiling the real atmos
-      # binary above (which already compiles cmd and everything it imports),
-      # so the incremental cost of also compiling cmd's test files is small -
-      # instead of paying the full cold-cache compile inside the acceptance
-      # test matrix, whose whole point is finishing in well under 10 minutes
-      # per shard. The `test` job's shard 1 downloads this binary (bundled
-      # into the same build-artifacts-<target> artifact below) and executes
-      # it directly instead of running `go test ./cmd` from source.
-      - name: Pre-compile cmd package test binary
+      # Reuse this job's warm Go cache to compile the large acceptance test
+      # binaries once. On Windows, compiling ./tests independently in all ten
+      # shards costs roughly eight minutes each, while internal/exec adds
+      # another five minutes of compilation to shard 2. The runner executes
+      # the downloaded binaries directly; Linux/macOS retain source-based
+      # execution where native coverage or runtime is already acceptable.
+      - name: Pre-compile acceptance test binaries
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
-        env:
-          # cmd transitively pulls in github.com/bearsh/hid (hardware security
-          # key support), which needs cgo + libudev to build with CGO enabled -
-          # not installed on these runners. `atmos build binary` above already
-          # builds with CGO disabled (see .atmos.d/test.yaml's CGO_ENABLED "0"
-          # convention for the same reason); this raw `go test -c` invocation
-          # needs the same setting explicitly, since it doesn't go through that
-          # command.
-          CGO_ENABLED: "0"
-        run: |
-          # -covermode=atomic (not just -cover, which defaults to "set") to stay
-          # consistent with -covermode=atomic pinned in scripts/collect-coverage.sh -
-          # mixing modes across the coverage files that later get merged together
-          # would be invalid.
-          go test -c -covermode=atomic -o "build/cmd.test${{ matrix.target == 'windows' && '.exe' || '' }}" ./cmd
+        run: scripts/precompile-acceptance-tests.sh "${{ matrix.target }}"
+
+      - name: Verify acceptance shard plan
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        shell: bash
+        run: scripts/verify-acceptance-shards.sh "${{ matrix.target }}" "$TEST_SHARD_COUNT"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -342,17 +326,10 @@ jobs:
     # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
     # on this comment) rather than dividing those numbers by the shard count exactly.
     #
-    # Shard 1 also absorbs every non-`tests` package (the ~400 fast unit-test
-    # packages, split round-robin across all 10 shards - see the "Acceptance
-    # tests"/"Acceptance tests with coverage" steps below) plus every ./tests
-    # top-level test other than TestCLICommands unrestricted, so it still does
-    # somewhat more work than shards 2-10 by design. It used to also compile
-    # github.com/cloudposse/atmos/cmd from a cold cache (15m+ on windows,
-    # confirmed by a real run that hit this ceiling with cmd still compiling),
-    # but that's now precompiled once in the `build` job and just executed
-    # here as a binary - this elevated budget is now a safety margin, not a
-    # measured requirement; trim it once a few runs confirm shard 1 no longer
-    # needs it.
+    # Shard 1 runs every ./tests top-level test other than TestCLICommands, and
+    # shard 2 owns internal/exec. Windows executes both from binaries compiled
+    # once in the build job, removing the repeated cold-compile bottleneck while
+    # preserving the existing test allocation.
     timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
