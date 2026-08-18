@@ -173,15 +173,19 @@ func TestManifestSchema_WorkflowStepTypedFieldsStillValidated(t *testing.T) {
 // "prefixed", and "none". A schema-accepted-but-Go-rejected mode (e.g. a stale "raw" value) passes
 // validation and then fails at workflow-execution time with a much less actionable error.
 func TestManifestSchema_ParallelStepOutputMode(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
-		for _, mode := range []string{"grouped", "prefixed", "none"} {
-			t.Run(schemaName+"/accepts "+mode, func(t *testing.T) {
+		for _, mode := range []string{"", "grouped", "prefixed", "none"} {
+			label := mode
+			if label == "" {
+				label = `""`
+			}
+			t.Run(schemaName+"/accepts "+label, func(t *testing.T) {
 				assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{
 					"type":   "parallel",
 					"output": map[string]any{"mode": mode},

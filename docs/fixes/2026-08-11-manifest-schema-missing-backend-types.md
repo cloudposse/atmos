@@ -53,8 +53,9 @@ validation bug fix turned into user-visible hard failures.
 
 Scope: schema validation and the backend_type/backend key-matching check only. `!terraform.state`
 (`internal/terraform_backend/`) still only implements backend readers for `local/s3/gcs/azurerm` — issue
-#1384 tracks adding an `http` reader there separately; that's a different, larger feature, not a schema
-gap. `vault` and `static` were left untouched in the `backend_type` enum: `static` is a real Atmos-specific
+[`#1384`](https://github.com/cloudposse/atmos/issues/1384) tracks adding an `http` reader there separately;
+that's a different, larger feature, not a schema gap. `vault` and `static` were left untouched in the
+`backend_type` enum: `static` is a real Atmos-specific
 `remote_state_backend_type` (documented in `remote-state.mdx`), and `vault` is unclear/likely stale, but
 removing either was out of scope and carries its own risk.
 
@@ -148,7 +149,9 @@ again.
 - `go build ./...`, `go vet ./...` — pass.
 - `go test ./pkg/datafetcher/... ./pkg/validator/... ./internal/exec/... ./errors/...` — pass, including
   new tests: `TestManifestSchema_BackendTypeCoverage` (14 backend types × backend + remote_state_backend,
-  across 4 schema copies, plus an enum-isolated negative case and a separate key-rejection negative case),
+  across 3 distinct schema copies — embedded, fixture, stack-config; the website copy is byte-identical to
+  the embedded one, so it's intentionally not duplicated in the test table — plus an enum-isolated negative
+  case and a separate key-rejection negative case),
   `TestManifestSchema_OverridesFieldCoverage`, `TestManifestSchema_ComponentLevelRetry`,
   `TestManifestSchema_RequiredVersionAndProviders`, `TestManifestSchema_KubernetesComponentSecrets`,
   `TestManifestSchema_ContainerRuntimeProviderAuto`, `TestManifestSchema_SourceTTLField`,

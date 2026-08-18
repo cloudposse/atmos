@@ -240,9 +240,12 @@ func TestManifestSchema_KubernetesComponentProvisionTargetSplitField(t *testing.
 // has no "container" key anywhere) and is intentionally excluded here, same as
 // TestManifestSchema_KubernetesComponentValidateField.
 func TestManifestSchema_ContainerRuntimeProviderAuto(t *testing.T) {
+	// loadWebsiteSchemaBytes is intentionally omitted here: it returns the exact
+	// same bytes as loadEmbeddedSchemaBytes (see its doc comment), so pairing it
+	// alongside "embedded" would validate identical bytes twice under different
+	// subtest names without adding any drift-detection value.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -279,9 +282,9 @@ func containerComponentManifestWithRuntimeProvider(provider string) map[string]a
 // it at pkg/provisioner/source/extract.go ("Optional: ttl") and website/docs/cli/commands/terraform/
 // source/source.mdx documents it as a per-component override of the global cache TTL default.
 func TestManifestSchema_SourceTTLField(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
@@ -327,9 +330,9 @@ func terraformSourceManifest(source any) map[string]any {
 // earlier attempt instead enumerated the allowed root keys explicitly, which broke that
 // mixin-fragment fixture.
 func TestManifestSchema_RootOneOfAllowsWorkflowsWithStackFields(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded":     loadEmbeddedSchemaBytes(t),
-		"website":      loadWebsiteSchemaBytes(t),
 		"fixture":      loadFixtureSchemaBytes(t),
 		"stack-config": loadStackConfigSchemaBytes(t),
 	}
@@ -391,9 +394,9 @@ func TestManifestSchema_RootOneOfAllowsWorkflowsWithStackFields(t *testing.T) {
 // allowed command/vars/env/settings/providers -- see website/docs/stacks/overrides.mdx, which
 // documents overrides.hooks and overrides.generate directly.
 func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
@@ -453,9 +456,9 @@ func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
 // internal/exec/stack_processor_process_stacks_helpers_extraction.go, but the embedded schema had
 // no retry definition at all prior to this fix).
 func TestManifestSchema_ComponentLevelRetry(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 		"fixture":  loadFixtureSchemaBytes(t),
 	}
 	retry := map[string]any{
@@ -501,9 +504,9 @@ func TestManifestSchema_ComponentLevelRetry(t *testing.T) {
 // website/docs/cli/configuration/describe.mdx and extracted by
 // internal/exec/stack_processor_process_stacks_helpers_extraction.go (DEV-3124).
 func TestManifestSchema_RequiredVersionAndProviders(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
@@ -539,9 +542,9 @@ func TestManifestSchema_RequiredVersionAndProviders(t *testing.T) {
 // stack-config.json isn't what `atmos describe stacks`/`validate stacks` enforce by default), and is
 // also excluded here.
 func TestManifestSchema_KubernetesComponentSecrets(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -580,9 +583,9 @@ func TestManifestSchema_KubernetesComponentSecrets(t *testing.T) {
 // kubernetes/oss/pg -- that website/docs/components/terraform/backends.mdx
 // already documents as supported.
 func TestManifestSchema_BackendTypeCoverage(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
 	schemas := map[string][]byte{
 		"embedded":     loadEmbeddedSchemaBytes(t),
-		"website":      loadWebsiteSchemaBytes(t),
 		"fixture":      loadFixtureSchemaBytes(t),
 		"stack-config": loadStackConfigSchemaBytes(t),
 	}
@@ -614,7 +617,14 @@ func TestManifestSchema_BackendTypeCoverage(t *testing.T) {
 		})
 
 		t.Run(schemaName+"/rejects unrecognized backend key", func(t *testing.T) {
-			assertSchemaInvalid(t, schemaData, terraformBackendManifest("not-a-real-backend"))
+			// Isolate the backend_manifest allow-list: backend_type stays valid, so the
+			// only possible cause of rejection is the unrecognized key under backend:.
+			manifest := terraformBackendManifest("s3")
+			component := manifest["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)
+			component["backend"] = map[string]any{
+				"not-a-real-backend": map[string]any{"address": "https://example.com/state"},
+			}
+			assertSchemaInvalid(t, schemaData, manifest)
 		})
 	}
 }

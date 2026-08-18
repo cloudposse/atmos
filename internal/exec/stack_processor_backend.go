@@ -65,25 +65,12 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 		if !ok {
 			return "", nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformBackend, cfg.component)
 		}
-	} else if finalComponentBackendType != "" && len(finalComponentBackendSection) > 0 {
-		// backend_type doesn't match any key configured under backend: a plausible
-		// copy-paste mistake (e.g. backend_type: http with backend: {s3: {...}}).
-		// Without this check the mismatch is silent: finalComponentBackend stays
-		// {} and the component gets an effectively empty backend config. An empty
-		// backend_type is a separate, already-handled case (the caller skips
-		// backend generation and logs a warning), not a mismatch.
-		configuredKeys := make([]string, 0, len(finalComponentBackendSection))
-		for k := range finalComponentBackendSection {
-			configuredKeys = append(configuredKeys, k)
-		}
-		sort.Strings(configuredKeys)
-		return "", nil, errUtils.Build(errUtils.ErrBackendTypeMismatch).
-			WithContext("component", cfg.component).
-			WithContext("backend_type", finalComponentBackendType).
-			WithContext("backend_keys", strings.Join(configuredKeys, ", ")).
-			WithHintf("backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
-				finalComponentBackendType, strings.Join(configuredKeys, ", "), finalComponentBackendType).
-			Err()
+	} else if err := checkTerraformBackendTypeMatch(
+		cfg.component,
+		finalComponentBackendType,
+		finalComponentBackendSection,
+	); err != nil {
+		return "", nil, err
 	}
 
 	// Set backend-specific defaults.
@@ -101,6 +88,33 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 	}
 
 	return finalComponentBackendType, finalComponentBackend, nil
+}
+
+// checkTerraformBackendTypeMatch errors when backend: configures at least one
+// backend-type key but none of them match the resolved backend_type -- a
+// plausible copy-paste mistake (e.g. backend_type: http with backend:
+// {s3: {...}}) that would otherwise silently resolve to an empty backend
+// config. An empty backend_type is a separate, already-handled case (the
+// caller skips backend generation and logs a warning), not a mismatch.
+// Mirrors checkRemoteStateBackendTypeMatch.
+func checkTerraformBackendTypeMatch(component, backendType string, backendSection map[string]any) error {
+	if backendType == "" || len(backendSection) == 0 {
+		return nil
+	}
+
+	configuredKeys := make([]string, 0, len(backendSection))
+	for k := range backendSection {
+		configuredKeys = append(configuredKeys, k)
+	}
+	sort.Strings(configuredKeys)
+
+	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
+		WithContext("component", component).
+		WithContext("backend_type", backendType).
+		WithContext("backend_keys", strings.Join(configuredKeys, ", ")).
+		WithHintf("backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
+			backendType, strings.Join(configuredKeys, ", "), backendType).
+		Err()
 }
 
 // setS3BackendDefaults sets AWS S3 backend defaults.

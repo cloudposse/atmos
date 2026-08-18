@@ -1652,6 +1652,7 @@
                 "mode": {
                   "type": "string",
                   "enum": [
+                    "",
                     "grouped",
                     "prefixed",
                     "none"
