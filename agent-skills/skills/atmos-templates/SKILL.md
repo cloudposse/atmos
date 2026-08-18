@@ -1,6 +1,6 @@
 ---
 name: atmos-templates
-description: "Go templates: Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, atmos.Store, template configuration, evaluations"
+description: "Go templates: Sprig/Gomplate functions, Atmos's own collectKeys, atmos.Component, atmos.GomplateDatasource, atmos.Store, template configuration, evaluations"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
