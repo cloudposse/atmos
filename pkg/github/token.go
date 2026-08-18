@@ -81,7 +81,7 @@ func GetGitHubTokenOrError() (string, error) {
 // Exported so other packages needing GitHub CLI token resolution (e.g. the git-clone
 // token injection in pkg/downloader) can call the same fallback without duplicating it.
 func GetGitHubTokenFromCLI() string {
-	defer perf.Track(nil, "github.getGitHubTokenFromCLI")()
+	defer perf.Track(nil, "github.GetGitHubTokenFromCLI")()
 
 	cli := gitHubCLIBinary()
 	if cli == "" {

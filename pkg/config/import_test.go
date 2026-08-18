@@ -284,7 +284,7 @@ func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	testLogger := log.New()
 	testLogger.SetOutput(buffer)
-	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetLevel(log.WarnLevel)
 	testLogger.SetReportTimestamp(false)
 	log.SetDefault(testLogger)
 	t.Cleanup(func() { log.SetDefault(originalLogger) })
@@ -322,7 +322,7 @@ func TestProcessImports_FailedImportLogSanitized(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	testLogger := log.New()
 	testLogger.SetOutput(buffer)
-	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetLevel(log.WarnLevel)
 	testLogger.SetReportTimestamp(false)
 	log.SetDefault(testLogger)
 	t.Cleanup(func() { log.SetDefault(originalLogger) })

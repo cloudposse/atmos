@@ -125,49 +125,58 @@ func TestResolveToken_GitHub_CLIFallback(t *testing.T) {
 		}
 	}
 
-	t.Run("falls back to gh auth token when all settings-based tokens are empty", func(t *testing.T) {
-		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
-		t.Setenv("ATMOS_GITHUB_CLI", "gh")
-		ctrl := gomock.NewController(t)
-		mock := execpkg.NewMockCommandExecutor(ctrl)
-		mock.EXPECT().
-			CommandContext(gomock.Any(), "gh", "auth", "token").
-			Return(fakeCLICmd("ghp_from_cli\n", 0))
-		t.Cleanup(github.SetCommanderForTesting(mock))
+	tests := []struct {
+		name                string
+		atmosGithubCLI      string
+		explicitGithubToken string
+		expectCommanderCall bool
+		expectedToken       string
+		expectedTokenSource string
+	}{
+		{
+			name:                "falls back to gh auth token when all settings-based tokens are empty",
+			atmosGithubCLI:      "gh",
+			expectCommanderCall: true,
+			expectedToken:       "ghp_from_cli",
+			expectedTokenSource: "GH_CLI",
+		},
+		{
+			name:           "ATMOS_GITHUB_CLI empty disables the fallback without invoking the commander",
+			atmosGithubCLI: "",
+		},
+		{
+			name:                "an explicit GITHUB_TOKEN short-circuits the CLI fallback",
+			atmosGithubCLI:      "gh",
+			explicitGithubToken: "explicit-github-token",
+			expectedToken:       "explicit-github-token",
+			expectedTokenSource: "GITHUB_TOKEN",
+		},
+	}
 
-		token, tokenSource := newDetector().resolveToken(hostGitHub)
-		assert.Equal(t, "ghp_from_cli", token)
-		assert.Equal(t, "GH_CLI", tokenSource)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+			t.Setenv("ATMOS_GITHUB_CLI", tt.atmosGithubCLI)
+			ctrl := gomock.NewController(t)
+			// No EXPECT set when expectCommanderCall is false: any call to the commander fails the test.
+			mock := execpkg.NewMockCommandExecutor(ctrl)
+			if tt.expectCommanderCall {
+				mock.EXPECT().
+					CommandContext(gomock.Any(), "gh", "auth", "token").
+					Return(fakeCLICmd("ghp_from_cli\n", 0))
+			}
+			t.Cleanup(github.SetCommanderForTesting(mock))
 
-	t.Run("ATMOS_GITHUB_CLI empty disables the fallback without invoking the commander", func(t *testing.T) {
-		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
-		t.Setenv("ATMOS_GITHUB_CLI", "")
-		ctrl := gomock.NewController(t)
-		// No EXPECT: any call to the commander fails the test.
-		mock := execpkg.NewMockCommandExecutor(ctrl)
-		t.Cleanup(github.SetCommanderForTesting(mock))
+			detector := newDetector()
+			if tt.explicitGithubToken != "" {
+				detector.atmosConfig.Settings.GithubToken = tt.explicitGithubToken
+			}
 
-		token, tokenSource := newDetector().resolveToken(hostGitHub)
-		assert.Empty(t, token)
-		assert.Empty(t, tokenSource)
-	})
-
-	t.Run("an explicit GITHUB_TOKEN short-circuits the CLI fallback", func(t *testing.T) {
-		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
-		t.Setenv("ATMOS_GITHUB_CLI", "gh")
-		ctrl := gomock.NewController(t)
-		// No EXPECT: the commander must not be invoked when an explicit token is present.
-		mock := execpkg.NewMockCommandExecutor(ctrl)
-		t.Cleanup(github.SetCommanderForTesting(mock))
-
-		detector := newDetector()
-		detector.atmosConfig.Settings.GithubToken = "explicit-github-token"
-
-		token, tokenSource := detector.resolveToken(hostGitHub)
-		assert.Equal(t, "explicit-github-token", token)
-		assert.Equal(t, "GITHUB_TOKEN", tokenSource)
-	})
+			token, tokenSource := detector.resolveToken(hostGitHub)
+			assert.Equal(t, tt.expectedToken, token)
+			assert.Equal(t, tt.expectedTokenSource, tokenSource)
+		})
+	}
 }
 
 // TestResolveToken_Bitbucket tests token resolution for Bitbucket.

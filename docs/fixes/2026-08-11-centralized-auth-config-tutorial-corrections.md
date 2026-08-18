@@ -59,9 +59,10 @@ Findings, most severe first:
     command in a project using this pattern re-cloned the central repo — an undocumented network
     dependency for every command, not just auth ones. **Final behavior:** the existing top-level
     `imports.ttl` atmos.yaml setting (already used by stack-manifest imports) is now also read by
-    `RemoteImporter.Resolve`, the root-config path — one shared setting now caches both. This applies
-    specifically to `git::` imports that use a subdirectory; plain remote URLs and git imports without a
-    subdirectory use a separate, non-expiring cache and are unaffected either way.
+    `RemoteImporter.Resolve`, the root-config path — one shared setting now caches both. A follow-up fix in
+    this same PR (see `docs/fixes/2026-08-12-unify-remote-import-ttl-caching.md`) extended `ttl` coverage
+    to `RemoteImporter.Download` too, so plain remote URLs and `git::` imports without a subdirectory now
+    honor the same setting instead of caching forever with no expiry.
 
 Two other claims from the same tutorial were checked and found accurate, so left unchanged: the
 "quote `account.id` as a string" advice (an unquoted YAML integer really does fail a Go type assertion
@@ -92,8 +93,10 @@ exit (already corrected in an earlier pass this session, per a CodeRabbit review
   "What's Actually Zero-Setup" section and Troubleshooting, and updated §2's caching note to point at the
   new `imports.ttl` option instead of stating there's no cache.
 - `website/docs/cli/configuration/imports.mdx`, `website/blog/2026-08-11-remote-import-github-auth-and-caching.mdx`,
-  `website/src/data/roadmap.js`: scoped all TTL-caching claims to `git::` imports with a subdirectory
-  specifically (not all remote imports), matching `RemoteImporter.Resolve`'s actual behavior.
+  `website/src/data/roadmap.js`: scoped TTL-caching claims to `RemoteImporter.Resolve`'s actual behavior
+  at the time (`git::` imports with a subdirectory only). Updated again in the Stage 3 follow-up fix
+  once `RemoteImporter.Download` also started honoring `ttl` — see
+  `docs/fixes/2026-08-12-unify-remote-import-ttl-caching.md`.
 
 ## Validation
 

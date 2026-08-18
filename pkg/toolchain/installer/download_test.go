@@ -715,11 +715,13 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 		cacheDir := filepath.Join(tmpDir, "cache")
 		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
+		var primaryRequests atomic.Int32
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "v1.0.0") {
 				w.Write([]byte("fallback asset data"))
 				return
 			}
+			primaryRequests.Add(1)
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}))
 		defer ts.Close()
@@ -739,6 +741,9 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "v1.0.0", result.effectiveVersion)
 		assert.Contains(t, result.effectiveURL, "v1.0.0")
+		// The fallback must only engage after the primary URL exhausts its real retry budget,
+		// not after the first 503 — otherwise a regression that gives up early would still pass.
+		assert.Equal(t, int32(downloadRetryMaxAttempts), primaryRequests.Load())
 	})
 }
 
