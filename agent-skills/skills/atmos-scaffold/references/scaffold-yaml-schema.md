@@ -62,6 +62,33 @@ path-templating sentinel-skip behavior). This overlay does not declare *which* f
 exist — the template's file tree does that; it only gates whether an already-discovered
 file gets written.
 
+### `spec.files[].matrix` — dynamic file generation
+
+```yaml
+- path: templates/deploy.yaml
+  target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"   # required when matrix is set
+  matrix:
+    environment: answers.environments                    # dot-path into an already list-shaped answer
+    region: [us-east-1, us-west-2]                        # literal list
+  when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+Expands this one file entry into one generated file per resolved combination of every
+axis's values (their full Cartesian product, sorted per axis for deterministic output)
+— the same shape the workflow `matrix:` step uses. `target:` is required (a single
+`path:` can't serve as more than one output) and rendered once per combination.
+
+Each axis's value is one of:
+- a literal list of strings
+- a string starting with `answers.`, a dot-path into an already list-shaped answer
+- a Go-template expression (any string containing `{{`) computing the list from
+  nested/structured or free-text answer data (via `collectKeys`, `splitList`, or any
+  other Sprig/Gomplate function — see `atmos-templates`)
+
+`when:` gets a `matrix` CEL variable alongside `answers`, evaluated once per resolved
+combination to prune ones that don't apply. The resolved combination is also available
+as `.matrix.<axis>` in `target:` and the file's own rendered content.
+
 ## `spec.hooks` — step-backed hooks
 
 ```yaml

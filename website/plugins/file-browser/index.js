@@ -135,6 +135,7 @@ const TAGS_MAP = {
   'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
+  'scaffolding-matrix': ['Scaffold'],
 };
 
 // Display labels for the `metadata.category` slug used by SKILL.md front matter
@@ -161,6 +162,10 @@ const CATEGORY_LABELS = {
 // README front matter `cast:` block still wins when present.
 const CAST_MAP = {
   scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
+  'scaffolding-matrix': {
+    file: '/casts/examples/scaffolding-matrix/generate-example.cast',
+    title: 'atmos scaffold: one file per selection via matrix',
+  },
 };
 
 // Documentation pages mapping for examples.
@@ -245,6 +250,10 @@ const DOCS_MAP = {
   scaffolding: [
     { label: 'Init Command', url: '/cli/commands/init' },
     { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
+  'scaffolding-matrix': [
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+    { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
