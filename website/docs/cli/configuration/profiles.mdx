@@ -213,16 +213,17 @@ atmos terraform apply --auto-approve
 ### Interactive Selection
 
 Use `--profile` without a value to open a multi-select picker listing every profile Atmos
-discovers (see [Profile Discovery](#profile-discovery)). Toggle the profiles you want with
-space, then confirm — they're activated left-to-right in the order shown, same as if you'd typed
-them explicitly.
+discovers (see [Profile Discovery](#profile-discovery)). Nothing is pre-checked by default — toggle
+the profiles you want with space, then confirm — they're activated left-to-right in the order
+shown, same as if you'd typed them explicitly.
 
 ```bash
 atmos auth login -i core-auto/terraform --profile
 ```
 
 Any profile name already typed explicitly alongside the bare flag (e.g. `--profile ci --profile`)
-is always kept in the final selection, even if you don't re-pick it in the form.
+starts pre-checked in the picker, since you asked for it — but the form is still yours to edit,
+including unchecking it.
 
 This requires an interactive terminal. In CI, scripts, or any non-interactive context, use
 `--profile=<name>` or `ATMOS_PROFILE` explicitly instead — `--profile` used bare there returns an

@@ -365,9 +365,9 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 // sentinel is not present, so this is safe to call unconditionally on any non-empty profile list.
 //
 // Any explicit profile names given alongside the bare flag (e.g. `--profile foo --profile`) are
-// passed to the selector as "preselected" and are always preserved in the result -- the user
-// typed them explicitly, so they're never silently dropped by the interactive picker, even if
-// the picker itself is a plain multi-select that doesn't distinguish "must keep" from "offered".
+// passed to the selector as "preselected" so the picker starts with them pre-checked instead of
+// nothing checked -- the user typed them explicitly, so they shouldn't have to re-pick them. The
+// user's final choice in the form (including deliberately unchecking one) is still what's returned.
 //
 // On success, the resolved profile list is also written back to the global Viper singleton
 // (the same instance getProfilesFromFlagsOrEnv reads from) so any other same-process reader of

@@ -260,9 +260,10 @@ discovered profile (mirroring how bare `--identity` opens an interactive identit
 ```bash
 atmos auth login -i core-auto/terraform --profile
 ```
-- Any profile names already given explicitly alongside the bare flag (e.g. `--profile ci --profile`)
-  MUST always be included in the final activation list, regardless of what is (or isn't) re-picked
-  in the form
+- No profile is pre-checked by default; a bare `--profile` with no explicit names MUST open the
+  picker with nothing selected. Profile names already given explicitly alongside the bare flag
+  (e.g. `--profile ci --profile`) MUST start pre-checked, but the user's final choice in the form
+  (including deliberately unchecking an explicitly-given name) MUST be respected
 - In a non-interactive context (no TTY, CI), bare `--profile` MUST return a clear error rather than
   attempting to load a literal profile named after the internal sentinel value or hanging
 - The sentinel value (`__SELECT__`) MUST be reserved: a profile directory with that name is excluded

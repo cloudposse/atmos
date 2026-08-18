@@ -62,66 +62,6 @@ func TestSelectProfilesInteractively_NotInteractive(t *testing.T) {
 	})
 }
 
-// TestMergeProfileSelections tests the pure union logic used to guarantee that profile names
-// explicitly typed by the user (e.g. `--profile foo --profile`) always survive the interactive
-// picker, regardless of what the user does with the multi-select form.
-func TestMergeProfileSelections(t *testing.T) {
-	tests := []struct {
-		name        string
-		preselected []string
-		selected    []string
-		want        []string
-	}{
-		{
-			name:        "no preselected, some selected",
-			preselected: nil,
-			selected:    []string{"a", "b"},
-			want:        []string{"a", "b"},
-		},
-		{
-			name:        "preselected not present in selected is still included",
-			preselected: []string{"foo"},
-			selected:    []string{"a", "b"},
-			want:        []string{"foo", "a", "b"},
-		},
-		{
-			name:        "preselected already present in selected is not duplicated",
-			preselected: []string{"a"},
-			selected:    []string{"a", "b"},
-			want:        []string{"a", "b"},
-		},
-		{
-			name:        "both empty",
-			preselected: nil,
-			selected:    nil,
-			want:        []string{},
-		},
-		{
-			name:        "user deselected everything, preselected still survives",
-			preselected: []string{"foo", "bar"},
-			selected:    nil,
-			want:        []string{"foo", "bar"},
-		},
-		{
-			name:        "duplicates within selected are collapsed",
-			preselected: nil,
-			selected:    []string{"a", "a", "b"},
-			want:        []string{"a", "b"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := mergeProfileSelections(tt.preselected, tt.selected)
-			assert.Equal(t, tt.want, got)
-			if len(tt.want) > 0 {
-				assert.Equal(t, tt.want[0], got[0], "first element must match for order guarantees")
-				assert.Equal(t, tt.want[len(tt.want)-1], got[len(got)-1], "last element must match for order guarantees")
-			}
-		})
-	}
-}
-
 // selectProfilesInteractivelyIsProfileSelector is a compile-time guard: selectProfilesInteractively
 // must remain assignable to cfg.ProfileSelector, the dependency-injection seam this package's
 // init() registers it against via cfg.SetProfileSelector(). If the function signature ever drifts

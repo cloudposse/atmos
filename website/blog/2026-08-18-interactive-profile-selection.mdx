@@ -30,13 +30,14 @@ Error: --profile flag needs an argument for command atmos auth login
 ## The Fix
 
 `--profile` with no value now opens an interactive multi-select listing every profile Atmos
-discovers across your configured profile locations. Toggle the ones you want with space, confirm,
-and they activate left-to-right in the order shown — exactly as if you'd typed them explicitly.
+discovers across your configured profile locations. Nothing is checked by default — toggle the
+ones you want with space, confirm, and they activate left-to-right in the order shown, exactly as
+if you'd typed them explicitly.
 
-Any profile name you already typed alongside the bare flag is always kept in the final selection,
-even if you don't re-pick it in the form, so `--profile ci --profile` still guarantees `ci` stays
-active. In a non-interactive context — CI, scripts, no TTY — bare `--profile` returns a clear
-error instead of hanging or guessing, so automation fails fast rather than silently.
+Any profile name you already typed alongside the bare flag starts pre-checked, so
+`--profile ci --profile` opens with `ci` already selected, ready to confirm or adjust. In a
+non-interactive context — CI, scripts, no TTY — bare `--profile` returns a clear error instead of
+hanging or guessing, so automation fails fast rather than silently.
 
 ## How to Use It
 

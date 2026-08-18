@@ -75,6 +75,31 @@ func TestPromptForMultipleValues(t *testing.T) {
 	})
 }
 
+func TestPromptForMultipleValuesWithPreselection(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	t.Run("returns error when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev", "ci"}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+
+	t.Run("returns error when no options available", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", nil, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("non-interactive gate is checked before preselection is used", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev"}, []string{"dev"})
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+}
+
 // TestPromptForMissingRequired tests the PromptForMissingRequired function.
 func TestPromptForMissingRequired(t *testing.T) {
 	// Save original viper state.
