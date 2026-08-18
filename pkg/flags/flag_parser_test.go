@@ -542,6 +542,27 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 	}
 }
 
+// TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry verifies that Parse doesn't panic
+// when the parser has a nil registry: resolveNoOptDefValForEmptyFlags must bail out early via its
+// `p.registry == nil` guard rather than dereferencing a nil registry when deriving the set of
+// NoOptDefVal-eligible flags.
+func TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	parser := NewAtmosFlagParser(cmd, v, translator, nil)
+
+	var err error
+	assert.NotPanics(t, func() {
+		_, err = parser.Parse([]string{"--stack", "dev"})
+	}, "Parse must not panic with a nil registry")
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"), "flag parsing itself must still work without a registry")
+}
+
 // TestFlagParser_Reset verifies that Reset clears registered command flag state
 // so parsers can be reused cleanly between test runs.
 func TestFlagParser_Reset(t *testing.T) {

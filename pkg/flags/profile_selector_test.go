@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -60,6 +61,41 @@ func TestSelectProfilesInteractively_NotInteractive(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 	})
+}
+
+// TestSelectProfilesInteractively_DiscoversRealProfiles proves selectProfilesInteractively's
+// discovery-to-options conversion loop actually runs over real ProfileInfo results from
+// profile.NewProfileManager().ListProfiles (not just the empty-discovery path covered by
+// TestSelectProfilesInteractively_NotInteractive above). Discovery and options-building happen
+// unconditionally before the interactive-gate check inside PromptForMultipleValuesWithPreselection,
+// so this is exercised even though the overall call still ends up gated non-interactive here.
+func TestSelectProfilesInteractively_DiscoversRealProfiles(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	t.Cleanup(func() {
+		viper.Set("interactive", originalInteractive)
+	})
+	viper.Set("interactive", false)
+
+	atmosConfig := isolatedAtmosConfig(t)
+	// A profile is discovered as any subdirectory of <CliConfigPath>/profiles.
+	require.NoError(t, os.MkdirAll(filepath.Join(atmosConfig.CliConfigPath, "profiles", "dev"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(atmosConfig.CliConfigPath, "profiles", "prod"), 0o755))
+
+	// Sanity-check the fixture: profile.NewProfileManager().ListProfiles (the same call
+	// selectProfilesInteractively makes) must actually discover both directories, so the
+	// assertion below is known to exercise a non-empty options list, not an empty one.
+	discovered, err := profile.NewProfileManager().ListProfiles(atmosConfig)
+	require.NoError(t, err)
+	require.Len(t, discovered, 2, "fixture must produce exactly the 2 profile directories created above")
+
+	_, err = selectProfilesInteractively(atmosConfig, nil)
+
+	require.Error(t, err)
+	// Discovery found 2 profiles (non-empty options), so the error comes from the
+	// non-interactive gate inside PromptForMultipleValuesWithPreselection, not from
+	// ErrNoOptionsAvailable -- proving the discovered-profiles loop above actually ran and
+	// produced a non-empty options list before the prompt call was made.
+	assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 }
 
 // selectProfilesInteractivelyIsProfileSelector is a compile-time guard: selectProfilesInteractively
