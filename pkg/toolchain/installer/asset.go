@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -273,6 +274,9 @@ func assetTemplateFuncs() template.FuncMap {
 	}
 	funcs["replace"] = func(old, new, s string) string {
 		return strings.ReplaceAll(s, old, new)
+	}
+	for k, v := range templatefuncs.FuncMap() {
+		funcs[k] = v
 	}
 
 	return funcs
