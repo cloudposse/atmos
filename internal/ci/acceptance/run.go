@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/google/shlex"
+	"golang.org/x/sync/errgroup"
 )
 
 // Mode selects ordinary test execution or native coverage collection.
@@ -45,7 +47,7 @@ type sourceTestGroup struct {
 	testArgs []string
 }
 
-//nolint:cyclop,gocognit,nestif,revive // Ordered orchestration intentionally keeps the shard phases visible in one place.
+//nolint:revive // Ordered orchestration intentionally keeps the shard phases visible in one place.
 func RunShard(ctx context.Context, options *RunOptions) error {
 	runner := newCommandRunner()
 	allPackages, err := listPackages(ctx, runner, options.RepoRoot)
@@ -55,9 +57,7 @@ func RunShard(ctx context.Context, options *RunOptions) error {
 	packages := shardPackages(allPackages, options.Target, options.Shard)
 	coverageInputs := make([]string, 0, 3)
 	if options.Target == TargetWindows && options.Mode == ModeTest {
-		if err := runWindowsTests(ctx, runner, options); err != nil {
-			return err
-		}
+		return runWindowsShard(ctx, runner, options, packages)
 	} else {
 		input, runErr := runSourceTestGroup(ctx, runner, options, sourceTestGroup{
 			name: "tests", packages: []string{"./tests"}, testArgs: sourceTestArgs(options.Shard),
@@ -80,11 +80,6 @@ func RunShard(ctx context.Context, options *RunOptions) error {
 		}
 	}
 
-	if options.Target == TargetWindows && options.Mode == ModeTest {
-		if err := runWindowsExecTests(ctx, runner, options); err != nil {
-			return err
-		}
-	}
 	if options.Shard.Index == 1 {
 		input, runErr := runCmdTests(ctx, runner, options)
 		if runErr != nil {
@@ -100,6 +95,48 @@ func RunShard(ctx context.Context, options *RunOptions) error {
 			filepath.Join(options.CoverageRoot, fmt.Sprintf("shard-%d", options.Shard.Index)), "", coverageInputs)
 	}
 	return nil
+}
+
+// runWindowsShard runs independent test binaries and source packages concurrently.
+// The Go tool already isolates packages in separate processes; grouping them here
+// avoids serializing three independently sharded workloads on Windows runners.
+func runWindowsShard(
+	ctx context.Context,
+	runner commandRunner,
+	options *RunOptions,
+	packages []string,
+) error {
+	group, groupContext := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		if err := runWindowsTests(groupContext, runner, options); err != nil {
+			return fmt.Errorf("run tests package: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() error {
+		if err := runWindowsExecTests(groupContext, runner, options); err != nil {
+			return fmt.Errorf("run internal/exec package: %w", err)
+		}
+		return nil
+	})
+	if len(packages) > 0 {
+		group.Go(func() error {
+			_, err := runSourceTestGroup(groupContext, runner, options, sourceTestGroup{name: "pkgs", packages: packages})
+			if err != nil {
+				return fmt.Errorf("run source packages: %w", err)
+			}
+			return nil
+		})
+	}
+	if options.Shard.Index == 1 {
+		group.Go(func() error {
+			if _, err := runCmdTests(groupContext, runner, options); err != nil {
+				return fmt.Errorf("run cmd package: %w", err)
+			}
+			return nil
+		})
+	}
+	return group.Wait()
 }
 
 func runSourceTestGroup(
@@ -210,7 +247,7 @@ func Precompile(ctx context.Context, repoRoot string, target Target, outputDir s
 	if target == TargetWindows {
 		extension = ".exe"
 	}
-	if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c", "-covermode=atomic",
+	if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c", "-covermode=atomic", "-coverpkg=./...",
 		"-o", filepath.Join(outputDir, "cmd.test"+extension), "./cmd"); err != nil {
 		return err
 	}
@@ -265,6 +302,10 @@ func DefaultRunOptions(repoRoot string, mode Mode, target Target, shard Shard) R
 	}
 }
 
-func SplitCommandLine(value string) []string {
-	return strings.Fields(strings.ReplaceAll(value, "\n", " "))
+func SplitCommandLine(value string) ([]string, error) {
+	fields, err := shlex.Split(value)
+	if err != nil {
+		return nil, fmt.Errorf("%w: split command line %q: %w", errInvalidConfiguration, value, err)
+	}
+	return fields, nil
 }

@@ -39,9 +39,10 @@ func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, te
 		}
 		packages = all
 	}
-	integrationDir := filepath.Join(options.Dir, "integration")
-	unitDir := filepath.Join(options.Dir, "unit")
-	absIntegration, absUnit, err := prepareCoverageDirectories(options.Dir)
+	dir := absoluteFromRoot(options.RepoRoot, options.Dir)
+	integrationDir := filepath.Join(dir, "integration")
+	unitDir := filepath.Join(dir, "unit")
+	absIntegration, absUnit, err := prepareCoverageDirectories(dir)
 	if err != nil {
 		return err
 	}
@@ -66,18 +67,23 @@ func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, te
 }
 
 func MergeCoverage(ctx context.Context, repoRoot, dataOut, textOut string, inputs []string) error {
-	if err := validateCoverageInputs(inputs); err != nil {
+	dataOut = absoluteFromRoot(repoRoot, dataOut)
+	normalizedInputs := make([]string, len(inputs))
+	for i, input := range inputs {
+		normalizedInputs[i] = absoluteFromRoot(repoRoot, input)
+	}
+	if err := validateCoverageInputs(normalizedInputs); err != nil {
 		return err
 	}
 	if err := resetDirectory(dataOut); err != nil {
 		return err
 	}
 	runner := newCommandRunner()
-	if err := runner.run(ctx, repoRoot, nil, "go", "tool", "covdata", "merge", "-pcombine", "-i="+strings.Join(inputs, ","), "-o="+dataOut); err != nil {
+	if err := runner.run(ctx, repoRoot, nil, "go", "tool", "covdata", "merge", "-pcombine", "-i="+strings.Join(normalizedInputs, ","), "-o="+dataOut); err != nil {
 		return err
 	}
 	if textOut != "" {
-		if err := writeCoverageText(ctx, runner, repoRoot, dataOut, textOut); err != nil {
+		if err := writeCoverageText(ctx, runner, repoRoot, dataOut, absoluteFromRoot(repoRoot, textOut)); err != nil {
 			return err
 		}
 	}
@@ -85,17 +91,30 @@ func MergeCoverage(ctx context.Context, repoRoot, dataOut, textOut string, input
 }
 
 func MergeCoverageShards(ctx context.Context, options CoverageShardOptions) error {
+	shardsDir := absoluteFromRoot(options.RepoRoot, options.ShardsDir)
 	inputs := make([]string, 0, options.Count)
 	for shard := 1; shard <= options.Count; shard++ {
-		shardDir := filepath.Join(options.ShardsDir, "shard-"+strconv.Itoa(shard))
+		shardDir := filepath.Join(shardsDir, "shard-"+strconv.Itoa(shard))
 		metadata, err := findCoverageMetadata(shardDir)
 		if err != nil {
+			if os.IsNotExist(err) {
+				if statusErr := writeStatus("Skipping shard %d: no coverage directory found\n", shard); statusErr != nil {
+					return statusErr
+				}
+				continue
+			}
 			return fmt.Errorf("find coverage for shard %d: %w", shard, err)
 		}
 		if metadata == "" {
-			return fmt.Errorf("%w: no native metadata found for shard %d", errCoverageData, shard)
+			if statusErr := writeStatus("Skipping shard %d: no native coverage metadata found\n", shard); statusErr != nil {
+				return statusErr
+			}
+			continue
 		}
 		inputs = append(inputs, filepath.Dir(metadata))
+	}
+	if len(inputs) == 0 {
+		return fmt.Errorf("%w: no shard produced native coverage metadata", errCoverageData)
 	}
 	return MergeCoverage(ctx, options.RepoRoot, options.DataOut, options.TextOut, inputs)
 }

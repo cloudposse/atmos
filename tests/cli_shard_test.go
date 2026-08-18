@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAssignWorkdirsToShardsCompleteness(t *testing.T) {
@@ -71,6 +73,7 @@ func TestAssignActualCLIWorkdirsToShardsCompleteness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load test suites: %v", err)
 	}
+	require.Positive(t, len(testSuite.Tests), "expected at least one CLI test fixture")
 
 	for _, shardCount := range []int{10, 11} {
 		t.Run(fmt.Sprintf("shards-%d", shardCount), func(t *testing.T) {

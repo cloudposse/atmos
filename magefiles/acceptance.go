@@ -65,8 +65,14 @@ func (Coverage) Collect(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	packages := acceptance.SplitCommandLine(environment("TEST"))
-	testArgs := acceptance.SplitCommandLine(environment("TESTARGS"))
+	packages, err := acceptance.SplitCommandLine(environment("TEST"))
+	if err != nil {
+		return err
+	}
+	testArgs, err := acceptance.SplitCommandLine(environment("TESTARGS"))
+	if err != nil {
+		return err
+	}
 	return acceptance.CollectCoverage(ctx, &acceptance.CoverageOptions{
 		RepoRoot: repoRoot,
 		Dir:      firstNonEmpty(environment("COVERAGE_DIR"), "coverage"),

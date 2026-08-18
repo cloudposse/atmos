@@ -404,7 +404,10 @@ jobs:
         id: go
 
       - name: Get dependencies
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        # Windows runs precompiled acceptance binaries and lets its small source
+        # package slice fetch only the modules it needs. Downloading the complete
+        # module graph in all ten Windows shards added 2-6 minutes of contention.
+        if: ${{ matrix.flavor.target != 'windows' }}
         run: |
           atmos build deps
 
@@ -478,7 +481,7 @@ jobs:
   # matrix result, so every OS/shard must pass before any alias succeeds.
   test-required:
     name: ${{ matrix.check }}
-    needs: test
+    needs: [test, terraform-registry-cache]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     strategy:
@@ -490,6 +493,10 @@ jobs:
         run: |
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "test matrix result was '${{ needs.test.result }}'"
+            exit 1
+          fi
+          if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
+            echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
             exit 1
           fi
 
