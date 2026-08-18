@@ -1535,7 +1535,15 @@
               "type": "string"
             },
             "values": {
-              "type": "object"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object"
+                }
+              ]
             },
             "values_files": {
               "type": "array",
@@ -1555,11 +1563,17 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "hooks": {
               "$ref": "#/definitions/hooks"
             },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
             },
             "source": {
               "$ref": "#/definitions/source"
@@ -1569,6 +1583,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
@@ -2389,10 +2406,11 @@
         },
         {
           "type": "object",
-          "additionalProperties": true,
+          "additionalProperties": false,
           "patternProperties": {
             "^[a-zA-Z0-9-_]+$": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "source": {
                   "type": "string",
