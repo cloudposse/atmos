@@ -44,16 +44,16 @@ func findBinaryPath(toolNameFull string) (string, error) {
 	// vice versa. The write side already canonicalizes for dedup — this keeps
 	// the read side symmetric.
 	installer := NewInstaller()
-	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
+	resolvedKey, defaultVersion, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
 	if !found {
 		return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
 	}
 
-	// Use the most recent version if not specified. Read directly from the
-	// resolved key so multi-version entries preserve their ordering semantics.
+	// Use the default (first) version if not specified explicitly. .tool-versions
+	// follows asdf convention: the first token is the default, any further tokens
+	// are additional installable versions — not a "most recent wins" ordering.
 	if version == "" {
-		versions := toolVersions.Tools[resolvedKey]
-		version = versions[len(versions)-1]
+		version = defaultVersion
 	}
 
 	// Derive owner/repo from the resolved key, not the user input, so a raw

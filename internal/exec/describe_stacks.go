@@ -402,7 +402,7 @@ func executeDescribeStacks(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +420,9 @@ func executeDescribeStacks(
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
+	// Recover per-component deferred-merge contexts from the FindStacksMap cache so Stage 3
+	// (resolveDeferredYamlFunctions) can run below — see processComponentEntry.
+	processor.deferredContexts = deferredContexts
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 	}

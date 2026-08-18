@@ -1003,3 +1003,97 @@ func TestProcessStackFile_NoGhostEntry_FilterByStack(t *testing.T) {
 	_, exists := p.finalStacksMap["stacks/prod.yaml"]
 	assert.False(t, exists, "non-matching stack should not create an entry when filterByStack is active")
 }
+
+// TestExecuteDescribeStacks_ResolvesDeferredMergeContexts is a regression test for a PR #2892
+// review finding: describe_stacks.go has its own component processor (describeStacksProcessor)
+// that never went through processStacks (utils.go), so it never ran Stage 3
+// (resolveDeferredYamlFunctions). A component with a deferred function (e.g. !labels) at a path
+// also set by a concrete override at a lower-precedence layer would silently lose the deferred
+// function's contribution to the merge — the exact #2888 data-loss bug this PR claims to fix,
+// still present for `atmos describe stacks` specifically. Mirrors
+// TestExecuteTerraformGenerateVarfiles_DeferredMergeDataLoss's fixture.
+func TestExecuteDescribeStacks_ResolvesDeferredMergeContexts(t *testing.T) {
+	tempDir := t.TempDir()
+
+	stacksDir := filepath.Join(tempDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc component\n"), 0o644))
+
+	// base-labels is an abstract base component whose `vars.tags` is a deferred !labels function
+	// (derived from its own metadata.labels). vpc inherits from it via `component:` and layers a
+	// conflicting literal map at the same `vars.tags` path — the two must deep-merge (org/region
+	// from !labels, team from the override), not have one silently discard the other.
+	stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    base-labels:
+      metadata:
+        type: abstract
+        labels:
+          org: acme
+          region: us-east-1
+      vars:
+        tags: !labels
+    vpc:
+      component: base-labels
+      backend:
+        bucket: test-bucket
+        key: terraform.tfstate
+      backend_type: s3
+      vars:
+        name: test-vpc
+        tags:
+          team: platform
+`
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+	require.NoError(t, os.WriteFile(stackFile, []byte(stackContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+		StacksBaseAbsolutePath:        stacksDir,
+		TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+		IncludeStackAbsolutePaths:     []string{stacksDir},
+		StackConfigFilesAbsolutePaths: []string{stackFile},
+	}
+
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"", nil, nil, nil, false, true, true,
+		false, // includeEmptyStacks.
+		nil, nil,
+	)
+	require.NoError(t, err)
+
+	stackSection, ok := stacks["dev"].(map[string]any)
+	require.True(t, ok, "expected a 'dev' stack in the describe output")
+	components, ok := stackSection["components"].(map[string]any)
+	require.True(t, ok, "components should be a map")
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "components.terraform should be a map")
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "components.terraform.vpc should be a map")
+	vars, ok := vpc["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+	tags, ok := vars["tags"].(map[string]any)
+	require.True(t, ok, "vars.tags must be a resolved map, not a leftover function string")
+
+	assert.Equal(t, map[string]any{
+		"org":    "acme",
+		"region": "us-east-1",
+		"team":   "platform",
+	}, tags, "deferred !labels output must deep-merge with the component's own vars.tags override, not be silently dropped")
+}

@@ -119,6 +119,13 @@ atmos init --update --merge-strategy=theirs
   <dt>`--base-ref`</dt>
   <dd>Override the recorded merge base.</dd>
 
+  <dt>`--merge-driver` (default `auto`)</dt>
+  <dd>
+    Choose `auto` (YAML-aware for `.yaml`/`.yml`, text otherwise) or `text` to force every file
+    through the line-oriented text merge driver, preserving formatting (e.g. blank lines) that a
+    YAML-aware re-encode would otherwise collapse.
+  </dd>
+
   <dt>`--merge-strategy`</dt>
   <dd>Select `manual`, `ours`, or `theirs`.</dd>
 

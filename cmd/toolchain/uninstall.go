@@ -17,7 +17,7 @@ var uninstallCmd = &cobra.Command{
 	Long: `Uninstall a specific tool version or all tools listed in .tool-versions.
 
 Use --all to uninstall every tool found in the install directory,
-including tools installed via component dependencies.`,
+including tools installed via component, workflow, or command dependencies.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUninstall,
 }

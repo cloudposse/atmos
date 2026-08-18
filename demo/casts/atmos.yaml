@@ -320,6 +320,11 @@ commands:
         path: "../../.context/cast-fixtures/scaffolds"
         reset: true
       - type: workdir
+        name: scaffolding-matrix-fixture
+        source: "../../examples/scaffolding-matrix"
+        path: "../../.context/cast-fixtures/scaffolding-matrix"
+        reset: true
+      - type: workdir
         name: version-tracker-fixture
         source: "../../examples/version-tracker"
         path: "../../.context/cast-fixtures/version-tracker"

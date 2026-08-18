@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,13 +118,13 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 			assert.True(t, skipped.(bool), "validation_skipped_opentofu should be true when OpenTofu-specific syntax is detected")
 		}
 
-		// Terraform config may be nil (validation skipped) or contain partial info.
+		// Terraform config may be nil (validation skipped) or the parsed module.
 		// Either is acceptable - the important part is that the error didn't fail the operation.
-		if terraformConfig, exists := componentInfo["terraform_config"]; exists {
-			// If it exists, it should either be nil or a valid config object.
+		if terraformConfig, exists := componentInfo[terraformConfigKey]; exists {
+			// If it exists, it should either be nil or the module parsed by terraform-config-inspect.
 			if terraformConfig != nil {
-				_, ok := terraformConfig.(map[string]any)
-				assert.True(t, ok, "If terraform_config is not nil, it should be a valid config object")
+				_, ok := terraformConfig.(*tfconfig.Module)
+				assert.True(t, ok, "If terraform_config is not nil, it should be a parsed Terraform module")
 			}
 		}
 

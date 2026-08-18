@@ -266,3 +266,37 @@ func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
 	err = WhichExec("terraform@1.5.7")
 	require.NoError(t, err, "Should succeed with version specifier")
 }
+
+// TestWhichCommand_MultiVersionUsesDefaultNotLast reproduces a bug where
+// findBinaryPath resolved a tool's default (no version specifier) using the
+// LAST token in a multi-version .tool-versions line instead of the FIRST
+// (asdf convention: first token is the default). Only the first version is
+// installed here; if the bug regresses, WhichExec resolves the second
+// ("1.6.0", never installed) and wrongly reports "not installed".
+func TestWhichCommand_MultiVersionUsesDefaultNotLast(t *testing.T) {
+	setupTestIO(t)
+
+	tempDir := t.TempDir()
+
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"terraform": {"1.5.7", "1.6.0"},
+		},
+	}
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: tempDir, VersionsFile: toolVersionsPath}})
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Only the default (first) version is installed; the second is not.
+	installer := NewInstaller()
+	binaryPath := installer.GetBinaryPath("hashicorp", "terraform", "1.5.7", "")
+	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	// No version specifier: must resolve the default (first) version, "1.5.7".
+	err = WhichExec("terraform")
+	require.NoError(t, err, "Should resolve the default (first) version in a multi-version .tool-versions entry, not the last")
+}

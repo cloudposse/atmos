@@ -44,6 +44,7 @@
       "Bash(git add .:*)",
       "Bash(git commit --no-gpg-sign:*)",
       "Bash(git commit -c commit.gpgsign=false:*)",
+      "Bash(golangci-lint:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh workflow:*)",
       "Bash(gh secret:*)",

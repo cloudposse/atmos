@@ -335,6 +335,13 @@ func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showH
 }
 
 func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstallFlag, showHint, showProgress bool) (string, error) {
+	// Reject unsupported version formats (e.g. a hand-edited range/constraint in
+	// .tool-versions) before any lookup or network call, with a clear per-tool error
+	// instead of a raw HTTP 404 from treating the value as a literal release tag.
+	if err := ValidateVersionSpec(tool.version); err != nil {
+		return resultFailed, err
+	}
+
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
 		return resultSkipped, nil

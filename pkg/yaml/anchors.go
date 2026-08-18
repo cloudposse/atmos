@@ -89,11 +89,14 @@ func anchorViolation(name string, before, after map[string]anchorInfo) string {
 	case !hadBefore && hasAfter:
 		return fmt.Sprintf("anchor &%s was introduced by the edit", name)
 	case b.aliasCount != a.aliasCount:
-		return fmt.Sprintf("anchor &%s alias references changed from %d to %d (an alias was flattened or added)",
+		return fmt.Sprintf("anchor &%s alias references changed from %d to %d (an alias was flattened or added); "+
+			"editing an aliased value in place isn't supported here — edit the anchor definition explicitly "+
+			"(affects every alias), or restructure the YAML directly to give this key its own value",
 			name, b.aliasCount, a.aliasCount)
 	case b.aliasCount > 0 && b.content != a.content:
 		return fmt.Sprintf("anchor &%s is shared by %d alias(es) and its value would change; "+
-			"edit the anchor definition explicitly or restructure to avoid mutating shared data",
+			"edit the anchor definition explicitly, or add an explicit key at this path to override "+
+			"the anchored value here without touching the anchor",
 			name, b.aliasCount)
 	}
 	return ""
