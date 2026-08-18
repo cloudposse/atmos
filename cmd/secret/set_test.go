@@ -134,10 +134,15 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 
 func TestFindGlobalSetContext(t *testing.T) {
 	sharedSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
-	componentReferenceSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{
+	componentReferenceSectionA := secretDeclarationSection("SHARED_TOKEN", map[string]any{
 		"store":     "example-secrets",
 		"scope":     "global",
-		"reference": "op://shared/{{ .atmos_component }}/password",
+		"reference": "op://shared/example-service-a/password",
+	})
+	componentReferenceSectionB := secretDeclarationSection("SHARED_TOKEN", map[string]any{
+		"store":     "example-secrets",
+		"scope":     "global",
+		"reference": "op://shared/example-service-b/password",
 	})
 	tests := []struct {
 		name              string
@@ -199,10 +204,10 @@ func TestFindGlobalSetContext(t *testing.T) {
 			expectedErr: errUtils.ErrRequiredFlagNotProvided,
 		},
 		{
-			name: "identical component-dependent references require component",
+			name: "resolved component-dependent references require component",
 			entries: []scopeEntry{
-				{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: componentReferenceSection},
-				{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: componentReferenceSection},
+				{Stack: "dev", Component: "example-service-a", ComponentType: "helm", Section: componentReferenceSectionA},
+				{Stack: "dev", Component: "example-service-b", ComponentType: "helm", Section: componentReferenceSectionB},
 			},
 			scope:       secretScope{Stack: "dev"},
 			expectedErr: errUtils.ErrRequiredFlagNotProvided,
