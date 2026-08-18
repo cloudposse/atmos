@@ -26,7 +26,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
@@ -1030,9 +1029,11 @@ func validateScaffoldFile(scaffoldPath string) error {
 			Err()
 	}
 
-	// Validate against the generated AtmosScaffoldConfig JSON Schema,
-	// including the manifest envelope (apiVersion, kind, metadata).
-	if err := manifest.Validate(config.ScaffoldKind, scaffoldData); err != nil {
+	// Validate against the generated AtmosScaffoldConfig JSON Schema (including
+	// the manifest envelope: apiVersion, kind, metadata) and the Go-level
+	// backstop checks generate itself relies on (field definitions, matrix
+	// axis values).
+	if _, err := config.LoadScaffoldConfigFromContent(string(scaffoldData)); err != nil {
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithCause(err).
 			WithExplanationf("Invalid scaffold manifest: `%s`", scaffoldPath).
