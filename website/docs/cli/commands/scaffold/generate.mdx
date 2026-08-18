@@ -132,10 +132,12 @@ spec:
       when: "matrix.region in answers.environments[matrix.environment].regions"
 ```
 
-`target:` is required whenever `matrix:` is set. The resolved combination is available as
-`.matrix.<axis>` in `target:`, in `when:`, and in the file's own content — not just the output
-path. Two files (matrixed or not) rendering to the same output path is a hard error, never a
-silent overwrite.
+`target:` is required whenever `matrix:` is set. The resolved combination is available in
+`target:` and the file's own content — not just the output path — as `.matrix.<axis>`, matching
+Go template's leading-dot field access. `when:` is CEL, not Go template, so it reads the same
+value as `matrix.<axis>` instead, without the leading dot (see the `when:` example above). Two
+files (matrixed or not) rendering to the same output path is a hard error, never a silent
+overwrite.
 
 An axis doesn't need to come from a `multiselect` at all — a plain free-text answer is just a
 string, and any Sprig/Gomplate function can split it into a list:
