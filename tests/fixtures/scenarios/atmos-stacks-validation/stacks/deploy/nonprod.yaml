@@ -3,8 +3,54 @@
 vars:
   stage: nonprod
 
+# Stack-wide Terraform defaults. Exercises the `terraform` manifest schema definition's
+# `required_version`/`required_providers`/`retry` properties (github.com/cloudposse/atmos/issues/2948)
+# and the shared `overrides` definition's copies of the same three fields.
+terraform:
+  required_version: ">= 1.9.0"
+  required_providers:
+    time:
+      source: "hashicorp/time"
+      version: "~> 0.13"
+  retry:
+    max_attempts: 2
+    backoff_strategy: constant
+    initial_delay: "1s"
+  overrides:
+    required_version: ">= 1.9.0"
+    required_providers:
+      time:
+        source: "hashicorp/time"
+        version: "~> 0.13"
+    retry:
+      max_attempts: 2
+
 components:
   terraform:
+    component-test-required-providers:
+      metadata:
+        component: mock
+      settings:
+        validation:
+          validate-required-providers:
+            schema_type: opa
+            schema_path: "validate-component.rego"
+            description: Test component-level required_version/required_providers/retry schema validation
+      required_version: ">= 1.9.0"
+      required_providers:
+        azurerm:
+          source: "hashicorp/azurerm"
+          version: "~> 4.12.0"
+      retry:
+        max_attempts: 3
+        backoff_strategy: exponential
+        initial_delay: "2s"
+        max_delay: "30s"
+        conditions:
+          - "connection reset"
+      vars:
+        test_required_providers: true
+
     component-1:
       metadata:
         component: mock
