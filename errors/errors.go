@@ -1655,6 +1655,15 @@ var (
 	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
 	// ErrComponentDirNotFound indicates a component's resolved base directory does not exist.
 	ErrComponentDirNotFound = errors.New("component directory does not exist")
+	// ErrResolveComponentPath indicates a component's filesystem path could not be resolved
+	// (path-joining or symlink resolution failed), distinct from ErrComponentDirNotFound's "the
+	// path resolved fine but nothing exists there".
+	ErrResolveComponentPath = errors.New("failed to resolve component path")
+	// ErrDuplicateVendorComponent indicates the same component name is declared more than once
+	// across a vendor manifest and its imports, matching the rejection normal `vendor pull`
+	// processing already applies (internal/exec's ErrDuplicateComponentsFound) for the
+	// --stack/--tags declared-tags resolution path.
+	ErrDuplicateVendorComponent = errors.New("duplicate component declared in vendor manifest")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
