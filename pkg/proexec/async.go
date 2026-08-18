@@ -1,7 +1,6 @@
 package proexec
 
 import (
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,6 +16,11 @@ import (
 // for the async default path (research.md Decision 8, SC-004). Not derived
 // from user configuration — a delivery outage must never slow down every
 // other command beyond this small, predictable ceiling.
+//
+// TEMPORARILY UNUSED: CaptureAsync currently blocks synchronously on every
+// upload (see CaptureAsync below) so its response can be logged reliably
+// while the exec-metadata upload path is being validated. Restore the
+// select/timeout race once that verification is done.
 const asyncFlushCeiling = 2 * time.Second
 
 // processBaseline is captured once, as early as possible in the process's
@@ -71,31 +75,20 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 		commandPath = cmd.CommandPath()
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		uploadExecMetadata(commandPath, exitCode, nil, nil, client, git.NewDefaultGitRepo())
-	}()
-
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(asyncFlushCeiling):
-		// Best-effort ceiling reached; the goroutine is abandoned and the
-		// process is free to exit — Go permits this.
-		log.Debug("Async exec-metadata upload did not finish within the flush ceiling; abandoning.")
+	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
+	// so the command's process doesn't exit before the request completes,
+	// and so its outcome is always logged.
+	uploadErr := uploadExecMetadata(commandPath, exitCode, nil, nil, client, git.NewDefaultGitRepo())
+	if uploadErr != nil {
+		log.Info("Exec-metadata upload finished.", "command", commandPath, "success", false, "error", uploadErr)
+	} else {
+		log.Info("Exec-metadata upload finished.", "command", commandPath, "success", true)
 	}
 }
 
 // uploadExecMetadata builds and sends a single execution record. Any failure
-// is logged at debug level only (FR-009a) and never surfaces to the user or
-// alters the calling command's outcome.
+// is returned to the caller to log — it never surfaces to the user or alters
+// the calling command's outcome.
 func uploadExecMetadata(
 	commandPath string,
 	exitCode int,
@@ -103,14 +96,11 @@ func uploadExecMetadata(
 	dataItems []any,
 	client pro.AtmosProAPIClientInterface,
 	gitRepo git.GitRepoInterface,
-) {
+) error {
 	req, buildErr := buildRecord(commandPath, exitCode, processBaseline.Since(), data, dataItems, gitRepo)
 	if buildErr != nil {
-		log.Debug("Skipping exec-metadata upload: failed to build execution record.", "error", buildErr)
-		return
+		return buildErr
 	}
 
-	if uploadErr := client.UploadExecMetadata(req); uploadErr != nil {
-		log.Debug("Exec-metadata upload failed.", "error", uploadErr)
-	}
+	return client.UploadExecMetadata(req)
 }

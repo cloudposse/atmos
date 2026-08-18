@@ -50,8 +50,9 @@ func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	client := &fakeUploadClient{}
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	uploadExecMetadata("atmos version", 0, nil, nil, client, repo)
+	err := uploadExecMetadata("atmos version", 0, nil, nil, client, repo)
 
+	assert.NoError(t, err)
 	assert.Equal(t, int32(1), client.uploadCalls.Load())
 	assert.Equal(t, "atmos version", client.lastRequest.Command)
 }
@@ -87,12 +88,18 @@ func TestCaptureAsync_DoesNotAlterCallerError(t *testing.T) {
 
 // Ensures the process telemetry CI helpers are exercised for completeness;
 // mirrors the isolation approach used by gate_test.go's withCIEnv.
-func TestCaptureAsync_RespectsFlushCeiling(t *testing.T) {
+//
+// TEMPORARY: CaptureAsync currently blocks synchronously on the upload (see
+// the TEMPORARILY UNUSED note on asyncFlushCeiling in async.go), so this no
+// longer asserts a ceiling — it only asserts CaptureAsync returns promptly
+// when the upload fails fast (e.g. connection refused).
+func TestCaptureAsync_ReturnsAfterUploadCompletes(t *testing.T) {
 	withCIEnv(t, true)
 	_ = telemetry.IsCI // sanity: package imported and usable directly if needed.
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.Token = "test-token"
+	atmosConfig.Settings.Pro.BaseURL = "http://127.0.0.1:0" // unreachable; fails fast.
 	SetAtmosConfig(atmosConfig)
 	t.Cleanup(func() { SetAtmosConfig(nil) })
 
@@ -101,7 +108,8 @@ func TestCaptureAsync_RespectsFlushCeiling(t *testing.T) {
 	start := time.Now()
 	CaptureAsync(cmd, nil)
 	elapsed := time.Since(start)
-	// Even in the worst case (client construction fails fast, or a slow
-	// upload), CaptureAsync must return within its documented ceiling.
-	assert.LessOrEqual(t, elapsed, asyncFlushCeiling+time.Second)
+	// The connection fails fast, but doWithRetry still retries with backoff
+	// (mirrors TestCaptureSync_WarnAndContinueOnFailure's ~7s runtime); just
+	// assert CaptureAsync doesn't hang indefinitely.
+	assert.Less(t, elapsed, 15*time.Second)
 }
