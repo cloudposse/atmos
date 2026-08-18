@@ -210,9 +210,8 @@ func (e *Executor) GetOutput(
 
 	// Check cache first.
 	if !skipCache {
-		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
-			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
+			return result.value, result.exists, result.err
 		}
 	}
 
@@ -302,9 +301,8 @@ func (e *Executor) GetOutputWithOptions(
 
 	// Check cache first.
 	if !skipCache {
-		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
-			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
+			return result.value, result.exists, result.err
 		}
 	}
 

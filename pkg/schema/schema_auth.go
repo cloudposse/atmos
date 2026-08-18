@@ -142,13 +142,14 @@ type EnvironmentVariable struct {
 
 // ComponentAuthConfig defines auth configuration at the component level.
 type ComponentAuthConfig struct {
-	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
-	Providers    map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
-	Identities   map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
-	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+	RequireIdentity *bool                  `yaml:"require_identity,omitempty" json:"require_identity,omitempty" mapstructure:"require_identity"`
+	Realm           string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
+	Providers       map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
+	Identities      map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Integrations    map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 }
 
-// Integration defines a client-only credential materialization (e.g., ECR, EKS).
+// Integration defines a client-only credential materialization (e.g., ECR, EKS, GKE).
 // Integrations derive credentials from identities for service-specific access.
 type Integration struct {
 	Kind string           `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
@@ -199,11 +200,12 @@ type Registry struct {
 	TenantID string `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty" mapstructure:"tenant_id"`
 }
 
-// Cluster represents a Kubernetes cluster configuration shared by aws/eks
-// and azure/aks integrations. Each integration kind reads only the fields it
-// needs: aws/eks requires Name+Region; azure/aks requires Name+ResourceGroup.
+// Cluster represents a Kubernetes cluster configuration shared by aws/eks,
+// azure/aks, and gcp/gke integrations. Each integration kind reads only the
+// fields it needs: aws/eks requires Name+Region; azure/aks requires
+// Name+ResourceGroup; gcp/gke requires Name+ProjectID+Location.
 type Cluster struct {
-	// Name is the cluster name (required by both aws/eks and azure/aks).
+	// Name is the cluster name (required by aws/eks, azure/aks, and gcp/gke).
 	Name string `yaml:"name" json:"name" mapstructure:"name"`
 
 	// Region is the AWS region where the cluster is located (required for aws/eks).
@@ -215,6 +217,12 @@ type Cluster struct {
 	// SubscriptionID optionally overrides the Azure subscription used to address
 	// the cluster (azure/aks); defaults to the identity's subscription.
 	SubscriptionID string `yaml:"subscription_id,omitempty" json:"subscription_id,omitempty" mapstructure:"subscription_id"`
+
+	// ProjectID is the GCP project containing the cluster (required for gcp/gke).
+	ProjectID string `yaml:"project_id,omitempty" json:"project_id,omitempty" mapstructure:"project_id"`
+
+	// Location is the GCP region or zone containing the cluster (required for gcp/gke).
+	Location string `yaml:"location,omitempty" json:"location,omitempty" mapstructure:"location"`
 
 	// Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID).
 	Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`

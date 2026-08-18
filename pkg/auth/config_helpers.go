@@ -11,8 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// CopyGlobalAuthConfig creates a deep copy of global auth config.
-// Copies all fields: providers, identities, logs, keyring, and identity case map.
+// CopyGlobalAuthConfig creates an independent copy of global auth configuration.
+// Mutable integration and console settings are cloned so component-level merges
+// cannot mutate the caller's global configuration.
 func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	if globalAuth == nil {
 		return &schema.AuthConfig{}
@@ -48,6 +49,21 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 		}
 	}
 
+	if globalAuth.Console != nil {
+		config.Console = &schema.AuthConsoleConfig{}
+		if globalAuth.Console.Isolated != nil {
+			isolated := *globalAuth.Console.Isolated
+			config.Console.Isolated = &isolated
+		}
+	}
+
+	if globalAuth.Integrations != nil {
+		config.Integrations = make(map[string]schema.Integration, len(globalAuth.Integrations))
+		for name, integration := range globalAuth.Integrations {
+			config.Integrations[name] = copyIntegration(integration)
+		}
+	}
+
 	if globalAuth.IdentityCaseMap != nil {
 		config.IdentityCaseMap = make(map[string]string, len(globalAuth.IdentityCaseMap))
 		for k, v := range globalAuth.IdentityCaseMap {
@@ -56,6 +72,46 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	}
 
 	return config
+}
+
+// copyIntegration clones an integration and all of its mutable nested configuration.
+func copyIntegration(integration schema.Integration) schema.Integration {
+	result := schema.Integration{Kind: integration.Kind}
+
+	if integration.Via != nil {
+		via := *integration.Via
+		result.Via = &via
+	}
+
+	if integration.Spec != nil {
+		spec := *integration.Spec
+		if integration.Spec.AutoProvision != nil {
+			autoProvision := *integration.Spec.AutoProvision
+			spec.AutoProvision = &autoProvision
+		}
+		if integration.Spec.Registry != nil {
+			registry := *integration.Spec.Registry
+			spec.Registry = &registry
+		}
+		if integration.Spec.Cluster != nil {
+			cluster := *integration.Spec.Cluster
+			if integration.Spec.Cluster.Kubeconfig != nil {
+				kubeconfig := *integration.Spec.Cluster.Kubeconfig
+				cluster.Kubeconfig = &kubeconfig
+			}
+			spec.Cluster = &cluster
+		}
+		if integration.Spec.Repos != nil {
+			spec.Repos = append([]string(nil), integration.Spec.Repos...)
+		}
+		if integration.Spec.RevokeOnExit != nil {
+			revokeOnExit := *integration.Spec.RevokeOnExit
+			spec.RevokeOnExit = &revokeOnExit
+		}
+		result.Spec = &spec
+	}
+
+	return result
 }
 
 // AuthConfigToMap converts AuthConfig struct to map[string]any for deep merging.

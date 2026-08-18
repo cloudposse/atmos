@@ -21,6 +21,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
 // YamlFunctionProcessor is a callback for processing YAML function tags in locals.
@@ -461,7 +462,7 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 	}
 
 	// Parse and execute the template.
-	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Parse(strVal)
+	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Funcs(templatefuncs.FuncMap()).Parse(strVal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template for local %q in %s: %w", localName, r.filePath, err)
 	}

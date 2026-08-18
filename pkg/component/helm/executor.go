@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -102,7 +103,7 @@ func executeSingle(
 	info *schema.ConfigAndStacksInfo,
 	operation Operation,
 ) error {
-	if err := processStacksWithAuth(atmosConfig, info, operation); err != nil {
+	if err := processStacksWithAuth(atmosConfig, info, operation, ctx.Flags); err != nil {
 		return err
 	}
 	if !info.ComponentIsEnabled {
@@ -131,18 +132,57 @@ func executeSingle(
 	if err != nil {
 		return err
 	}
-	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	authEnvRestore, err := applyAuthEnvironment(info)
+	restoreEnvironment, err := setupExecutionEnvironment(info, operation, ctx.Flags, tenv.EnvVars())
 	if err != nil {
-		envRestore()
 		return err
 	}
-	defer func() {
-		authEnvRestore()
-		envRestore()
-	}()
+	defer restoreEnvironment()
 
 	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
+}
+
+// setupExecutionEnvironment composes component, toolchain, auth, and endpoint-guard
+// environment changes and returns one restore function in reverse application order.
+func setupExecutionEnvironment(
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+	toolchainEnv []string,
+) (func(), error) {
+	envRestore := applyEnvironment(info.ComponentEnvSection, toolchainEnv)
+	internalEnvRestore := func() {}
+	authEnvRestore := func() {}
+	guardEnvRestore := func() {}
+	restore := func() {
+		guardEnvRestore()
+		authEnvRestore()
+		internalEnvRestore()
+		envRestore()
+	}
+
+	guarded, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	if guarded {
+		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
+	}
+	resolvedAuthEnvRestore, err := applyAuthEnvironment(info)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	authEnvRestore = resolvedAuthEnvRestore
+	if guarded {
+		if os.Getenv(kube.ExpectedServerEnv) == "" { //nolint:forbidigo // Integration environment was just applied to this process.
+			restore()
+			return nil, fmt.Errorf("%w: the selected identity did not provision a GKE endpoint", errUtils.ErrKubernetesIdentityRequired)
+		}
+		guardEnvRestore = applyEnvironment(map[string]any{kube.EndpointGuardEnv: "true"}, nil)
+	}
+
+	return restore, nil
 }
 
 // runWithHooks runs the before/after hooks around chart rendering and the operation.
@@ -398,13 +438,46 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
+// processStacksWithAuth resolves component auth settings before full stack processing.
+func processStacksWithAuth(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+) error {
 	var authManager auth.AuthManager
-	if shouldSetupComponentAuth(info, operation) {
+	if hasExplicitIdentity(info) {
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
 			return err
+		}
+	} else if operationContactsCluster(operation, flags) {
+		// Discover the effective component auth block without evaluating templates or
+		// YAML functions. This lets disabled components short-circuit before auth and lets
+		// the opt-in guard fail closed before the full processing pass.
+		discovered, err := processStacks(atmosConfig, *info, true, false, false, nil, nil)
+		if err != nil {
+			return err
+		}
+		*info = discovered
+		required, err := requireIdentityForOperation(info, operation, flags)
+		if err != nil {
+			return err
+		}
+		if required {
+			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
+				return errUtils.ErrKubernetesIdentityRequired
+			}
+		}
+		if info.ComponentIsEnabled {
+			// Resolve a stack default identity for every live cluster operation, even when
+			// the component does not opt into require_identity. With no configured auth,
+			// this returns a nil manager and preserves ambient KUBECONFIG behavior.
+			authManager, err = setupComponentAuthForCLI(atmosConfig, info)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -414,30 +487,76 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 
 	*info = processedInfo
+	required, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		return err
+	}
+	if !required {
+		return nil
+	}
+	if authManager == nil || info.Identity == "" {
+		return errUtils.ErrKubernetesIdentityRequired
+	}
 	return nil
 }
 
-// shouldSetupComponentAuth reports whether to resolve component auth (which auto-detects the stack's
-// `default: true` identity) before processing stacks. It runs when an explicit identity was requested,
-// or for any cluster operation (apply/diff/delete) so those resolve the stack's default-identity
-// binding automatically - matching `atmos terraform`, which never needs an explicit --identity for a
-// stack that binds one. The offline template render never triggers auth. When no auth is configured,
-// setupComponentAuthForCLI returns a nil manager and the identity stays empty (ambient KUBECONFIG is
-// used, preserving prior behavior). See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
-func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
-	if info.Identity != "" {
-		return true
-	}
-	return operationRequiresCluster(operation)
+// hasExplicitIdentity reports whether the invocation selected an identity directly.
+func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
 }
 
-// operationRequiresCluster reports whether an operation contacts the cluster. It uses an explicit
-// allowlist (apply/diff/delete) rather than "not template" so that an unsupported operation does not
-// trigger authentication before runOperation can return ErrHelmUnsupportedOperation.
+// shouldSetupComponentAuth reports whether a command may need component auth before
+// full stack processing. Live diff/apply/delete operations resolve a stack default;
+// an explicit identity also applies to offline operations such as template.
+func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
+	return hasExplicitIdentity(info) || operationRequiresCluster(operation)
+}
+
+// operationRequiresCluster reports whether an operation can contact Kubernetes.
+// Diff baselines are refined by operationContactsCluster once flags are available.
 func operationRequiresCluster(operation Operation) bool {
 	switch operation {
 	case OperationApply, OperationDiff, OperationDelete:
 		return true
+	default:
+		return false
+	}
+}
+
+// requireIdentityForOperation reports whether this Helm path must fail closed.
+func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) (bool, error) {
+	if !operationContactsCluster(operation, flags) || info == nil || !info.ComponentIsEnabled {
+		return false, nil
+	}
+	if info.ComponentAuthSection == nil {
+		return false, nil
+	}
+	value, exists := info.ComponentAuthSection["require_identity"]
+	if !exists {
+		return false, nil
+	}
+	required, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: auth.require_identity must be a boolean, got %T", errUtils.ErrInvalidComponentAuth, value)
+	}
+	return required, nil
+}
+
+// operationContactsCluster reports whether the selected operation and baseline
+// need Kubernetes API access. Template and explicitly offline diff baselines do not.
+func operationContactsCluster(operation Operation, flags map[string]any) bool {
+	if !operationRequiresCluster(operation) {
+		return false
+	}
+	switch operation {
+	case OperationApply, OperationDelete:
+		return true
+	case OperationDiff:
+		if flagString(flags, flagFromManifest) != "" {
+			return false
+		}
+		against := flagString(flags, flagAgainst)
+		return against == "" || against == againstRelease
 	default:
 		return false
 	}
@@ -637,6 +756,29 @@ func applyEnvironment(componentEnv map[string]any, toolchainEnv []string) func()
 		}
 	}
 
+	return func() {
+		for key, value := range original {
+			if value == nil {
+				_ = os.Unsetenv(key)
+			} else {
+				_ = os.Setenv(key, *value)
+			}
+		}
+	}
+}
+
+// clearEnvironment removes keys and returns a function that restores their prior values.
+func clearEnvironment(keys ...string) func() {
+	original := make(map[string]*string, len(keys))
+	for _, key := range keys {
+		if value, exists := os.LookupEnv(key); exists {
+			valueCopy := value
+			original[key] = &valueCopy
+		} else {
+			original[key] = nil
+		}
+		_ = os.Unsetenv(key)
+	}
 	return func() {
 		for key, value := range original {
 			if value == nil {
