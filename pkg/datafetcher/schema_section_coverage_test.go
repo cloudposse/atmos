@@ -122,13 +122,9 @@ var nonManifestSections = map[string]struct{}{
 //
 // TODO(schema-reconciliation): close these gaps and delete the entries.
 //   - top-level `ansible` and global `auth` are not yet modeled (only component-level auth is).
-//   - native Helm is not yet modeled: top-level `helm` (default config for helm components, peer
-//     of `helmfile`/`kubernetes`) and the `helm_component_manifest` definition are missing.
-//     Tracked until the native-Helm manifest schema lands.
 var knownSchemaGaps = map[string]struct{}{
 	"topLevel:ansible": {},
 	"topLevel:auth":    {},
-	"topLevel:helm":    {},
 }
 
 // componentManifestDefs are the per-component-type manifest definitions whose `properties` model
@@ -136,6 +132,7 @@ var knownSchemaGaps = map[string]struct{}{
 var componentManifestDefs = []string{
 	"terraform_component_manifest",
 	"helmfile_component_manifest",
+	"helm_component_manifest",
 	"packer_component_manifest",
 }
 

@@ -196,7 +196,12 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		return schema.AtmosConfiguration{}, nil
 	}
 
-	processStacksCalled := false
+	type processingFlags struct {
+		checkStack           bool
+		processTemplates     bool
+		processYamlFunctions bool
+	}
+	var calls []processingFlags
 	processStacks = func(
 		_ *schema.AtmosConfiguration,
 		info schema.ConfigAndStacksInfo,
@@ -204,10 +209,7 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		_ []string,
 		_ auth.AuthManager,
 	) (schema.ConfigAndStacksInfo, error) {
-		processStacksCalled = true
-		assert.True(t, checkStack)
-		assert.True(t, processTemplates)
-		assert.True(t, processYamlFunctions)
+		calls = append(calls, processingFlags{checkStack, processTemplates, processYamlFunctions})
 		info.ComponentIsEnabled = false
 		info.ComponentFromArg = "app"
 		return info, nil
@@ -226,7 +228,10 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		},
 	}, OperationApply)
 	require.NoError(t, err)
-	assert.True(t, processStacksCalled)
+	require.Equal(t, []processingFlags{
+		{checkStack: true, processTemplates: false, processYamlFunctions: false},
+		{checkStack: true, processTemplates: true, processYamlFunctions: true},
+	}, calls)
 }
 
 func TestExecutorHelpers(t *testing.T) {
