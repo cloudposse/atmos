@@ -15,7 +15,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -340,9 +342,17 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		}
 	}
 
-	// Add the tool with the selected version.
+	// Reject SemVer range/constraint syntax (e.g. "^1.7.0") before it's ever written to
+	// .tool-versions -- matches the validation already applied on the add/install paths.
+	if err := ValidateVersionSpec(version); err != nil {
+		return err
+	}
+
+	// Set the tool's default version. Always replace (not append) so `set`
+	// matches its documented purpose and never produces a multi-version
+	// .tool-versions line that leaves a stale version as the default.
 	filePath := GetToolVersionsFilePath()
-	err = AddToolToVersions(filePath, spec.key, version)
+	err = AddToolToVersionsAsDefault(filePath, spec.key, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
@@ -378,24 +388,89 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 	return items, nil
 }
 
+// GitHub API request retry tuning: bounded, short backoff so a transient
+// network/TLS hiccup (the kind CI runners occasionally hit) doesn't silently
+// degrade `atmos toolchain info/list/set` to "no available versions" when a
+// second attempt would have succeeded.
+const (
+	githubRequestRetryMaxAttempts  = 3
+	githubRequestRetryInitialDelay = 300 * time.Millisecond
+	githubRequestRetryMaxDelay     = 2 * time.Second
+	// Exponential-backoff growth factor applied between attempts when no
+	// rate-limit header supplies a precise wait.
+	githubBackoffMultiplier = 2
+)
+
+// githubBackoffDelay computes the fixed exponential-backoff delay for the
+// given 1-indexed attempt, used when a retryable response carries no
+// rate-limit wait header.
+func githubBackoffDelay(attempt int) time.Duration {
+	multiplier := 1
+	for i := 1; i < attempt; i++ {
+		multiplier *= githubBackoffMultiplier
+	}
+	delay := githubRequestRetryInitialDelay * time.Duration(multiplier)
+	if delay > githubRequestRetryMaxDelay {
+		delay = githubRequestRetryMaxDelay
+	}
+	return delay
+}
+
+// makeGitHubRequest fetches apiURL, retrying transient failures up to
+// githubRequestRetryMaxAttempts times. When a retryable response carries a
+// Retry-After or X-RateLimit-Reset header, the next attempt waits exactly
+// that long (not a generic fixed backoff) — sending a request before GitHub's
+// own indicated wait would just exhaust the retry budget against the same
+// rate limit. When that wait exceeds githubRequestRetryMaxDelay, this gives
+// up immediately rather than blocking the caller's command for a cooldown
+// that can run to tens of minutes; this fetch already degrades gracefully to
+// "no available versions" on failure.
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
 	client := &http.Client{
 		Timeout: defaultHTTPTimeout,
 	}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases from GitHub: %w", err)
+	var lastErr error
+	for attempt := 1; attempt <= githubRequestRetryMaxAttempts; attempt++ {
+		req, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
+		if err != nil {
+			lastErr = fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
+			if attempt == githubRequestRetryMaxAttempts {
+				break
+			}
+			time.Sleep(githubBackoffDelay(attempt))
+			continue
+		}
+
+		if !registry.IsRetryableGitHubStatus(r.StatusCode, r.Header) {
+			return r, nil
+		}
+
+		wait, hasWait := registry.GitHubRetryAfter(r.Header)
+		if hasWait && wait > githubRequestRetryMaxDelay {
+			return r, nil
+		}
+
+		r.Body.Close()
+		lastErr = fmt.Errorf("%w: GitHub API returned status %d", ErrHTTPRequest, r.StatusCode)
+		if attempt == githubRequestRetryMaxAttempts {
+			break
+		}
+		if !hasWait {
+			wait = githubBackoffDelay(attempt)
+		}
+		time.Sleep(wait)
 	}
-	return resp, nil
+	return nil, lastErr
 }
 
 type release struct {

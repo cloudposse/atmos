@@ -189,6 +189,12 @@ exclude = [
   # This PDF intermittently times out from CI runners across multiple docs
   # referencing it; verified to return 200 outside CI via curl.
   "cis\\.upenn\\.edu/~bcpierce/papers/diff3-short\\.pdf",
+  # Google's URL shortener resets connections from GitHub-hosted runners;
+  # verified to return 200 outside CI via curl.
+  "goo\\.gle",
+  # Playwright's docs site resets connections from GitHub-hosted runners;
+  # verified to return 200 outside CI via curl.
+  "playwright\\.dev",
   # Reproducible Builds project docs intermittently refuse connections from CI
   # runners; the page returns 200 outside CI, verified via curl.
   "reproducible-builds\\.org",

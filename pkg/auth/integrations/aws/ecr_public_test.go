@@ -103,7 +103,7 @@ func TestNewECRPublicIntegration_WithValidRegion(t *testing.T) {
 				Identity: "dev-admin",
 			},
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					Region: "us-east-1",
 				},
 			},
@@ -125,7 +125,7 @@ func TestNewECRPublicIntegration_WithInvalidRegion(t *testing.T) {
 				Identity: "dev-admin",
 			},
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					Region: "eu-west-1",
 				},
 			},
@@ -145,7 +145,7 @@ func TestNewECRPublicIntegration_WithChinaRegion(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSECRPublic,
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					Region: "cn-north-1",
 				},
 			},

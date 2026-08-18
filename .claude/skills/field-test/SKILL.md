@@ -54,8 +54,23 @@ real user — not to re-run what automated tests already cover. Anticipate plaus
 misunderstandings, not just obvious bugs.
 
 **This pass is investigation only.** Do not fix anything you find — see Phase 5. Report and stop;
-the user decides what to fix (and when they do, that follow-up work should close with the
-`fix-log` skill, not this one).
+the user decides what to fix. Any follow-up fix work — including a plan to fix the findings, not
+just the implementation — must close with the `fix-log` skill, not this one.
+
+## Plan Mode
+
+If plan mode is active when this skill is invoked (a `<system-reminder>` says so), Phase 3
+(Build fixtures) and Phase 4 (Execute) can't run inline — writing fixture files and running real,
+sometimes state-mutating commands are exactly what plan mode exists to gate.
+
+- Run Phase 1 (Research) and Phase 2 (Generate hypotheses) as normal — both are already read-only
+  and fit plan mode's constraints without modification.
+- Instead of proceeding into Phase 3/4, write the plan file: the target under test, the
+  prioritized hypothesis list from Phase 2, the fixtures Phase 3 would build (note which
+  extend/copy an existing fixture, per that phase's guidance), and which planned Phase 4 commands
+  are read-only vs. state-mutating — the mutating ones are specifically what need sign-off.
+- Call `ExitPlanMode` to request approval of that plan. Don't ask for approval any other way.
+- Once approved, resume at Phase 3 using the approved plan as the fixture/execution blueprint.
 
 ## Phase 1 — Research before touching anything
 
@@ -112,6 +127,35 @@ plausibly do:
 - Idempotency/rerun-safety — run the same operation twice; does the second run behave correctly?
 - Determinism — run the same read-only command several times with no state change between runs —
   is the output identical every time?
+- Any command that does real work across multiple items (batch installs/updates, concurrent
+  workers, multi-resource loops) — does it show *live* progress, or does it silently buffer
+  everything and dump it all at once when the whole batch finishes? A command that takes 10+
+  seconds with zero output is indistinguishable from a hang to a real user. Also check whether its
+  status lines actually use `ui.Success`/`ui.Error`/`ui.Warning`/`ui.Info` (icon + theme color) per
+  CLAUDE.md's I/O and UI Usage section, rather than a hand-rolled glyph (`"✓ %s"`, `"✗ %s"`) printed
+  through the plain `ui.Writef`/`ui.Write` — the two are easy to conflate since both compile and
+  both "print a checkmark," but only the semantic function is themed/colored. **This class of bug
+  is easy to miss when every command in this pass has been run through the Bash tool** — captured
+  output can look fine in the transcript even when the real behavior (silent hang, unstyled text)
+  would be obvious to a human watching a real terminal. This needs two *separate* checks, not one
+  piped command doing double duty — piping through `cat -v` makes the command non-TTY, which
+  exercises the non-live fallback renderer instead of the real live-progress path, and
+  `--force-color` does not restore TTY behavior:
+  - **Live progress**: run the command in a real pseudo-TTY, unpiped (e.g.
+    `script -q /dev/null build/atmos toolchain update --force-tty --force-color`), and watch it —
+    does a spinner/progress bar actually redraw in place, or does it silently buffer and dump
+    everything at once?
+  - **ANSI styling**: separately, pipe a `--force-color` run through `cat -v` (or grep for the raw
+    `\x1b[` / `^[[` escape sequence) to confirm color codes are actually present around each status
+    line, not just plain text with a Unicode glyph. Piping is fine here since this check only cares
+    about styling, not live-rendering behavior.
+- Any "N -> M" / diff-style report line — construct a case where N and M are the *same value in
+  different string forms* (e.g. `v1.2.3` vs `1.2.3`, the one equivalence `normalizeVersion`
+  actually handles by stripping a leading `v` — don't test casing or trailing-metadata variants
+  unless the specific normalizer under test explicitly documents supporting them). A raw
+  string-equality comparison will misreport a no-op as a change, which also tends to corrupt
+  whatever summary/count line tallies outcomes — check the tally against the individual lines
+  above it, don't just trust it.
 
 ## Phase 3 — Build real, durable fixtures
 
@@ -144,6 +188,10 @@ plausibly do:
   just that a command exited 0).
 - When something surprises you, reduce it to the smallest reproducible case and verify the repro
   twice.
+- For any command with a summary/tally line (`Updated N, up to date M, failed K`), manually
+  recount the individual lines above it and compare — don't trust the tally at face value. A
+  miscounted summary is a strong signal the classification logic feeding it is wrong somewhere,
+  not just a cosmetic issue.
 - If Phase 1 research made a claim, verify it live before trusting it — code-reading can miss
   control flow (e.g. assuming a flag is silently ignored when it actually errors, or vice versa).
   Correct the record explicitly when research turns out wrong.
@@ -163,14 +211,19 @@ section, scratch/research files never get committed; only the fixtures built in 
 for lasting value) and this final report are durable output.
 
 Do not fix anything found — this pass is investigation only. Stop and report; the user decides what
-to fix. End by invoking the `say` skill — a completed test pass reaching a stopping point a human
-should review is exactly its trigger.
+to fix. If a plan gets made to fix any finding — whether right away or as a later follow-up,
+even in a different session — that plan and its implementation must close with the `fix-log`
+skill so the fix leaves a durable record under `docs/fixes/`. End by invoking the `say` skill — a
+completed test pass reaching a stopping point a human should review is exactly its trigger.
 
 ## Related
 
+- **Plan Mode** (above) — when invoked under plan mode, Phases 3-4 wait for approval via
+  `ExitPlanMode` before building fixtures or executing.
 - **`Explore` agent** — Phase 1's broad read-only research.
 - **`atmos-emulator` skill** — real local infra for Phase 3/4 when the target touches
   AWS/GCP/Azure/Kubernetes.
 - **`docs` skill** — conventions for the CLI docs being cross-checked in Phase 1.
-- **`fix-log` skill** — for the user's follow-up once they decide what to fix; out of scope here.
+- **`fix-log` skill** — required for any follow-up fix work, including a plan to fix findings,
+  once the user decides what to fix; out of scope here.
 - **`say` skill** — end-of-pass notification.

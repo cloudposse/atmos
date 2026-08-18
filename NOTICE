@@ -723,7 +723,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - gopkg.in/ini.v1
     License: Apache-2.0
-    URL: https://github.com/go-ini/ini/blob/v1.67.2/LICENSE
+    URL: https://github.com/go-ini/ini/blob/v1.67.3/LICENSE
 
   - gopkg.in/yaml.v2
     License: Apache-2.0
@@ -1368,6 +1368,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
 
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/containerservice/armcontainerservice/v6.6.0/sdk/resourcemanager/containerservice/armcontainerservice/LICENSE.txt
+
   - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armresources/v1.2.0/sdk/resourcemanager/resources/armresources/LICENSE.txt
@@ -1690,7 +1694,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.46.2/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.48.0/LICENSE
 
   - github.com/go-errors/errors
     License: MIT

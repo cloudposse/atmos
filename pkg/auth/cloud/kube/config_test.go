@@ -13,19 +13,57 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 )
 
 // testCARawPEM is the raw PEM data used in test fixtures.
 const testCARawPEM = "-----BEGIN CERTIFICATE-----\ntest-ca-data\n-----END CERTIFICATE-----\n"
 
-func testClusterInfo() *awsCloud.EKSClusterInfo {
-	return &awsCloud.EKSClusterInfo{
+// clusterInfoWithIdentity builds an EKS-shaped ClusterInfo fixture with the
+// exec-plugin args/env baked in for the given identity (empty string omits
+// --identity/ATMOS_IDENTITY), mirroring what awsCloud.BuildKubeClusterInfo
+// produces. Kept EKS-flavored (rather than a synthetic cloud) so
+// context/username assertions below match real-world output; the aws
+// package has its own tests asserting BuildKubeClusterInfo itself
+// constructs this shape.
+func clusterInfoWithIdentity(identity string) *ClusterInfo {
+	info := &ClusterInfo{
 		Name:                     "dev-cluster",
 		Endpoint:                 "https://XXXX.gr7.us-east-2.eks.amazonaws.com",
 		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
+		ID:                       "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
 		Region:                   "us-east-2",
+		UserPrefix:               "eks",
+		ExecArgs:                 []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2"},
+	}
+	if identity != "" {
+		info.ExecArgs = append(info.ExecArgs, "--identity="+identity)
+		info.ExecEnv = []clientcmdapi.ExecEnvVar{{Name: "ATMOS_IDENTITY", Value: identity}}
+	}
+	return info
+}
+
+// testClusterInfo returns the default fixture, identity "dev-admin" baked in.
+func testClusterInfo() *ClusterInfo {
+	return clusterInfoWithIdentity("dev-admin")
+}
+
+// testClusterInfoNoIdentity is the same fixture with no identity baked in.
+func testClusterInfoNoIdentity() *ClusterInfo {
+	return clusterInfoWithIdentity("")
+}
+
+// namedClusterInfo builds an EKS-shaped ClusterInfo fixture for a second
+// cluster distinct from testClusterInfo(), identity "dev-admin" baked in.
+func namedClusterInfo(name, endpoint, id, region string) *ClusterInfo {
+	return &ClusterInfo{
+		Name:                     name,
+		Endpoint:                 endpoint,
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
+		ID:                       id,
+		Region:                   region,
+		UserPrefix:               "eks",
+		ExecArgs:                 []string{"aws", "eks", "token", "--cluster-name", name, "--region", region, "--identity=dev-admin"},
+		ExecEnv:                  []clientcmdapi.ExecEnvVar{{Name: "ATMOS_IDENTITY", Value: "dev-admin"}},
 	}
 }
 
@@ -60,13 +98,13 @@ func TestNewKubeconfigManager_EmptyModeDefaults(t *testing.T) {
 
 func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	info := testClusterInfo()
-	config := BuildClusterConfig(info, "dev-eks", "dev-admin")
+	config := BuildClusterConfig(info, "dev-eks")
 
 	// Check current context.
 	assert.Equal(t, "dev-eks", config.CurrentContext)
 
 	// Check cluster entry.
-	cluster, ok := config.Clusters[info.ARN]
+	cluster, ok := config.Clusters[info.ID]
 	require.True(t, ok)
 	assert.Equal(t, info.Endpoint, cluster.Server)
 	// CA data should be base64-decoded from the EKS API response.
@@ -75,7 +113,7 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	// Check context entry.
 	ctx, ok := config.Contexts["dev-eks"]
 	require.True(t, ok)
-	assert.Equal(t, info.ARN, ctx.Cluster)
+	assert.Equal(t, info.ID, ctx.Cluster)
 	assert.Equal(t, "atmos-eks-dev-cluster-us-east-2", ctx.AuthInfo)
 
 	// Check user entry.
@@ -97,17 +135,17 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 
 func TestBuildClusterConfig_WithoutAlias(t *testing.T) {
 	info := testClusterInfo()
-	config := BuildClusterConfig(info, "", "dev-admin")
+	config := BuildClusterConfig(info, "")
 
-	// Context name should default to ARN.
-	assert.Equal(t, info.ARN, config.CurrentContext)
-	_, ok := config.Contexts[info.ARN]
+	// Context name should default to ID.
+	assert.Equal(t, info.ID, config.CurrentContext)
+	_, ok := config.Contexts[info.ID]
 	require.True(t, ok)
 }
 
 func TestBuildClusterConfig_WithoutIdentity(t *testing.T) {
-	info := testClusterInfo()
-	config := BuildClusterConfig(info, "dev", "")
+	info := testClusterInfoNoIdentity()
+	config := BuildClusterConfig(info, "dev")
 
 	user := config.AuthInfos["atmos-eks-dev-cluster-us-east-2"]
 	require.NotNil(t, user.Exec)
@@ -123,7 +161,7 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 	assert.True(t, changed, "first write to a new file must report changed=true")
 
@@ -131,7 +169,7 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "dev-eks", loaded.CurrentContext)
-	assert.Contains(t, loaded.Clusters, info.ARN)
+	assert.Contains(t, loaded.Clusters, info.ID)
 	assert.Contains(t, loaded.Contexts, "dev-eks")
 	assert.Contains(t, loaded.AuthInfos, "atmos-eks-dev-cluster-us-east-2")
 }
@@ -148,7 +186,7 @@ func TestWriteClusterConfig_MergeUnchanged(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 	require.True(t, changed)
 
@@ -157,7 +195,7 @@ func TestWriteClusterConfig_MergeUnchanged(t *testing.T) {
 	require.NoError(t, err)
 
 	// Identical inputs → no on-disk change.
-	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 	assert.False(t, changed, "writing identical content must report changed=false")
 
@@ -175,11 +213,11 @@ func TestWriteClusterConfig_ReplaceUnchanged(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "replace")
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "replace")
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "replace")
+	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "replace")
 	require.NoError(t, err)
 	assert.False(t, changed, "replace with identical content must report changed=false")
 }
@@ -201,13 +239,13 @@ func TestWriteClusterConfig_MergeUnchangedReconcilesMode(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// Simulate an out-of-band chmod that weakens the file.
 	require.NoError(t, os.Chmod(path, 0o644))
 
-	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 	assert.True(t, changed, "mode drift on identical content must report changed=true")
 
@@ -217,7 +255,7 @@ func TestWriteClusterConfig_MergeUnchangedReconcilesMode(t *testing.T) {
 }
 
 // TestWriteClusterConfig_MergeChangedFields verifies that altering any visible
-// field (endpoint, in this case) flips changed back to true even when the ARN
+// field (endpoint, in this case) flips changed back to true even when the ID
 // key stays the same.
 func TestWriteClusterConfig_MergeChangedFields(t *testing.T) {
 	dir := t.TempDir()
@@ -227,14 +265,14 @@ func TestWriteClusterConfig_MergeChangedFields(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
-	// Rotate the endpoint — same ARN, different cluster data.
+	// Rotate the endpoint — same ID, different cluster data.
 	rotated := *info
 	rotated.Endpoint = "https://ZZZZ.gr7.us-east-2.eks.amazonaws.com"
 
-	changed, err := mgr.WriteClusterConfig(&rotated, "dev-eks", "dev-admin", "merge")
+	changed, err := mgr.WriteClusterConfig(&rotated, "dev-eks", "merge")
 	require.NoError(t, err)
 	assert.True(t, changed, "endpoint change must report changed=true")
 }
@@ -248,25 +286,19 @@ func TestWriteClusterConfig_MergeExisting(t *testing.T) {
 
 	// Write first cluster.
 	info1 := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// Write second cluster.
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "staging-cluster",
-		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	info2 := namedClusterInfo("staging-cluster", "https://YYYY.gr7.us-east-1.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "merge")
 	require.NoError(t, err)
 
 	// Both clusters should exist.
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	assert.Contains(t, loaded.Clusters, info1.ARN)
-	assert.Contains(t, loaded.Clusters, info2.ARN)
+	assert.Contains(t, loaded.Clusters, info1.ID)
+	assert.Contains(t, loaded.Clusters, info2.ID)
 	assert.Contains(t, loaded.Contexts, "dev-eks")
 	assert.Contains(t, loaded.Contexts, "staging-eks")
 	// Current context should be the last written.
@@ -282,25 +314,19 @@ func TestWriteClusterConfig_Replace(t *testing.T) {
 
 	// Write first cluster.
 	info1 := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// Replace with second cluster.
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "staging-cluster",
-		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "replace")
+	info2 := namedClusterInfo("staging-cluster", "https://YYYY.gr7.us-east-1.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "replace")
 	require.NoError(t, err)
 
 	// Only second cluster should exist.
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	assert.NotContains(t, loaded.Clusters, info1.ARN)
-	assert.Contains(t, loaded.Clusters, info2.ARN)
+	assert.NotContains(t, loaded.Clusters, info1.ID)
+	assert.Contains(t, loaded.Clusters, info2.ID)
 }
 
 func TestWriteClusterConfig_ErrorMode(t *testing.T) {
@@ -313,11 +339,11 @@ func TestWriteClusterConfig_ErrorMode(t *testing.T) {
 	info := testClusterInfo()
 
 	// First write should succeed.
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.NoError(t, err)
 
 	// Second write with same cluster should fail.
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 }
@@ -333,7 +359,7 @@ func TestWriteClusterConfig_FilePermissions(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	stat, err := os.Stat(path)
@@ -349,11 +375,11 @@ func TestRemoveClusterConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// Remove the cluster.
-	err = mgr.RemoveClusterConfig(info.ARN, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
+	err = mgr.RemoveClusterConfig(info.ID, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
 	require.NoError(t, err)
 
 	// File should be removed (was the only cluster).
@@ -370,28 +396,22 @@ func TestRemoveClusterConfig_PreservesOthers(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "merge")
 	require.NoError(t, err)
 
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "staging-cluster",
-		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	info2 := namedClusterInfo("staging-cluster", "https://YYYY.gr7.us-east-1.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "merge")
 	require.NoError(t, err)
 
 	// Remove first cluster.
-	err = mgr.RemoveClusterConfig(info1.ARN, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
+	err = mgr.RemoveClusterConfig(info1.ID, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
 	require.NoError(t, err)
 
 	// Second cluster should still exist.
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	assert.NotContains(t, loaded.Clusters, info1.ARN)
-	assert.Contains(t, loaded.Clusters, info2.ARN)
+	assert.NotContains(t, loaded.Clusters, info1.ID)
+	assert.Contains(t, loaded.Clusters, info2.ID)
 }
 
 func TestRemoveClusterConfig_Idempotent(t *testing.T) {
@@ -415,17 +435,11 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "merge")
 	require.NoError(t, err)
 
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "staging-cluster",
-		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	info2 := namedClusterInfo("staging-cluster", "https://YYYY.gr7.us-east-1.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "merge")
 	require.NoError(t, err)
 
 	// Current context should be staging-eks (last written).
@@ -433,7 +447,7 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 	assert.Equal(t, "staging-eks", loaded.CurrentContext)
 
 	// Remove staging (current context).
-	err = mgr.RemoveClusterConfig(info2.ARN, "staging-eks", "atmos-eks-staging-cluster-us-east-1")
+	err = mgr.RemoveClusterConfig(info2.ID, "staging-eks", "atmos-eks-staging-cluster-us-east-1")
 	require.NoError(t, err)
 
 	// Current context should be cleared.
@@ -449,7 +463,7 @@ func TestWriteClusterConfig_CreatesDirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// File should exist.
@@ -467,15 +481,15 @@ func TestWriteClusterConfig_DefaultUpdateMode(t *testing.T) {
 	info := testClusterInfo()
 
 	// Empty update mode should default to merge.
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "")
 	require.NoError(t, err)
 
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	assert.Contains(t, loaded.Clusters, info.ARN)
+	assert.Contains(t, loaded.Clusters, info.ID)
 }
 
-func TestListClusterARNs_Success(t *testing.T) {
+func TestListClusterIDs_Success(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 
@@ -484,39 +498,33 @@ func TestListClusterARNs_Success(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "merge")
 	require.NoError(t, err)
 
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "staging-cluster",
-		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	info2 := namedClusterInfo("staging-cluster", "https://YYYY.gr7.us-east-1.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "merge")
 	require.NoError(t, err)
 
-	arns, err := mgr.ListClusterARNs()
+	arns, err := mgr.ListClusterIDs()
 	require.NoError(t, err)
 	assert.Len(t, arns, 2)
-	assert.Contains(t, arns, info1.ARN)
-	assert.Contains(t, arns, info2.ARN)
+	assert.Contains(t, arns, info1.ID)
+	assert.Contains(t, arns, info2.ID)
 }
 
-func TestListClusterARNs_NonexistentFile(t *testing.T) {
+func TestListClusterIDs_NonexistentFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nonexistent", "kubeconfig")
 
 	mgr, err := NewKubeconfigManager(path, "")
 	require.NoError(t, err)
 
-	arns, err := mgr.ListClusterARNs()
+	arns, err := mgr.ListClusterIDs()
 	require.NoError(t, err)
 	assert.Nil(t, arns)
 }
 
-func TestListClusterARNs_EmptyFile(t *testing.T) {
+func TestListClusterIDs_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 
@@ -528,7 +536,7 @@ func TestListClusterARNs_EmptyFile(t *testing.T) {
 	mgr, mgrErr := NewKubeconfigManager(path, "")
 	require.NoError(t, mgrErr)
 
-	arns, err := mgr.ListClusterARNs()
+	arns, err := mgr.ListClusterIDs()
 	require.NoError(t, err)
 	assert.Empty(t, arns)
 }
@@ -559,7 +567,7 @@ func TestWriteClusterConfig_InvalidUpdateMode(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "invalid")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "invalid")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 	assert.Contains(t, err.Error(), "invalid update mode")
@@ -573,18 +581,12 @@ func TestWriteClusterConfig_ErrorMode_ContextCollision(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "merge")
 	require.NoError(t, err)
 
 	// Write a different cluster but with same alias (context name).
-	info2 := &awsCloud.EKSClusterInfo{
-		Name:                     "other-cluster",
-		Endpoint:                 "https://OTHER.eks.amazonaws.com",
-		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
-		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/other-cluster",
-		Region:                   "us-east-1",
-	}
-	_, err = mgr.WriteClusterConfig(info2, "dev-eks", "other-admin", "error")
+	info2 := namedClusterInfo("other-cluster", "https://OTHER.eks.amazonaws.com", "arn:aws:eks:us-east-1:123456789012:cluster/other-cluster", "us-east-1")
+	_, err = mgr.WriteClusterConfig(info2, "dev-eks", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 	assert.Contains(t, err.Error(), "context dev-eks already exists")
@@ -599,26 +601,27 @@ func TestWriteClusterConfig_ErrorMode_NewFile(t *testing.T) {
 
 	// Error mode on new file should succeed.
 	info := testClusterInfo()
-	_, err = mgr.WriteClusterConfig(info, "", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "", "error")
 	require.NoError(t, err)
 
 	loaded, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	assert.Contains(t, loaded.Clusters, info.ARN)
+	assert.Contains(t, loaded.Clusters, info.ID)
 }
 
 func TestBuildClusterConfig_RawPEMCertificate(t *testing.T) {
 	// If certificate data is already raw PEM (not base64), it should be used as-is.
-	info := &awsCloud.EKSClusterInfo{
+	info := &ClusterInfo{
 		Name:                     "dev-cluster",
 		Endpoint:                 "https://example.eks.amazonaws.com",
 		CertificateAuthorityData: "not-valid-base64!@#$",
-		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
+		ID:                       "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
 		Region:                   "us-east-2",
+		UserPrefix:               "eks",
 	}
 
-	config := BuildClusterConfig(info, "dev", "admin")
-	cluster := config.Clusters[info.ARN]
+	config := BuildClusterConfig(info, "dev")
+	cluster := config.Clusters[info.ID]
 	assert.Equal(t, []byte("not-valid-base64!@#$"), cluster.CertificateAuthorityData)
 }
 
@@ -630,23 +633,23 @@ func TestBuildClusterConfig_RawPEMCertificate(t *testing.T) {
 // friends to fail on Windows.
 func TestMergeWouldChange_StructuralComparison(t *testing.T) {
 	info := testClusterInfo()
-	base := BuildClusterConfig(info, "dev-eks", "dev-admin")
+	base := BuildClusterConfig(info, "dev-eks")
 
 	t.Run("identical configs return false", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		assert.False(t, mergeWouldChange(base, other),
 			"merging an identical config must be a no-op")
 	})
 
 	t.Run("different current-context returns true", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.CurrentContext = "different-context"
 		assert.True(t, mergeWouldChange(base, other),
 			"a different current-context is a meaningful change")
 	})
 
 	t.Run("empty current-context in newConfig is treated as no-op for that field", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.CurrentContext = ""
 		// All other fields match, and an empty newConfig.CurrentContext doesn't
 		// overwrite, so this must report no change.
@@ -655,22 +658,22 @@ func TestMergeWouldChange_StructuralComparison(t *testing.T) {
 	})
 
 	t.Run("missing cluster in existing returns true", func(t *testing.T) {
-		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		existing := BuildClusterConfig(info, "dev-eks")
 		// Wipe the cluster the newConfig adds.
-		delete(existing.Clusters, info.ARN)
+		delete(existing.Clusters, info.ID)
 		assert.True(t, mergeWouldChange(existing, base),
 			"adding a cluster that isn't in existing must flag a change")
 	})
 
 	t.Run("different cluster endpoint returns true", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		other.Clusters[info.ARN].Server = "https://different.eks.amazonaws.com"
+		other := BuildClusterConfig(info, "dev-eks")
+		other.Clusters[info.ID].Server = "https://different.eks.amazonaws.com"
 		assert.True(t, mergeWouldChange(base, other),
 			"changed cluster Server must flag a change")
 	})
 
 	t.Run("different exec plugin identity returns true", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "different-admin")
+		other := BuildClusterConfig(clusterInfoWithIdentity("different-admin"), "dev-eks")
 		assert.True(t, mergeWouldChange(base, other),
 			"different identity changes the exec args, must flag a change")
 	})
@@ -680,8 +683,8 @@ func TestMergeWouldChange_StructuralComparison(t *testing.T) {
 		// (which clientcmd populates from the source file path). The fresh
 		// BuildClusterConfig output has LocationOfOrigin empty. Without the
 		// structural comparison, byte equality would diverge here.
-		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		existing.Clusters[info.ARN].LocationOfOrigin = "/some/path/kubeconfig"
+		existing := BuildClusterConfig(info, "dev-eks")
+		existing.Clusters[info.ID].LocationOfOrigin = "/some/path/kubeconfig"
 		existing.Contexts["dev-eks"].LocationOfOrigin = "/some/path/kubeconfig"
 		existing.AuthInfos["atmos-eks-dev-cluster-us-east-2"].LocationOfOrigin = "/some/path/kubeconfig"
 		assert.False(t, mergeWouldChange(existing, base),

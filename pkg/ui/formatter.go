@@ -1165,6 +1165,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 	}
 	defer renderer.Close()
 
+	// Prevent package/tool references like foo/bar@1.0.0 or terraform@1.5.0 (common in
+	// command help/usage examples) from being auto-linked as mailto: links by glamour's
+	// default GFM Linkify extension.
+	markdown.ApplyStrictLinkify(renderer)
+
 	rendered, err := renderer.Render(content)
 	if err != nil {
 		// Degrade gracefully: return plain content if rendering fails
