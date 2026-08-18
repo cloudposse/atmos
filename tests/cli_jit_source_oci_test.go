@@ -75,7 +75,7 @@ components:
 	// provisioning should have already run before that point is reached.
 	_ = cmd.Execute()
 
-	workdirPath := filepath.Join(root, ".workdir", "terraform", "dev-oci-component")
+	workdirPath := filepath.Join(root, ".workdir", "terraform", "dev-oci-hcomponent")
 	info, err := os.Stat(workdirPath)
 	require.NoError(t, err, "workdir should exist at %s", workdirPath)
 	require.True(t, info.IsDir(), "workdir path should be a directory")

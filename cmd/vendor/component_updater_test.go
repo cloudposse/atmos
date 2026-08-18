@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/vendoring"
@@ -46,6 +47,50 @@ func (l *componentUpdaterLister) ListTags(context.Context, string) ([]string, er
 func TestNormalizeComponentSelectors(t *testing.T) {
 	assert.Nil(t, normalizeComponentSelectors(nil))
 	assert.Equal(t, []string{"vpc", "eks"}, normalizeComponentSelectors([]string{" vpc ", "[]", "", "eks"}))
+}
+
+// TestValidateUpdateSelectorFlags proves --stack/--labels reject combining with an explicitly
+// passed --component (a single explicit target doesn't compose with a resolved set), while allowing
+// --stack or --labels alone, or together with each other. --tags is not part of this function at
+// all anymore -- it's an independent filter that composes with everything (--component,
+// --stack/--labels, or standing alone), applied downstream by
+// pkg/vendoring/update.go's sourceMatchesFilter/checkAndUpdateSource regardless of how the
+// candidate component list was selected -- see validateUpdateSelectorFlags' own doc comment.
+func TestValidateUpdateSelectorFlags(t *testing.T) {
+	t.Run("no stack or labels is always valid, even with --component", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags([]string{"vpc"}, "", nil))
+	})
+
+	t.Run("stack alone is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(nil, "dev", nil))
+	})
+
+	t.Run("labels alone is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(nil, "", map[string]string{"tier": "1"}))
+	})
+
+	t.Run("stack and labels together is valid", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(nil, "dev", map[string]string{"tier": "1"}))
+	})
+
+	t.Run("explicitly passed --component together with stack is rejected", func(t *testing.T) {
+		err := validateUpdateSelectorFlags([]string{"vpc"}, "dev", nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	})
+
+	t.Run("explicitly passed --component together with labels is rejected", func(t *testing.T) {
+		err := validateUpdateSelectorFlags([]string{"vpc"}, "", map[string]string{"tier": "1"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	})
+
+	// A post-normalization empty --component (e.g. an explicit "--component=" that
+	// normalizeComponentSelectors reduced to an empty slice) must not conflict with --stack:
+	// there's no actual --component selector left once normalization strips it.
+	t.Run("post-normalization empty --component with stack is not rejected", func(t *testing.T) {
+		require.NoError(t, validateUpdateSelectorFlags(normalizeComponentSelectors([]string{""}), "dev", nil))
+	})
 }
 
 func TestRunVendorUpdateDoesNotWidenEmptyGroupSelection(t *testing.T) {

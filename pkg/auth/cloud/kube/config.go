@@ -19,6 +19,12 @@ import (
 )
 
 const (
+	// ExpectedServerEnv is set by cluster integrations to the API endpoint they provisioned.
+	// Cluster clients use it as a post-condition against the effective kubeconfig target.
+	ExpectedServerEnv = "ATMOS_KUBERNETES_EXPECTED_SERVER"
+	// EndpointGuardEnv enables endpoint enforcement for an explicitly guarded operation.
+	EndpointGuardEnv = "ATMOS_KUBERNETES_ENDPOINT_GUARD"
+
 	// defaultFileMode is the default kubeconfig file permission.
 	defaultFileMode = 0o600
 
@@ -60,12 +66,12 @@ type ClusterInfo struct {
 
 	// ID uniquely identifies the cluster and is used as the kubeconfig
 	// cluster map key and default context name: the ARN for EKS, the ARM
-	// resource ID for AKS.
+	// resource ID for AKS, or the canonical GKE resource name.
 	ID string
 
 	// Region disambiguates the generated exec-plugin username when the same
 	// cluster name exists in more than one place: the AWS region for EKS,
-	// the resource group for AKS.
+	// the resource group for AKS, or the project and location for GKE.
 	Region string
 
 	// UserPrefix distinguishes the exec-plugin username by cloud, e.g. "eks"
@@ -90,7 +96,7 @@ type ClusterInfo struct {
 	ExecEnv []clientcmdapi.ExecEnvVar
 }
 
-// KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS).
+// KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS, GKE).
 type KubeconfigManager struct {
 	path string
 	mode os.FileMode
@@ -272,10 +278,7 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
-	userName := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
-	if info.AccountID != "" {
-		userName += "-" + info.AccountID
-	}
+	userName := UserName(info)
 
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = contextName
@@ -310,6 +313,17 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	}
 
 	return config
+}
+
+// UserName returns the shared exec-plugin username for a cluster entry.
+func UserName(info *ClusterInfo) string {
+	defer perf.Track(nil, "kube.UserName")()
+
+	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
+	if info.AccountID != "" {
+		name += "-" + info.AccountID
+	}
+	return name
 }
 
 // DefaultKubeconfigPath returns the XDG-compliant default kubeconfig path.

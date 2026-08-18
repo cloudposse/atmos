@@ -2,12 +2,9 @@ package output
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -182,33 +179,19 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 		if basePath == "" {
 			basePath = "."
 		}
-		workdirPath := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
-		if !filepath.IsAbs(workdirPath) {
-			if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
-				workdirPath = abs
-			}
+		// BuildPath itself rejects a derived path that escapes basePath (component and
+		// stack names both come from user-controlled YAML; a value containing ../ sequences
+		// could otherwise escape BasePath via filepath.Join's implicit Clean()). Surface that
+		// error rather than silently falling back to componentPath: componentPath is the
+		// *source* component directory, and redirecting terraform there on a rejected path
+		// risks mixing up stacks or reusing the wrong local state -- exactly the collision
+		// BuildPath's validation exists to prevent. Fail closed instead (see
+		// provWorkdir.BuildPath's doc comment for the exact conditions that trigger this).
+		workdirPath, err := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
+		if err != nil {
+			return "", err
 		}
-		// Containment guard: reject derived paths that escape the project directory.
-		// atmos_component and atmos_stack come from user-controlled YAML; a value
-		// containing ../ sequences (e.g. "../../../../etc/evil") could otherwise
-		// escape BasePath via filepath.Join resolution inside BuildPath.
-		// Note: symlinks are not resolved — same best-effort scope as the mirror
-		// guard in terraform_backend_local.go:resolveLocalBackendComponentPath.
-		// Uses the already-resolved basePath local (not atmosConfig.BasePath which
-		// may be "") to avoid Abs("") vs Abs(".") inconsistency.
-		absBase, errBase := filepath.Abs(basePath)
-		if errBase == nil {
-			sep := string(filepath.Separator)
-			if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
-				return workdirPath, nil
-			}
-			log.Debug("Derived workdir path escapes project directory; using component path",
-				"derived_path", workdirPath, "base_path", basePath)
-		} else {
-			// filepath.Abs failure is unreachable in practice, but if it somehow
-			// occurs, return the safe fallback rather than an unverified path.
-			return componentPath, nil
-		}
+		return workdirPath, nil
 	}
 
 	return componentPath, nil
