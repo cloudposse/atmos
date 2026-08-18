@@ -45,6 +45,66 @@ func TestResetDirectoryRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestDefaultValue(t *testing.T) {
+	t.Parallel()
+
+	if got := defaultValue("", "fallback"); got != "fallback" {
+		t.Fatalf("defaultValue() of empty input = %q, want %q", got, "fallback")
+	}
+	if got := defaultValue("set", "fallback"); got != "set" {
+		t.Fatalf("defaultValue() of set input = %q, want %q", got, "set")
+	}
+}
+
+func TestPrepareCoverageDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join(t.TempDir(), "coverage-work")
+	absIntegration, absUnit, err := prepareCoverageDirectories(root)
+	if err != nil {
+		t.Fatalf("prepare coverage directories: %v", err)
+	}
+	if !filepath.IsAbs(absIntegration) || !filepath.IsAbs(absUnit) {
+		t.Fatalf("expected absolute paths, got integration=%q unit=%q", absIntegration, absUnit)
+	}
+	for _, dir := range []string{absIntegration, absUnit} {
+		info, statErr := os.Stat(dir)
+		if statErr != nil {
+			t.Fatalf("expected %s to exist: %v", dir, statErr)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", dir)
+		}
+	}
+	if filepath.Base(absIntegration) != "integration" || filepath.Base(absUnit) != "unit" {
+		t.Fatalf("unexpected directory names: integration=%q unit=%q", absIntegration, absUnit)
+	}
+
+	if _, _, err := prepareCoverageDirectories(""); err == nil {
+		t.Fatal("expected an error for an unsafe root")
+	}
+}
+
+func TestValidateCoverageInputs(t *testing.T) {
+	t.Parallel()
+
+	if err := validateCoverageInputs(nil); err == nil {
+		t.Fatal("expected an error for zero input directories")
+	}
+
+	withMetadata := t.TempDir()
+	if err := os.WriteFile(filepath.Join(withMetadata, "covmeta.abc"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCoverageInputs([]string{withMetadata}); err != nil {
+		t.Fatalf("expected a directory with covmeta.* to validate: %v", err)
+	}
+
+	if err := validateCoverageInputs([]string{withMetadata, t.TempDir()}); err == nil {
+		t.Fatal("expected an error when one of several inputs has no coverage metadata")
+	}
+}
+
 func regexpMustCompile(t *testing.T, value string) *regexp.Regexp {
 	t.Helper()
 	compiled, err := regexp.Compile(value)
