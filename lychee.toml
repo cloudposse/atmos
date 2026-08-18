@@ -192,4 +192,10 @@ exclude = [
   # Reproducible Builds project docs intermittently refuse connections from CI
   # runners; the page returns 200 outside CI, verified via curl.
   "reproducible-builds\\.org",
+  # Microsoft's Language Server Protocol spec site intermittently resets
+  # connections from CI runners; the page returns 200 outside CI, verified via curl.
+  "microsoft\\.github\\.io/language-server-protocol",
+  # AWS STS API reference (GetFederationToken) intermittently resets
+  # connections from CI runners; the page returns 200 outside CI, verified via curl.
+  "docs\\.aws\\.amazon\\.com/STS/latest/APIReference/API_GetFederationToken\\.html",
 ]
