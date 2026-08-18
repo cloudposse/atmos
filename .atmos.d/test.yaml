@@ -155,6 +155,13 @@ commands:
           - type: shell
             command: go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
 
+      - name: magefiles
+        description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: go test -tags=mage -coverprofile=magefiles-coverage.out ./magefiles/...
+
       - name: generate-auth-http-store-mocks
         description: Regenerate auth/http/store mocks using go:generate directives
         env: *go_auto_env

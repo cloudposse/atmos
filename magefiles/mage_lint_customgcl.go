@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
-
-	"github.com/magefile/mage/sh"
 )
 
 var errCustomGCLBuildFailed = errors.New("mage: golangci-lint custom failed")
@@ -42,11 +41,16 @@ func (Lint) CustomGCL() error {
 	if err != nil {
 		return err
 	}
-	env := map[string]string{
-		"GOFLAGS":     "-buildvcs=false",
-		"GOTOOLCHAIN": goVersion,
-	}
-	if runErr := sh.RunWithV(env, "golangci-lint", "custom"); runErr != nil {
+	// golangci-lint custom reads .custom-gcl.yml and writes its output binary
+	// relative to its working directory, but binPath (and customGCLIsStale)
+	// assume the repo root — so this must run with root as its cwd, not
+	// whatever directory `go tool mage` was invoked from.
+	cmd := exec.Command("golangci-lint", "custom")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GOFLAGS=-buildvcs=false", "GOTOOLCHAIN="+goVersion)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if runErr := cmd.Run(); runErr != nil {
 		return fmt.Errorf("%w: %w", errCustomGCLBuildFailed, runErr)
 	}
 	fmt.Println("Custom golangci-lint binary built successfully:", binPath)

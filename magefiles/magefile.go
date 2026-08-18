@@ -41,8 +41,11 @@ func mageRepoRoot() (string, error) {
 	}
 	for {
 		data, readErr := os.ReadFile(filepath.Join(dir, "go.mod"))
-		if readErr == nil && strings.HasPrefix(string(data), rootModuleDecl) {
-			return dir, nil
+		if readErr == nil {
+			firstLine, _, _ := strings.Cut(string(data), "\n")
+			if strings.TrimSpace(firstLine) == rootModuleDecl {
+				return dir, nil
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

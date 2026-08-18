@@ -359,9 +359,43 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
+  # so it's silently excluded from the default `go build ./...`/`go test
+  # ./...` scope every other job here uses. Run it as its own lightweight job
+  # (parallel to `build`, needing only the Go toolchain, not the built
+  # `atmos` binary) so it gets real CI + Codecov signal instead of running
+  # only locally.
+  magefiles:
+    name: "[magefiles] unit tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      - name: Run magefiles unit tests with coverage
+        run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
+
+      - name: Upload magefiles coverage report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magefiles-coverage-linux
+          path: magefiles-coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   coverage:
     name: Upload acceptance coverage to Codecov
-    needs: test
+    needs: [test, magefiles]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -376,6 +410,12 @@ jobs:
           name: acceptance-coverage-linux
           path: ${{ github.workspace }}
 
+      - name: Download magefiles coverage report artifact
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: magefiles-coverage-linux
+          path: ${{ github.workspace }}
+
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -383,7 +423,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage.out
+          files: coverage.out,magefiles-coverage.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key
@@ -1104,7 +1144,7 @@ jobs:
           echo "failing-check correctly returned a non-zero exit code"
 
   release:
-    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
+    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step, magefiles]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

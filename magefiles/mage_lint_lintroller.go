@@ -59,7 +59,7 @@ func lintrollerBinaryName() string {
 }
 
 // lintrollerIsStale reports whether the binary is missing or older than any
-// *.go file under dir.
+// *.go, go.mod, or go.sum file under dir.
 func lintrollerIsStale(dir, binPath string) (bool, error) {
 	info, err := os.Stat(binPath)
 	if err != nil {
@@ -68,7 +68,7 @@ func lintrollerIsStale(dir, binPath string) (bool, error) {
 		}
 		return false, fmt.Errorf("mage: stat %s: %w", binPath, err)
 	}
-	return dirHasFileNewerThan(dir, info.ModTime(), isGoSourceFile)
+	return dirHasFileNewerThan(dir, info.ModTime(), isGoModuleFile)
 }
 
 // filterOutTestdata drops empty entries and any package under a testdata

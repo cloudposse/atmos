@@ -24,10 +24,14 @@ func (Lint) Precommit() error {
 		return err
 	}
 	binPath := customGCLBinaryPath(root)
-	if _, statErr := os.Stat(binPath); statErr != nil {
-		fmt.Fprintln(os.Stderr, "Error: custom-gcl binary not found.")
+	stale, err := customGCLIsStale(root, binPath)
+	if err != nil {
+		return err
+	}
+	if stale {
+		fmt.Fprintln(os.Stderr, "Error: custom-gcl binary is missing or stale.")
 		fmt.Fprintln(os.Stderr, "Please build it first by running: go tool mage lint:customGCL")
-		return mg.Fatal(1, "custom-gcl binary not found")
+		return mg.Fatal(1, "custom-gcl binary is missing or stale")
 	}
 	return runGolangciLintPrecommit(root, binPath)
 }
