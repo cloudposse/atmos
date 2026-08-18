@@ -110,7 +110,7 @@ func TestDefaultWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	info, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev")
+	info, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "dev-vpc", info.Name)
 	assert.Equal(t, "vpc", info.Component)
@@ -125,7 +125,7 @@ func TestDefaultWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	_, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev")
+	_, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev", nil)
 	assert.Error(t, err)
 }
 
@@ -152,7 +152,7 @@ func TestDefaultWorkdirManager_DescribeWorkdir(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	manifest, err := manager.DescribeWorkdir(atmosConfig, "vpc", "dev")
+	manifest, err := manager.DescribeWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 
 	// Check that output contains expected structure.
@@ -178,7 +178,7 @@ func TestDefaultWorkdirManager_CleanWorkdir(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify workdir is removed.
@@ -192,7 +192,7 @@ func TestDefaultWorkdirManager_CleanWorkdir_NotFound(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	assert.Error(t, err)
 }
 
@@ -308,7 +308,7 @@ func TestDefaultWorkdirManager_DescribeWorkdir_NotFound(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	manifest, err := manager.DescribeWorkdir(atmosConfig, "nonexistent", "dev")
+	manifest, err := manager.DescribeWorkdir(atmosConfig, "nonexistent", "dev", nil)
 	assert.Error(t, err)
 	assert.Empty(t, manifest)
 }
@@ -449,7 +449,7 @@ func TestDefaultWorkdirManager_CleanWorkdir_RemoveAllError(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev")
+	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	// This may or may not error depending on OS behavior.
 	// On some systems, RemoveAll can still work with read-only parent.
 	_ = err
@@ -512,7 +512,7 @@ func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	manifest, err := manager.DescribeWorkdir(atmosConfig, "s3", "prod")
+	manifest, err := manager.DescribeWorkdir(atmosConfig, "s3", "prod", nil)
 	require.NoError(t, err)
 
 	// Verify all expected keys are present.
