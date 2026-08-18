@@ -4,99 +4,94 @@
 
 **Input**: Feature specification from `specs/002-pro-exec-metadata/spec.md`
 
-**Note**: This is a re-plan. US1 (async default upload) and US2 (synchronous base-envelope
-upload) shipped and are live in production. This revision addresses (a) a correctness
-defect found in production data — sync-allowlisted commands were producing **two**
-execution records per invocation instead of one — and (b) scope changes from the
-2026-08-18 `/speckit-clarify` session: multi-component `--affected`/`--all` runs must
-report one aggregate record instead of one per component, and `terraform deploy` joins
-the synchronous allowlist with its own structured data. It also corrects the previously
-filed blocker for US3 ([#2924](https://github.com/cloudposse/atmos/issues/2924)): the
-raw stdout capture US3 needs already exists and is already wired for CI mode in
-`cmd/terraform/plan.go`/`apply.go` — the real gap is plumbing, not a new tee mechanism.
+**Note**: This is a second re-plan. US1/US2 shipped; the `CaptureSync`/`CaptureAsync`
+double-fire regression (a single `atmos terraform plan` producing two execution records)
+was already fixed on this branch (commit `63ab795af`, via the shared
+`proexec.IsSyncCommand` predicate) and the `deploy`-allowlist/aggregation/US3-completion
+scope from the first re-plan (2026-08-18, earlier same day) is unchanged and still
+pending implementation. This revision addresses a **second, distinct** correctness gap
+found via `/speckit-clarify` (2026-08-18, later same day): the two-execution-records
+symptom reported in production was not fully explained by the `CaptureSync`/`CaptureAsync`
+race alone — it also comes from **cross-feature duplication** between this feature's
+`POST /v1/atmos/exec` and the older, independently-gated `uploadStatus`/`--upload-status`
+`PATCH .../instances` mechanism (`internal/exec/pro.go`), which this feature was never
+designed to coordinate with. The two paths are confirmed to stay independent (FR-003a),
+but this revision fixes a live bug (`Args` always empty — `maskArgs(nil)` in
+`pkg/proexec/envelope.go:55`) and tightens the wire shape of `Command`/`Args` so the two
+independent records remain correlatable by content (FR-003b).
 
 ## Summary
 
-Three fixes to the already-shipped `pkg/proexec`/`internal/exec/terraform.go` delivery
-path, plus completion of the previously-blocked User Story 3:
+One additional fix, layered on top of the still-pending dedup/allowlist/aggregation/US3
+scope from the first re-plan:
 
-1. **Dedup fix (regression)**: `cmd/root.go`'s unconditional `proexec.CaptureAsync(cmd,
-    err)` call must be skipped for commands on the synchronous allowlist, so each
-    qualifying invocation produces exactly one execution record (FR-007), not two. This
-    requires a single shared classification function callable from both `cmd/root.go` and
-    `internal/exec/terraform.go`/`describe affected`'s call sites, replacing the
-    `internal/exec`-only `isExecMetadataSyncSubcommand`.
-2. **Allowlist expansion**: `terraform deploy` joins the synchronous allowlist
-    (`plan`/`apply`/`deploy`/`describe affected`) and gets the same structured
-    infrastructure-change data as `plan`/`apply` (FR-006/FR-007, 2026-08-18 clarifications).
-3. **Multi-component aggregation**: `atmos terraform plan/apply/deploy --affected`/`--all`
-    currently uploads one execution record per graph node (since `ExecuteTerraform` runs
-    per component and `captureExecMetadataSync` lives inside it). Per FR-006a, this must
-    become exactly one aggregate record per CLI invocation, with each component's identity,
-    outcome, and structured data folded into that single record's `DataItems`.
-4. **US3 completion (previously blocked)**: attach itemized created/updated/deleted/
-    replaced/moved/imported resources, output values, and warnings to `plan`/`apply`/
-    `deploy` execution records. The blocker recorded in #2924 ("`ExecuteTerraform` never
-    captures raw stdout, needs a new `MultiWriter` tee across the shared pipeline") is
-    **only partially accurate**: `internal/exec/shell_utils.go`'s `WithStdoutCapture`/
-    `WithStderrCapture` `ShellCommandOption`s already implement exactly that tee, and
-    `cmd/terraform/plan.go`/`apply.go` (and `deploy.go`) already use them today — gated on
-    a *different* CI flag (`ciMode`) than the exec-metadata gate (`telemetry.IsCI() &&
-    Pro-configured`), and the captured buffer is a package-level var consumed only by
-    `PostRunE`'s Native-CI job-summary hooks, never threaded down into `ExecuteTerraform`'s
-    `captureExecMetadataSync`. The fix is to thread that already-captured, already
-    ANSI-stripped buffer (or a second capture using the same existing option, gated on the
-    exec-metadata gate instead of `ciMode`) into `CaptureSync`'s `data`/`dataItems`
-    arguments via the now-public `terraform.ParsePlanOutput`/`ParseApplyOutput`, not to
-    invent new tee infrastructure.
+5. **`Command`/`Args`/`Flags` shape fix (this delta)**: `pkg/proexec/envelope.go`'s
+    `buildRecord` currently sends `Command = cmd.CommandPath()` (e.g.
+    `"atmos terraform plan"`, including the `atmos` root) and always sends `Args = []`
+    (the `maskArgs(nil)` call at line 55 never receives real arguments regardless of what
+    was actually typed). Per FR-003b:
+    - `Command` MUST drop the leading `atmos` root segment (`"terraform plan"`, not
+      `"atmos terraform plan"`).
+    - `Args` MUST carry only positional arguments (e.g. the component: `["cdn"]`),
+      currently entirely unpopulated.
+    - A **new** `Flags` field MUST carry the CLI flags actually passed (e.g.
+      `["-s", "plat-use2-dev", "--upload-status"]`), each masked per the existing
+      secret-masking used for `Args` today (FR-010) — positional args and flags are
+      distinct fields, never combined into one array.
+    This requires: a new `Flags []string` field on `dtos.ExecUploadRequest`
+    (`pkg/pro/dtos/exec.go`), `buildRecord` splitting `cmd.Flags()`/positional `args`
+    instead of calling `maskArgs(nil)`, and `Command` construction stripping the root
+    segment (`strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")` or equivalent).
+    FR-003a additionally makes explicit that no code change coordinates this feature with
+    `uploadStatus` — both continue to fire independently; this is a correlatable-content
+    guarantee only, not a merge.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26
 
 **Primary Dependencies**:
-- `pkg/proexec` (existing, shipped — `gateOpen`, `buildRecord`, `CaptureAsync`, `CaptureSync`) — extended, not replaced
-- `pkg/pro` (existing, shipped — `AtmosProAPIClient.UploadExecMetadata`, `sendChunked`/`BatchInfo`)
+- `pkg/proexec` (existing, shipped — `gateOpen`, `buildRecord`, `CaptureAsync`, `CaptureSync`, `classify.IsSyncCommand`) — `envelope.go`'s `buildRecord` modified for this delta
+- `pkg/pro` (existing, shipped — `AtmosProAPIClient.UploadExecMetadata`, `sendChunked`/`BatchInfo`) — `dtos.ExecUploadRequest` gains `Flags`
+- `internal/exec/pro.go` (existing, unchanged by this delta — `uploadStatus`/`shouldUploadStatus`, the older `PATCH .../instances` path this feature stays independent from per FR-003a)
 - `pkg/telemetry` (existing — `IsCI()`, the exec-metadata gate's CI check)
-- `pkg/ci` (existing — `IsCI()`, a *separate* CI-detection function gating today's `plan`/`apply` stdout capture; this plan clarifies which of the two gates the US3 capture must key off)
-- `internal/exec/shell_utils.go` (existing — `WithStdoutCapture`/`WithStderrCapture` `ShellCommandOption`s; reused, not replaced, for US3)
-- `pkg/ci/plugins/terraform` (existing, public — `ParsePlanOutput`/`ParseApplyOutput(output string) *plugin.OutputResult`, confirmed callable from `internal/exec` via `any`-typed `OutputResult.Data`, per #2924's own investigation)
 - `pkg/metrics/process` (existing, shipped)
 
-**Storage**: N/A — unchanged from the original plan; no local persistence.
+**Storage**: N/A — unchanged; no local persistence.
 
 **Testing**: `atmos test` (unit, table-driven, mocked `AtmosProAPIClientInterface`); new
-cases for the dedup fix (assert `CaptureAsync` is a no-op for sync-allowlisted commands),
-the aggregation change (assert one record, not N, for a multi-component graph run), the
-`deploy` allowlist addition, and US3's stdout-capture plumbing.
+cases for `buildRecord`: `Command` has no `atmos` prefix, `Args` contains only positional
+arguments, `Flags` contains masked CLI flags, and a case asserting `Args`/`Flags` are never
+combined into a single array. Existing tests asserting the old `Command`/`Args` shape
+(full `atmos ...` path, always-empty `Args`) are now wrong and must be updated, not
+preserved.
 
 **Target Platform**: Linux, macOS, Windows — unchanged.
 
-**Project Type**: CLI feature — bug-fix and scope-extension changes to already-shipped
-`pkg/proexec`, `internal/exec/terraform.go`, `cmd/root.go`, `cmd/terraform/{plan,apply,deploy}.go`,
-and `cmd/terraform/utils.go` (multi-component graph hooks). No new packages.
+**Project Type**: CLI feature — targeted fix to already-shipped `pkg/proexec/envelope.go`
+and `pkg/pro/dtos/exec.go`. No new packages.
 
-**Performance Goals**: Unchanged (SC-003/SC-004) — the aggregation change must not turn a
-multi-component run's per-node timing into a serialization point; components still execute
-concurrently, only the *upload* is deferred and combined until the whole graph run completes.
+**Performance Goals**: Unchanged (SC-003/SC-004) — this delta only changes what three
+existing fields contain, not the delivery/timeout mechanics.
 
 **Constraints**:
 - No new user-facing opt-out (unchanged).
-- The dedup fix and aggregation change are corrections to already-merged code — they must
-  not regress US1/US2's existing test coverage; existing tests asserting per-component
-  records or dual-record behavior are now wrong and must be updated, not preserved.
-- `deploy`'s structured data reuses the same `TerraformExecData` shape as `plan`/`apply`
-  (FR-006) — no new DTO fields.
-- US3's stdout capture MUST NOT change streaming/TTY/masking behavior for any terraform
-  subcommand outside `plan`/`apply`/`deploy` — reusing the existing, already-scoped
-  `WithStdoutCapture` call sites keeps this risk bounded to code paths already proven safe
-  for exactly this purpose.
+- `uploadStatus`/`--upload-status` (`internal/exec/pro.go`) is explicitly NOT modified by
+  this delta (FR-003a) — no new DTO fields, no new call-site coordination, no shared
+  record ID between the two mechanisms. Extending that DTO was considered and rejected
+  during clarification (Option B) as unnecessary scope creep into a different,
+  pre-existing endpoint this feature does not own.
+- Masking: `Flags` MUST reuse the same masking path already applied to `Args`
+  (`pkg/proexec/envelope.go`'s existing masking call, per FR-010) — no new masking logic.
+- This corrects, not replaces, `data-model.md`'s original `ExecUploadRequest` shape
+  (`Command = cmd.CommandPath()`, `Args` reserved/always-empty, "0 new DTO fields") from
+  the initial 2026-08-11 plan — that shape is now superseded by FR-003b.
 
-**Scale/Scope**: 0 new Atmos Pro endpoints (still `POST /v1/atmos/exec`, no DTO shape
-change beyond what US3 already specified in data-model.md). ~6 call-site changes: a new
-shared classification function, `cmd/root.go`'s dedup skip, `cmd/terraform/deploy.go`'s
-allowlist join, `cmd/terraform/utils.go`'s per-node→aggregate change for the graph path,
-and `internal/exec/terraform.go`'s US3 wiring.
+**Scale/Scope**: 1 new field on one existing Atmos Pro endpoint's request DTO (`Flags` on
+`POST /v1/atmos/exec` — no new endpoint). 2 call-site changes: `pkg/pro/dtos/exec.go`
+(new field), `pkg/proexec/envelope.go`'s `buildRecord` (Command/Args/Flags population).
+This is additive to, not a replacement for, the still-pending dedup/`deploy`-allowlist/
+aggregation/US3 work tracked in the same `specs/002-pro-exec-metadata/` artifacts.
 
 ## Constitution Check
 
@@ -104,14 +99,17 @@ and `internal/exec/terraform.go`'s US3 wiring.
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags; `deploy` joining a fixed, code-defined allowlist is the same pattern as `plan`/`apply`, not a new extension point. |
-| II. Interface-Driven Design with DI | ✅ Pass | No interface changes; the shared classification function is a plain predicate (`isExecMetadataSyncCommand(subCommand string) bool`), injected nowhere because it has no side effects — consistent with the existing `isExecMetadataSyncSubcommand`. |
-| III. Test-First with 80% Coverage | ✅ Pass | Regression tests for the dedup bug and aggregation change are written first (reproducing the observed double-record behavior), per the constitution's bug-fix workflow. |
-| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output; unchanged from original plan. |
-| V. Simplicity and No Over-Engineering | ✅ Pass | The US3 fix explicitly rejects #2924's proposed new `MultiWriter`-tee-across-the-shared-pipeline mechanism in favor of reusing the existing, narrowly-scoped `WithStdoutCapture` call sites already present in `plan.go`/`apply.go`/`deploy.go` — smaller blast radius, no new abstraction. The aggregation change replaces N per-node uploads with 1, which is strictly simpler than what it replaces, not more complex. |
+| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags/endpoints; a DTO field addition on an existing endpoint. |
+| II. Interface-Driven Design with DI | ✅ Pass | No interface changes; `buildRecord` remains a plain function with no new side effects. |
+| III. Test-First with 80% Coverage | ✅ Pass | New table-driven cases for the `Command`/`Args`/`Flags` shape are written first, reproducing the observed always-empty-`Args` defect, per the constitution's bug-fix workflow. |
+| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output. |
+| V. Simplicity and No Over-Engineering | ✅ Pass | Rejected Option B (extending `uploadStatus`'s DTO for exact field-level equality) in favor of the smaller, narrowly-scoped `Flags` addition — avoids touching a second, unrelated upload mechanism to solve a correlation problem this feature can solve unilaterally. |
 
-**Post-design re-check**: Pending Phase 1 (data-model.md, contracts/ updates for the
-aggregated multi-component `DataItems` shape and the `deploy` allowlist addition).
+**Post-design re-check**: ✅ Pass. Phase 1 complete — `data-model.md`'s `ExecutionRecord`
+table now documents `Command`/`Args`/`Flags` and the `uploadStatus` independence rule;
+`contracts/interactions.md`'s request-body field list and Validation Rules now include
+`flags` and the `command`/`args` shape constraints; `quickstart.md` has a manual
+regression-check step (step 8). No new violations introduced.
 
 ## Project Structure
 
@@ -119,63 +117,37 @@ aggregated multi-component `DataItems` shape and the `deploy` allowlist addition
 
 ```text
 specs/002-pro-exec-metadata/
-├── plan.md                 # This file — re-plan for the dedup/aggregation/deploy/US3 delta
-├── research.md              # Phase 0 output — Decisions 10–12 appended for this delta
-├── data-model.md            # Phase 1 output — Delivery Classification table updated (deploy, aggregation)
-├── quickstart.md            # Phase 1 output — updated manual-validation steps for the 3 fixes
+├── plan.md                 # This file — second re-plan, Command/Args/Flags delta
+├── research.md              # Phase 0 output — Decision 13 appended for this delta
+├── data-model.md            # Phase 1 output — ExecutionRecord table updated (Command/Args/Flags, uploadStatus independence note)
+├── quickstart.md            # Phase 1 output — manual-validation step added for the Flags fix
 ├── contracts/
-│   └── interactions.md      # Phase 1 output — Pact interaction updated if the aggregated multi-component DataItems shape needs a dedicated example
-└── tasks.md                  # Phase 2 output (/speckit-tasks) — NEEDS REGENERATION for this delta
+│   └── interactions.md      # Phase 1 output — Pact interaction's request-body field list updated with `flags`
+└── tasks.md                  # Phase 2 output (/speckit-tasks) — NEEDS REGENERATION for this delta (already flagged stale by the first re-plan; this delta adds to that staleness)
 ```
 
 ### Source Code (repository root)
 
 ```text
-pkg/proexec/
-├── gate.go                  # Unchanged
-├── classify.go               # NEW — shared IsSyncCommand(commandPath string) bool, single source of truth for the sync allowlist (plan/apply/deploy/describe affected), replacing internal/exec's private isExecMetadataSyncSubcommand
-├── envelope.go               # Unchanged
-├── async.go                  # Modified — CaptureAsync no-ops early when classify.IsSyncCommand(cmd) is true (dedup fix)
-├── sync.go                   # Unchanged (signature already supports data/dataItems from US2's rework)
-└── *_test.go                 # New table-driven cases: CaptureAsync no-ops for each sync-allowlisted command; classify.IsSyncCommand matrix
+pkg/pro/dtos/exec.go
+└── ExecUploadRequest         # Modified — new `Flags []string` field (json:"flags"), alongside existing `Args`
 
-internal/exec/terraform.go
-├── captureExecMetadataSync    # Modified — subCommand check now delegates to proexec/classify.go; deploy added; wired to US3's data/dataItems once the capture plumbing (below) lands
-└── isExecMetadataSyncSubcommand  # REMOVED — superseded by pkg/proexec/classify.go
+pkg/proexec/envelope.go
+└── buildRecord                # Modified — Command strips the `atmos` root segment; Args populated from positional
+                                 arguments only (currently unpopulated); Flags (new) populated from masked CLI flags,
+                                 replacing the `maskArgs(nil)` no-op at line 55
 
-cmd/root.go
-└── Execute()                 # Modified — proexec.CaptureAsync(cmd, err) call now preceded by a classify.IsSyncCommand(cmd.CommandPath()) skip (dedup fix)
-
-cmd/terraform/
-├── plan.go                   # Modified — existing ciMode-gated WithStdoutCapture buffer additionally (or separately) feeds ExecuteTerraform's US3 data via a new opts param, decoupled from the ciMode/Native-CI gate
-├── apply.go                  # Modified — same as plan.go
-├── deploy.go                 # Modified — joins the sync allowlist; gains the same stdout-capture wiring as plan.go/apply.go
-└── utils.go                  # Modified — terraformNodeHooks.AfterWithWriters's per-node CI-hook path (runCIHooksForNode) is joined by a new aggregation collector: per-node results accumulate across the graph run and a single proexec.CaptureSync call fires once after the whole graph completes, replacing today's per-node captureExecMetadataSync calls
-
-pkg/ci/plugins/terraform/parser.go
-└── ParsePlanOutput/ParseApplyOutput  # Unchanged (already public per #2924's investigation) — now actually called from internal/exec, not just pkg/ci
-
-pacts/atmos-AtmosPro.json           # Unchanged shape; regenerated only if contracts/interactions.md's aggregated-multi-component example is added as a distinct interaction
+pacts/atmos-AtmosPro.json      # Regenerated — UploadExecMetadata interaction's request body gains `flags`,
+                                 `command`/`args` example values updated to the new shape
 ```
 
-**Structure Decision**: No new packages. This delta is intentionally scoped as targeted
-fixes to already-shipped files plus one new small file (`pkg/proexec/classify.go`) that
-centralizes the sync-allowlist predicate so `cmd/root.go` and `internal/exec/terraform.go`
-can no longer drift out of sync the way they did to produce the dedup bug — the single
-biggest structural lesson from this delta. The multi-component aggregation moves
-`captureExecMetadataSync`'s effective call site from "once per graph node" (inside
-`ExecuteTerraform`, which recurs per node) to "once per graph run" (in
-`cmd/terraform/utils.go`, which owns the graph's lifecycle) — this is the one place in the
-codebase that already knows when a multi-component run starts and ends
-(`wasMultiComponentExecution`), so it is the natural aggregation point rather than a new
-one.
-
-**US3 blocker correction**: Per the research phase below (Decision 12), issue #2924's
-proposed fix (`MultiWriter`-based tee added to `ExecuteTerraform`'s shared pipeline) is
-superseded — `WithStdoutCapture`/`WithStderrCapture` already exist and are already used
-for this exact purpose in `plan.go`/`apply.go`/`deploy.go`, just gated on the wrong
-condition and not threaded to the right call site. #2924 should be updated or closed as
-"solved differently" once this plan's US3 tasks land.
+**Structure Decision**: No new packages, no new files. This delta is intentionally the
+smallest change that resolves the clarified ambiguity: one new DTO field plus one
+function's field-population logic. It does not touch `internal/exec/pro.go` (the
+`uploadStatus` mechanism) at all, consistent with FR-003a's explicit independence
+requirement and the constitution's simplicity principle — coordinating two upload
+mechanisms client-side was considered and rejected in favor of making each one
+independently correct and correlatable by content.
 
 ## Complexity Tracking
 

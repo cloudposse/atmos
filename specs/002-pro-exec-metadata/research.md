@@ -408,6 +408,62 @@ silently depend on an unrelated feature flag.
 
 ---
 
+## Decision 13: `Command`/`Args`/`Flags` shape — correlatable with `uploadStatus` without merging it
+
+**Decision**: `ExecUploadRequest.Command` is changed from `cmd.CommandPath()` (e.g.
+`"atmos terraform plan"`) to the subcommand path with the leading `atmos` root segment
+stripped (`"terraform plan"`). `ExecUploadRequest.Args` — currently always sent empty via
+`maskArgs(nil)` in `pkg/proexec/envelope.go:55`, a live bug — is populated with only the
+invocation's positional arguments (e.g. `["cdn"]`). A **new** `ExecUploadRequest.Flags`
+field is added to carry the CLI flags actually passed (e.g.
+`["-s", "plat-use2-dev", "--upload-status"]`), masked through the same existing
+secret-masking path already used for `Args`. Positional args and flags are kept in
+separate fields, never combined into one array. The older, independently-gated
+`uploadStatus`/`--upload-status` mechanism (`internal/exec/pro.go`, `PATCH .../instances`)
+is explicitly left unmodified — its `Command` field (a bare subcommand string, e.g.
+`"plan"`, sourced from `info.SubCommand`) and separate `Component`/`Stack` fields have no
+literal field-for-field equivalent on the `ExecUploadRequest` side, and this decision does
+not attempt to force one; it only ensures both mechanisms' output is *content-correlatable*
+for a human or the Atmos Pro backend reading both records for the same invocation.
+
+**Rationale**: A production bug report showed a single `atmos terraform plan` invocation
+producing two Atmos-Pro-side rows with different shapes — one from `uploadStatus` (has
+`component`/`args`-like fields, no resource metrics) and one from this feature's
+`POST /v1/atmos/exec` (has resource metrics, but `args` always empty and no `component`
+field at all). Investigation (see `plan.md`'s Note) showed these are two structurally
+independent, independently-gated upload mechanisms with no shared record ID — not (only)
+the already-fixed `CaptureSync`/`CaptureAsync` race. Rather than introduce cross-mechanism
+coordination (skip logic, a shared ID, or a merged payload — all rejected during
+`/speckit-clarify` as unjustified scope expansion into a different, pre-existing endpoint
+this feature does not own), the fix scoped to this feature alone: make its own `Command`/
+`Args`/`Flags` correct and complete, so that whatever correlation Atmos Pro's backend
+performs across the two record types has real data to work with instead of an always-empty
+`Args` array and an `atmos`-prefixed `Command` that don't match `uploadStatus`'s shape at
+all.
+
+**Alternatives considered**:
+- Make `ExecUploadRequest.Command`/`Args` byte-for-byte identical to `uploadStatus`'s
+  `Command`/`Component`/`Stack` — rejected: the two DTOs have genuinely different shapes
+  (`uploadStatus.Command` is a bare subcommand with no flags at all, `Component`/`Stack`
+  are separate fields with no `ExecUploadRequest` counterpart); forcing byte-identical
+  equality would mean either dropping information (`ExecUploadRequest.Flags`, which
+  `uploadStatus` doesn't carry) or fabricating fields `uploadStatus` doesn't have. Content
+  correlation (subcommand-name equivalence, e.g. `"plan"` is a suffix of `"terraform
+  plan"`) is achievable without shape equality.
+- Extend `uploadStatus`'s DTO/call site to also send `Flags`, achieving true field-level
+  equality across both mechanisms (clarification session's "Option B") — rejected: this
+  touches a second, older, pre-existing Atmos Pro endpoint (`PATCH .../instances`) that
+  this feature does not own and has no other reason to modify; the smaller, one-sided fix
+  (fixing only `ExecUploadRequest`, which already has a live bug to fix regardless) fully
+  resolves the observed symptom without that added blast radius.
+- Combine `Args` and `Flags` into one array (`["cdn", "-s", "plat-use2-dev",
+  "--upload-status"]`) — rejected during clarification: the user explicitly requested
+  positional arguments and flags be kept in distinct fields, matching how the two are
+  independently useful to a downstream consumer (e.g. filtering/searching by flag without
+  string-parsing a combined array).
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,

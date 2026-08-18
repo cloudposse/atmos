@@ -59,7 +59,7 @@ State the reason plainly in your summary. Don't silently drop a finding.
 
 ## Guardrails (CLAUDE.md, mandatory)
 
-- Use `gofumpt`/`goimports` formatting conventions — this repo enforces `gofumpt`, not plain
+- Use `gofumpt`/`gci` formatting conventions — this repo enforces `gofumpt`, not plain
   `gofmt`.
 - Preserve existing comments; never delete one without a strong reason.
 - Follow the repo's error-handling conventions (static sentinel errors in `errors/errors.go`,

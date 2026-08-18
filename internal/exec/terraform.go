@@ -196,7 +196,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
 
-	captureExecMetadataSync(&atmosConfig, originalSubCommand, err)
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, err)
 
 	return err
 }
@@ -220,7 +220,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // non-internal function. Data is passed as nil for now; the base envelope
 // (US1/US2) still reports normally regardless of whether Native CI is
 // enabled.
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, cmdErr error) {
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmdErr error) {
 	commandPath := "atmos terraform " + subCommand
 	if !proexec.IsSyncCommand(commandPath) {
 		return
@@ -231,7 +231,12 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		exitCode = 1
 	}
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, exitCode, nil, nil); syncErr != nil {
+	var args []string
+	if info.ComponentFromArg != "" {
+		args = []string{info.ComponentFromArg}
+	}
+
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, info.AdditionalArgsAndFlags, exitCode, nil, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

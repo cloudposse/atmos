@@ -31,8 +31,9 @@ for `POST /v1/atmos/exec`.
 | `AtmosVersion` | `string` | `pkgversion.Version` |
 | `AtmosOS` | `string` | `runtime.GOOS` |
 | `AtmosArch` | `string` | `runtime.GOARCH` |
-| `Command` | `string` | Full Cobra command path (`cmd.CommandPath()`), e.g. `"atmos terraform plan"` |
-| `Args` | `[]string` | Empty by default; populated only by commands that opt in (initially none — reserved per FR-003) |
+| `Command` | `string` | Subcommand path with the leading `atmos` root stripped, e.g. `"terraform plan"` (not `"atmos terraform plan"`) — FR-003b, 2026-08-18 (2nd) clarification |
+| `Args` | `[]string` | Positional arguments only, e.g. `["cdn"]` — previously always empty (`maskArgs(nil)` bug in `envelope.go:55`), now populated per FR-003b |
+| `Flags` | `[]string` | **New** — CLI flags actually passed, masked (e.g. `["-s", "plat-use2-dev", "--upload-status"]`); kept separate from `Args`, never combined — FR-003b |
 | `ExitCode` | `int` | |
 | `GitSHA` | `string` | |
 | `RepoURL`, `RepoName`, `RepoOwner`, `RepoHost` | `string` | From `git.GitRepoInterface.GetLocalRepoInfo()`, matching `InstanceStatusUploadRequest` |
@@ -115,7 +116,9 @@ exceed `MaxPayloadBytes`. See research.md Decision 11 for the aggregation-point 
 | Rule | Detail |
 |------|--------|
 | Gate check | `proexec.gateOpen` MUST be evaluated fresh per invocation; never cached across commands within the same process |
-| Secret masking | `Args` and `Data` MUST pass through the existing Gitleaks-based masking (`pkg/io` masking) before marshaling, consistent with FR-010 |
+| Secret masking | `Args`, `Flags`, and `Data` MUST pass through the existing Gitleaks-based masking (`pkg/io` masking) before marshaling, consistent with FR-010 |
+| Command/Args/Flags shape | `Command` MUST exclude the `atmos` root segment; `Args` MUST hold only positional arguments; `Flags` MUST hold only CLI flags — never combined into one array (FR-003b) |
+| Independence from `uploadStatus` | This endpoint MUST NOT be skipped, merged, or made conditional on whether `uploadStatus`/`--upload-status` (`internal/exec/pro.go`) also fires for the same invocation, and vice versa — the two mechanisms remain fully independent (FR-003a); only `Command`/`Args`/`Flags` content is kept correlatable |
 | Payload size | Marshaled body (envelope + `Metrics` + `Data`) MUST be compared against `Settings.Pro.MaxPayloadBytes` (falling back to the existing Pro default). When it fits, the record is sent as a single request. When `DataItems` pushes it over the limit, `DataItems` is split across multiple correlated requests via `pro.sendChunked`/`BatchInfo`, each carrying the full envelope/`Metrics`/`Data`; the envelope, `Metrics`, and `Data` themselves are never truncated or chunked (FR-011) |
 | Sync timeout | `CaptureSync` MUST bound its **total** wait — across all chunk requests combined, if `DataItems` required batching — to `max(Settings.Pro.Exec.SyncTimeoutSeconds, 10)` seconds |
 | Async flush ceiling | `CaptureAsync` MUST bound its wait to a fixed 2 seconds, not configurable |

@@ -21,7 +21,7 @@ output location are unchanged from the existing suite (see `research.md` Decisio
 | Method | `POST` |
 | Path | `/api/v1/atmos/exec` |
 | Request Headers | `Authorization: Bearer <token>`, `Content-Type: application/json` |
-| Request Body Fields | `atmos_pro_run_id` (string), `atmos_version` (string), `atmos_os` (string), `atmos_arch` (string), `command` (string), `args` (array of string, may be empty), `exit_code` (integer), `git_sha` (string), `repo_url`/`repo_name`/`repo_owner`/`repo_host` (strings), `metrics` (object — see below), `data` (object, optional/nullable), `data_items` (array of object, optional — see below), `batch_id` (string, optional), `batch_index` (integer, optional), `batch_total` (integer, optional) |
+| Request Body Fields | `atmos_pro_run_id` (string), `atmos_version` (string), `atmos_os` (string), `atmos_arch` (string), `command` (string, subcommand path with the `atmos` root stripped, e.g. `"terraform plan"`), `args` (array of string, positional arguments only, e.g. `["cdn"]`, may be empty), `flags` (array of string, masked CLI flags actually passed, e.g. `["-s", "plat-use2-dev", "--upload-status"]`, may be empty), `exit_code` (integer), `git_sha` (string), `repo_url`/`repo_name`/`repo_owner`/`repo_host` (strings), `metrics` (object — see below), `data` (object, optional/nullable), `data_items` (array of object, optional — see below), `batch_id` (string, optional), `batch_index` (integer, optional), `batch_total` (integer, optional) |
 | Response Status | `200` |
 | Response Body | `{ "success": true }` |
 
@@ -95,3 +95,5 @@ chunk requests, only `data_items`/`batch_index` differ.
 | `data`/`data_items` nullability | The contract MUST cover a present-`data`/`data_items` interaction (terraform plan), an absent/`null` interaction (non-terraform command), and a chunked (`batch_id`/`batch_index`/`batch_total` present) interaction, since FR-005 and FR-011 require all three to be valid |
 | No truncation | `data_items` entries in the contract MUST NOT be marked/expected as truncated or dropped — the contract only ever models full delivery, split across requests when large, never partial data (FR-011) |
 | Numeric metrics | All `metrics` fields MUST use `Like()` (never exact literals) since resource usage is inherently non-deterministic across machines/runs |
+| `command` shape | MUST NOT include the `atmos` root segment (e.g. `Like("terraform plan")`, not `"atmos terraform plan"`) |
+| `args`/`flags` separation | `args` MUST contain only positional arguments (e.g. `EachLike("cdn")`); `flags` MUST contain only CLI flags (e.g. `EachLike("-s")`, `EachLike("plat-use2-dev")`); the two MUST NOT be combined into a single array in any example interaction |

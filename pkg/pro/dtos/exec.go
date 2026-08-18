@@ -28,7 +28,15 @@ type ExecUploadRequest struct {
 	AtmosOS       string               `json:"atmos_os"`
 	AtmosArch     string               `json:"atmos_arch"`
 	Command       string               `json:"command"`
-	Args          []string             `json:"args"`
+	// Args holds only the invocation's positional arguments (e.g. the
+	// component identifier). CLI flags are reported separately in Flags —
+	// the two are never combined into one array (FR-003b).
+	Args []string `json:"args"`
+	// Flags holds the CLI flags actually passed (e.g. "-s", "plat-use2-dev"),
+	// masked the same way Args is. Kept distinct from Args per FR-003b so the
+	// two remain correlatable in content with the older, independent
+	// uploadStatus mechanism (internal/exec/pro.go) without merging shapes.
+	Flags         []string             `json:"flags"`
 	ExitCode      int                  `json:"exit_code"`
 	GitSHA        string               `json:"git_sha"`
 	RepoURL       string               `json:"repo_url"`

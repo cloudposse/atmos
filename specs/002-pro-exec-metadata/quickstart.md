@@ -52,6 +52,13 @@ This supplements the existing "Pact Contract Testing" README section
   / reports its upload outcome (allowlist expansion) and carries structured
   infrastructure-change data (FR-006).
 
+8. Run `atmos terraform plan cdn -s plat-use2-dev --upload-status` and inspect the logged
+  request body (`ATMOS_LOGS_LEVEL=Debug`) to confirm the `Command`/`Args`/`Flags` shape
+  fix (FR-003b): `command` MUST be `"terraform plan"` (no `atmos` prefix), `args` MUST be
+  `["cdn"]` (not empty), and `flags` MUST be `["-s", "plat-use2-dev", "--upload-status"]`
+  — never combined with `args`. This is the regression check for the always-empty-`Args`
+  bug (`pkg/proexec/envelope.go:55`).
+
 ## Regenerating the Pact contract
 
 ```bash

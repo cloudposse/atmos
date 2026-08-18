@@ -121,7 +121,7 @@ gaps skipped (file:lines, reason). The calling skill uses this to decide when to
 
 ## Guardrails (CLAUDE.md, mandatory)
 
-- `gofumpt`/`goimports` formatting. Preserve existing comments.
+- `gofumpt`/`gci` formatting. Preserve existing comments.
 - Use `cmd.NewTestKit(t)` for any `cmd` package tests; table-driven tests; `errors.Is()` for error
   checks; never platform-specific binaries in tests (`false`/`true`/`sh` don't exist on Windows).
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, or `go.sum`.

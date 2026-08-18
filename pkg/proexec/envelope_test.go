@@ -61,11 +61,11 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 		sha: "deadbeef",
 	}
 
-	req, err := buildRecord("atmos version", 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	assert.Equal(t, "atmos version", req.Command)
+	assert.Equal(t, "terraform plan", req.Command)
 	assert.Equal(t, 0, req.ExitCode)
 	assert.Equal(t, "deadbeef", req.GitSHA)
 	assert.Equal(t, "https://github.com/acme/infra", req.RepoURL)
@@ -77,14 +77,40 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 	assert.Equal(t, int64(10), req.Metrics.SystemCPUTimeMS)
 	assert.NotNil(t, req.Args)
 	assert.Empty(t, req.Args)
+	assert.NotNil(t, req.Flags)
+	assert.Empty(t, req.Flags)
 	assert.Nil(t, req.Data)
 	assert.Nil(t, req.DataItems)
+}
+
+// TestBuildRecord_ArgsAndFlagsShape verifies FR-003b's Command/Args/Flags
+// contract: Command has no "atmos" root, Args holds only the positional
+// component, Flags holds only the CLI flags actually passed, and the two are
+// never combined into one array — the regression test for the
+// previously-always-empty Args bug (maskArgs(nil) in the pre-fix envelope.go).
+func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
+	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	req, err := buildRecord(
+		"terraform plan",
+		[]string{"cdn"},
+		[]string{"-s", "plat-use2-dev", "--upload-status"},
+		0, testMetrics(), nil, nil, repo,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, req)
+
+	assert.Equal(t, "terraform plan", req.Command)
+	assert.Equal(t, []string{"cdn"}, req.Args)
+	assert.Equal(t, []string{"-s", "plat-use2-dev", "--upload-status"}, req.Flags)
+	assert.NotContains(t, req.Args, "-s", "positional Args must never contain flags")
+	assert.NotContains(t, req.Flags, "cdn", "Flags must never contain the positional component")
 }
 
 func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req, err := buildRecord("atmos list components", 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("atmos list components", nil, nil, 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -107,7 +133,7 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 
-	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), sample{Foo: "bar"}, nil, repo)
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), sample{Foo: "bar"}, nil, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -136,7 +162,7 @@ func TestBuildRecord_DataItemsPresentWhenGiven(t *testing.T) {
 		resourceChange{Action: "updated", Address: "aws_iam_role.example"},
 	}
 
-	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), nil, items, repo)
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), nil, items, repo)
 	require.NoError(t, err)
 	require.Len(t, req.DataItems, 2)
 
@@ -154,7 +180,7 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	}
 
 	// A recognizable AWS access key pattern the Gitleaks-based masker detects.
-	req, err := buildRecord("atmos terraform plan", 0, testMetrics(),
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(),
 		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, nil, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
@@ -175,7 +201,7 @@ func TestBuildRecord_SecretMaskingAppliedToDataItems(t *testing.T) {
 
 	// Same masking-call-path assertion as TestBuildRecord_SecretMaskingAppliedToData,
 	// applied to each DataItems entry independently (FR-010).
-	req, err := buildRecord("atmos terraform plan", 0, testMetrics(), nil,
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), nil,
 		[]any{sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}}, repo)
 	require.NoError(t, err)
 	require.Len(t, req.DataItems, 1)
@@ -190,7 +216,7 @@ func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
 		shaErr:  assertError("no sha"),
 	}
 
-	req, err := buildRecord("atmos version", 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("atmos version", nil, nil, 0, testMetrics(), nil, nil, repo)
 	require.NoError(t, err)
 	assert.Equal(t, "", req.GitSHA)
 	assert.Equal(t, "", req.RepoURL)

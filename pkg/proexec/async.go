@@ -1,9 +1,11 @@
 package proexec
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -85,15 +87,42 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 		exitCode = 1
 	}
 
+	reportedCommand, args, flags := commandArgsAndFlags(cmd)
+
 	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
 	// so the command's process doesn't exit before the request completes,
 	// and so its outcome is always logged.
-	uploadErr := uploadExecMetadata(commandPath, exitCode, nil, nil, client, git.NewDefaultGitRepo())
+	uploadErr := uploadExecMetadata(reportedCommand, args, flags, exitCode, nil, nil, client, git.NewDefaultGitRepo())
 	if uploadErr != nil {
-		log.Info("Exec-metadata upload finished.", "command", commandPath, "success", false, "error", uploadErr)
+		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", false, "error", uploadErr)
 	} else {
-		log.Info("Exec-metadata upload finished.", "command", commandPath, "success", true)
+		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", true)
 	}
+}
+
+// commandArgsAndFlags derives the FR-003b execution-record shape from a
+// Cobra command: Command with the leading "atmos" root segment stripped
+// (e.g. "terraform plan", not "atmos terraform plan"), Args holding only
+// positional arguments, and Flags holding only the CLI flags actually
+// passed (Changed == true), matching the shape internal/exec's sync capture
+// path already uses.
+func commandArgsAndFlags(cmd *cobra.Command) (command string, args []string, flags []string) {
+	if cmd == nil {
+		return "", nil, nil
+	}
+
+	command = cmd.CommandPath()
+	if cmd.Root() != nil {
+		command = strings.TrimPrefix(command, cmd.Root().Name()+" ")
+	}
+
+	args = cmd.Flags().Args()
+
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags = append(flags, "--"+f.Name, f.Value.String())
+	})
+
+	return command, args, flags
 }
 
 // uploadExecMetadata builds and sends a single execution record. Any failure
@@ -101,13 +130,15 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 // the calling command's outcome.
 func uploadExecMetadata(
 	commandPath string,
+	args []string,
+	flags []string,
 	exitCode int,
 	data any,
 	dataItems []any,
 	client pro.AtmosProAPIClientInterface,
 	gitRepo git.GitRepoInterface,
 ) error {
-	req, buildErr := buildRecord(commandPath, exitCode, processBaseline.Since(), data, dataItems, gitRepo)
+	req, buildErr := buildRecord(commandPath, args, flags, exitCode, processBaseline.Since(), data, dataItems, gitRepo)
 	if buildErr != nil {
 		return buildErr
 	}

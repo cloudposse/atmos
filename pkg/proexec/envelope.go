@@ -20,13 +20,17 @@ const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 
 // buildRecord assembles the base execution-record envelope (version, OS,
 // arch, command path, ATMOS_PRO_RUN_ID, git info, resource-usage metrics),
-// and applies secret masking to Args, data, and dataItems (FR-010). A nil
-// data/dataItems argument produces a request with that field entirely absent
-// from the marshaled JSON. Payload-size handling (FR-011) is not performed
-// here — oversized dataItems are split across multiple correlated requests
-// by pro.UploadExecMetadata, never truncated or dropped.
+// and applies secret masking to Args, Flags, data, and dataItems (FR-010).
+// args MUST hold only positional arguments and flags MUST hold only CLI
+// flags — the two are kept in separate fields, never combined (FR-003b). A
+// nil data/dataItems argument produces a request with that field entirely
+// absent from the marshaled JSON. Payload-size handling (FR-011) is not
+// performed here — oversized dataItems are split across multiple correlated
+// requests by pro.UploadExecMetadata, never truncated or dropped.
 func buildRecord(
 	command string,
+	args []string,
+	flags []string,
 	exitCode int,
 	metrics process.ProcessMetrics,
 	data any,
@@ -52,7 +56,8 @@ func buildRecord(
 	//nolint:forbidigo // Exception: Run ID is always from CI/CD environment, not config
 	atmosProRunID := os.Getenv(atmosProRunIDEnvVar)
 
-	maskedArgs := maskArgs(nil)
+	maskedArgs := maskArgs(args)
+	maskedFlags := maskArgs(flags)
 
 	dataRaw, err := maskedDataJSON(data)
 	if err != nil {
@@ -71,6 +76,7 @@ func buildRecord(
 		AtmosArch:     runtime.GOARCH,
 		Command:       command,
 		Args:          maskedArgs,
+		Flags:         maskedFlags,
 		ExitCode:      exitCode,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,

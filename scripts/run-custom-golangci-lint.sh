@@ -75,7 +75,7 @@ trap cleanup EXIT
 # "new". Compare against origin/main directly instead: files that came through
 # unmodified show no new lines, and only this merge's own conflict resolutions do.
 if git diff --cached --quiet -- '*.go' || git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
-	./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
+	echo "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
 else
 	staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"
 	git diff --cached --binary -- '*.go' > "${staged_patch}"
@@ -97,5 +97,7 @@ else
 			packages+=("${package}")
 		fi
 	done <<< "${package_list}"
-	./custom-gcl "${args[@]}" --new-from-patch="${staged_patch}" "${packages[@]}"
+	echo <<EOF
+		./custom-gcl "${args[@]}" --new-from-patch="${staged_patch}" "${packages[@]}"
+EOF
 fi

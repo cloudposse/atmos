@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	git "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -50,11 +51,42 @@ func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	client := &fakeUploadClient{}
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	err := uploadExecMetadata("atmos version", 0, nil, nil, client, repo)
+	err := uploadExecMetadata("version", nil, nil, 0, nil, nil, client, repo)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), client.uploadCalls.Load())
-	assert.Equal(t, "atmos version", client.lastRequest.Command)
+	assert.Equal(t, "version", client.lastRequest.Command)
+}
+
+// TestCommandArgsAndFlags_StripsRootAndSeparatesFlags verifies FR-003b's
+// shape for the async (CaptureAsync) path: Command has no "atmos" root
+// segment, Args holds only positional arguments, and Flags holds only the
+// CLI flags actually passed (Changed == true) — matching the sync path's
+// shape (internal/exec's captureExecMetadataSync) so both mechanisms report
+// consistently for the same invocation (FR-003a).
+func TestCommandArgsAndFlags_StripsRootAndSeparatesFlags(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	tf := &cobra.Command{Use: "terraform"}
+	plan := &cobra.Command{Use: "plan"}
+	plan.Flags().StringP("stack", "s", "", "stack")
+	plan.Flags().Bool("upload-status", false, "upload status")
+	root.AddCommand(tf)
+	tf.AddCommand(plan)
+
+	require.NoError(t, plan.Flags().Parse([]string{"cdn", "-s", "plat-use2-dev", "--upload-status"}))
+
+	command, args, flags := commandArgsAndFlags(plan)
+
+	assert.Equal(t, "terraform plan", command)
+	assert.Equal(t, []string{"cdn"}, args)
+	assert.ElementsMatch(t, []string{"--stack", "plat-use2-dev", "--upload-status", "true"}, flags)
+}
+
+func TestCommandArgsAndFlags_NilCommand(t *testing.T) {
+	command, args, flags := commandArgsAndFlags(nil)
+	assert.Empty(t, command)
+	assert.Nil(t, args)
+	assert.Nil(t, flags)
 }
 
 // nestedCommand builds a minimal Cobra command tree so cmd.CommandPath()

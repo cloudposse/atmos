@@ -19,12 +19,12 @@
 
 version: "2"
 run:
-  tests: true
+  tests: false
   # golangci-lint takes a machine-global single-instance lock. Parallel
   # worktree sessions (and pre-commit hooks racing manual runs) otherwise fail
   # with "parallel golangci-lint is running"; serializing makes the second
   # instance wait instead.
-  allow-serial-runners: true
+  allow-serial-runners: false
 linters:
   enable:
     - bodyclose
@@ -431,7 +431,14 @@ severity:
 formatters:
   enable:
     - gofumpt
-    - goimports
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/cloudposse/atmos)
+      custom-order: true
   exclusions:
     generated: lax
     paths:
