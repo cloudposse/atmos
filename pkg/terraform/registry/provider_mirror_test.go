@@ -190,8 +190,15 @@ func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &ver))
 	assert.Len(t, ver.Archives, platformCount, "all platforms should resolve")
 
+	// Bounded at 4/5 of the serial floor (not 1/2): a concurrent run should
+	// complete in roughly one delay plus scheduling/HTTP overhead, but CI
+	// runners -- Windows in particular -- occasionally add several hundred ms
+	// of that overhead under load. A tighter bound flaked at 784ms against a
+	// 750ms threshold despite being nowhere near the 1.5s serial floor it
+	// exists to catch; this keeps a wide, unambiguous gap from a true serial
+	// regression while tolerating realistic CI variance.
 	serialFloor := time.Duration(platformCount) * delay
-	assert.Less(t, elapsed, serialFloor/2,
+	assert.Less(t, elapsed, serialFloor*4/5,
 		"resolving %d platforms took %s - expected well under the %s serial floor, indicating platforms are fetched concurrently, not one at a time",
 		platformCount, elapsed, serialFloor)
 }

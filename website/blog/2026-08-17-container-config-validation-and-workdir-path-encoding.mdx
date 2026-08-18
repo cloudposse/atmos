@@ -1,0 +1,63 @@
+---
+slug: container-config-validation-and-workdir-path-encoding
+title: "A Typo in a Container Step's `with:` Block Used to Just... Do Nothing"
+authors: [osterman]
+tags: [bugfix, breaking-change]
+date: 2026-08-17T12:00:00.000Z
+---
+
+You add `platforms: [linux/amd64]` to a container build step, run it, and nothing happens
+differently. No error, no warning — the field is just gone, like it was never written. You spend
+ten minutes checking your YAML indentation before realizing the field name was never real to
+begin with.
+
+<!--truncate-->
+
+## The Problem
+
+`type: container` steps take their configuration under `with:` (and, for the driver, a nested
+`driver:` block) as a typed mapping — `run`, `build`, `push`, and `inspect` actions each have a
+fixed set of real fields. But nothing checked that the keys you wrote were actually among them.
+A typo'd field name, a field copied from Docker Compose that doesn't exist in Atmos, or a
+straight-up nonexistent option all decoded the same way: silently discarded, with the rest of the
+mapping loaded normally. The step would run — just without the setting you thought you'd
+configured.
+
+## The Fix
+
+`with:` and `driver:` blocks on container steps now reject unknown fields outright, in both
+standalone workflow files and custom commands. A typo like `platforms:` (not a real field) now
+fails the step with a clear decode error naming the field, instead of quietly doing nothing.
+
+## Breaking Change
+
+If a `with:` or `driver:` block on a `type: container` step currently has a field that isn't one
+of the real, documented fields, it will now fail to load instead of being silently ignored.
+Check your container steps for typos or leftover fields from a different tool's config format
+before upgrading.
+
+## Also in This Release: Local Backend State Was Being Deleted on Re-Provision
+
+If you used a `local` Terraform backend on a component with just-in-time (JIT) workdir
+provisioning enabled, your state was gone after the second run. Not corrupted — deleted, cleanly,
+with no error. `apply` would create it, and the very next `plan` would silently start over with
+an empty state, because the workdir provisioner's incremental sync treated the state file the
+same way it treats any file that isn't part of your component's source: not present in source,
+so remove it. `terraform.tfstate` was never protected from that cleanup the way provider lock
+files already were.
+
+The workdir provisioner now leaves `terraform.tfstate`, `terraform.tfstate.backup`, and the
+transient `.terraform.tfstate.lock.info` marker alone, in both directions — never copied in from
+source, never deleted from the workdir. If you were working around this by avoiding JIT workdir
+provisioning for local-backend components, that workaround is no longer necessary.
+
+## Also in This Release: Workdir Path Encoding
+
+Separately, the internal `.workdir/` directory Atmos uses for JIT component provisioning now
+encodes component and stack names more carefully, to guarantee two differently named components
+(e.g. one named `app/local` and another named `app-local`) can never accidentally resolve to the
+same on-disk directory and share files or state.
+
+This changes the on-disk directory name for any component whose name contains a literal `-`,
+`/`, or `\`. Atmos migrates a workdir it finds at the old location automatically the next time
+that component is provisioned, so this should be transparent for most setups.
