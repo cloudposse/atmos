@@ -91,6 +91,13 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
+	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
+	// handleDeploySubcommand rewrites "deploy" to "apply" in place so
+	// downstream terraform invocation logic can treat them uniformly). The
+	// exec-metadata record must report the command the user actually typed,
+	// not its internal apply-equivalent rewrite.
+	originalSubCommand := info.SubCommand
+
 	log.Debug(
 		"ExecuteTerraform entry",
 		"SubCommand", info.SubCommand,
@@ -189,15 +196,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
 
-	captureExecMetadataSync(&atmosConfig, &info, err)
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, err)
 
 	return err
 }
 
 // captureExecMetadataSync reports an execution record to Atmos Pro for the
-// synchronous allowlist (terraform plan/apply), blocking briefly per
+// synchronous allowlist (terraform plan/apply/deploy), blocking briefly per
 // proexec.CaptureSync's own configurable timeout. No-op for every other
-// terraform subcommand.
+// terraform subcommand. subCommand must be the subcommand the user actually
+// invoked (captured before handleDeploySubcommand's in-place "deploy" ->
+// "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
+// misattributed to `apply`.
 //
 // NOTE (scoping judgment call): the structured plugin.TerraformOutputData
 // enrichment described for User Story 3 is NOT wired in here. That type
@@ -210,8 +220,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // non-internal function. Data is passed as nil for now; the base envelope
 // (US1/US2) still reports normally regardless of whether Native CI is
 // enabled.
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmdErr error) {
-	if !isExecMetadataSyncSubcommand(info.SubCommand) {
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, cmdErr error) {
+	commandPath := "atmos terraform " + subCommand
+	if !proexec.IsSyncCommand(commandPath) {
 		return
 	}
 
@@ -220,16 +231,9 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, info *schem
 		exitCode = 1
 	}
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+info.SubCommand, exitCode, nil, nil); syncErr != nil {
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, exitCode, nil, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
-}
-
-// isExecMetadataSyncSubcommand reports whether the given terraform subcommand
-// is part of the synchronous exec-metadata-upload allowlist (FR-007):
-// plan and apply only — not validate, output, workspace, version, etc.
-func isExecMetadataSyncSubcommand(subCommand string) bool {
-	return subCommand == "plan" || subCommand == subcommandApply
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.

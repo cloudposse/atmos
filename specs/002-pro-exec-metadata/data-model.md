@@ -55,7 +55,7 @@ for `POST /v1/atmos/exec`.
 | `InBlockOps`, `OutBlockOps` | `int64` | `omitempty` — Unix only |
 | `VolCtxSwitches`, `InvolCtxSwitches` | `int64` | `omitempty` — Unix only |
 
-### TerraformExecData (one concrete `Data`/`DataItems` shape, for `terraform plan`/`apply`)
+### TerraformExecData (one concrete `Data`/`DataItems` shape, for `terraform plan`/`apply`/`deploy`)
 
 Derived from the already-merged `pkg/ci/internal/plugin.TerraformOutputData` structure,
 split across the two fields by size:
@@ -81,13 +81,32 @@ split across the two fields by size:
 |---|---|---|---|
 | `terraform plan` | Sync | Warn-and-continue (does not fail the plan) | `TerraformOutputData` |
 | `terraform apply` | Sync | Warn-and-continue (does not fail the apply) | `TerraformOutputData` |
+| `terraform deploy` | Sync | Warn-and-continue (does not fail the deploy) | `TerraformOutputData` |
 | `describe affected` | Sync | Warn-and-continue | `nil` |
 | All other commands | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `nil` |
 
 The specific fail-vs-warn choice per synchronous command (FR-008) defaults to
-**warn-and-continue** for all three initial commands — a delivery outage must never turn
-a successful `terraform apply` into a failed CI run. This is a code-level default, not a
-user setting, consistent with the spec's Assumptions.
+**warn-and-continue** for all four sync commands — a delivery outage must never turn
+a successful `terraform apply`/`deploy` into a failed CI run. This is a code-level
+default, not a user setting, consistent with the spec's Assumptions.
+
+**Sync/async exclusivity (FR-007, 2026-08-18 clarification)**: A command classified as
+sync above MUST NOT also receive the async default-path upload for the same invocation.
+Both `cmd/root.go` (async call site) and `internal/exec/terraform.go`/`describe affected`
+(sync call site) MUST consult the same shared predicate (`proexec.IsSyncCommand`, research
+Decision 10) so the two paths cannot independently drift — this was the root cause of a
+production defect where a single `atmos terraform plan` produced two execution records.
+
+**Multi-component invocations (FR-006a, 2026-08-18 clarification)**: When `plan`/`apply`/
+`deploy` targets multiple components in one CLI invocation (`--affected`/`--all`), exactly
+one `ExecutionRecord` is produced for the whole invocation — not one per component. Each
+component's identity (`component`, `stack`), outcome (`exitCode`), and structured data
+(created/updated/deleted/replaced/moved/imported resources, outputs, warnings) are folded
+into that single record's `DataItems` as one entry per component, e.g.
+`{"component": "vpc", "stack": "plat-use2-dev", "exitCode": 0, "action": "created",
+"address": "aws_vpc.this"}`-shaped items — the existing chunking mechanism (FR-011)
+applies transparently if the combined multi-component `DataItems` list is large enough to
+exceed `MaxPayloadBytes`. See research.md Decision 11 for the aggregation-point rationale.
 
 ---
 

@@ -30,7 +30,9 @@ This supplements the existing "Pact Contract Testing" README section
   ATMOS_LOGS_LEVEL=Debug atmos version
   ```
 
-4. Run a synchronous command and confirm it visibly waits on / reports the upload outcome:
+4. Run a synchronous command and confirm it visibly waits on / reports the upload outcome,
+  and that **exactly one** upload attempt is logged (not two — this is the regression
+  check for the dedup fix, US2 Acceptance Scenario 4):
 
   ```bash
   ATMOS_LOGS_LEVEL=Debug atmos terraform plan <component> -s <stack>
@@ -38,6 +40,17 @@ This supplements the existing "Pact Contract Testing" README section
 
 5. Unset `CI` and confirm no upload attempt is logged for the same commands — this is the
   negative-path check from Acceptance Scenario US1.2/US1.3.
+
+6. Run a multi-component `plan` and confirm exactly **one** upload attempt is logged for
+  the whole invocation, not one per component (FR-006a):
+
+  ```bash
+  ATMOS_LOGS_LEVEL=Debug atmos terraform plan --affected
+  ```
+
+7. Run `atmos terraform deploy <component> -s <stack>` and confirm it now also blocks on
+  / reports its upload outcome (allowlist expansion) and carries structured
+  infrastructure-change data (FR-006).
 
 ## Regenerating the Pact contract
 

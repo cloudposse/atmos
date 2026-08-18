@@ -57,6 +57,79 @@ func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	assert.Equal(t, "atmos version", client.lastRequest.Command)
 }
 
+// nestedCommand builds a minimal Cobra command tree so cmd.CommandPath()
+// produces a realistic full path (e.g. "atmos terraform plan"), matching how
+// cmd/root.go's real command tree is shaped. Standalone commands (no parent)
+// only ever report their own Use as CommandPath(), which cannot reproduce
+// the sync-allowlist matching this test suite needs.
+func nestedCommand(path ...string) *cobra.Command {
+	if len(path) == 0 {
+		return &cobra.Command{Use: ""}
+	}
+	root := &cobra.Command{Use: path[0]}
+	cur := root
+	for _, use := range path[1:] {
+		child := &cobra.Command{Use: use}
+		cur.AddCommand(child)
+		cur = child
+	}
+	return cur
+}
+
+// TestCaptureAsync_SkipsSyncAllowlistedCommands is the regression test for
+// the production duplicate-execution-record defect: a single invocation of a
+// sync-allowlisted command (e.g. "atmos terraform plan") must never also
+// receive the async default-path upload, since its own execution path
+// already delivers via CaptureSync (FR-007's mutual-exclusivity
+// clarification, research.md Decision 10).
+func TestCaptureAsync_SkipsSyncAllowlistedCommands(t *testing.T) {
+	withCIEnv(t, true)
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.Token = "test-token"
+	SetAtmosConfig(atmosConfig)
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	tests := []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{"terraform plan", nestedCommand("atmos", "terraform", "plan")},
+		{"terraform apply", nestedCommand("atmos", "terraform", "apply")},
+		{"terraform deploy", nestedCommand("atmos", "terraform", "deploy")},
+		{"describe affected", nestedCommand("atmos", "describe", "affected")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// CaptureAsync must return promptly without attempting a network
+			// call (it would otherwise try to reach the real Atmos Pro API
+			// and hang/retry, since no fake client is wired at this layer).
+			start := time.Now()
+			CaptureAsync(tt.cmd, nil)
+			assert.Less(t, time.Since(start), time.Second, "CaptureAsync should no-op immediately for sync-allowlisted commands, not attempt an upload")
+		})
+	}
+}
+
+// TestCaptureAsync_StillDispatchesForNonSyncCommands ensures the dedup fix
+// does not regress User Story 1: commands outside the synchronous allowlist
+// must still receive the async default-path upload.
+func TestCaptureAsync_StillDispatchesForNonSyncCommands(t *testing.T) {
+	withCIEnv(t, false)
+	SetAtmosConfig(&schema.AtmosConfiguration{})
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	cmd := nestedCommand("atmos", "version")
+	start := time.Now()
+	CaptureAsync(cmd, nil)
+	// Gate is closed (CI off), so this should also no-op promptly — this
+	// test only asserts IsSyncCommand does not incorrectly classify "atmos
+	// version" as sync (which would make it indistinguishable from the
+	// skip case above).
+	assert.False(t, IsSyncCommand(cmd.CommandPath()))
+	assert.Less(t, time.Since(start), asyncFlushCeiling)
+}
+
 func TestCaptureAsync_NoOpOnGateClosed(t *testing.T) {
 	withCIEnv(t, false)
 	SetAtmosConfig(&schema.AtmosConfiguration{})

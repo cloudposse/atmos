@@ -291,7 +291,125 @@ directly; there is no reasonable alternative that wouldn't duplicate that infras
 
 ---
 
+## Decision 10: Dedup fix — single shared sync-allowlist predicate
+
+**Decision**: Move the sync-allowlist check out of `internal/exec/terraform.go`'s private
+`isExecMetadataSyncSubcommand` into a new exported `proexec.IsSyncCommand(commandPath
+string) bool` in `pkg/proexec/classify.go`. `cmd/root.go`'s `Execute()` calls it before
+`proexec.CaptureAsync(cmd, err)` and skips the async call entirely when true;
+`internal/exec/terraform.go`'s `captureExecMetadataSync` calls the same function instead
+of its own copy.
+
+**Rationale**: Production data showed a single `atmos terraform plan` invocation
+producing two execution records — one via `cmd/root.go`'s unconditional
+`proexec.CaptureAsync`, one via `ExecuteTerraform`'s `captureExecMetadataSync` →
+`proexec.CaptureSync`. The root cause is that the allowlist existed only inside
+`internal/exec`, invisible to `cmd/root.go`, so the two call sites could never stay in
+sync by construction. A single exported predicate in `pkg/proexec` (the package both call
+sites already depend on) removes the possibility of the two diverging again, and matches
+FR-007's 2026-08-18 clarification that sync/async delivery is mutually exclusive per
+invocation.
+
+**Alternatives considered**:
+- Have `cmd/root.go` special-case `terraform plan`/`apply`/`deploy`/`describe affected`
+  by string match inline — rejected: reintroduces exactly the two-copies-of-the-same-list
+  problem that caused the bug; a shared function in the package both sites already import
+  is strictly simpler.
+- Have `ExecuteTerraform` suppress `cmd/root.go`'s later `CaptureAsync` via a shared
+  mutable flag (e.g. a package-level "already delivered" marker) — rejected: implicit,
+  order-dependent state across package boundaries is harder to reason about and test than
+  a pure predicate function; the predicate approach requires no coordination at call time.
+
+---
+
+## Decision 11: Multi-component aggregation — one record per graph run, not per node
+
+**Decision**: Move the exec-metadata capture call out of `ExecuteTerraform` (which
+`cmd/terraform/utils.go`'s `executeSingleComponent` calls once, but which the
+multi-component graph scheduler also calls once *per node*) and into
+`cmd/terraform/utils.go`'s graph-run lifecycle, which already tracks
+`wasMultiComponentExecution` and already owns a per-run `terraformNodeHooks` value shared
+across all nodes. `terraformNodeHooks` accumulates each node's outcome (component name,
+exit code, structured data) into a slice as `AfterWithWriters` fires per node, and after
+the graph scheduler returns, exactly one `proexec.CaptureSync` call is made with the
+accumulated per-component list as `dataItems`. For the single-component path
+(`executeSingleComponent`), `ExecuteTerraform`'s existing per-invocation
+`captureExecMetadataSync` call is unchanged (there is only ever one node, so "per node"
+and "per invocation" already coincide).
+
+**Rationale**: Per FR-006a (2026-08-18 clarification), a multi-component `--affected`/
+`--all` run must produce exactly one execution record for the whole CLI invocation, not
+one per component — matching how `describe affected` (a related multi-component command)
+already reports as a single record. `cmd/terraform/utils.go`'s graph orchestration is the
+only place in the codebase that already knows when a multi-component run starts and ends,
+making it the natural aggregation point; `ExecuteTerraform` itself has no visibility into
+whether it is being called once or N times as part of a larger run.
+
+**Alternatives considered**:
+- Keep per-node uploads but tag them with a shared `BatchID` so Atmos Pro can group them
+  client-side — rejected: FR-006a's clarification specifically calls for one record with
+  per-component data folded into `DataItems`, not N correlated-but-separate records; the
+  existing `BatchID`/chunking mechanism (FR-011) is reserved for splitting one oversized
+  `DataItems` array, not for aggregating logically-distinct component runs, and reusing it
+  for both purposes would conflate two different correlation semantics.
+- Buffer per-node results in a package-level slice inside `internal/exec` and flush on
+  process exit — rejected: `internal/exec` has no reliable "the graph run just ended"
+  signal (that lifecycle lives in `cmd/terraform/utils.go`); piggy-backing on process exit
+  would also misbehave for the sync delivery/timeout guarantees FR-008a requires.
+
+---
+
+## Decision 12: US3 unblocked — reuse existing `WithStdoutCapture`, not a new tee
+
+**Decision**: Issue #2924's proposed fix (add a new `MultiWriter`-based stdout tee to
+`ExecuteTerraform`'s shared pipeline) is **not adopted**. Instead: `cmd/terraform/plan.go`,
+`apply.go`, and (newly) `deploy.go` already construct a `bytes.Buffer` and pass
+`e.WithStdoutCapture(&stdoutBuf)`/`e.WithStderrCapture(&stderrBuf)` as `ShellCommandOption`s
+into `terraformRunWithOptions` — today gated on `ciMode` (`--ci` flag / `ATMOS_CI`/`CI` env
+/ `pkg/ci.IsCI()` auto-detect) and consumed only by `PostRunE`'s Native-CI job-summary
+hooks. This plan decouples that capture from the `ciMode` gate: the buffer is now always
+captured for `plan`/`apply`/`deploy` (cheap — an in-memory `bytes.Buffer`, no behavior
+change to the real stdout stream, which still receives the tee'd copy unchanged), and
+after `terraformRunWithOptions` returns, the ANSI-stripped text is passed through the
+already-public `terraform.ParsePlanOutput`/`ParseApplyOutput` and forwarded as an
+additional `opts`-carried value into `ExecuteTerraform`, which `captureExecMetadataSync`
+reads to populate `CaptureSync`'s `data`/`dataItems` arguments (data-model.md's
+`TerraformExecData` mapping, unchanged in shape).
+
+**Rationale**: The capture mechanism US3 needs already exists, is already exercised in
+production (Native CI job summaries depend on it today), and is already scoped to exactly
+the three commands (`plan`/`apply`/`deploy`) that need it — extending its use avoids the
+much larger blast radius #2924 originally proposed (a new tee across a shared pipeline
+used by every terraform subcommand, requiring re-verification of streaming/TTY/masking
+behavior for all of them, not just three). The only real gap was plumbing: the captured
+buffer never left the `cmd/terraform/plan.go`/`apply.go` closures. Decoupling the capture
+from `ciMode` (rather than reusing that flag as the exec-metadata gate) matters because
+the two gates are independently controlled — `ciMode` enables the *separate*,
+independently-configured Native CI job-summary feature (`atmosConfig.CI.Enabled`), while
+exec-metadata upload is gated by `telemetry.IsCI() && Pro-configured`; a run could have
+one true without the other, and coupling them would make exec-metadata's structured data
+silently depend on an unrelated feature flag.
+
+**Alternatives considered**:
+- #2924's original proposal (new `MultiWriter` tee in `ExecuteTerraform`'s shared
+  pipeline, using `WithStdoutOverride`'s prior art from `terraform_plan_diff.go`) —
+  rejected: `WithStdoutOverride` *replaces* stdout (used to redirect noisy output to
+  stderr), not tee it; `WithStdoutCapture` already tees, so no new option type is needed.
+  Scoping the change to the shared pipeline (touched by every terraform subcommand) is
+  also strictly riskier than scoping it to the three call sites that already opt into
+  capture today.
+- Gate the always-on capture behind the exec-metadata gate (`telemetry.IsCI() &&
+  Pro-configured`) instead of making it unconditional — considered but not adopted as the
+  primary mechanism: the capture itself is cheap (an in-memory buffer append, no I/O), so
+  gating it saves negligible cost while adding a second condition to reason about at the
+  `cmd/terraform/plan.go` call site; the exec-metadata gate is still checked downstream by
+  `proexec.CaptureSync` itself (as it already is today), so no wasted upload occurs either
+  way. Revisit only if profiling shows the always-on buffer append is measurably costly.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
-All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11) before
-planning began. No NEEDS CLARIFICATION markers remain in this plan or the spec.
+All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,
+2026-08-18) before planning began. No NEEDS CLARIFICATION markers remain in this plan or
+the spec.

@@ -53,7 +53,22 @@ func SetAtmosConfig(atmosConfig *schema.AtmosConfiguration) {
 // don't need to duplicate that check), never alters err or the caller's exit
 // path, and blocks the caller for at most asyncFlushCeiling to maximize the
 // chance the upload is dispatched before the process exits (FR-009).
+//
+// Commands on the synchronous allowlist (IsSyncCommand) are skipped here:
+// their own execution path already calls CaptureSync directly, and the two
+// delivery paths are mutually exclusive per invocation (FR-007) — a command
+// must never produce two execution records for the same run.
 func CaptureAsync(cmd *cobra.Command, err error) {
+	commandPath := ""
+	if cmd != nil {
+		commandPath = cmd.CommandPath()
+	}
+
+	if IsSyncCommand(commandPath) {
+		log.Debug("Skipping async exec-metadata upload: command is on the synchronous allowlist.", "command", commandPath)
+		return
+	}
+
 	atmosConfig := currentAtmosConfig
 	if !gateOpen(atmosConfig) {
 		return
@@ -68,11 +83,6 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	exitCode := 0
 	if err != nil {
 		exitCode = 1
-	}
-
-	commandPath := ""
-	if cmd != nil {
-		commandPath = cmd.CommandPath()
 	}
 
 	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)

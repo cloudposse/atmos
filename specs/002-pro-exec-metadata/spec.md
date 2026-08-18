@@ -19,6 +19,13 @@
 - Q: When an execution record's command-specific structured data is too large for a single request, what should be chunked/batched across multiple correlated requests? → A: Only the command-specific structured-data field is split across multiple correlated requests, reusing the existing chunked-upload/batch-correlation mechanism already used for `describe affected` uploads; the base envelope and resource-usage metrics are small and are always sent in full, never truncated or dropped.
 - Q: For synchronous commands, does the ~10s upload-confirmation wait (FR-008a) apply per chunk or to the whole record? → A: To the whole record (all chunks combined), ~10s total, not per chunk.
 
+### Session 2026-08-18
+
+- Q: For a command on the synchronous allowlist (`terraform plan`, `terraform apply`, `describe affected`), should the async default-path upload (FR-002/FR-009) still also fire, or should sync delivery replace it for that invocation? → A: Mutually exclusive — sync-allowlisted commands are exempted from the async default path entirely; each qualifying invocation produces exactly one execution record, delivered via its command's classified path (sync or async), never both.
+- Q: For a multi-component `atmos terraform plan --affected`/`--all` run (many components in one CLI invocation), should each per-component graph node produce its own execution record, or should the invocation produce one aggregate record? → A: Aggregate — one execution record per CLI invocation; per-component results (including each component's identity, outcome, and structured data) are folded into that single record's structured data, not sent as separate records.
+- Q: Should `atmos terraform deploy` (which already has the same CI-mode stdout-capture wiring as `plan`/`apply`) join the synchronous execution-record allowlist, or stay outside it? → A: Add `deploy` to the synchronous allowlist alongside `plan`/`apply`/`describe affected`.
+- Q: Since `terraform deploy` typically wraps plan+apply internally, should its execution record carry deploy's own structured infrastructure-change data (FR-006), or just the base envelope like `describe affected`? → A: `deploy` gets structured infrastructure-change data too, same as `plan`/`apply` — FR-006 extended to include it.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Automatic visibility into CI command execution (Priority: P1)
@@ -40,23 +47,24 @@ As an organization running Atmos in CI with Atmos Pro configured, I want every `
 
 ### User Story 2 - Reliable reporting for critical operations (Priority: P2)
 
-As an organization relying on Atmos Pro to track infrastructure changes, I want the outcome of critical operations (`terraform plan`, `terraform apply`, `describe affected`) to be confirmed as recorded by Atmos Pro before the command finishes, so that a CI pipeline never reports success for an infrastructure change that Atmos Pro failed to record.
+As an organization relying on Atmos Pro to track infrastructure changes, I want the outcome of critical operations (`terraform plan`, `terraform apply`, `terraform deploy`, `describe affected`) to be confirmed as recorded by Atmos Pro before the command finishes, so that a CI pipeline never reports success for an infrastructure change that Atmos Pro failed to record.
 
 **Why this priority**: Builds directly on User Story 1's delivery mechanism; only meaningful once basic reporting exists. It matters most for the highest-stakes commands, which is why it is scoped to a small, well-defined set rather than all commands.
 
-**Independent Test**: Run `atmos terraform plan` (or `apply`, or `describe affected`) in CI with Atmos Pro configured, and verify the command does not exit until the execution record upload has completed (or has been explicitly handled as a failure per that command's configured behavior).
+**Independent Test**: Run `atmos terraform plan` (or `apply`, `deploy`, or `describe affected`) in CI with Atmos Pro configured, and verify the command does not exit until the execution record upload has completed (or has been explicitly handled as a failure per that command's configured behavior).
 
 **Acceptance Scenarios**:
 
 1. **Given** `atmos terraform plan` runs in CI with Atmos Pro configured and reachable, **When** the plan completes, **Then** the command does not exit until its execution record has been accepted by Atmos Pro.
 2. **Given** `atmos terraform apply` runs in CI with Atmos Pro configured but unreachable, **When** the apply completes, **Then** the command follows its own configured failure behavior (either fails with a clear error, or proceeds with a warning) — never silently proceeds without one of the two.
 3. **Given** a command outside the critical allowlist (e.g. `atmos validate stacks`) runs in CI with Atmos Pro configured, **When** the command completes, **Then** it exits immediately without waiting for the execution record upload to finish.
+4. **Given** `atmos terraform plan` runs in CI with Atmos Pro configured, **When** the command completes, **Then** exactly one execution record is produced for that invocation — delivered via the synchronous path — and no separate asynchronous execution record is also sent for the same invocation.
 
 ---
 
-### User Story 3 - Structured infrastructure-change data for plan/apply (Priority: P3)
+### User Story 3 - Structured infrastructure-change data for plan/apply/deploy (Priority: P3)
 
-As an organization reviewing infrastructure changes made through CI, I want `terraform plan`/`apply` execution records to include the specific resources created, updated, deleted, and the resulting outputs, so that I can see what changed in Atmos Pro without re-reading raw CI logs.
+As an organization reviewing infrastructure changes made through CI, I want `terraform plan`/`apply`/`deploy` execution records to include the specific resources created, updated, deleted, and the resulting outputs, so that I can see what changed in Atmos Pro without re-reading raw CI logs.
 
 **Why this priority**: Adds significant analytical value but depends on User Stories 1 and 2 already being in place; the base execution record is useful on its own, and this enriches it further for the commands that produce the richest data.
 
@@ -79,6 +87,7 @@ As an organization reviewing infrastructure changes made through CI, I want `ter
 - What happens if a command's arguments or structured data would otherwise contain secret values? Consistent with Atmos's existing secret-masking behavior, sensitive values must never be included in the uploaded payload.
 - What happens when a command is interrupted (e.g. Ctrl-C) mid-execution? Best-effort delivery of a partial/aborted execution record is acceptable; a synchronous command being interrupted must not hang indefinitely waiting on delivery.
 - What happens when the same CI job runs many `atmos` commands in sequence (e.g. a workflow)? Each command execution produces its own independent execution record.
+- What happens when a single `atmos terraform plan`/`apply` CLI invocation targets multiple components in one run (`--affected`/`--all`)? The invocation still produces exactly one execution record overall, not one per component; each component's identity, outcome, and any structured data (FR-006) are folded into that single record's command-specific structured-data field.
 
 ## Requirements *(mandatory)*
 
@@ -89,8 +98,9 @@ As an organization reviewing infrastructure changes made through CI, I want `ter
 - **FR-003**: For every qualifying command execution, system MUST report a base execution record containing: Atmos version, operating system, architecture, the full command invoked, any command-specific additional arguments, the command's exit code, source-control identification (e.g. commit/repository info), and the existing Atmos Pro run identifier, consistent with what other Atmos Pro uploads already capture.
 - **FR-004**: System MUST report resource-usage metrics for the command's execution, including at minimum wall-clock duration and CPU time, with additional metrics (peak memory, page faults, context switches, block I/O) included whenever the host platform makes them available.
 - **FR-005**: System MUST support commands attaching additional, command-specific structured data to their execution record; commands that do not define such data MUST still have their base execution record and resource-usage metrics sent normally.
-- **FR-006**: System MUST attach structured infrastructure-change data (created/updated/deleted/replaced resources, output values, warnings/errors) to the execution record for `terraform plan` and `terraform apply`.
-- **FR-007**: System MUST treat `terraform plan`, `terraform apply`, and `describe affected` as commands whose execution-record delivery blocks command completion (synchronous), and MUST treat all other commands as fire-and-forget (asynchronous), matching each command's fixed, code-defined classification.
+- **FR-006**: System MUST attach structured infrastructure-change data (created/updated/deleted/replaced resources, output values, warnings/errors) to the execution record for `terraform plan`, `terraform apply`, and `terraform deploy`.
+- **FR-006a**: When a single `terraform plan`/`apply` CLI invocation targets multiple components in one run (e.g. `--affected`/`--all`), System MUST report exactly one execution record for the whole invocation, not one per component; each component's identity, outcome, and structured data (FR-006) MUST be folded into that single record's command-specific structured-data field rather than sent as separate, independent execution records.
+- **FR-007**: System MUST treat `terraform plan`, `terraform apply`, `terraform deploy`, and `describe affected` as commands whose execution-record delivery blocks command completion (synchronous), and MUST treat all other commands as fire-and-forget (asynchronous), matching each command's fixed, code-defined classification. These two delivery paths are mutually exclusive per invocation: a command on the synchronous allowlist MUST NOT also receive an asynchronous default-path upload for the same invocation — every qualifying command execution produces exactly one execution record, never two.
 - **FR-008**: For each command classified as synchronous, the command's own implementation MUST define whether a delivery failure causes the command itself to fail, or is treated as a non-fatal warning that still allows the command to complete; system MUST guarantee one of these two outcomes occurs (never a silent, indefinite hang).
 - **FR-008a**: System MUST bound how long a synchronous command waits for its complete execution-record upload (including all chunks, if the structured data required batching) to be confirmed, defaulting to approximately 10 seconds total, and this wait duration MUST be configurable by the user to a longer value.
 - **FR-009**: For commands classified as asynchronous, a delivery failure MUST NOT alter the command's own exit code or block its completion. The process MUST perform a short, bounded best-effort wait to maximize the chance the upload is dispatched before exiting, rather than exiting with no delivery guarantee at all.
@@ -102,9 +112,9 @@ As an organization reviewing infrastructure changes made through CI, I want `ter
 
 ### Key Entities
 
-- **Execution Record**: Represents a single `atmos` command invocation's reported outcome. Includes identity (command, arguments, exit code), environment (Atmos version, OS, architecture), source-control context, resource-usage metrics, an optional command-specific structured-data payload, and the existing Atmos Pro run identifier already used by other Pro uploads, for correlation across a CI run and deduplication of retried uploads.
+- **Execution Record**: Represents a single `atmos` command invocation's reported outcome — exactly one record per CLI invocation, including a multi-component `--affected`/`--all` run (FR-006a), never one record per component. Includes identity (command, arguments, exit code), environment (Atmos version, OS, architecture), source-control context, resource-usage metrics, an optional command-specific structured-data payload (which, for a multi-component invocation, itself contains the per-component breakdown), and the existing Atmos Pro run identifier already used by other Pro uploads, for correlation across a CI run and deduplication of retried uploads.
 - **Resource Usage Metrics**: Represents how much time and system resources a command consumed while running — wall-clock duration, CPU time, and (where available) peak memory, page faults, context switches, and block I/O.
-- **Command Structured Data**: Represents optional, command-specific enrichment attached to an Execution Record. For `terraform plan`/`apply`, this is the set of created/updated/deleted/replaced resources, output values, and warnings/errors produced by that run. When this data exceeds the platform's payload size limit, it is split across multiple correlated requests (never truncated or dropped) using the same chunking/batch-correlation mechanism as `describe affected` uploads; the base envelope and resource-usage metrics are unaffected and always delivered in full.
+- **Command Structured Data**: Represents optional, command-specific enrichment attached to an Execution Record. For `terraform plan`/`apply`/`deploy`, this is the set of created/updated/deleted/replaced resources, output values, and warnings/errors produced by that run. When this data exceeds the platform's payload size limit, it is split across multiple correlated requests (never truncated or dropped) using the same chunking/batch-correlation mechanism as `describe affected` uploads; the base envelope and resource-usage metrics are unaffected and always delivered in full.
 - **Execution Contract**: Represents the agreed, verifiable shape of the data exchanged between Atmos and Atmos Pro for execution-metadata upload, independent of either side's internal implementation.
 
 ## Success Criteria *(mandatory)*
@@ -113,7 +123,7 @@ As an organization reviewing infrastructure changes made through CI, I want `ter
 
 - **SC-001**: 100% of `atmos` command executions that run in a recognized CI environment with Atmos Pro configured produce a corresponding execution record on the Atmos Pro side, with no additional setup beyond existing CI/Pro configuration.
 - **SC-002**: 0% of command executions outside CI, or in CI without Atmos Pro configured, produce any outbound execution-metadata traffic.
-- **SC-003**: For `terraform plan`, `terraform apply`, and `describe affected`, 100% of runs either confirm successful delivery of their complete execution record — including all chunks, if its structured data required batching — within the configured total wait period (~10 seconds by default), or exit through one of the two explicitly defined failure paths (fail command / warn and continue) — never an indefinite wait.
+- **SC-003**: For `terraform plan`, `terraform apply`, `terraform deploy`, and `describe affected`, 100% of runs either confirm successful delivery of their complete execution record — including all chunks, if its structured data required batching — within the configured total wait period (~10 seconds by default), or exit through one of the two explicitly defined failure paths (fail command / warn and continue) — never an indefinite wait.
 - **SC-004**: For all other commands, execution-metadata delivery adds no more than a brief, bounded delay to command completion as perceived by the user (fire-and-forget with a short best-effort flush, not a blocking wait for confirmation).
 - **SC-005**: An outage or error response from Atmos Pro causes zero unexpected exit-code changes for asynchronous commands, and causes only the explicitly configured behavior (fail or warn) for synchronous commands.
 - **SC-006**: A reviewer on the Atmos Pro team can determine the exact request/response shape for execution-metadata upload from a single, versioned artifact, without reading Atmos's Go source code.
@@ -123,7 +133,7 @@ As an organization reviewing infrastructure changes made through CI, I want `ter
 
 - "Recognized CI environment" reuses Atmos's existing CI-detection behavior (environment-variable-based provider detection) rather than introducing a new detection mechanism.
 - "Atmos Pro configured" means a usable authentication path already exists (a static token, or GitHub OIDC plus workspace identification) via Atmos's existing Atmos Pro configuration — no new configuration surface is introduced by this feature.
-- The set of commands treated as synchronous (`terraform plan`, `terraform apply`, `describe affected`) is fixed by this feature's initial implementation; commands are not user-configurable as synchronous or asynchronous.
+- The set of commands treated as synchronous (`terraform plan`, `terraform apply`, `terraform deploy`, `describe affected`) is fixed by this feature's initial implementation; commands are not user-configurable as synchronous or asynchronous.
 - The mechanism by which an individual command supplies its structured data (FR-005) is an internal implementation concern and is intentionally not specified here; it must not require any user-facing configuration.
 - Resource-usage metrics that are platform-specific (e.g. detailed memory/IO counters available on Unix-like systems but not Windows) are best-effort and their absence on unsupported platforms is expected, not an error.
 - The "Execution Contract" (FR-013) is delivered as a consumer contract test artifact, following the same local-only, no-broker pattern already established for Atmos's other Atmos Pro API interactions.

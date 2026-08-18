@@ -5,13 +5,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestIsExecMetadataSyncSubcommand verifies that only terraform plan/apply
-// are classified as synchronous for exec-metadata upload purposes (FR-007);
-// every other terraform subcommand (validate, output, workspace, version,
-// init, etc.) must remain fire-and-forget via the async default path only.
+// TestIsExecMetadataSyncSubcommand verifies that only terraform
+// plan/apply/deploy are classified as synchronous for exec-metadata upload
+// purposes (FR-007); every other terraform subcommand (validate, output,
+// workspace, version, init, etc.) must remain fire-and-forget via the async
+// default path only. The classification now lives in the shared
+// proexec.IsSyncCommand predicate (research.md Decision 10) rather than a
+// private copy in this package, so both cmd/root.go's async path and this
+// package's sync path can never independently drift out of sync again.
 func TestIsExecMetadataSyncSubcommand(t *testing.T) {
 	tests := []struct {
 		subCommand string
@@ -19,19 +24,19 @@ func TestIsExecMetadataSyncSubcommand(t *testing.T) {
 	}{
 		{"plan", true},
 		{"apply", true},
+		{"deploy", true},
 		{"validate", false},
 		{"output", false},
 		{"workspace", false},
 		{"version", false},
 		{"init", false},
-		{"deploy", false},
 		{"destroy", false},
 		{"", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.subCommand, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isExecMetadataSyncSubcommand(tt.subCommand))
+			assert.Equal(t, tt.expected, proexec.IsSyncCommand("atmos terraform "+tt.subCommand))
 		})
 	}
 }
@@ -45,10 +50,26 @@ func TestCaptureExecMetadataSync_NoOpOutsideCI(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	for _, subCommand := range []string{"plan", "apply", "validate", "output"} {
-		info := &schema.ConfigAndStacksInfo{SubCommand: subCommand}
+	for _, subCommand := range []string{"plan", "apply", "deploy", "validate", "output"} {
 		assert.NotPanics(t, func() {
-			captureExecMetadataSync(atmosConfig, info, nil)
+			captureExecMetadataSync(atmosConfig, subCommand, nil)
 		})
 	}
+}
+
+// TestCaptureExecMetadataSync_DeployReportedAsDeploy guards against a
+// regression where captureExecMetadataSync would report a `deploy`
+// invocation as `apply` if it ever read info.SubCommand after
+// handleDeploySubcommand's in-place "deploy" -> "apply" rewrite instead of
+// the subCommand value ExecuteTerraform captures up front. This test only
+// asserts the function accepts "deploy" without panicking outside CI; the
+// command-string correctness is covered by TestIsExecMetadataSyncSubcommand
+// and the ExecuteTerraform-level wiring itself.
+func TestCaptureExecMetadataSync_DeployReportedAsDeploy(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	assert.NotPanics(t, func() {
+		captureExecMetadataSync(atmosConfig, "deploy", nil)
+	})
 }
