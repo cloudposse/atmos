@@ -1,12 +1,13 @@
 ---
 name: atmos-vendoring
-description: "Component vendoring: vendor.yaml and component.yaml manifests, immutable vendor.lock.yaml receipts, pulling from Git/S3/HTTP/OCI/Terraform Registry, native vendor update, clean, diff, config, and reviewed local component copies"
+description: "Component vendoring: vendor.yaml and component.yaml manifests, immutable vendor.lock.yaml receipts, pulling from Git/S3/HTTP/OCI/Terraform Registry, --stack/--labels/--tags selector composition, native vendor update, clean, diff, config, and reviewed local component copies"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
   category: state-versioning
 references:
   - references/component-updater.md
+  - references/source-types.md
 ---
 
 # Atmos Component Vendoring
@@ -152,83 +153,10 @@ targets:
 
 ## Source Types
 
-### Git Repositories
-
-The most common source type. Supports GitHub, GitLab, Bitbucket, and any Git host:
-
-```yaml
-# GitHub (implicit HTTPS, recommended)
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
-
-# GitHub with subdirectory
-source: "github.com/org/terraform-components.git//modules/vpc?ref={{.Version}}"
-
-# Explicit Git protocol
-source: "git::https://github.com/org/repo.git?ref={{.Version}}"
-
-# SSH authentication
-source: "git::ssh://git@github.com/org/private-repo.git?ref={{.Version}}"
-
-# GitLab
-source: "gitlab.com/group/project.git?ref={{.Version}}"
-
-# Bitbucket
-source: "bitbucket.org/owner/repo.git?ref={{.Version}}"
-```
-
-The `//` delimiter separates the repository URL from the subdirectory within the repository. For example, `repo.git//modules/vpc` extracts only the `modules/vpc` directory. Without `//`, Atmos downloads the entire repository root.
-
-### OCI Registries
-
-Pull artifacts from OCI-compatible container registries:
-
-```yaml
-# AWS ECR Public
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-
-# GitHub Container Registry
-source: "oci://ghcr.io/cloudposse/components/vpc:{{.Version}}"
-
-# Docker Hub
-source: "oci://docker.io/library/nginx:alpine"
-```
-
-OCI authentication precedence:
-1. Docker credentials from `~/.docker/config.json` (highest)
-2. Environment variables (`GITHUB_TOKEN` + `GITHUB_ACTOR` for ghcr.io)
-3. Anonymous (for public images)
-
-### Amazon S3
-
-```yaml
-source: "s3::https://s3.amazonaws.com/acme-configs/components/vpc.tar.gz"
-source: "s3::https://s3-us-west-2.amazonaws.com/bucket/path/component.tar.gz"
-```
-
-Uses AWS credentials from the environment or AWS config files.
-
-### HTTP/HTTPS
-
-```yaml
-# Download and extract archive
-source: "https://example.com/components/vpc.tar.gz"
-
-# Download single file
-source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
-```
-
-### Local Paths
-
-```yaml
-# Relative to vendor.yaml location
-source: "../shared-components/vpc"
-
-# Absolute path
-source: "/path/to/components/vpc"
-
-# file:// URI
-source: "file:///path/to/components/vpc"
-```
+`source:` accepts Git (GitHub/GitLab/Bitbucket/SSH), OCI registries, Amazon S3, Google Cloud
+Storage, HTTP/HTTPS, and local paths -- see
+[references/source-types.md](references/source-types.md) for the full URL syntax and examples of
+each.
 
 ## Authentication
 
@@ -357,9 +285,18 @@ atmos vendor pull --everything
 atmos vendor pull -c vpc
 atmos vendor pull --component eks-cluster
 
-# Vendor by tags
+# Vendor by tags (vendor.yaml-declared source tags, matches ANY)
 atmos vendor pull --tags networking
 atmos vendor pull --tags networking,compute
+
+# Vendor every component in a stack that has its own component.yaml
+atmos vendor pull --stack plat-ue2-dev
+
+# Vendor components whose stack metadata.labels match ALL pairs (matches --stack's resolution)
+atmos vendor pull --labels tier=1,cost-center:platform
+
+# Narrow a --stack/--labels selection by declared tags too
+atmos vendor pull --stack plat-ue2-dev --tags networking
 
 # Intentionally resolve mutable declared refs and replace their lock evidence
 atmos vendor pull --refresh-lock
@@ -376,6 +313,46 @@ identity. `--refresh-lock` is the explicit mutable-ref refresh path. `vendor cle
 lock-owned paths, reports modified-file conflicts, and requires `--force` to remove them. Do not
 hand-delete a target directory or lock entry when a scoped clean/replay can preserve overlapping
 source and mixin ownership.
+
+### Selector Flags: --component, --stack, --labels, --tags
+
+These four flags select which components a `vendor pull`/`diff`/`clean`/`update`/`verify` command
+acts on. They compose as independent filters rather than being mutually exclusive selector "modes":
+
+- `--component`/`-c`: command-specific cardinality. `vendor update` accepts repeated values and
+  accumulates them; `pull`, `diff`, `clean`, and `verify` each accept only a single value. In every
+  command, mutually exclusive with `--stack`/`--labels` (a stack-resolved set doesn't compose with
+  one or more explicit targets). Composes with `--tags`.
+- `--stack`/`-s`: every component declared in the stack (`vendor pull` narrows this further to
+  components with their own `component.yaml` -- see below). Composes with `--labels` (narrows
+  further) and `--tags`.
+- `--labels`: filters the same stack-resolved component set `--stack` resolves, by each
+  component's stack `metadata.labels` -- a *stack* concept, not a `vendor.yaml` concept (`vendor.yaml`
+  sources have no labels field). Matches ALL the given comma-separated `key=value`/`key:value`
+  pairs. Cannot combine with `--component`; composes with `--stack` and `--tags`.
+- `--tags`: an independent filter over each candidate's declared `vendor.yaml` `tags:` (matches ANY
+  of the given tags). Composes with `--component` or `--stack`/`--labels`, or stands on its own. A
+  candidate resolved only through `--stack`/`--labels` (no matching `vendor.yaml` entry) has no tags
+  to match and is excluded by any non-empty `--tags` filter -- the same way any filter excludes an
+  entity missing the filtered attribute.
+
+A selector with no eligible vendor target is always an explicit error, never a silent no-op or a
+silent fall-through to "vendor everything."
+
+For `vendor pull` only, `--stack`/`--labels` install from each resolved component's own
+`component.yaml`, bypassing `vendor.yaml` entirely -- a component without one is silently skipped,
+since not every stack component vendors this way. This is the one exception to the "always error"
+rule above: if the stack resolves but none of its matched components has its own `component.yaml`,
+`vendor pull` succeeds as an intentional no-op instead of erroring, since there was nothing for that
+selector to install. A component declared in *both* places can have its `vendor.yaml`-driven install
+(`-c <name>` or bare `--tags`) and its `--stack`/`--labels`-driven install disagree on content if the
+two sources ever drift -- Atmos warns when it detects this, but doesn't reconcile the two
+automatically. Prefer declaring a component in only one place.
+
+`diff`/`clean`/`update`/`verify` do not have this exception: their `--stack`/`--labels` resolve
+stack-declared component names directly, with no `component.yaml` required (they operate on already
+vendored/lock-owned state, not on how it was installed), so an unmatched selector is always an error
+for these four commands.
 
 ## Native Vendor Update and Diff
 
@@ -394,13 +371,18 @@ atmos vendor update --pull
 # Scope updates
 atmos vendor update --component vpc
 atmos vendor update --tags networking,aws
+atmos vendor update --stack plat-ue2-dev --labels tier=1
 atmos vendor update --check --outdated
 
 # Review upstream changes without a local checkout
 atmos vendor diff --component vpc
 atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
 atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+atmos vendor diff --stack plat-ue2-dev --tags networking
 ```
+
+`update`/`diff` (and `clean`/`verify`) accept the same `--component`/`--stack`/`--labels`/`--tags`
+selector composition described above.
 
 `vendor update` follows imports and writes the manifest file that declares each source. It supports
 Git-backed sources and reports skipped templated versions or non-Git sources. Use source-level
