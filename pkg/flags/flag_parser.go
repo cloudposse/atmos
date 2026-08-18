@@ -144,13 +144,30 @@ func splitAtSeparator(args []string) ([]string, []string) {
 //
 // This works around Cobra's NoOptDefVal limitation where --identity value treats
 // "value" as a positional arg instead of the flag value.
+//
+// The set of flags eligible for this treatment is derived generically from this
+// parser's registry (any Flag whose GetNoOptDefVal() is non-empty), rather than a
+// hard-coded per-flag-name map. This mirrors the pattern used by
+// preprocessNoOptDefValFlags (see p.registry.All() usage above) so new NoOptDefVal
+// flags (e.g. --profile) are picked up automatically without touching this function.
 func (p *AtmosFlagParser) resolveNoOptDefValForEmptyFlags() {
 	defer perf.Track(nil, "flags.FlagParser.resolveNoOptDefValForEmptyFlags")()
 
-	// Hard-coded list of flags that support empty-value interactive selection.
-	// In future, this could be configurable via builder pattern.
-	interactiveFlags := map[string]string{
-		"identity": "__SELECT__",
+	if p.registry == nil {
+		return
+	}
+
+	// Build the set of flags that support empty-value interactive selection
+	// from the registry's NoOptDefVal metadata.
+	interactiveFlags := make(map[string]string)
+	for _, f := range p.registry.All() {
+		if marker := f.GetNoOptDefVal(); marker != "" {
+			interactiveFlags[f.GetName()] = marker
+		}
+	}
+
+	if len(interactiveFlags) == 0 {
+		return
 	}
 
 	p.cmd.Flags().VisitAll(func(flag *pflag.Flag) {
