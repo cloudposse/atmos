@@ -115,3 +115,63 @@ func TestGenerateProviderOverridesForAliases(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateProviderOverridesPreservesEmptyAzureRMFeatures(t *testing.T) {
+	// Clear env vars that would otherwise point Atmos at a different config.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	fixture := "../../tests/fixtures/scenarios/atmos-providers-aliases"
+	t.Chdir(fixture)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "azurerm-empty-features",
+		Stack:            "nonprod",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	result, err := ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
+	require.NoError(t, err, "ProcessStacks must load the fixture stack")
+	require.NotEmpty(t, result.ComponentProvidersSection, "ComponentProvidersSection should be populated from the stack")
+
+	tempDir := t.TempDir()
+	require.NoError(t, generateProviderOverrides(&atmosConfig, &result, tempDir))
+
+	providersFile := filepath.Join(tempDir, "providers_override.tf.json")
+	raw, err := os.ReadFile(providersFile)
+	require.NoError(t, err, "providers_override.tf.json must be generated")
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed), "generated file must be valid JSON")
+
+	providerSection, ok := parsed["provider"].(map[string]any)
+	require.True(t, ok, "top-level `provider` must be an object, got %T", parsed["provider"])
+
+	_, hasDotKey := providerSection["azurerm.other"]
+	assert.False(t, hasDotKey, "generated JSON must not contain `azurerm.other` as a top-level provider key; got: %s", string(raw))
+
+	azurermEntries, ok := providerSection["azurerm"].([]any)
+	require.True(t, ok, "`provider.azurerm` must be a JSON array, got %T in: %s", providerSection["azurerm"], string(raw))
+	require.Len(t, azurermEntries, 2, "`provider.azurerm` must contain 2 entries (base + 1 alias)")
+
+	base, ok := azurermEntries[0].(map[string]any)
+	require.True(t, ok, "first entry must be an object")
+	assertAzureRMFeaturesBlock(t, base, string(raw))
+	_, baseHasAlias := base["alias"]
+	assert.False(t, baseHasAlias, "base provider entry must not have an `alias` key")
+
+	aliased, ok := azurermEntries[1].(map[string]any)
+	require.True(t, ok, "second entry must be an object")
+	assertAzureRMFeaturesBlock(t, aliased, string(raw))
+	assert.Equal(t, "other", aliased["alias"], "alias must be auto-derived from the key suffix")
+}
+
+func assertAzureRMFeaturesBlock(t *testing.T, provider map[string]any, raw string) {
+	t.Helper()
+
+	features, ok := provider["features"].(map[string]any)
+	require.True(t, ok, "`features` must be present as an empty object in: %s", raw)
+	assert.Empty(t, features, "`features` block must remain empty")
+}

@@ -30,6 +30,7 @@ func safeCap(a, b int) int {
 //
 // Behavior summary (defined contract for native merge):
 //   - Both values are map[string]any: recurse, merge in place (no container allocation).
+//     An explicitly empty src map replaces dst, preserving `{}` as an override.
 //   - Typed maps (e.g., map[string]schema.Provider): normalized to map[string]any via deepCopyValue and recursed.
 //   - appendSlice=true and both are slices: append src elements to dst.
 //   - sliceDeepCopy=true and both are slices: element-wise deep-merge.
@@ -55,6 +56,10 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		// Fast path: both are maps — recurse without allocating a new container.
 		if srcMap, srcIsMap := srcVal.(map[string]any); srcIsMap {
 			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
+				if len(srcMap) == 0 {
+					dst[k] = map[string]any{}
+					continue
+				}
 				if err := deepMergeNative(dstMap, srcMap, appendSlice, sliceDeepCopy); err != nil {
 					return fmt.Errorf("merge key %q: %w", k, err)
 				}
@@ -69,6 +74,10 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		// deepCopyValue handles this via reflection-based normalizeValueReflect for non-map[string]any types.
 		if normalizedSrcMap, ok := deepCopyValue(srcVal).(map[string]any); ok {
 			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
+				if len(normalizedSrcMap) == 0 {
+					dst[k] = map[string]any{}
+					continue
+				}
 				if err := deepMergeNative(dstMap, normalizedSrcMap, appendSlice, sliceDeepCopy); err != nil {
 					return fmt.Errorf("merge key %q: %w", k, err)
 				}
