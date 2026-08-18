@@ -141,21 +141,18 @@ jobs:
         run: |
           atmos build version --target=${{ matrix.target }}
 
-      # Reuse this job's warm Go cache to compile the large acceptance test
-      # binaries once. On Windows, compiling ./tests independently in all ten
-      # shards costs roughly eight minutes each, while internal/exec adds
-      # another five minutes of compilation to shard 2. The runner executes
-      # the downloaded binaries directly; Linux/macOS retain source-based
-      # execution where native coverage or runtime is already acceptable.
+      # Mage keeps the cross-platform acceptance orchestration in typed,
+      # unit-tested Go code while the workflow remains a one-command dispatch.
+      # Reuse this job's warm Go cache to compile the large test binaries once.
       - name: Pre-compile acceptance test binaries
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
-        run: scripts/precompile-acceptance-tests.sh "${{ matrix.target }}"
+        run: go tool mage acceptance:precompile "${{ matrix.target }}"
 
       - name: Verify acceptance shard plan
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
-        run: scripts/verify-acceptance-shards.sh "${{ matrix.target }}" "$TEST_SHARD_COUNT"
+        run: go tool mage acceptance:verify "${{ matrix.target }}" "$TEST_SHARD_COUNT"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -230,33 +227,29 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      - name: Install Packer
-        uses: ./.github/actions/setup-packer-retry
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       - name: Cache Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Terraform, OpenTofu, Helm, and Helmfile
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install --default hashicorp/terraform
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Verify Terraform, OpenTofu, Helm, and Helmfile
+      - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           terraform version
           tofu version
+          packer version
           helm version --short
           helmfile version
 
@@ -326,10 +319,10 @@ jobs:
     # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
     # on this comment) rather than dividing those numbers by the shard count exactly.
     #
-    # Shard 1 runs every ./tests top-level test other than TestCLICommands, and
-    # shard 2 owns internal/exec. Windows executes both from binaries compiled
-    # once in the build job, removing the repeated cold-compile bottleneck while
-    # preserving the existing test allocation.
+    # Windows also distributes the tests package's non-CLI top-level tests and
+    # internal/exec's top-level tests across all shards. Both binaries are
+    # compiled once in the build job, so each shard executes only its assigned
+    # tests without paying a cold compile/link penalty.
     timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -352,12 +345,6 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      - name: Install Packer
-        uses: ./.github/actions/setup-packer-retry
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       # Dogfood `atmos ci cache`: cache the configured Atmos cache root via the
       # recommended composite action. Do not export ATMOS_XDG_CACHE_HOME or
       # TF_PLUGIN_CACHE_DIR for the full acceptance job: many tests assert XDG
@@ -369,22 +356,24 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Terraform, OpenTofu, Helm, and Helmfile
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install --default hashicorp/terraform
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Verify Terraform, OpenTofu, Helm, and Helmfile
+      - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           terraform version
           tofu version
+          packer version
           helm version --short
           helmfile version
 
@@ -434,8 +423,8 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
-      # The shard runner owns package allocation, the precompiled cmd suite,
-      # and native coverage collection so both workflow paths stay identical.
+      # The Mage target owns package/test allocation, precompiled suites, and
+      # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
         timeout-minutes: ${{ matrix.shard == 1 && 60 || 40 }}
         if: matrix.flavor.target == 'linux'
@@ -448,7 +437,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
-        run: scripts/run-acceptance-shard.sh coverage linux
+        run: go tool mage acceptance:run coverage linux
 
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
@@ -469,7 +458,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
-        run: scripts/run-acceptance-shard.sh test "${{ matrix.flavor.target }}"
+        run: go tool mage acceptance:run test "${{ matrix.flavor.target }}"
 
       - name: Upload native coverage artifact
         if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
@@ -540,7 +529,7 @@ jobs:
           cache: false
 
       - name: Merge native coverage data
-        run: scripts/merge-coverage-shards.sh
+        run: go tool mage coverage:mergeShards
 
       - name: Upload coverage report to Codecov
         timeout-minutes: 10

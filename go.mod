@@ -484,6 +484,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/magefile/mage v1.17.2
 	github.com/minamijoyo/hcledit v0.2.18
 	github.com/mxschmitt/playwright-go v0.6100.0
 	github.com/updatecli/updatecli v0.999.0
@@ -603,3 +604,5 @@ require (
 	k8s.io/component-base v0.36.1 // indirect
 	k8s.io/kubectl v0.36.1 // indirect
 )
+
+tool github.com/magefile/mage
