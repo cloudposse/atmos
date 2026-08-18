@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -110,7 +111,11 @@ func TestVerifyWorkflow(t *testing.T) {
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	workflow := "shard: [1, 2, 3]\nrun: go test ./tests -run '^TestTerraformRegistryCache$'\n"
+	workflow := `shard: [1, 2, 3]
+name: ${{ matrix.check }}
+check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
+run: go test ./tests -run '^TestTerraformRegistryCache$'
+`
 	if err := os.WriteFile(filepath.Join(workflowDir, "test.yml"), []byte(workflow), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -119,5 +124,17 @@ func TestVerifyWorkflow(t *testing.T) {
 	}
 	if err := verifyWorkflow(root, 4); err == nil {
 		t.Fatal("expected shard-count mismatch")
+	}
+}
+
+func TestGoCommandEnvironmentDisablesCGO(t *testing.T) {
+	t.Setenv("CGO_ENABLED", "1")
+
+	output, err := newCommandRunner().output(t.Context(), t.TempDir(), goCommandEnvironment(), "go", "env", "CGO_ENABLED")
+	if err != nil {
+		t.Fatalf("read Go environment: %v", err)
+	}
+	if got := strings.TrimSpace(output); got != "0" {
+		t.Fatalf("CGO_ENABLED = %q, want 0", got)
 	}
 }

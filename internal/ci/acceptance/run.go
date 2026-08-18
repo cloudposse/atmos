@@ -123,7 +123,7 @@ func runSourceTestGroup(
 	args = append(args, group.packages...)
 	args = append(args, group.testArgs...)
 	args = append(args, "-timeout", defaultValue(options.GoTestTimeout, defaultTestTimeout))
-	return "", runner.run(ctx, options.RepoRoot, nil, "go", args...)
+	return "", runner.run(ctx, options.RepoRoot, goCommandEnvironment(), "go", args...)
 }
 
 func runWindowsTests(ctx context.Context, runner commandRunner, options *RunOptions) error {
@@ -210,7 +210,7 @@ func Precompile(ctx context.Context, repoRoot string, target Target, outputDir s
 	if target == TargetWindows {
 		extension = ".exe"
 	}
-	if err := runner.run(ctx, repoRoot, []string{"CGO_ENABLED=0"}, "go", "test", "-c", "-covermode=atomic",
+	if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c", "-covermode=atomic",
 		"-o", filepath.Join(outputDir, "cmd.test"+extension), "./cmd"); err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func Precompile(ctx context.Context, repoRoot string, target Target, outputDir s
 		{name: "tests.test.exe", pkgPath: "./tests"},
 		{name: "internal-exec.test.exe", pkgPath: "./internal/exec"},
 	} {
-		if err := runner.run(ctx, repoRoot, []string{"CGO_ENABLED=0"}, "go", "test", "-c",
+		if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c",
 			"-o", filepath.Join(outputDir, testBinary.name), testBinary.pkgPath); err != nil {
 			return err
 		}

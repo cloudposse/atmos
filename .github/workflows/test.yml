@@ -472,16 +472,19 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-  # Sharding the `test` job (matrix.shard) fans it out into TEST_SHARD_COUNT x 3
-  # separate per-leg checks instead of one per OS. Branch protection needs one
-  # stable required-check name regardless of shard count, so gate on this
-  # aggregator instead of the individual "Acceptance Tests (...)" legs (mirrors
-  # the k3s-required pattern below).
+  # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
+  # Keep the three historical required-check names as compatibility aliases so
+  # branch protection does not need to change. Each alias gates on the complete
+  # matrix result, so every OS/shard must pass before any alias succeeds.
   test-required:
-    name: Acceptance Tests (required)
+    name: ${{ matrix.check }}
     needs: test
     runs-on: ubuntu-latest
     if: ${{ always() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Check test matrix result
         run: |

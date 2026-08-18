@@ -16,6 +16,7 @@ import (
 const (
 	directoryPermissions = 0o755
 	defaultTestTimeout   = "40m"
+	cgoDisabled          = "CGO_ENABLED=0"
 )
 
 var (
@@ -38,6 +39,10 @@ func newCommandRunner() commandRunner {
 func environment(name string) string {
 	value, _ := os.LookupEnv(name)
 	return value
+}
+
+func goCommandEnvironment(values ...string) []string {
+	return append([]string{cgoDisabled}, values...)
 }
 
 func writeStatus(format string, args ...any) error {

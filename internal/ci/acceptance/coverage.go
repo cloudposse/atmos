@@ -54,7 +54,7 @@ func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, te
 	args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	args = append(args, testArgs...)
 	args = append(args, "-timeout", defaultValue(options.Timeout, defaultTestTimeout), "-args", "-test.gocoverdir="+absUnit)
-	if err := runner.run(ctx, options.RepoRoot, []string{"GOCOVERDIR=" + absIntegration}, "go", args...); err != nil {
+	if err := runner.run(ctx, options.RepoRoot, goCommandEnvironment("GOCOVERDIR="+absIntegration), "go", args...); err != nil {
 		return err
 	}
 
