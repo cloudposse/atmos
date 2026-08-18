@@ -1,0 +1,305 @@
+# yaml-language-server: $schema=schema.json
+# Tests for `atmos scaffold generate`, against dedicated fixtures under
+# tests/fixtures/scenarios/scaffold-* (not end-user examples -- see
+# examples/scaffolding and examples/scaffolding-matrix for those). Each
+# fixture exercises one concept in isolation, plus at least one deliberately
+# wrong input against that same fixture, so failure paths get the same
+# coverage as the happy path.
+tests:
+  # --- scaffold-basic: plain fields, no matrix ---
+
+  - name: "scaffold-basic generate with project_name set"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-basic fixture with project_name set"
+    workdir: "fixtures/scenarios/scaffold-basic"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-answers"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "project_name=my-app"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-answers/config.yaml"
+      file_contains:
+        "generated/with-answers/config.yaml":
+          - 'project_name: "my-app"'
+
+  # Wrong input: project_name is `required: true` and has no default, so
+  # omitting it non-interactively must fail fast rather than generate a
+  # broken project.
+  - name: "scaffold-basic generate without required project_name fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-basic fixture with no project_name, verifying the required-field error"
+    workdir: "fixtures/scenarios/scaffold-basic"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/missing-required"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - "field is required: project_name"
+        - "Required fields have no value: project_name"
+      file_not_exists:
+        - "generated/missing-required/config.yaml"
+
+  # --- scaffold-matrix-list: a list-shaped multiselect axis ---
+
+  - name: "scaffold-matrix-list generate with environments set"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-list fixture with environments set, verifying one file per selected environment"
+    workdir: "fixtures/scenarios/scaffold-matrix-list"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-answers"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "environments=dev,staging"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-answers/stacks/dev.yaml"
+        - "generated/with-answers/stacks/staging.yaml"
+      file_not_exists:
+        - "generated/with-answers/stacks/prod.yaml"
+      file_contains:
+        "generated/with-answers/stacks/dev.yaml":
+          - 'environment: "dev"'
+
+  # Leaving environments at its default (unselected) resolves the axis to
+  # zero values -- matrix mirrors when:'s existing silent-skip semantics
+  # rather than erroring, and generates none of environment.yaml's files.
+  - name: "scaffold-matrix-list generate with defaults generates no files"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-list fixture with no environments, verifying the matrix-driven file is skipped"
+    workdir: "fixtures/scenarios/scaffold-matrix-list"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/defaults-only"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_not_exists:
+        - "generated/defaults-only/stacks/dev.yaml"
+
+  # Wrong input: "bogus" is not one of environments' declared options, so
+  # this must fail validation rather than silently generating
+  # stacks/bogus.yaml.
+  - name: "scaffold-matrix-list generate with invalid environments option fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-list fixture with an unsupported environments option, verifying the validation error"
+    workdir: "fixtures/scenarios/scaffold-matrix-list"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/invalid-option"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "environments=bogus"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - 'field has unsupported option: field "environments"'
+        - 'option "bogus"'
+      file_not_exists:
+        - "generated/invalid-option/stacks/bogus.yaml"
+
+  # --- scaffold-matrix-computed: a computed, multi-axis matrix via collectKeys ---
+
+  - name: "scaffold-matrix-computed generate derives environment and region axes"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-computed fixture, verifying both axes are derived from the deploy_topology preset via collectKeys"
+    workdir: "fixtures/scenarios/scaffold-matrix-computed"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-answers"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-answers/deploy/dev/us-east-1.yaml"
+        - "generated/with-answers/deploy/staging/us-east-1.yaml"
+        - "generated/with-answers/deploy/production/us-east-1.yaml"
+        - "generated/with-answers/deploy/production/us-west-2.yaml"
+      file_not_exists:
+        # dev and staging only declare us-east-1 in the deploy_topology
+        # preset, so `when:` prunes their us-west-2 combination.
+        - "generated/with-answers/deploy/dev/us-west-2.yaml"
+        - "generated/with-answers/deploy/staging/us-west-2.yaml"
+      file_contains:
+        "generated/with-answers/deploy/production/us-west-2.yaml":
+          - 'environment: "production"'
+          - 'region: "us-west-2"'
+
+  # Wrong input: deploy_topology has no `fields:` entry, but is still a
+  # regular answer -- overridable via --set like any other. collectKeys must
+  # reject a non-map value at generation time with a clear error, not panic
+  # or silently produce zero files.
+  - name: "scaffold-matrix-computed generate with non-map deploy_topology fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-computed fixture with deploy_topology overridden to a non-map value, verifying collectKeys' error"
+    workdir: "fixtures/scenarios/scaffold-matrix-computed"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/non-map-topology"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "deploy_topology=notamap"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 1
+      stderr:
+        - "collectKeys: argument is not a map"
+      file_not_exists:
+        - "generated/non-map-topology/deploy"
+
+  # --- scaffold-matrix-freetext: a free-text axis split via Sprig's splitList ---
+
+  - name: "scaffold-matrix-freetext generate with extra_regions_csv set"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-freetext fixture with extra_regions_csv set, verifying one file per region entered"
+    workdir: "fixtures/scenarios/scaffold-matrix-freetext"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-answers"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "extra_regions_csv=us-east-1,eu-central-1"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-answers/regions/us-east-1.yaml"
+        - "generated/with-answers/regions/eu-central-1.yaml"
+      file_contains:
+        "generated/with-answers/regions/eu-central-1.yaml":
+          - 'region: "eu-central-1"'
+
+  # Leaving extra_regions_csv at its default (blank) resolves the axis to
+  # zero values via the entry's own `when:` guard, generating none of
+  # region.yaml's files.
+  - name: "scaffold-matrix-freetext generate with defaults generates no files"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-freetext fixture with no extra_regions_csv, verifying the matrix-driven file is skipped"
+    workdir: "fixtures/scenarios/scaffold-matrix-freetext"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/defaults-only"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_not_exists:
+        - "generated/defaults-only/regions"
+
+  # Wrong input: a path-traversal attempt through the free-text answer.
+  # Since the axis value flows straight into target:'s rendered path, this
+  # proves the existing path-traversal guard catches a matrix-driven path
+  # exactly like it already does for a non-matrix target:.
+  - name: "scaffold-matrix-freetext generate with path-traversal region fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-matrix-freetext fixture with a path-traversal attempt in extra_regions_csv, verifying the path-traversal guard"
+    workdir: "fixtures/scenarios/scaffold-matrix-freetext"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/path-traversal"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "extra_regions_csv=../../../etc"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - "path traversal not allowed"
+      file_not_exists:
+        - "generated/path-traversal/regions"
+        - "../../../etc.yaml"
