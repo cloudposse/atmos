@@ -369,7 +369,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		return info, nil
 	}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate, nil))
 	assert.True(t, info.ComponentIsEnabled)
 
 	// Issue #3: a cluster operation resolves component auth even without an explicit identity, so the
@@ -379,7 +379,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		authSetupCalled = true
 		return nil, nil
 	}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply, nil))
 	assert.True(t, authSetupCalled, "cluster ops must resolve component auth even without --identity")
 
 	// With an identity, a setup failure propagates before processStacks runs.
@@ -387,8 +387,112 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, sentinel
 	}
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"}, OperationApply)
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "example-admin"}, OperationTemplate, nil)
 	require.ErrorIs(t, err, sentinel)
+
+	// The opt-in guard resolves a component default even when no CLI identity was supplied.
+	setupComponentAuthForCLI = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		info.Identity = "example-deployer"
+		manager := fakeHelmAuthManager{}
+		info.AuthManager = manager
+		return manager, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = true
+		if authManager != nil {
+			assert.Equal(t, "example-deployer", info.Identity, "component identity must resolve before the full processing pass")
+		}
+		return info, nil
+	}
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		info = &schema.ConfigAndStacksInfo{ComponentFromArg: "example-component"}
+		require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, operation, nil))
+		assert.Equal(t, "example-deployer", info.Identity)
+		assert.NotNil(t, info.AuthManager)
+	}
+
+	// Without a resolvable component default, the opt-in guard fails closed.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		return nil, nil
+	}
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, operation, nil)
+		require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
+	}
+
+	// Disabled components skip identity setup even when they declare the guard.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		t.Fatal("disabled components must not resolve identity")
+		return nil, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = false
+		return info, nil
+	}
+	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "disabled-component"}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationApply, nil))
+	assert.False(t, info.ComponentIsEnabled)
+
+	// Invalid guard types fail closed for enabled cluster operations.
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": "true"}
+		info.ComponentIsEnabled = true
+		return info, nil
+	}
+	err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationApply, nil)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentAuth)
+}
+
+// TestRequireIdentityForOperation verifies the GKE guard applies to every path
+// that contacts a cluster while offline rendering and diff baselines remain offline.
+func TestRequireIdentityForOperation(t *testing.T) {
+	guarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true},
+	}
+	unguarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
+	}
+	invalid := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": "true"},
+	}
+
+	tests := []struct {
+		name      string
+		info      *schema.ConfigAndStacksInfo
+		operation Operation
+		flags     map[string]any
+		want      bool
+		wantErr   error
+	}{
+		{name: "template stays offline", info: guarded, operation: OperationTemplate, want: false},
+		{name: "live diff requires identity", info: guarded, operation: OperationDiff, want: true},
+		{name: "explicit release diff requires identity", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: againstRelease}, want: true},
+		{name: "manifest diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagFromManifest: "baseline.yaml"}, want: false},
+		{name: "target diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: "target"}, want: false},
+		{name: "apply requires identity", info: guarded, operation: OperationApply, want: true},
+		{name: "delete requires identity", info: guarded, operation: OperationDelete, want: true},
+		{name: "disabled guard preserves ambient apply", info: unguarded, operation: OperationApply, want: false},
+		{name: "missing guard preserves ambient apply", info: &schema.ConfigAndStacksInfo{ComponentIsEnabled: true}, operation: OperationApply, want: false},
+		{name: "disabled component skips guard", info: &schema.ConfigAndStacksInfo{ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true}}, operation: OperationApply, want: false},
+		{name: "non-boolean guard fails closed", info: invalid, operation: OperationApply, wantErr: errUtils.ErrInvalidComponentAuth},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := requireIdentityForOperation(tt.info, tt.operation, tt.flags)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestApplyAuthEnvironment(t *testing.T) {

@@ -1,0 +1,23 @@
+# Ignore JIT-provisioned workdirs (created by the source + workdir provisioners).
+.workdir/
+
+# Ignore local backend state written outside the workdir by the relative
+# backend.local.path (../../../.context/tfstate/...).
+.context/
+
+# The "../escape-test-nowd" path-traversal probe (provision.workdir.enabled
+# NOT set) now fails with ErrPathTraversal before writing anything --
+# DetermineTargetDirectory in pkg/provisioner/source/source.go gained a
+# containment guard, so this sibling directory should never actually be
+# created. The ignore entry is kept defensively (harmless if empty, catches
+# a regression that resurrects the escape rather than silently untracking a
+# real vendored directory) rather than removed.
+components/escape-test-nowd/
+
+# Terraform files.
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+**/.terraform.lock.hcl
+**/backend.tf.json
+**/*.terraform.tfvars.json

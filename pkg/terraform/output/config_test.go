@@ -387,24 +387,26 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 			"workdir": map[string]any{"enabled": true},
 		},
 	}
-	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Inject path traversal via the stack argument (incorporated into BuildPath
+	// as "<stack>-<component>"). Component-name traversal is no longer a valid
+	// vector here: BuildPath now sanitizes "/" out of the component name (see
+	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md), so a "/"
+	// or "../"-laden component collapses into a single safe path segment
+	// before this guard would ever need to fire. Stack names aren't
+	// sanitized the same way, so they're what still needs this guard.
 	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
-	traversalComponent := "../../../../../../../../../../evil"
+	traversalStack := "../../../../../../../../../../evil"
 
-	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
-	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
+	path, err := extractComponentPath(atmosConfig, traversalSections, "vpc", traversalStack)
 
-	// The returned path must not escape BasePath.
-	absBase, _ := filepath.Abs(atmosConfig.BasePath)
-	sep := string(filepath.Separator)
-	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
-	assert.False(t, escaped,
-		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
-
-	// The guard must have fired and returned the componentPath fallback, not the
-	// workdir path. Workdir paths contain ".workdir"; the component path does not.
-	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
-		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
+	// The guard must fail closed: a rejected workdir path must surface as an
+	// error, never silently redirect to componentPath (the *source* component
+	// directory), which would risk mixing up stacks or reusing the wrong local
+	// state. The traversal is rejected by BuildPath's validateStackForPath
+	// (a "." or ".." stack path segment), which wraps errUtils.ErrPathTraversal.
+	require.Error(t, err, "containment guard must surface an error instead of falling back to componentPath")
+	require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Empty(t, path, "extractComponentPath must return an empty path on error")
 }
 
 func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
@@ -645,7 +647,7 @@ func TestExtractComponentPath(t *testing.T) {
 					"workdir": map[string]any{"enabled": true},
 				},
 			},
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc"),
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-hvpc"),
 		},
 		{
 			name:     "component with folder prefix",
