@@ -98,12 +98,20 @@ diff each accounts for.
 - **Docs and skills** — every relevant page under `website/docs/cli/commands/`, the matching
   `.claude/skills/atmos-*` skill(s) for the subsystem, and any README describing the feature. Note
   anything phrased with confidence you haven't independently confirmed against the code — docs and
-  skills describe intended behavior, not necessarily current behavior.
+  skills describe intended behavior, not necessarily current behavior. A capability can be
+  documented on one page and missing from another that also covers it (a reference page, the
+  skill's own summary, a related subsystem doc that mentions it in passing) — check every doc
+  surface for the feature, not just the primary one. Also re-read each doc for internal
+  self-contradiction: a rule stated in one paragraph can be silently overridden or contradicted by
+  an example or a later paragraph in the *same* file.
 - **Existing automated tests** — unit tests colocated with the code, `tests/test-cases/` fixtures,
   `tests/testdata/` golden snapshots. For each, note exactly what it does and doesn't exercise
   (mocked vs. real execution, which flags/paths/backends are hit).
 - **Every flag, config option, and documented action/mode** — grep for them and list them. You
-  will need to touch every one in Phase 4.
+  will need to touch every one in Phase 4. Cross-reference mechanically: grep the command's flag
+  registration calls in its Go source and diff that list against the flags documented in the
+  corresponding `.mdx`'s `<dl>` — every registered flag needs a matching `<dt>`, and every
+  documented flag needs to actually be registered.
 
 ## Phase 2 — Generate hypotheses, don't just wander
 
@@ -112,6 +120,11 @@ plausibly do:
 
 - Every flag combination that seems natural but might not be validated (two flags that should be
   mutually exclusive; two config fields whose combination is never cross-checked).
+- Every flag's parsed value actually reaching the code path that would use it — not just that the
+  flag exists, parses, and the command exits 0. A flag can be fully registered and documented yet
+  silently dropped before the logic that should consume it (e.g. the command builds a fresh/empty
+  config struct instead of the one built from parsed flags). Trace the value from flag definition
+  to point of use for every flag, don't just confirm the command accepts it.
 - Every place the docs/skill claim something you haven't verified against actual code.
 - Any "safe-looking" command (`plan`/`preview`/`--dry-run`/`list`/`describe`) that might secretly
   mutate state or trigger side effects, if built the same way as a mutating command — Atmos has
@@ -194,7 +207,13 @@ plausibly do:
   not just a cosmetic issue.
 - If Phase 1 research made a claim, verify it live before trusting it — code-reading can miss
   control flow (e.g. assuming a flag is silently ignored when it actually errors, or vice versa).
-  Correct the record explicitly when research turns out wrong.
+  The same applies to any externally suggested fix or finding (a review comment, a prior report) —
+  don't propagate its claimed root cause (e.g. a named sentinel error) without running the code to
+  confirm it's actually correct. Correct the record explicitly when research — yours or someone
+  else's — turns out wrong.
+- A test that only asserts `require.Error` (or similarly loose) without pinning down which error —
+  `ErrorIs`/`ErrorAs` against the actual sentinel — is itself a field-test finding worth reporting,
+  not just something to note in passing.
 - Test the happy path too, not just edge cases — confirm what's supposed to work actually does, so
   the report distinguishes real regressions from things that were never broken.
 
