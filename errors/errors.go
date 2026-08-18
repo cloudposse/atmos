@@ -1299,6 +1299,12 @@ var (
 	ErrAKSIntegrationFailed    = errors.New("AKS integration failed")
 	ErrAKSTokenGeneration      = errors.New("failed to generate AKS token")
 
+	// GKE server errors.
+	ErrGKEDescribeCluster   = errors.New("failed to describe GKE cluster")
+	ErrGKEClusterNotFound   = errors.New("GKE cluster not found")
+	ErrGKEIntegrationFailed = errors.New("GKE integration failed")
+	ErrGKETokenGeneration   = errors.New("failed to generate GKE token")
+
 	// ACR authentication errors.
 	ErrACRAuthFailed       = errors.New("ACR authentication failed")
 	ErrACRTokenExpired     = errors.New("ACR authorization token expired")
@@ -1545,6 +1551,8 @@ var (
 	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
 	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
 	ErrKubernetesClientInit                 = errors.New("failed to initialize kubernetes client")
+	ErrKubernetesEndpointMismatch           = errors.New("effective Kubernetes API endpoint does not match the identity integration")
+	ErrKubernetesIdentityRequired           = errors.New("an Atmos Auth identity is required for this Kubernetes operation")
 	ErrKubernetesApply                      = errors.New("failed to apply kubernetes object")
 	ErrKubernetesDelete                     = errors.New("failed to delete kubernetes object")
 	ErrKubernetesDiff                       = errors.New("failed to diff kubernetes object")
