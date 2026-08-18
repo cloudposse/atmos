@@ -1,3 +1,5 @@
+version: 2
+
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
 before:
@@ -68,7 +70,7 @@ builds:
       - -trimpath
 
 archives:
-  - format: binary
+  - formats: [binary]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 
 checksum:
