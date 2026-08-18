@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
     secrets: inherit
 
   homebrew:
