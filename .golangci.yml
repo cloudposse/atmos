@@ -20,6 +20,11 @@
 version: "2"
 run:
   tests: true
+  # Includes the magefiles/ Mage targets (excluded from a plain
+  # `go build ./...` by the `mage` build tag) so this repo's own build
+  # tooling gets linted too, instead of being permanently exempted.
+  build-tags:
+    - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
   # worktree sessions (and pre-commit hooks racing manual runs) otherwise fail
   # with "parallel golangci-lint is running"; serializing makes the second
@@ -393,6 +398,19 @@ linters:
           - forbidigo
         path: ^cmd/terraform/planfile/
         text: "os\\.Getenv"
+      # Mage build tooling (magefiles/ — only compiled via the `mage` build
+      # tag, invoked through `go tool mage`). It's a standalone dev-tooling
+      # entrypoint outside the Atmos CLI/UI runtime and config pipeline, so
+      # the Atmos I/O-layer, env-binding, and perf.Track conventions (written
+      # for shipped product code) don't apply here.
+      - linters:
+          - forbidigo
+        path: ^magefiles/
+        text: "Atmos output helpers|direct `fmt\\.Print\\*` output|writing directly to `os\\.Stdout` or `os\\.Stderr`|viper\\.BindEnv"
+      - linters:
+          - lintroller
+        path: ^magefiles/
+        text: "perf\\.Track"
     paths:
       - experiments/.*
       - third_party$

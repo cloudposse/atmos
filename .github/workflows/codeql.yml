@@ -147,8 +147,8 @@ jobs:
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
-          golangci-lint custom
+          # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
+          go tool mage lint:customGCL
 
           # Verify the custom binary was created
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }

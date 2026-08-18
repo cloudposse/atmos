@@ -105,6 +105,27 @@ func BenchmarkExample(b *testing.B) {
 
 ## Usage
 
+### Via Mage (Recommended)
+
+All staleness-checked build/run orchestration for lintroller and custom-gcl lives in the
+`magefiles/`, invoked through Go 1.24's `tool` directive — no global `mage`
+install required:
+
+```bash
+go tool mage lint:lintroller     # build (if stale) + run the standalone analyzer
+go tool mage lint:customGCL      # staleness-guarded custom-gcl build
+go tool mage lint:changed        # gomodcheck -> customGCL -> precommit-style patch-scoped run
+go tool mage lint:precommit      # check-only; fails fast if custom-gcl is missing/stale, never builds
+```
+
+### Via Atmos
+
+```bash
+atmos lint lintroller   # -> go tool mage lint:lintroller
+atmos lint custom-gcl   # -> go tool mage lint:customGCL
+atmos lint --changed    # -> go tool mage lint:changed
+```
+
 ### Standalone Binary
 
 Build and run the Lint Roller binary directly:
@@ -114,16 +135,6 @@ cd tools/lintroller
 go build -o .lintroller ./cmd/lintroller
 ./.lintroller ./...
 ```
-
-### Via Atmos
-
-The recommended way to run Lint Roller locally:
-
-```bash
-atmos lint lintroller
-```
-
-This is automatically run as part of `atmos lint changed`.
 
 ### Via golangci-lint (Local Development)
 
@@ -144,7 +155,9 @@ This provides unified linting with all golangci-lint features:
 
 ### Pre-commit Hook
 
-Lint Roller runs automatically via pre-commit hooks. It will block commits if violations are found.
+Lint Roller runs automatically via pre-commit hooks (`go tool mage lint:precommit`). It will
+block commits if violations are found, and will never build custom-gcl itself — see the comment
+on `Lint.Precommit` in `magefiles/mage_lint_precommit.go` for why.
 
 To bypass (not recommended):
 ```bash
@@ -254,7 +267,7 @@ The custom binary integrates with GitHub Actions via `golangci-lint-action`:
 
 - name: Build custom golangci-lint with plugins
   run: |
-    golangci-lint custom
+    go tool mage lint:customGCL
     sudo cp ./custom-gcl /usr/local/bin/golangci-lint
 
 - name: Run golangci-lint with plugins
