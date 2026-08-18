@@ -485,8 +485,9 @@ func mergeEnvSlices(base, overlay []string) []string {
 	if len(overlay) == 0 {
 		return append([]string{}, base...)
 	}
-	values := make(map[string]string, len(base)+len(overlay))
-	order := make([]string, 0, len(base)+len(overlay))
+	capHint := max(len(base), len(overlay))
+	values := make(map[string]string, capHint)
+	order := make([]string, 0, capHint)
 	set := func(entry string) {
 		key, value, ok := strings.Cut(entry, "=")
 		if !ok {

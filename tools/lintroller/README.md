@@ -229,31 +229,31 @@ All rules are enabled by default.
 To add another custom linter:
 
 1. **Add plugin to `.custom-gcl.yml`**:
-   ```yaml
-   plugins:
-     - module: 'github.com/cloudposse/atmos/tools/lintroller'
-       path: './tools/lintroller'
-     - module: 'github.com/cloudposse/atmos/tools/another-linter'
-       path: './tools/another-linter'
-   ```
+  ```yaml
+  plugins:
+    - module: 'github.com/cloudposse/atmos/tools/lintroller'
+      path: './tools/lintroller'
+    - module: 'github.com/cloudposse/atmos/tools/another-linter'
+      path: './tools/another-linter'
+  ```
 
 2. **Enable in `.golangci.yml`**:
-   ```yaml
-   linters:
-     enable:
-       - lintroller
-       - another-linter
-   ```
+  ```yaml
+  linters:
+    enable:
+      - lintroller
+      - another-linter
+  ```
 
 3. **Configure in `.golangci.yml`**:
-   ```yaml
-   settings:
-     custom:
-       another-linter:
-         type: "module"
-         settings:
-           some-rule: true
-   ```
+  ```yaml
+  settings:
+    custom:
+      another-linter:
+        type: "module"
+        settings:
+          some-rule: true
+  ```
 
 4. **Rebuild**: `golangci-lint custom` creates one binary with both plugins
 
@@ -307,14 +307,14 @@ Each rule is implemented in its own file:
 Lint Roller supports both standalone and golangci-lint plugin modes:
 
 1. **Standalone Mode** (`cmd/lintroller/main.go`):
-   - Uses `golang.org/x/tools/go/analysis/singlechecker`
-   - Direct binary execution
-   - Used by Makefile and pre-commit hooks
+  - Uses `golang.org/x/tools/go/analysis/singlechecker`
+  - Direct binary execution
+  - Used by Makefile and pre-commit hooks
 
 2. **Plugin Mode** (`plugin.go`):
-   - Implements `register.LinterPlugin` interface
-   - Integrates with golangci-lint
-   - Auto-registers via `init()` with `register.Plugin("lintroller", New)`
+  - Implements `register.LinterPlugin` interface
+  - Integrates with golangci-lint
+  - Auto-registers via `init()` with `register.Plugin("lintroller", New)`
 
 ## Adding New Rules
 
