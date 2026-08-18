@@ -14,6 +14,9 @@ type FileSystem interface {
 	// RemoveAll removes path and any children it contains.
 	RemoveAll(path string) error
 
+	// Rename moves oldPath to newPath.
+	Rename(oldPath, newPath string) error
+
 	// Exists checks if a path exists.
 	Exists(path string) bool
 
