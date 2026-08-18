@@ -98,6 +98,12 @@ tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
 tests/fixtures/scenarios/vendor-simple-excludes/components/**
 tests/fixtures/scenarios/vendor-simple-excludes/vendor.lock.yaml
+# vendor-stack-labels's vendored output (main.tf/README.md/vendor.lock.yaml, alongside the tracked
+# component.yaml manifests) is intentionally NOT gitignored here: the atmos_vendor_pull_stack and
+# atmos_vendor_pull_labels test cases share this fixture and rely on the test harness's `clean: true`
+# (which only removes untracked-and-not-gitignored files) to reset state between runs -- gitignoring
+# the output would make `clean: true` a no-op and let stale files from one test leak into the other's
+# file_not_exists assertions.
 tests/fixtures/scenarios/complete/components/terraform/infra/account-map/context.tf
 internal/exec/output.*
 

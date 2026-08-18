@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -17,6 +18,8 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	// Aliased: this file already has a local "tags" variable (the --tags flag's parsed value).
+	pkgtags "github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
@@ -55,13 +58,35 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		// the literal "[]" in a few embedded-command test paths. Treat that
 		// representation as the empty selector users intended.
 		components = normalizeComponentSelectors(components)
+		componentType := v.GetString("type")
+		tags := splitTags(v.GetString("tags"))
+		typeChanged := cmd.Flags().Changed("type")
+
+		stack := v.GetString("stack")
+		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		if labelsErr != nil {
+			return labelsErr
+		}
+		if err := validateUpdateSelectorFlags(components, stack, labels); err != nil {
+			return err
+		}
+		components, selectErr := resolveUpdateSelectors(&updateSelectorParams{
+			cmd:           cmd,
+			viper:         v,
+			components:    components,
+			componentType: componentType,
+			typeChanged:   typeChanged,
+			stack:         stack,
+			labels:        labels,
+		})
+		if selectErr != nil {
+			return selectErr
+		}
+
 		component := ""
 		if len(components) == 1 {
 			component = components[0]
 		}
-		componentType := v.GetString("type")
-		tags := splitTags(v.GetString("tags"))
-		typeChanged := cmd.Flags().Changed("type")
 		pullRequest := v.GetBool("pull-request")
 		all := v.GetBool("all")
 		group := v.GetString("group")
@@ -191,6 +216,71 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 	},
 }
 
+// updateSelectorParams bundles resolveUpdateSelectors' inputs (Options Pattern, CLAUDE.md: revive's
+// argument-limit caps functions at 5 positional parameters, crossed once labels joined
+// stack/componentType/typeChanged alongside cmd/v/components).
+type updateSelectorParams struct {
+	cmd           *cobra.Command
+	viper         *viper.Viper
+	components    []string
+	componentType string
+	typeChanged   bool
+	stack         string
+	labels        map[string]string
+}
+
+// resolveUpdateSelectors resolves vendorUpdateCmd's --stack/--labels selector, if given, into a
+// concrete component list, then normalizes cmd's own flag state so every downstream reader (the
+// --pull delegation to ExecuteVendorPullCmd in particular, which reuses this same cmd/FlagSet and
+// was built around --component) sees --stack/--labels' resolution the same way it would see an
+// equivalent --component list, without needing to know --stack/--labels exist. Mirrors
+// pullUpdatedComponent's own flag-normalization approach below. When neither --stack nor --labels
+// was given, p.components is returned unchanged.
+func resolveUpdateSelectors(p *updateSelectorParams) ([]string, error) {
+	if p.stack == "" && len(p.labels) == 0 {
+		return p.components, nil
+	}
+
+	// processStacks=true: this branch resolves components via ExecuteDescribeStacksScoped, which
+	// requires atmosConfig.StackConfigFilesAbsolutePaths to be populated. info is built via
+	// flags.BuildConfigAndStacksInfo (reads --base-path/--config/--config-path/--profile from the
+	// already-bound Viper values) rather than an empty schema.ConfigAndStacksInfo{}, so those global
+	// flags are honored on this path too instead of silently ignored.
+	info := flags.BuildConfigAndStacksInfo(p.cmd, p.viper)
+	atmosConfig, cfgErr := cfg.InitCliConfig(info, true)
+	if cfgErr != nil {
+		return nil, cfgErr
+	}
+	resolved, resolveErr := resolveVendorStackLabelsSelector(&atmosConfig, p.stack, p.labels, p.componentType, p.typeChanged)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if len(resolved) == 0 {
+		// A --stack/--labels selector was explicitly given but matched nothing (e.g. an unknown
+		// stack name). Falling through with an empty components would be indistinguishable from "no
+		// selector given", silently widening to a repo-wide update instead of reporting no match.
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No components matched the given --stack/--labels selector.").
+			Err()
+	}
+	components := resolved
+
+	if err := resetUnchangedFlag(p.cmd, "stack"); err != nil {
+		return nil, err
+	}
+	if err := resetUnchangedFlag(p.cmd, "labels"); err != nil {
+		return nil, err
+	}
+	if sliceValue, ok := p.cmd.Flags().Lookup("component").Value.(pflag.SliceValue); ok {
+		if err := sliceValue.Replace(components); err != nil {
+			return nil, err
+		}
+		p.cmd.Flags().Lookup("component").Changed = len(components) > 0
+	}
+
+	return components, nil
+}
+
 // vendorPullRequestConfig extracts the vendor.ci.pull_request.* viper values into the typed
 // schema.VendorPullRequestConfig pkg/vendoring/updater's publish functions take, keeping that
 // package's own viper reads at zero.
@@ -280,7 +370,9 @@ func init() {
 	vendorUpdateParser = flags.NewStandardParser(
 		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
-		flags.WithStringFlag("tags", "", "", "Update only components with any of these comma-separated tags"),
+		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
+		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
 		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),
@@ -359,6 +451,11 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 
 	batchComponentsByType, fallback := partitionPullResults(report)
 
+	// Built once and reused across every componentType batch below: --base-path/--config/
+	// --config-path/--profile must be honored on this repo-wide "--pull" path too, the same way
+	// resolveUpdateSelectors already does for --stack/--labels selector resolution.
+	info := flags.BuildConfigAndStacksInfo(cmd, viper.GetViper())
+
 	var errs []error
 	// Batch per type: DiscoverAllComponentManifests' repo-wide sweep (no explicit --type) can mix
 	// terraform/helmfile/packer component.yaml updates in one report, and
@@ -372,6 +469,7 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 			dryRun:          p.dryRun,
 			refreshLock:     p.refreshLock,
 			lockEnforcement: p.lockEnforcement,
+			info:            info,
 		}); err != nil {
 			errs = append(errs, err)
 		}
@@ -430,13 +528,19 @@ type batchedComponentManifestsParams struct {
 	dryRun          bool
 	refreshLock     bool
 	lockEnforcement string
+	// info carries --base-path/--config/--config-path/--profile into cfg.InitCliConfig below, the
+	// same way resolveUpdateSelectors already does for --stack/--labels selector resolution above --
+	// an empty schema.ConfigAndStacksInfo{} here silently dropped those global flags on this
+	// repo-wide "--pull" batched path.
+	info schema.ConfigAndStacksInfo
 }
 
-// pullBatchedComponentManifests initializes the CLI config the same way other component-manifest
-// resolution call sites do (e.g. pkg/vendoring/resolve.go's DefaultComponentDirResolver) and pulls
+// pullBatchedComponentManifests initializes the CLI config from p.info the same way other
+// component-manifest resolution call sites do (e.g. pkg/vendoring/resolve.go's
+// DefaultComponentDirResolver), honoring --base-path/--config/--config-path/--profile, and pulls
 // every entry in p.components in a single ExecuteComponentVendorPullBatch call.
 func pullBatchedComponentManifests(p *batchedComponentManifestsParams) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(p.info, false)
 	if err != nil {
 		return err
 	}
