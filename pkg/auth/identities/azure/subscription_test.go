@@ -349,6 +349,8 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 				GraphAPIExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
 				KeyVaultToken:      "keyvault-token",
 				KeyVaultExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
+				AKSToken:           "aks-token",
+				AKSTokenExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
 			},
 			expectError: false,
 		},
@@ -466,6 +468,8 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			assert.Equal(t, baseCreds.TenantID, azureCreds.TenantID)
 			assert.Equal(t, baseCreds.GraphAPIToken, azureCreds.GraphAPIToken)
 			assert.Equal(t, baseCreds.KeyVaultToken, azureCreds.KeyVaultToken)
+			assert.Equal(t, baseCreds.AKSToken, azureCreds.AKSToken)
+			assert.Equal(t, baseCreds.AKSTokenExpiration, azureCreds.AKSTokenExpiration)
 
 			// Verify OIDC fields are preserved.
 			assert.Equal(t, baseCreds.ClientID, azureCreds.ClientID)

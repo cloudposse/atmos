@@ -39,7 +39,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		if len(atmosConfig.MCP.Servers) == 0 {
-			ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+			ui.Info(noServersConfiguredMessage(atmosConfig.MCP.IsEnabled()))
 			return nil
 		}
 

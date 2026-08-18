@@ -59,6 +59,10 @@ func TestMain(m *testing.M) {
 	case "rm-glob-and-fail":
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)
+	case "spin-output":
+		_, _ = os.Stdout.WriteString("spin-stdout")
+		_, _ = os.Stderr.WriteString("spin-stderr")
+		os.Exit(0)
 	}
 	if os.Getenv(sessionShellHelperEnv) == "1" {
 		runStepSessionShellHelper()

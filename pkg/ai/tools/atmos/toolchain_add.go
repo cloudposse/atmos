@@ -71,7 +71,7 @@ func (t *ToolchainAddTool) Execute(_ context.Context, params map[string]interfac
 		version = defaultToolVersion
 	}
 
-	if err := toolchain.AddToolVersion(tool, version); err != nil {
+	if err := toolchain.AddToolVersion(tool, version, false); err != nil {
 		return &tools.Result{Success: false, Error: err}, err
 	}
 

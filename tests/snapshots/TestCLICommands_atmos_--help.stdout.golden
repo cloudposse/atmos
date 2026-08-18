@@ -28,6 +28,7 @@ BUILT-IN COMMANDS
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command] [EXPERIMENTAL]          Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
+      azure [command]                        Run Azure-specific commands for interacting with cloud resources
       cast [command]                         Play and render Atmos asciicast recordings
       ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
@@ -40,6 +41,7 @@ BUILT-IN COMMANDS
       emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
                                              registries
       env                                    Output environment variables configured in atmos.yaml
+      gcp [command]                          Run GCP-specific commands for interacting with cloud resources
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments

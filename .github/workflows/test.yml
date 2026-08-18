@@ -76,7 +76,7 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
         if: matrix.target == 'linux'
 
       - name: Announce build target
@@ -90,14 +90,14 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
           # Disable setup-go's module cache to avoid restoring or saving mutable
@@ -152,7 +152,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out source with validation base history
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           # `atmos validate --affected` compares HEAD to the PR merge-base.
@@ -195,7 +195,7 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -264,7 +264,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -305,8 +305,14 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
-      # TestTerraformRegistryCache runs once above on every active OS. Skip it
-      # here so Linux coverage does not execute the same trust/cache test twice.
+      # TestTerraformRegistryCache runs once above on every active OS. Skip it in
+      # both steps below so no OS executes the same trust/cache test twice: it
+      # installs/removes a real cert in the OS trust store (the macOS System
+      # keychain via `sudo security`, or the Windows Root store), and a second,
+      # concurrent run racing dozens of other tests that make real TLS calls
+      # (provider installs, vendor pulls, GitHub API requests) can destabilize
+      # trust verification for the rest of the job — surfacing as spurious
+      # "certificate signed by unknown authority" failures on unrelated tests.
       - name: Acceptance tests with coverage
         timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
@@ -338,6 +344,7 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          TESTARGS: "-skip=^TestTerraformRegistryCache$"
         run: atmos test acceptance
 
       - name: Upload coverage report artifact
@@ -359,7 +366,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -414,11 +421,11 @@ jobs:
       security-events: write
     steps:
       - name: Check out code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -430,7 +437,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -460,7 +467,7 @@ jobs:
     steps:
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -518,7 +525,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -529,7 +536,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
           cache: false
@@ -584,7 +591,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -605,7 +612,18 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        timeout-minutes: 45
+        # setup-colima is vz-only: qemu never came up on this Intel runner
+        # (usernet failure, docs/fixes/2026-07-01-macos-k3s-runner-research.md),
+        # and a green run shows vz starting on the first attempt with the whole
+        # step under 6 minutes. Caps: brew 7m + initial cleanup 1.5m + two vz
+        # start/info attempts 10m each + bounded diagnostics and intermediate
+        # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
+        # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
+        # The recovery path fits when the final image pull completes normally;
+        # anything past 40 is treated as pathological. The job-level 60m cap
+        # preserves fail-fast behavior; the observed healthy setup leaves ample
+        # time for both 15-minute test attempts.
+        timeout-minutes: 40
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
@@ -716,13 +734,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           cache: false
           go-version-file: "go.mod"
@@ -802,7 +820,7 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -908,7 +926,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -943,7 +961,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -998,7 +1016,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -1041,7 +1059,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -1051,7 +1069,7 @@ jobs:
           target: linux
 
       - name: Set up Go for the Buildx cache integration test
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
 

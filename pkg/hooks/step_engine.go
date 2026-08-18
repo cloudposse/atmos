@@ -82,10 +82,15 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	setDefaultStepWorkingDirectory(ctx, ws)
 
 	executor := runnerstep.NewStepExecutorWithVars(vars)
+	runCtx := context.Background()
+	if ctx.Stdout != nil || ctx.Stderr != nil {
+		runCtx = runnerstep.WithOutputSuppressed(runCtx)
+		executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+	}
 
 	var result *runnerstep.StepResult
 	run := func() error {
-		r, runErr := executor.Execute(context.Background(), ws)
+		r, runErr := executor.Execute(runCtx, ws)
 		result = r
 		return runErr
 	}
@@ -178,6 +183,11 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 		// process environment values from a failed attempt may leak into it.
 		vars := stepVariables(ctx)
 		executor := runnerstep.NewStepExecutorWithVars(vars)
+		runCtx := context.Background()
+		if ctx.Stdout != nil || ctx.Stderr != nil {
+			runCtx = runnerstep.WithOutputSuppressed(runCtx)
+			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+		}
 		for i, rawStep := range rawSteps {
 			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)
 			if resolveErr != nil {
@@ -187,7 +197,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			if step.Name == "" {
 				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
 			}
-			result, runErr := executor.Execute(context.Background(), step)
+			result, runErr := executor.Execute(runCtx, step)
 			lastResult = result
 			if runErr != nil {
 				return runErr

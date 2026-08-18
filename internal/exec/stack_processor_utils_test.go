@@ -1706,7 +1706,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	importsConfig := processingResult.ImportsConfig
 	assert.Nil(t, err)
 
-	config, err := ProcessStackConfig(
+	config, _, err := ProcessStackConfig(
 		&atmosConfig,
 		stacksBasePath,
 		filepath.Join(basePath, "components", "terraform"),
@@ -1917,7 +1917,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 		},
 	}
 
-	listResult, mapResult, rawStackConfigs, err := ProcessYAMLConfigFiles(
+	listResult, mapResult, rawStackConfigs, _, err := ProcessYAMLConfigFiles(
 		&atmosConfig,
 		stacksBasePath,
 		"", // terraformComponentsBasePath
@@ -2352,7 +2352,7 @@ func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
 
 	// Process both stacks in parallel using ProcessYAMLConfigFiles
 	// This tests the outer parallel loop (processing multiple stack files)
-	_, _, rawStackConfigs, err := ProcessYAMLConfigFiles(
+	_, _, rawStackConfigs, _, err := ProcessYAMLConfigFiles(
 		&atmosConfig,
 		stacksBasePath,
 		"../../tests/fixtures/scenarios/hierarchical-imports/components/terraform",
