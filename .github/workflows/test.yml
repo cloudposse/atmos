@@ -167,7 +167,10 @@ jobs:
         # editorconfig-checker is unaware of Go raw string literals, so it flags the
         # space-indented YAML/text embedded in *_test.go fixtures as tab violations;
         # exclude *.go since gofumpt/golangci-lint already own Go source formatting.
-        run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format rich
+        # specs/** is passed explicitly (mirrors .pre-commit-config.yaml) rather than
+        # relying solely on atmos.yaml's validate.editorconfig.exclude: older Atmos
+        # builds silently drop that list in the aggregate `validate --affected` path.
+        run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --format rich
 
   # run acceptance tests
   test:
