@@ -21,34 +21,34 @@ Three fixes to the already-shipped `pkg/proexec`/`internal/exec/terraform.go` de
 path, plus completion of the previously-blocked User Story 3:
 
 1. **Dedup fix (regression)**: `cmd/root.go`'s unconditional `proexec.CaptureAsync(cmd,
-   err)` call must be skipped for commands on the synchronous allowlist, so each
-   qualifying invocation produces exactly one execution record (FR-007), not two. This
-   requires a single shared classification function callable from both `cmd/root.go` and
-   `internal/exec/terraform.go`/`describe affected`'s call sites, replacing the
-   `internal/exec`-only `isExecMetadataSyncSubcommand`.
+    err)` call must be skipped for commands on the synchronous allowlist, so each
+    qualifying invocation produces exactly one execution record (FR-007), not two. This
+    requires a single shared classification function callable from both `cmd/root.go` and
+    `internal/exec/terraform.go`/`describe affected`'s call sites, replacing the
+    `internal/exec`-only `isExecMetadataSyncSubcommand`.
 2. **Allowlist expansion**: `terraform deploy` joins the synchronous allowlist
-   (`plan`/`apply`/`deploy`/`describe affected`) and gets the same structured
-   infrastructure-change data as `plan`/`apply` (FR-006/FR-007, 2026-08-18 clarifications).
+    (`plan`/`apply`/`deploy`/`describe affected`) and gets the same structured
+    infrastructure-change data as `plan`/`apply` (FR-006/FR-007, 2026-08-18 clarifications).
 3. **Multi-component aggregation**: `atmos terraform plan/apply/deploy --affected`/`--all`
-   currently uploads one execution record per graph node (since `ExecuteTerraform` runs
-   per component and `captureExecMetadataSync` lives inside it). Per FR-006a, this must
-   become exactly one aggregate record per CLI invocation, with each component's identity,
-   outcome, and structured data folded into that single record's `DataItems`.
+    currently uploads one execution record per graph node (since `ExecuteTerraform` runs
+    per component and `captureExecMetadataSync` lives inside it). Per FR-006a, this must
+    become exactly one aggregate record per CLI invocation, with each component's identity,
+    outcome, and structured data folded into that single record's `DataItems`.
 4. **US3 completion (previously blocked)**: attach itemized created/updated/deleted/
-   replaced/moved/imported resources, output values, and warnings to `plan`/`apply`/
-   `deploy` execution records. The blocker recorded in #2924 ("`ExecuteTerraform` never
-   captures raw stdout, needs a new `MultiWriter` tee across the shared pipeline") is
-   **only partially accurate**: `internal/exec/shell_utils.go`'s `WithStdoutCapture`/
-   `WithStderrCapture` `ShellCommandOption`s already implement exactly that tee, and
-   `cmd/terraform/plan.go`/`apply.go` (and `deploy.go`) already use them today — gated on
-   a *different* CI flag (`ciMode`) than the exec-metadata gate (`telemetry.IsCI() &&
-   Pro-configured`), and the captured buffer is a package-level var consumed only by
-   `PostRunE`'s Native-CI job-summary hooks, never threaded down into `ExecuteTerraform`'s
-   `captureExecMetadataSync`. The fix is to thread that already-captured, already
-   ANSI-stripped buffer (or a second capture using the same existing option, gated on the
-   exec-metadata gate instead of `ciMode`) into `CaptureSync`'s `data`/`dataItems`
-   arguments via the now-public `terraform.ParsePlanOutput`/`ParseApplyOutput`, not to
-   invent new tee infrastructure.
+    replaced/moved/imported resources, output values, and warnings to `plan`/`apply`/
+    `deploy` execution records. The blocker recorded in #2924 ("`ExecuteTerraform` never
+    captures raw stdout, needs a new `MultiWriter` tee across the shared pipeline") is
+    **only partially accurate**: `internal/exec/shell_utils.go`'s `WithStdoutCapture`/
+    `WithStderrCapture` `ShellCommandOption`s already implement exactly that tee, and
+    `cmd/terraform/plan.go`/`apply.go` (and `deploy.go`) already use them today — gated on
+    a *different* CI flag (`ciMode`) than the exec-metadata gate (`telemetry.IsCI() &&
+    Pro-configured`), and the captured buffer is a package-level var consumed only by
+    `PostRunE`'s Native-CI job-summary hooks, never threaded down into `ExecuteTerraform`'s
+    `captureExecMetadataSync`. The fix is to thread that already-captured, already
+    ANSI-stripped buffer (or a second capture using the same existing option, gated on the
+    exec-metadata gate instead of `ciMode`) into `CaptureSync`'s `data`/`dataItems`
+    arguments via the now-public `terraform.ParsePlanOutput`/`ParseApplyOutput`, not to
+    invent new tee infrastructure.
 
 ## Technical Context
 
