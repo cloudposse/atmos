@@ -379,7 +379,7 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		authSetupCalled = true
 		return nil, nil
 	}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply, nil))
 	assert.True(t, authSetupCalled, "cluster ops must resolve component auth even without --identity")
 
 	// With an identity, a setup failure propagates before processStacks runs.

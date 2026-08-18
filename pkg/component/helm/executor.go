@@ -454,21 +454,26 @@ func processStacksWithAuth(
 		}
 	} else if operationContactsCluster(operation, flags) {
 		// Discover the effective component auth block without evaluating templates or
-		// YAML functions. This keeps the ordinary ambient path unchanged while allowing
-		// an opt-in guard to resolve its component default before a cluster-contacting path.
+		// YAML functions. This lets disabled components short-circuit before auth and lets
+		// the opt-in guard fail closed before the full processing pass.
 		discovered, err := processStacks(atmosConfig, *info, true, false, false, nil, nil)
 		if err != nil {
 			return err
 		}
-		required, err := requireIdentityForOperation(&discovered, operation, flags)
+		*info = discovered
+		required, err := requireIdentityForOperation(info, operation, flags)
 		if err != nil {
 			return err
 		}
 		if required {
-			*info = discovered
 			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
 				return errUtils.ErrKubernetesIdentityRequired
 			}
+		}
+		if info.ComponentIsEnabled {
+			// Resolve a stack default identity for every live cluster operation, even when
+			// the component does not opt into require_identity. With no configured auth,
+			// this returns a nil manager and preserves ambient KUBECONFIG behavior.
 			authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 			if err != nil {
 				return err
@@ -500,6 +505,24 @@ func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
 	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
 }
 
+// shouldSetupComponentAuth reports whether a command may need component auth before
+// full stack processing. Live diff/apply/delete operations resolve a stack default;
+// an explicit identity also applies to offline operations such as template.
+func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
+	return hasExplicitIdentity(info) || operationRequiresCluster(operation)
+}
+
+// operationRequiresCluster reports whether an operation can contact Kubernetes.
+// Diff baselines are refined by operationContactsCluster once flags are available.
+func operationRequiresCluster(operation Operation) bool {
+	switch operation {
+	case OperationApply, OperationDiff, OperationDelete:
+		return true
+	default:
+		return false
+	}
+}
+
 // requireIdentityForOperation reports whether this Helm path must fail closed.
 func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) (bool, error) {
 	if !operationContactsCluster(operation, flags) || info == nil || !info.ComponentIsEnabled {
@@ -522,6 +545,9 @@ func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Ope
 // operationContactsCluster reports whether the selected operation and baseline
 // need Kubernetes API access. Template and explicitly offline diff baselines do not.
 func operationContactsCluster(operation Operation, flags map[string]any) bool {
+	if !operationRequiresCluster(operation) {
+		return false
+	}
 	switch operation {
 	case OperationApply, OperationDelete:
 		return true
