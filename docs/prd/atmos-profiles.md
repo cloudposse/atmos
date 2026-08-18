@@ -255,6 +255,17 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 - Users can still override with `--identity` flag or `ATMOS_IDENTITY` environment variable
 - Identity selection precedence: `--identity` flag > `ATMOS_IDENTITY` env > default identity from active profile > default identity from base config
 
+**FR2.7**: `--profile` used with no value MUST open an interactive multi-select of every
+discovered profile (mirroring how bare `--identity` opens an interactive identity selector)
+```bash
+atmos auth login -i core-auto/terraform --profile
+```
+- Any profile names already given explicitly alongside the bare flag (e.g. `--profile ci --profile`)
+  MUST always be included in the final activation list, regardless of what is (or isn't) re-picked
+  in the form
+- In a non-interactive context (no TTY, CI), bare `--profile` MUST return a clear error rather than
+  attempting to load a literal profile named after the internal sentinel value or hanging
+
 #### FR3: Configuration Merging and Precedence
 
 **FR3.1**: Configuration loading order MUST be (see

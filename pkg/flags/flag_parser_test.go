@@ -503,14 +503,24 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 					return nil
 				},
 			}
-			// Register flag with shorthand (NO NoOptDefVal - we handle empty values manually).
+			// Register flag with shorthand (NO NoOptDefVal on the pflag itself - the
+			// empty-value("--identity=") resolution is driven generically by the
+			// registry's NoOptDefVal metadata, matched below).
 			cmd.Flags().StringP("identity", "i", "", "Identity selector")
 
 			// Create viper instance.
 			v := viper.New()
 
-			// Create empty registry for tests (no NoOptDefVal preprocessing needed in these tests).
+			// Register the identity flag in the registry with its NoOptDefVal so
+			// resolveNoOptDefValForEmptyFlags (which derives eligible flags generically
+			// from the registry, not a hard-coded name) knows to treat an explicit
+			// empty value ("--identity=") as the interactive-selection sentinel.
 			registry := NewFlagRegistry()
+			registry.Register(&StringFlag{
+				Name:        "identity",
+				Shorthand:   "i",
+				NoOptDefVal: "__SELECT__",
+			})
 
 			// Create parser with compatibility flags.
 			translator := compat.NewCompatibilityFlagTranslator(tt.compatibilityAlias)

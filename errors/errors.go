@@ -408,14 +408,15 @@ var (
 	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
 	// Profile errors.
-	ErrProfileNotFound         = errors.New("profile not found")
-	ErrProfileSyntax           = errors.New("profile syntax error")
-	ErrProfileDiscovery        = errors.New("failed to discover profiles")
-	ErrProfileLoad             = errors.New("failed to load profile")
-	ErrProfileMerge            = errors.New("failed to merge profile configuration")
-	ErrProfileDirNotExist      = errors.New("profile directory does not exist")
-	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
-	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
+	ErrProfileNotFound             = errors.New("profile not found")
+	ErrProfileSyntax               = errors.New("profile syntax error")
+	ErrProfileDiscovery            = errors.New("failed to discover profiles")
+	ErrProfileLoad                 = errors.New("failed to load profile")
+	ErrProfileMerge                = errors.New("failed to merge profile configuration")
+	ErrProfileDirNotExist          = errors.New("profile directory does not exist")
+	ErrProfileDirNotAccessible     = errors.New("profile directory not accessible")
+	ErrProfileInvalidMetadata      = errors.New("invalid profile metadata")
+	ErrProfileSelectionUnavailable = errors.New("interactive profile selection is not available in this context")
 
 	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent         = errors.New("component is required")

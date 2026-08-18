@@ -159,6 +159,11 @@ These flags are available for every Atmos command:
     <dd>
         Activate configuration profiles for environment-specific settings.
 
+        **Modes:**
+        - **With profile name(s)** (`--profile developer` or `--profile=ci,security`): Activate the specified profile(s)
+        - **Without value** (`--profile`): Show an interactive multi-select to choose which discovered profiles to activate
+        - **Omitted**: Use `profiles.default` from `atmos.yaml`, if set
+
         **Use Cases:**
         - **Development workflow**: Use debug logging and wider terminal output during development
         - **CI/CD**: Disable interactive features and use plain text output in CI environments
@@ -180,6 +185,10 @@ These flags are available for every Atmos command:
         # Flag takes precedence over environment variable
         ATMOS_PROFILE=ci atmos --profile developer describe config
         # Uses: developer profile (flag wins)
+
+        # Interactive selection: bare --profile (no value) opens a multi-select
+        # picker listing every discovered profile, in an interactive terminal
+        atmos auth login -i core-auto/terraform --profile
         ```
 
         **Profile Configuration:**
