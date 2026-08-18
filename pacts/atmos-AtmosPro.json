@@ -24,6 +24,7 @@
             }
           ],
           "exit_code": 0,
+          "flags": [],
           "git_sha": "",
           "metrics": {
             "system_cpu_time_ms": 0,
@@ -131,6 +132,7 @@
             }
           ],
           "exit_code": 0,
+          "flags": [],
           "git_sha": "",
           "metrics": {
             "system_cpu_time_ms": 0,
@@ -586,6 +588,7 @@
             }
           ],
           "exit_code": 0,
+          "flags": [],
           "git_sha": "abc123def456",
           "metrics": {
             "in_block_ops": 4,
@@ -732,6 +735,7 @@
           "atmos_version": "1.2.3",
           "command": "atmos list components",
           "exit_code": 0,
+          "flags": [],
           "git_sha": "abc123def456",
           "metrics": {
             "system_cpu_time_ms": 5,
