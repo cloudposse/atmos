@@ -271,6 +271,63 @@ func TestBuildPath_AllowsSlashInStackWithoutDotSegments(t *testing.T) {
 	assert.Equal(t, filepath.Join(base, WorkdirPath, "terraform", "deploy", "test-vpc"), path)
 }
 
+// TestBuildPath_RejectsLeadingSlashInStack is a regression test for a collision
+// strings.FieldsFunc's empty-segment-dropping silently let through: validateStackForPath's
+// earlier revision split stack with strings.FieldsFunc, which drops empty segments, so
+// "/deploy/test" produced the same ["deploy", "test"] segment list "deploy/test" does. But
+// filepath.Join's implicit Clean() collapses the leading "/" the same way, so stack
+// "/deploy/test" and stack "deploy/test" resolved to the identical workdir path -- two distinct
+// stack configurations silently sharing one workdir.
+func TestBuildPath_RejectsLeadingSlashInStack(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", "/deploy/test", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestBuildPath_RejectsRepeatedSlashInStack mirrors TestBuildPath_RejectsLeadingSlashInStack for
+// a doubled "/" in the middle of stack: "deploy//test" also silently dropped its empty segment
+// under strings.FieldsFunc, and filepath.Join's implicit Clean() collapses the doubled "/" down
+// to the same path stack "deploy/test" produces.
+func TestBuildPath_RejectsRepeatedSlashInStack(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", "deploy//test", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestBuildPath_AllowsTrailingSlashInStack verifies a single trailing "/" is not rejected: unlike
+// a leading or repeated "/", it does not alias its non-trailing counterpart through Clean() --
+// BuildPath always appends "-<component>" directly onto stack with no separator in between, so a
+// trailing "/" becomes its own real path segment (".../test/-vpc") distinct from the
+// non-trailing form (".../test-vpc"). There is nothing to close for it, so it is left alone,
+// matching stack "/"'s general treatment as a supported nesting notation.
+func TestBuildPath_AllowsTrailingSlashInStack(t *testing.T) {
+	base := t.TempDir()
+
+	path, err := BuildPath(base, "terraform", "vpc", "deploy/test/", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(base, WorkdirPath, "terraform", "deploy", "test", "-vpc"), path)
+}
+
+// TestBuildPath_RejectsBackslashInStack verifies a bare "\" in stack (no "."/".." segment) is
+// rejected, closing a Windows-specific collision: unlike "/", the one nesting notation this
+// package documents and tests as supported (see TestBuildPath_AllowsSlashInStackWithoutDotSegments),
+// "\" was never adopted as an equivalent second notation, because filepath.Join/Clean on
+// Windows treat "\" and "/" as fully interchangeable separators, so stack `deploy\test`, left
+// unrejected, would alias the very same workdir as stack "deploy/test" on that platform -- two
+// distinct stack configurations silently sharing one workdir. Rejecting it unconditionally (not
+// only on Windows) keeps a given stack name's validity independent of which OS Atmos runs on.
+func TestBuildPath_RejectsBackslashInStack(t *testing.T) {
+	base := t.TempDir()
+
+	_, err := BuildPath(base, "terraform", "vpc", `deploy\test`, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
 // TestContainWithinBase_RejectsEscapingPath is a direct unit test for containWithinBase's own
 // rejection branch, kept as defense-in-depth coverage now that BuildPath's stack rejection and
 // workdirComponent escaping should already prevent any real ".." from reaching it in practice.

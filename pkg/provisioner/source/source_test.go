@@ -230,6 +230,51 @@ func TestDetermineTargetDirectory(t *testing.T) {
 			expectedDir:     "",
 			expectError:     errUtils.ErrPathTraversal,
 		},
+		{
+			// Regression test: filepath.Join(componentBasePath, ".") cleans to
+			// componentBasePath itself. isWithinBase's filepath.Rel-based check treats
+			// rel == "." as "within base" (it is, technically -- it *is* the base), so a
+			// naive containment guard would let a component named "." silently vendor
+			// into the shared components/terraform/ directory instead of a per-component
+			// subdirectory. This must be a hard error, not a fallback, since
+			// DetermineTargetDirectory's default branch has no further fallback to try.
+			name: "component name of . resolves to the component base path itself",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			componentType:   "terraform",
+			component:       ".",
+			componentConfig: map[string]any{},
+			expectedDir:     "",
+			expectError:     errUtils.ErrPathTraversal,
+		},
+		{
+			// Regression test: same root cause as the "." case above, reached via a
+			// component name that lexically cancels itself out --
+			// filepath.Join(componentBasePath, "child", "..") also cleans to
+			// componentBasePath itself.
+			name: "component name of child/.. resolves to the component base path itself",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			componentType: "terraform",
+			// A literal "child/.." component name, exactly as it could appear in a stack
+			// manifest -- not built with filepath.Join, since the value under test is the
+			// raw (potentially attacker-controlled) string, and filepath.Clean treats '/'
+			// as a separator on all platforms including Windows.
+			component:       "child/..",
+			componentConfig: map[string]any{},
+			expectedDir:     "",
+			expectError:     errUtils.ErrPathTraversal,
+		},
 	}
 
 	for _, tt := range tests {
@@ -391,6 +436,49 @@ func TestValidateWithinComponentBasePath_SymlinkResolutionErrorPropagates(t *tes
 	err := validateWithinComponentBasePath(targetDir, componentBasePath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestValidateTargetIsComponentSubdirectory covers the stricter, equality-rejecting check used
+// only by DetermineTargetDirectory's default vendoring-target branch. Unlike
+// validateWithinComponentBasePath (which intentionally allows target == base, per
+// TestValidateWithinComponentBasePath_RootBase's "root base equals target" case),
+// validateTargetIsComponentSubdirectory must reject target == base, since on this call path that
+// only happens when the component name collapsed to nothing (e.g. "." or "child/..").
+func TestValidateTargetIsComponentSubdirectory(t *testing.T) {
+	componentBasePath := t.TempDir()
+
+	t.Run("target equal to base is rejected", func(t *testing.T) {
+		err := validateTargetIsComponentSubdirectory(componentBasePath, componentBasePath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("target equal to base via dot is rejected", func(t *testing.T) {
+		dotTarget := filepath.Join(componentBasePath, ".")
+		err := validateTargetIsComponentSubdirectory(dotTarget, componentBasePath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("target equal to base via canceling segments is rejected", func(t *testing.T) {
+		cancelingTarget := filepath.Join(componentBasePath, "child", "..")
+		err := validateTargetIsComponentSubdirectory(cancelingTarget, componentBasePath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("genuine subdirectory of base is allowed", func(t *testing.T) {
+		target := filepath.Join(componentBasePath, "vpc")
+		err := validateTargetIsComponentSubdirectory(target, componentBasePath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("escape from base is still rejected", func(t *testing.T) {
+		target := filepath.Join(componentBasePath, "..", "outside")
+		err := validateTargetIsComponentSubdirectory(target, componentBasePath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
 }
 
 func TestGetComponentBasePath(t *testing.T) {

@@ -29,7 +29,7 @@ reply, not a code change.
   call `pkg/provisioner/workdir.CleanWorkdir`/`BuildPath` at all — it has its own separate,
   never-updated `fmt.Sprintf("%s-%s", stack, component)` formula in `CleanWorkdir`,
   `GetWorkdirInfo`, and (transitively) `DescribeWorkdir`, meaning `atmos terraform workdir
-  clean/get/describe` couldn't find *any* hyphenated component's real workdir, not just the
+  clean/show/describe` couldn't find *any* hyphenated component's real workdir, not just the
   `atmos_component`-override case CodeRabbit flagged.
 - **Fixed, scoped:** the hyphen/separator-escaping `BuildPath` change (from an earlier round of
   this same PR, see `docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`)
@@ -117,9 +117,13 @@ reply, not a code change.
 - `go test ./pkg/provisioner/... ./cmd/terraform/workdir/... ./pkg/terraform/output/...
   ./internal/terraform_backend/... ./pkg/component/... ./pkg/schema/... ./pkg/runner/step/...
   ./cmd ./cmd/git/...` — all pass, including:
-  - New: `TestBuildPath_RejectsStackContainingSlash`/`_RejectsStackContainingBackslash`/
-    `_AllowsHyphenatedStackName`, `TestContainWithinBase_RejectsEscapingPath`
-    (`pkg/provisioner/workdir/types_test.go`).
+  - New: `TestBuildPath_RejectsStackContainingDotDotSegment`/
+    `_RejectsStackContainingBackslashDotDotSegment`/`_AllowsHyphenatedStackName`/
+    `_AllowsSlashInStackWithoutDotSegments`, `TestContainWithinBase_RejectsEscapingPath`
+    (`pkg/provisioner/workdir/types_test.go`) — reflects the later dot-segment-only rejection
+    (see `docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`'s Update
+    note): a stack name containing `/` without a `.`/`..` segment is valid, supported nesting,
+    not rejected outright.
   - New: `TestCleanWorkdir_HonorsAtmosComponentOverride`/
     `_NilComponentConfigMissesAtmosComponentInstance` (`pkg/provisioner/workdir/clean_test.go`)
     — the latter documents the pre-fix failure mode as a regression guard.

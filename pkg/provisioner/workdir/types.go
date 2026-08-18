@@ -189,11 +189,11 @@ func resolveWorkdirComponentName(component string, componentConfig map[string]an
 	return escapeComponentNameForPath(workdirComponent)
 }
 
-// validateStackForPath rejects a stack name containing a "." or ".." path segment (split on
-// both "/" and "\"), instead of escaping the whole value the way resolveWorkdirComponentName
-// does for the component name.
+// validateStackForPath rejects a stack name containing a "." or ".." path segment, an empty
+// segment produced by a leading or repeated "/", or any "\" character, instead of escaping the
+// whole value the way resolveWorkdirComponentName does for the component name.
 //
-// A stack name is just as user-controlled as a component name, and without this check, a
+// A stack name is just as user-controlled as a component name, and without the "."/".." check, a
 // value such as "team/../prod" still contains a real ".." segment when workdirName is built --
 // filepath.Join's implicit Clean() then folds "team/../" away, silently aliasing stack
 // "team/../prod" onto the same workdir as stack "prod", so two distinct stack configurations
@@ -203,12 +203,58 @@ func resolveWorkdirComponentName(component string, componentConfig map[string]an
 // already-tested naming convention in this codebase -- is not rejected: it becomes a real
 // nested directory ("<typeRoot>/deploy/test-<component>") exactly as it always has (stack was
 // never escaped like the component name; only ".."'s Clean()-folding is a distinct-path-alias
-// risk, plain "/" nesting is not). Rejecting only dot segments, rather than every "/" or "\"
-// (this function's earlier revision), avoids breaking that existing convention while still
-// closing the collision: "deploy/test" and "deploy" can never alias each other through
-// Clean(), only "x/../y" and "y" can.
+// risk, plain "/" nesting is not). Rejecting only dot segments, rather than every "/" (this
+// function's earlier revision), avoids breaking that existing convention while still closing
+// the collision: "deploy/test" and "deploy" can never alias each other through Clean(), only
+// "x/../y" and "y" can.
+//
+// A leading or repeated "/" is rejected too, for the same Clean()-folding reason: this
+// function's earlier revision split stack on strings.FieldsFunc, which silently drops empty
+// segments, so "/deploy/test" and "deploy//test" both produced the same two-element segment
+// list ["deploy", "test"] that "deploy/test" itself does -- neither a leading nor a doubled "/"
+// was ever individually visible to the loop below. That matters because filepath.Join's
+// implicit Clean() collapses a leading or doubled "/" the same way BuildPath's workdirName
+// does: stack "/deploy/test" and stack "deploy//test" both clean down to the identical path
+// "deploy/test-<component>" that stack "deploy/test" itself produces -- the very
+// silent-aliasing collision this whole function exists to reject, just triggered by a
+// different Clean()-significant construct than "."/"..". A single *trailing* "/" is not
+// affected the same way and is deliberately left alone: BuildPath always appends
+// "-<component>" directly onto stack with no separator in between, so a trailing "/" becomes
+// its own real path segment (".../test/-<component>") distinct from the non-trailing form
+// (".../test-<component>") -- it does not alias its non-trailing counterpart through Clean(),
+// so there is nothing to close for it.
+//
+// "\" is rejected outright rather than merely split on for dot-detection, as this function's
+// earlier revision did: unlike "/", the one nesting notation this package documents and tests
+// as supported (see above), "\" was never adopted as an equivalent second notation -- splitting
+// on it existed only to catch a dot segment however it was delimited (e.g. `team\..\prod`).
+// But filepath.Join/Clean on Windows treat "\" and "/" as fully interchangeable separators, so
+// a stack such as `deploy\test`, left unrejected, would alias the very same workdir as stack
+// "deploy/test" produces on that platform -- again the same collision class this function
+// exists to close, just Windows-specific. Rejecting it unconditionally (not only on Windows)
+// keeps a given stack name's validity independent of which OS Atmos runs on.
 func validateStackForPath(stack string) error {
-	for _, segment := range strings.FieldsFunc(stack, isPathSeparator) {
+	if strings.ContainsRune(stack, '\\') {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Stack name `%s` must not contain a '\\' character", stack).
+			WithHint("Use '/' (not '\\') to nest a stack name").
+			WithContext("stack", stack).
+			Err()
+	}
+
+	segments := strings.Split(stack, "/")
+	for i, segment := range segments {
+		// An empty segment from a leading or repeated "/" is Clean()-significant the same way
+		// "."/".." are (see doc comment above) -- but only when it is not the final segment: a
+		// single trailing "/" does not alias its non-trailing counterpart, so it is allowed
+		// through.
+		if segment == "" && i != len(segments)-1 {
+			return errUtils.Build(errUtils.ErrPathTraversal).
+				WithExplanationf("Stack name `%s` must not contain a leading or repeated '/' path separator", stack).
+				WithHint("Remove any leading or doubled '/' characters from the stack name").
+				WithContext("stack", stack).
+				Err()
+		}
 		if segment == "." || segment == ".." {
 			return errUtils.Build(errUtils.ErrPathTraversal).
 				WithExplanationf("Stack name `%s` must not contain a '.' or '..' path segment", stack).
@@ -219,13 +265,6 @@ func validateStackForPath(stack string) error {
 	}
 
 	return nil
-}
-
-// isPathSeparator reports whether r is "/" or "\", the two characters filepath.Join treats as
-// path separators regardless of the host OS (filepath.Separator alone would miss the other
-// platform's separator when a stack name is crafted or copy-pasted across OSes).
-func isPathSeparator(r rune) bool {
-	return r == '/' || r == '\\'
 }
 
 // escapeComponentNameForPath injectively encodes name so it can be used as a single

@@ -249,12 +249,21 @@ func shouldSkipSyncDir(relPath string) bool {
 // state -- real infrastructure history, not a regenerable artifact -- was silently deleted by
 // deleteRemovedFiles on every re-provision, since sync otherwise treats anything absent from
 // the source component directory as an orphan to remove.
+//
+// The lock-file check is intentionally basename-based: per-instance lock files
+// (.<stack>-<component>.terraform.lock.hcl) legitimately live at any depth under the workdir.
+// The three local-backend state filenames, by contrast, are only ever written by Terraform/
+// OpenTofu directly into the workdir root -- so they are matched against relPath itself (i.e.
+// the file must BE at the workdir root), not just its basename. A source file that happens to
+// share one of these names at a nested path (e.g. a real Terraform module's example fixture at
+// "examples/terraform.tfstate") is ordinary source content, not the protected state, and must
+// sync/delete like any other file.
 func shouldSkipSyncFile(relPath string) bool {
 	base := filepath.Base(relPath)
 	if strings.HasSuffix(base, terraformLockFileSuffix) {
 		return true
 	}
-	switch base {
+	switch filepath.Clean(relPath) {
 	case terraformStateFile, terraformStateBackupFile, terraformStateLockInfoFile:
 		return true
 	default:

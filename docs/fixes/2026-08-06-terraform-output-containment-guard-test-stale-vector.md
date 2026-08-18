@@ -40,9 +40,16 @@ contain `.workdir`, proving the fallback fired) failed on every platform:
 
 The guard itself was never broken. The *stack* argument is concatenated
 into the workdir directory name the same way the component name is
-(`fmt.Sprintf("%s-%s", stack, componentName)`), but `BuildPath` never
-sanitizes it — so stack-name traversal remains a live vector the guard
-still needs to catch, and the pre-fix test simply wasn't exercising it.
+(`fmt.Sprintf("%s-%s", stack, componentName)`), but at the time this fix
+landed `BuildPath` never sanitized it — so stack-name traversal was a live
+vector the guard still needed to catch, and the pre-fix test simply wasn't
+exercising it. **This is now historical:** `BuildPath` was later given its
+own direct stack validation (`validateStackForPath`, added in
+`docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`)
+that rejects a `.`/`..` stack path segment before the workdir path is ever
+constructed, closing this vector at its source rather than relying solely
+on `extractComponentPath`'s downstream containment-guard fallback described
+above.
 
 ## Changes
 

@@ -962,11 +962,17 @@ func TestCustomCommandIntegration_AtmosStepUsesCurrentExecutable(t *testing.T) {
 	assert.Equal(t, outputValue, string(output))
 }
 
+// cancellationOsExitPanic is the typed sentinel cancellationOsExitStub panics with, so its
+// recovery func can distinguish the expected OsExit interception from a genuine regression
+// panicking elsewhere in the same goroutine -- absorbing the latter would let the goroutine end
+// silently (never writing "completed") and make a cancellation test pass for the wrong reason.
+type cancellationOsExitPanic struct{}
+
 // cancellationOsExitStub stubs errUtils.OsExit with a panic-based interception (the same pattern
 // TestExecuteCustomCommandUnsupportedStepTypeExits uses) so a cancelled step's error -- which
 // ultimately reaches errUtils.CheckErrorPrintAndExit -- doesn't call the real os.Exit and tear down
 // the test binary. Returns a recover func to be deferred inside the goroutine running
-// customCmd.Run, which absorbs the resulting panic.
+// customCmd.Run, which absorbs only the expected interception panic and re-panics anything else.
 func cancellationOsExitStub(t *testing.T) func() {
 	t.Helper()
 
@@ -975,10 +981,14 @@ func cancellationOsExitStub(t *testing.T) func() {
 		errUtils.OsExit = originalOsExit
 	})
 	errUtils.OsExit = func(int) {
-		panic("errUtils.OsExit called")
+		panic(cancellationOsExitPanic{})
 	}
 	return func() {
-		_ = recover()
+		switch recovered := recover().(type) {
+		case nil, cancellationOsExitPanic:
+		default:
+			panic(recovered)
+		}
 	}
 }
 

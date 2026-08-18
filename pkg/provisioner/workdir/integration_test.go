@@ -623,6 +623,15 @@ func TestServiceProvision_MigratesPreExistingLegacyWorkdir(t *testing.T) {
 	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", "my-hyphenated-component"))
 	require.NoError(t, os.MkdirAll(legacyPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyPath, ".terraform.lock.hcl"), []byte("# pre-existing lock"), 0o644))
+	// Also seed metadata matching this identity: verifyLegacyWorkdirIdentity requires it to
+	// confirm the legacy directory actually belongs to this component/stack before migrating
+	// it (see TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity below
+	// for the case where identity can't be confirmed).
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "my-hyphenated-component",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tempDir,
@@ -656,6 +665,63 @@ func TestServiceProvision_MigratesPreExistingLegacyWorkdir(t *testing.T) {
 	lockBytes, err := os.ReadFile(filepath.Join(provisionedPath, ".terraform.lock.hcl"))
 	require.NoError(t, err, "migrated workdir must retain the legacy workdir's contents")
 	assert.Equal(t, "# pre-existing lock", string(lockBytes))
+}
+
+// TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity is an
+// end-to-end regression test for the legacyWorkdirName collision: legacyWorkdirName's "%s-%s"
+// formula is plain concatenation, so stack "dev-a" + component "b" and stack "dev" + component
+// "a-b" both resolve to the identical legacy name "dev-a-b". Simulate a legacy workdir that was
+// actually provisioned for "dev-a" + "b" (its metadata records that identity and it holds real
+// Terraform state), then provision the OTHER identity ("dev" + "a-b") through the same
+// Provision entry point a real terraform run uses. Provision must fail rather than silently
+// rename the first identity's workdir -- and its state -- out from under it.
+func TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "a-b")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// The legacy name "dev-a-b" is shared by two distinct component/stack pairs: stack "dev-a"
+	// + component "b" (the identity actually recorded below, simulating a real prior
+	// provisioning) and stack "dev" + component "a-b" (the identity provisioned in this test).
+	const sharedLegacyName = "dev-a-b"
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", sharedLegacyName)
+	require.NoError(t, os.MkdirAll(legacyPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyPath, "terraform.tfstate"), []byte(`{"serial":1}`), 0o644))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "a-b",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
+	require.Error(t, err, "Provision must refuse to migrate a legacy workdir belonging to a different identity")
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
+
+	// The other identity's workdir (and its state) must be untouched: still present at the
+	// legacy path, not moved or overwritten.
+	stateBytes, statErr := os.ReadFile(filepath.Join(legacyPath, "terraform.tfstate"))
+	require.NoError(t, statErr, "the other identity's legacy workdir must not be moved or removed")
+	assert.Equal(t, `{"serial":1}`, string(stateBytes))
 }
 
 // TestServiceProvision_PreservesLocalBackendStateAcrossReprovision is a regression test for

@@ -336,13 +336,26 @@ func TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWork
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	base := "/tmp"
+	// A real temp dir (not a hardcoded "/tmp") is required here: verifyLegacyWorkdirIdentity
+	// reads real metadata via ReadMetadata (bypassing the mocked FileSystem, same as
+	// WriteMetadata elsewhere in this package), so the legacy directory's identity must be
+	// provable on disk before migrateLegacyWorkdir ever reaches the mocked Rename call below.
+	base := t.TempDir()
 	// "vpc-logs" contains a literal "-", so its escaped (new) path differs from the legacy
 	// (unescaped) path -- required for migrateLegacyWorkdir to attempt a Rename at all.
 	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
 	require.NoError(t, err)
 	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
 	require.NotEqual(t, legacyPath, newPath)
+
+	// Seed matching metadata so verifyLegacyWorkdirIdentity confirms this legacy directory
+	// really belongs to this component/stack and lets the flow reach Rename.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "vpc-logs",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
 
 	mockFS.EXPECT().Exists(legacyPath).Return(true)
 	mockFS.EXPECT().Exists(newPath).Return(false)
@@ -750,6 +763,15 @@ func TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure(t *testing.T) {
 	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
 	require.NotEqual(t, legacyPath, newPath)
 
+	// Seed matching metadata so verifyLegacyWorkdirIdentity confirms this legacy directory
+	// really belongs to this component/stack and lets the flow reach Rename.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "vpc-logs",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
 	mockFS.EXPECT().Exists(legacyPath).Return(true)
 	mockFS.EXPECT().Exists(newPath).Return(false)
 	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
@@ -757,6 +779,98 @@ func TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure(t *testing.T) {
 	migrateErr := service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
 	require.Error(t, migrateErr)
 	assert.Contains(t, migrateErr.Error(), "permission denied")
+}
+
+// TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity is a regression test
+// for the legacyWorkdirName collision: legacyWorkdirName(stack, component) is plain "%s-%s"
+// concatenation, so it is not injective -- stack "dev-a" + component "b" and stack "dev" +
+// component "a-b" both produce the identical legacy name "dev-a-b". If a legacy workdir under
+// that shared name actually belongs to one of those pairs and the other pair is provisioned
+// under the new encoding, migrateLegacyWorkdir must NOT blindly rename it onto the second
+// pair's new path -- that would silently move the first identity's workdir (and any real
+// Terraform state inside it) out from under it. No Rename call is expected: an unexpected call
+// would fail the test via the strict mock controller, proving the caller stops before ever
+// reaching Rename once the metadata identity check fails.
+func TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	// The legacy name "dev-a-b" is shared by two distinct, individually legitimate
+	// component/stack pairs: stack "dev-a" + component "b" (the identity actually recorded in
+	// the legacy directory's metadata below) and stack "dev" + component "a-b" (the identity
+	// this migrateLegacyWorkdir call is made for).
+	const sharedLegacyName = "dev-a-b"
+
+	newPath, err := BuildPath(base, "terraform", "a-b", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", sharedLegacyName)
+	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev", "a-b"), "legacy name for the caller's own identity must match the shared legacy name")
+	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev-a", "b"), "legacy name for the other identity must also match the shared legacy name")
+	require.NotEqual(t, legacyPath, newPath)
+
+	// Seed metadata recording the OTHER identity ("dev-a" + "b"), simulating a legacy workdir
+	// that was actually provisioned for that pair, not for "dev" + "a-b".
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	// No Rename expectation: migrateLegacyWorkdir must refuse before ever calling it.
+
+	migrateErr := service.migrateLegacyWorkdir(base, "a-b", "dev", newPath)
+	require.Error(t, migrateErr)
+	assert.ErrorIs(t, migrateErr, errUtils.ErrWorkdirCreation)
+	// The explanation/hint text lives in cockroachdb error details, not the top-level
+	// Error() string (which is just the sentinel message) -- use errUtils's helper.
+	assert.True(t, errUtils.HasHint(migrateErr, "different component instance"), "error should hint that manual investigation is needed")
+}
+
+// TestMigrateLegacyWorkdir_RefusesWhenLegacyDirectoryHasNoMetadata is a regression test for the
+// fail-closed decision on an unverifiable legacy workdir: a directory found at the legacy path
+// with no Atmos metadata at all (e.g. one predating the metadata feature) cannot prove which
+// component/stack it was created for. This is exactly the case migrateLegacyWorkdir must refuse
+// to rename rather than assume it belongs to the caller -- that assumption is the blind-rename
+// risk the identity check exists to close. No Rename call is expected: an unexpected call would
+// fail the test via the strict mock controller.
+func TestMigrateLegacyWorkdir_RefusesWhenLegacyDirectoryHasNoMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	// Create the legacy directory on disk, but deliberately write no metadata into it --
+	// simulating a workdir created before Atmos started writing .atmos/metadata.json.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	// No Rename expectation: migrateLegacyWorkdir must refuse before ever calling it.
+
+	migrateErr := service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.Error(t, migrateErr)
+	assert.ErrorIs(t, migrateErr, errUtils.ErrWorkdirCreation)
+	// The explanation/hint text lives in cockroachdb error details, not the top-level
+	// Error() string (which is just the sentinel message) -- use errUtils's helper.
+	assert.True(t, errUtils.HasHint(migrateErr, "no Atmos metadata"), "error should hint that manual investigation is needed")
 }
 
 // TestServiceProvision_RejectsStackTraversal is a regression test proving Service.Provision

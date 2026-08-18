@@ -175,7 +175,11 @@ func DetermineTargetDirectory(
 	// resolveLocalBackendComponentPath and pkg/terraform/output/config.go's
 	// extractComponentPath, except there is no safe fallback path to fall through to here -
 	// this branch already IS the final default - so an escaping path is a hard error instead.
-	if err := validateWithinComponentBasePath(targetDir, componentBasePath); err != nil {
+	// validateTargetIsComponentSubdirectory (rather than validateWithinComponentBasePath
+	// directly) additionally rejects a component name that collapses to nothing (e.g. "." or
+	// "child/.."), which would otherwise resolve targetDir to componentBasePath itself - see
+	// its doc comment for why that must be a hard error on this specific call path.
+	if err := validateTargetIsComponentSubdirectory(targetDir, componentBasePath); err != nil {
 		return "", err
 	}
 
@@ -236,6 +240,45 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 			WithContext("resolved_target_dir", resolvedTarget).
 			WithContext("component_base_path", absBase).
 			WithContext("resolved_component_base_path", resolvedBase).
+			Err()
+	}
+
+	return nil
+}
+
+// validateTargetIsComponentSubdirectory verifies targetDir is a genuine subdirectory of
+// componentBasePath -- never equal to it -- on top of the standard containment checks performed
+// by validateWithinComponentBasePath. It exists only for DetermineTargetDirectory's default
+// vendoring-target branch, where targetDir is always constructed as
+// filepath.Join(componentBasePath, component): if the resolved value equals componentBasePath
+// itself, the component segment was "." or fully canceled out (e.g. "child/.."), silently
+// collapsing this component's target onto the shared components/<type>/ directory. Provision
+// would then vendor into (and needsVendoring/restoreInstanceLock would then operate on) that
+// shared directory as though it belonged to a single component, risking overwriting or deleting
+// sibling components already vendored there. Note that validateWithinComponentBasePath's own
+// contract intentionally permits target == base (see its doc comment, and
+// TestValidateWithinComponentBasePath_RootBase's "root base equals target" case, which other
+// callers/tests rely on) so this stricter, equality-rejecting check is kept separate rather than
+// folded into isWithinBase or validateWithinComponentBasePath.
+func validateTargetIsComponentSubdirectory(targetDir, componentBasePath string) error {
+	if err := validateWithinComponentBasePath(targetDir, componentBasePath); err != nil {
+		return err
+	}
+
+	absTarget, errTarget := filepath.Abs(targetDir)
+	absBase, errBase := filepath.Abs(componentBasePath)
+	if errTarget != nil || errBase != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve component target directory `%s`", targetDir).
+			Err()
+	}
+
+	if absTarget == absBase {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Component target directory `%s` resolves to the component base path `%s` itself", targetDir, componentBasePath).
+			WithHint("Component name must not be empty, '.', or resolve away to nothing (e.g. 'child/..')").
+			WithContext("target_dir", absTarget).
+			WithContext("component_base_path", absBase).
 			Err()
 	}
 
