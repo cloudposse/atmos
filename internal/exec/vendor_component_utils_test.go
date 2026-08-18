@@ -357,3 +357,176 @@ func TestExecuteComponentVendorInternal_AlreadyMaterialized_SkipsReinstall(t *te
 	require.NoError(t, err)
 	assert.NoFileExists(t, filepath.Join(componentPath, "extra.tf"), "an already-materialized component must be skipped, not re-copied from source")
 }
+
+// TestResolveVendorComponentName proves the stack-declared component name is used as-is unless the
+// component's own data declares a metadata.component override (e.g. multiple stack instances of
+// the same underlying component vendor from the same directory).
+func TestResolveVendorComponentName(t *testing.T) {
+	tests := []struct {
+		name     string
+		compName string
+		data     any
+		want     string
+	}{
+		{"no override uses the stack-declared name", "vpc-flow-logs", map[string]any{}, "vpc-flow-logs"},
+		{"non-map data uses the stack-declared name", "vpc-flow-logs", "not-a-map", "vpc-flow-logs"},
+		{"no metadata section uses the stack-declared name", "vpc-flow-logs", map[string]any{"vars": map[string]any{}}, "vpc-flow-logs"},
+		{
+			"metadata.component override is used", "vpc-flow-logs",
+			map[string]any{"metadata": map[string]any{"component": "vpc"}},
+			"vpc",
+		},
+		{
+			"empty metadata.component override falls back to the stack-declared name", "vpc-flow-logs",
+			map[string]any{"metadata": map[string]any{"component": ""}},
+			"vpc-flow-logs",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveVendorComponentName(tt.compName, tt.data))
+		})
+	}
+}
+
+// TestComponentHasVendorManifest proves the existence check --stack relies on to silently skip
+// stack components with no component.yaml of their own, distinguishing that "no" case from a real
+// error (an unsupported component type).
+func TestComponentHasVendorManifest(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	terraformBasePath := filepath.Join(basePath, "components", "terraform")
+
+	t.Run("component with a component.yaml", func(t *testing.T) {
+		writeLocalComponentVendorConfig(t, terraformBasePath, "vpc", t.TempDir())
+
+		has, err := componentHasVendorManifest(atmosConfig, "vpc", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.True(t, has)
+	})
+
+	t.Run("component directory exists but has no component.yaml", func(t *testing.T) {
+		require.NoError(t, os.MkdirAll(filepath.Join(terraformBasePath, "eks"), 0o755))
+
+		has, err := componentHasVendorManifest(atmosConfig, "eks", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.False(t, has)
+	})
+
+	t.Run("component directory does not exist", func(t *testing.T) {
+		has, err := componentHasVendorManifest(atmosConfig, "does-not-exist", cfg.TerraformComponentType)
+
+		require.NoError(t, err)
+		assert.False(t, has)
+	})
+
+	t.Run("unsupported component type is a real error, not a silent skip", func(t *testing.T) {
+		_, err := componentHasVendorManifest(atmosConfig, "vpc", "bogus-type")
+
+		require.Error(t, err)
+	})
+}
+
+// stackComponentEntry builds one component's map[string]any entry as ExecuteDescribeStacks would
+// return it, optionally overriding metadata.component and/or marking it abstract.
+func stackComponentEntry(metadataComponent string, abstract bool) map[string]any {
+	metadata := map[string]any{}
+	if metadataComponent != "" {
+		metadata["component"] = metadataComponent
+	}
+	if abstract {
+		metadata["type"] = "abstract"
+	}
+	return map[string]any{"metadata": metadata}
+}
+
+// TestResolveStackVendorComponents proves the full resolution pipeline --stack relies on: abstract
+// components are skipped, components without a component.yaml are silently skipped, a
+// metadata.component override is honored and deduped against the component it resolves to, and
+// components are grouped by type for ExecuteComponentVendorPullBatch.
+func TestResolveStackVendorComponents(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
+		},
+	}
+	terraformBasePath := filepath.Join(basePath, "components", "terraform")
+	helmfileBasePath := filepath.Join(basePath, "components", "helmfile")
+
+	// "vpc" and "app" are real, vendorable components.
+	writeLocalComponentVendorConfig(t, terraformBasePath, "vpc", t.TempDir())
+	writeLocalComponentVendorConfig(t, helmfileBasePath, "app", t.TempDir())
+	// "eks" has a directory but no component.yaml - not every stack component vendors this way.
+	require.NoError(t, os.MkdirAll(filepath.Join(terraformBasePath, "eks"), 0o755))
+
+	stacksMap := map[string]any{
+		"dev-us-west-2": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc":                stackComponentEntry("", false),
+					"vpc-flow-logs":      stackComponentEntry("vpc", false), // dedups against "vpc".
+					"eks":                stackComponentEntry("", false),    // no component.yaml -> skipped.
+					"abstract-component": stackComponentEntry("", true),     // abstract -> skipped.
+				},
+				cfg.HelmfileComponentType: map[string]any{
+					"app": stackComponentEntry("", false),
+				},
+			},
+		},
+	}
+
+	got, err := resolveStackVendorComponents(atmosConfig, stacksMap, []string{cfg.TerraformComponentType, cfg.HelmfileComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, got[cfg.TerraformComponentType])
+	assert.Equal(t, []string{"app"}, got[cfg.HelmfileComponentType])
+	assert.Len(t, got, 2, "eks (no manifest) and abstract-component (abstract) must not appear in any group")
+}
+
+// TestResolveStackVendorComponents_SortsWithinEachType proves each per-type slice is sorted, not
+// just the type keys pullStackComponentsByType already sorts: walkStackVendorComponents iterates
+// stacksMap (a Go map), so append order into result[componentType] is nondeterministic across runs
+// without this, which would otherwise shift pull order, progress output, and joined per-component
+// error text run to run.
+func TestResolveStackVendorComponents_SortsWithinEachType(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	terraformBasePath := filepath.Join(basePath, "components", "terraform")
+
+	names := []string{"zeta", "alpha", "mu"}
+	for _, name := range names {
+		writeLocalComponentVendorConfig(t, terraformBasePath, name, t.TempDir())
+	}
+
+	stacksMap := map[string]any{
+		"dev-us-west-2": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"zeta":  stackComponentEntry("", false),
+					"alpha": stackComponentEntry("", false),
+					"mu":    stackComponentEntry("", false),
+				},
+			},
+		},
+	}
+
+	got, err := resolveStackVendorComponents(atmosConfig, stacksMap, []string{cfg.TerraformComponentType})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alpha", "mu", "zeta"}, got[cfg.TerraformComponentType])
+}

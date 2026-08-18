@@ -60,6 +60,7 @@ gopkg.in/op/go-logging.v1|github.com/op/go-logging||LICENSE
 gopkg.in/warnings.v0|github.com/go-warnings/warnings||LICENSE
 gopkg.in/yaml.v2|github.com/go-yaml/yaml||LICENSE
 gopkg.in/yaml.v3|github.com/go-yaml/yaml||LICENSE
+github.com/aws/aws-sdk-go-v2/internal/endpoints/v2|github.com/aws/aws-sdk-go-v2|internal/endpoints|internal/endpoints/v2/LICENSE.txt
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
