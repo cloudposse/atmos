@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -139,6 +140,44 @@ func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedInfo, result)
+}
+
+// TestShowCmd_RunE_ForwardsResolvedComponentConfig is a behavior-focused regression test for a
+// gap gomock.Any() cannot catch: gomock.Any() accepts nil, so a command-code regression that
+// stops calling resolveComponentConfig (or passes nil for componentConfig) would still satisfy
+// every other test in this file. This executes the real showCmd.RunE path against a real stack
+// config and asserts the exact resolved config -- including its "atmos_component" key -- reaches
+// GetWorkdirInfo, not just that GetWorkdirInfo was called.
+func TestShowCmd_RunE_ForwardsResolvedComponentConfig(t *testing.T) {
+	initTestIO(t)
+
+	tmpDir := t.TempDir()
+	createTestAtmosConfig(t, tmpDir)
+	t.Chdir(tmpDir)
+
+	v := viper.GetViper()
+	v.Set("stack", "dev")
+	t.Cleanup(func() { v.Set("stack", "") })
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev", gomock.Any()).
+		DoAndReturn(func(_ *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) (*WorkdirInfo, error) {
+			require.NotNil(t, componentConfig,
+				"resolveComponentConfig's result must reach GetWorkdirInfo, not be dropped or nilled")
+			assert.Equal(t, "vpc", componentConfig["atmos_component"],
+				"the resolved atmos_component override must be forwarded to GetWorkdirInfo")
+			return &WorkdirInfo{Name: "dev-vpc", Component: "vpc", Stack: "dev"}, nil
+		})
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	err := showCmd.RunE(showCmd, []string{"vpc"})
+	require.NoError(t, err)
 }
 
 func TestShowCmd_RequiresStack(t *testing.T) {

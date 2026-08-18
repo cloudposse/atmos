@@ -37,9 +37,12 @@ stacks:
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, "components", "terraform", "vpc", "main.tf"), []byte("# test"), 0o644))
 
-	// Create stacks directory.
+	// Create stacks directory. vars.stage must be set so name_pattern "{stage}" resolves this
+	// manifest to stack name "dev" -- required for any test that resolves the component through
+	// real stack processing (e.g. resolveComponentConfig's ExecuteDescribeComponent call),
+	// not just tests that stub the workdir manager directly.
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "stacks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(basePath, "stacks", "dev.yaml"), []byte("components:\n  terraform:\n    vpc: {}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, "stacks", "dev.yaml"), []byte("vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n"), 0o644))
 }
 
 // createTestWorkdir creates a workdir with metadata for testing.

@@ -35,17 +35,27 @@ ancestor depending on whether the component name happens to contain `/` —
 
 ## Changes
 
-- `pkg/provisioner/workdir/types.go`: `BuildPath` now replaces both `/` and
-  `\` with `-` in the resolved component name (via two `strings.ReplaceAll`
-  calls) before formatting the workdir directory name. Sanitizing `/` fixes
-  the reported path-depth bug; sanitizing `\` unconditionally on every
-  platform (not just Windows) closes a containment gap — a crafted or
+- `pkg/provisioner/workdir/types.go`: `BuildPath` now sanitizes both `/` and
+  `\` out of the resolved component name before formatting the workdir
+  directory name, via a single rune-by-rune pass (originally two
+  `strings.ReplaceAll` calls collapsing both separators to a plain `-`;
+  see the 2026-08-14 fix below for why that scheme was replaced). Sanitizing
+  `/` fixes the reported path-depth bug; sanitizing `\` unconditionally on
+  every platform (not just Windows) closes a containment gap — a crafted or
   copy-pasted component name containing `\` (e.g. `..\..\evil`) would
   otherwise let `filepath.Join`/`Clean` treat it as real `..`-traversal
   segments on Windows, escaping the intended workdir root — and keeps a
   given component name's workdir path identical across OSes. Since
   `BuildPath` is the one formula both the source provisioner and the
   JIT-workdir state lookup call, this single change fixes both.
+  **Update (2026-08-14):** the plain-`-` collapse above let two distinct
+  component names collide on the same workdir (`app/local` and `app-local`
+  both resolved to `app-local`). `escapeComponentNameForPath` replaced it
+  with an injective rune-by-rune encoding using distinct tokens per
+  separator (`-` → `-h`, `/` → `-s`, `\` → `-b`) so no two distinct
+  component names can ever encode to the same path segment — see
+  `docs/fixes/2026-08-14-workdir-buildpath-collision-and-stack-traversal.md`
+  for the full collision analysis and fix.
 
 ## Validation
 

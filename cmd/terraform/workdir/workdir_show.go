@@ -54,7 +54,7 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 		}
 
 		// Get workdir info.
-		componentConfig := resolveComponentConfig(&atmosConfig, component, stack)
+		componentConfig := resolveComponentConfig(&configInfo, component, stack)
 		info, err := workdirManager.GetWorkdirInfo(&atmosConfig, component, stack, componentConfig)
 		if err != nil {
 			return err

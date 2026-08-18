@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -103,9 +104,32 @@ func NewDefaultWorkdirManager() *DefaultWorkdirManager {
 // since workdir get/describe/clean must still work against an orphaned, no-longer-configured
 // workdir; callers fall back to treating component as its own instance name in that case,
 // matching the pre-override behavior.
-func resolveComponentConfig(atmosConfig *schema.AtmosConfiguration, component, stack string) map[string]any {
+//
+// Takes the same ConfigAndStacksInfo the caller already built from CLI flags (base-path,
+// config, config-path, profile) rather than an already-loaded *schema.AtmosConfiguration.
+// Describing a component requires stacks to be discovered and processed
+// (cfg.InitCliConfig's processStacks=true path); the caller's own AtmosConfiguration
+// intentionally skips that (processStacks=false), since BuildPath and friends only need
+// base_path, not the full stack list. Re-deriving a fully-processed config here, from the
+// same flag overrides, is what lets a real "atmos_component" instance-name override actually
+// resolve instead of ExecuteDescribeComponent always failing to find the component (and this
+// function silently falling back to nil on every call). Takes configAndStacksInfo by pointer
+// only to avoid copying its large struct on every call; it is never mutated -- a local copy is
+// taken internally before setting the per-call ComponentFromArg/Stack fields.
+func resolveComponentConfig(configAndStacksInfo *schema.ConfigAndStacksInfo, component, stack string) map[string]any {
+	infoCopy := *configAndStacksInfo
+	infoCopy.ComponentFromArg = component
+	infoCopy.Stack = stack
+
+	atmosConfig, err := cfg.InitCliConfig(infoCopy, true)
+	if err != nil {
+		log.Debug("Could not load atmos configuration for workdir path resolution; falling back to component name",
+			"component", component, "stack", stack, "error", err)
+		return nil
+	}
+
 	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		AtmosConfig:          atmosConfig,
+		AtmosConfig:          &atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     false,

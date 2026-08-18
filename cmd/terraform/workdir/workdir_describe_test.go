@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -85,6 +86,44 @@ func TestMockWorkdirManager_DescribeWorkdir_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Empty(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+}
+
+// TestDescribeCmd_RunE_ForwardsResolvedComponentConfig is a behavior-focused regression test
+// for a gap gomock.Any() cannot catch: gomock.Any() accepts nil, so a command-code regression
+// that stops calling resolveComponentConfig (or passes nil for componentConfig) would still
+// satisfy every other test in this file. This executes the real describeCmd.RunE path against
+// a real stack config and asserts the exact resolved config -- including its "atmos_component"
+// key -- reaches DescribeWorkdir, not just that DescribeWorkdir was called.
+func TestDescribeCmd_RunE_ForwardsResolvedComponentConfig(t *testing.T) {
+	initTestIO(t)
+
+	tmpDir := t.TempDir()
+	createTestAtmosConfig(t, tmpDir)
+	t.Chdir(tmpDir)
+
+	v := viper.GetViper()
+	v.Set("stack", "dev")
+	t.Cleanup(func() { v.Set("stack", "") })
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev", gomock.Any()).
+		DoAndReturn(func(_ *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) (string, error) {
+			require.NotNil(t, componentConfig,
+				"resolveComponentConfig's result must reach DescribeWorkdir, not be dropped or nilled")
+			assert.Equal(t, "vpc", componentConfig["atmos_component"],
+				"the resolved atmos_component override must be forwarded to DescribeWorkdir")
+			return "manifest", nil
+		})
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	err := describeCmd.RunE(describeCmd, []string{"vpc"})
+	require.NoError(t, err)
 }
 
 func TestDescribeCmd_RequiresStack(t *testing.T) {

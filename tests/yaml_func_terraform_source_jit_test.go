@@ -123,7 +123,7 @@ func seedStateFile(t *testing.T, cwd string) {
 // correctly when the producer component is configured with both source.uri and
 // provision.workdir.enabled: true.
 //
-// The state file lives in the JIT workdir (.workdir/terraform/test-producer-from-source/),
+// The state file lives in the JIT workdir (.workdir/terraform/test-producer-hfrom-hsource/),
 // not in components/terraform/. resolveLocalBackendComponentPath must derive the JIT path
 // even though the component was hydrated from an external source URI rather than a local
 // components/ directory.
@@ -160,7 +160,7 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 	//
 	// producer-from-source has provision.workdir.enabled: true + source.uri.
 	// resolveLocalBackendComponentPath must derive the JIT workdir path
-	// (.workdir/terraform/test-producer-from-source/) and find the pre-seeded
+	// (.workdir/terraform/test-producer-hfrom-hsource/) and find the pre-seeded
 	// state file there.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
