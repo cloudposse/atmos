@@ -265,6 +265,9 @@ atmos auth login -i core-auto/terraform --profile
   in the form
 - In a non-interactive context (no TTY, CI), bare `--profile` MUST return a clear error rather than
   attempting to load a literal profile named after the internal sentinel value or hanging
+- The sentinel value (`__SELECT__`) MUST be reserved: a profile directory with that name is excluded
+  from discovery, and an explicit request for it MUST return a clear "reserved name" error rather
+  than silently being unreachable
 
 #### FR3: Configuration Merging and Precedence
 

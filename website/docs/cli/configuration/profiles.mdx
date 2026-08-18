@@ -112,6 +112,10 @@ profiles/
     └── auth.yaml
 ```
 
+`__SELECT__` is a reserved profile directory name — it's the sentinel bare `--profile` uses to
+trigger [interactive selection](#interactive-selection), so a profile with that name can never be
+activated explicitly. Atmos excludes any `__SELECT__` directory from discovery.
+
 Each profile directory can contain:
 - `atmos.yaml` - Main configuration overrides
 - Additional YAML files that will be merged

@@ -236,6 +236,21 @@ These flags are available for every Atmos command:
         <Note>
             Profiles are loaded early in Atmos initialization (before stack processing) and can override any configuration setting including logging, terminal settings, and authentication.
         </Note>
+
+        :::tip Flag Placement Best Practice
+        Place a bare `--profile` (no value) **after** the command, not before it — the same placement rule as bare `--identity`:
+
+        ```bash
+        # Recommended: bare --profile after the command
+        atmos auth login --profile
+
+        # Avoid: bare --profile before the command consumes the command name as its value
+        atmos --profile auth login
+        # treated as: --profile=auth login  (fails with "profile not found" — "auth" isn't a profile)
+        ```
+
+        Using the equals syntax (`--profile=developer`) with an explicit value works in any position and is unambiguous either way.
+        :::
     </dd>
 
     <dt>`--edition`</dt>

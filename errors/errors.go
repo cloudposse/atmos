@@ -417,6 +417,7 @@ var (
 	ErrProfileDirNotAccessible     = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata      = errors.New("invalid profile metadata")
 	ErrProfileSelectionUnavailable = errors.New("interactive profile selection is not available in this context")
+	ErrProfileNameReserved         = errors.New("profile name is reserved")
 
 	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent         = errors.New("component is required")
