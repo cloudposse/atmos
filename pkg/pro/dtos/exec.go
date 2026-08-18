@@ -23,11 +23,11 @@ type ResourceUsageMetrics struct {
 // must be explicitly added here. Sensitive data is masked before this struct
 // is marshaled (see pkg/proexec).
 type ExecUploadRequest struct {
-	AtmosProRunID string               `json:"atmos_pro_run_id"`
-	AtmosVersion  string               `json:"atmos_version"`
-	AtmosOS       string               `json:"atmos_os"`
-	AtmosArch     string               `json:"atmos_arch"`
-	Command       string               `json:"command"`
+	AtmosProRunID string `json:"atmos_pro_run_id"`
+	AtmosVersion  string `json:"atmos_version"`
+	AtmosOS       string `json:"atmos_os"`
+	AtmosArch     string `json:"atmos_arch"`
+	Command       string `json:"command"`
 	// Args holds only the invocation's positional arguments (e.g. the
 	// component identifier). CLI flags are reported separately in Flags —
 	// the two are never combined into one array (FR-003b).
@@ -36,14 +36,14 @@ type ExecUploadRequest struct {
 	// masked the same way Args is. Kept distinct from Args per FR-003b so the
 	// two remain correlatable in content with the older, independent
 	// uploadStatus mechanism (internal/exec/pro.go) without merging shapes.
-	Flags         []string             `json:"flags"`
-	ExitCode      int                  `json:"exit_code"`
-	GitSHA        string               `json:"git_sha"`
-	RepoURL       string               `json:"repo_url"`
-	RepoName      string               `json:"repo_name"`
-	RepoOwner     string               `json:"repo_owner"`
-	RepoHost      string               `json:"repo_host"`
-	Metrics       ResourceUsageMetrics `json:"metrics"`
+	Flags     []string             `json:"flags"`
+	ExitCode  int                  `json:"exit_code"`
+	GitSHA    string               `json:"git_sha"`
+	RepoURL   string               `json:"repo_url"`
+	RepoName  string               `json:"repo_name"`
+	RepoOwner string               `json:"repo_owner"`
+	RepoHost  string               `json:"repo_host"`
+	Metrics   ResourceUsageMetrics `json:"metrics"`
 	// Data is command-specific structured *summary* data (e.g. terraform
 	// plan/apply resource counts, outputs, warnings). Small and bounded —
 	// always sent in full, never chunked. Absent (nil) for commands with no
