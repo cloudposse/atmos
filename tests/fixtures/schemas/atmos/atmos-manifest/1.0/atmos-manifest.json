@@ -16,6 +16,9 @@
     "packer": {
       "$ref": "#/definitions/packer"
     },
+    "kubernetes": {
+      "$ref": "#/definitions/kubernetes"
+    },
     "helm": {
       "$ref": "#/definitions/helm"
     },
@@ -352,6 +355,9 @@
             "packer": {
               "$ref": "#/definitions/packer_components"
             },
+            "kubernetes": {
+              "$ref": "#/definitions/kubernetes_components"
+            },
             "helm": {
               "$ref": "#/definitions/helm_components"
             }
@@ -663,6 +669,211 @@
           "items": {
             "type": "string"
           }
+        }
+      ]
+    },
+    "kubernetes": {
+      "title": "kubernetes",
+      "description": "Kubernetes component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes_provider": {
+      "title": "kubernetes_provider",
+      "description": "SDK-backed Kubernetes manifest provider",
+      "type": "string",
+      "enum": [
+        "kubectl",
+        "kustomize"
+      ]
+    },
+    "kubernetes_paths": {
+      "title": "kubernetes_paths",
+      "description": "Manifest files or directories relative to the Kubernetes component directory",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "kubernetes_manifest": {
+      "title": "kubernetes_manifest",
+      "description": "Kubernetes API object. Atmos validates only the structural fields it requires before passing the object to the Kubernetes API.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "apiVersion",
+        "kind"
+      ],
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "kubernetes_manifests": {
+      "title": "kubernetes_manifests",
+      "description": "Inline Kubernetes manifests rendered and deployed with the component",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/kubernetes_manifest"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "kubernetes_components": {
+      "title": "kubernetes_components",
+      "description": "Kubernetes components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/kubernetes_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "kubernetes_component_manifest": {
+      "title": "kubernetes_component_manifest",
+      "description": "Kubernetes component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "Enables structural validation of this component's manifests (default true). Set to false to opt out of both the implicit apply/deploy auto-gate and the explicit 'atmos kubernetes validate' command for this component; does not affect '--server' dry-run validation against a live cluster."
+            }
+          },
+          "required": []
         }
       ]
     },
