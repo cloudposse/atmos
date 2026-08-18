@@ -133,6 +133,31 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	assert.Equal(t, "dev-admin", user.Exec.Env[0].Value)
 }
 
+func TestUserName(t *testing.T) {
+	tests := []struct {
+		name string
+		info *ClusterInfo
+		want string
+	}{
+		{
+			name: "standard cloud identity",
+			info: &ClusterInfo{UserPrefix: "gke", Name: "example-cluster", Region: "example-project-us-central1"},
+			want: "atmos-gke-example-cluster-example-project-us-central1",
+		},
+		{
+			name: "account-scoped identity",
+			info: &ClusterInfo{UserPrefix: "aks", Name: "example-cluster", Region: "example-group", AccountID: "example-subscription"},
+			want: "atmos-aks-example-cluster-example-group-example-subscription",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, UserName(tt.info))
+		})
+	}
+}
+
 func TestBuildClusterConfig_WithoutAlias(t *testing.T) {
 	info := testClusterInfo()
 	config := BuildClusterConfig(info, "")
