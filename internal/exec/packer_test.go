@@ -399,7 +399,7 @@ components:
 		packerFlags := PackerFlags{}
 
 		err := ExecutePacker(&info, &packerFlags)
-		assert.NoError(t, err) // Should return nil for disabled components
+		assert.NoError(t, err) // Should return nil for disabled components.
 		assert.False(t, info.ComponentIsEnabled, "fixture component should resolve as disabled")
 	})
 

@@ -31,6 +31,12 @@ type CoverageShardOptions struct {
 }
 
 func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, testArgs []string) error {
+	if options == nil {
+		return fmt.Errorf("%w: coverage options are required", errInvalidConfiguration)
+	}
+	if options.Dir == "" {
+		return fmt.Errorf("%w: coverage work directory is required", errInvalidConfiguration)
+	}
 	runner := newCommandRunner()
 	if len(packages) == 0 {
 		all, err := listPackages(ctx, runner, options.RepoRoot)
@@ -67,6 +73,9 @@ func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, te
 }
 
 func MergeCoverage(ctx context.Context, repoRoot, dataOut, textOut string, inputs []string) error {
+	if dataOut == "" {
+		return fmt.Errorf("%w: coverage data output directory is required", errInvalidConfiguration)
+	}
 	dataOut = absoluteFromRoot(repoRoot, dataOut)
 	normalizedInputs := make([]string, len(inputs))
 	for i, input := range inputs {

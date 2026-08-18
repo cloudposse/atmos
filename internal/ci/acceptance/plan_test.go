@@ -261,6 +261,16 @@ func TestListRunnableTests(t *testing.T) {
 	}
 }
 
+func TestListRunnableTestsPropagatesCommandError(t *testing.T) {
+	t.Parallel()
+
+	binary := filepath.Join(t.TempDir(), "broken")
+	writeUnexecutableFile(t, binary)
+	if _, err := listRunnableTests(t.Context(), newCommandRunner(), t.TempDir(), binary); err == nil {
+		t.Fatal("expected an error when -test.list can't run")
+	}
+}
+
 func TestListPackagesPropagatesGoListErrors(t *testing.T) {
 	t.Parallel()
 

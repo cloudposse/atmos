@@ -51,6 +51,149 @@ func newOrchestrationFixtureModule(t *testing.T) string {
 	return root
 }
 
+// newFixtureModuleWithFailingTest is a minimal variant of
+// newOrchestrationFixtureModule where the named top-level package's test
+// always fails, for exercising RunShard/runWindowsShard's error-propagation
+// branches around each of its sub-steps.
+func newFixtureModuleWithFailingTest(t *testing.T, failingPackage string) string {
+	t.Helper()
+
+	root := t.TempDir()
+	write := func(relPath, content string) {
+		full := filepath.Join(root, relPath)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	packages := []string{"cmd", "tests", "extra1", "extra2"}
+	for _, pkg := range packages {
+		write(pkg+"/"+pkg+".go", "package "+pkg+"\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n")
+		if pkg == failingPackage {
+			write(pkg+"/"+pkg+"_test.go", "package "+pkg+"\n\nimport \"testing\"\n\nfunc TestAlwaysFails(t *testing.T) {\n\tt.Fatal(\"deliberate failure\")\n}\n")
+		} else {
+			write(pkg+"/"+pkg+"_test.go", "package "+pkg+"\n\nimport \"testing\"\n\nfunc TestSample(t *testing.T) {}\n")
+		}
+	}
+	write("go.mod", "module example.com/runfixture\n\ngo 1.21\n")
+	return root
+}
+
+func TestRunShardPropagatesListPackagesError(t *testing.T) {
+	t.Parallel()
+
+	options := &RunOptions{RepoRoot: t.TempDir(), Mode: ModeTest, Target: TargetLinux, Shard: Shard{Index: 1, Count: 3}}
+	if err := RunShard(t.Context(), options); err == nil {
+		t.Fatal("expected an error discovering packages outside any Go module")
+	}
+}
+
+func TestRunShardPropagatesTestsGroupFailure(t *testing.T) {
+	t.Parallel()
+
+	root := newFixtureModuleWithFailingTest(t, "tests")
+	options := &RunOptions{
+		RepoRoot: root, Mode: ModeTest, Target: TargetLinux,
+		Shard: Shard{Index: 1, Count: 3}, GoTestTimeout: "1m",
+	}
+	if err := RunShard(t.Context(), options); err == nil {
+		t.Fatal("expected an error from a failing ./tests package")
+	}
+}
+
+func TestRunShardPropagatesPkgsGroupFailure(t *testing.T) {
+	t.Parallel()
+
+	// With Shard{Index:1, Count:3}, shardPackages assigns exactly the
+	// alphabetically-third general package (extra2) to shard 1.
+	root := newFixtureModuleWithFailingTest(t, "extra2")
+	options := &RunOptions{
+		RepoRoot: root, Mode: ModeTest, Target: TargetLinux,
+		Shard: Shard{Index: 1, Count: 3}, GoTestTimeout: "1m",
+	}
+	if err := RunShard(t.Context(), options); err == nil {
+		t.Fatal("expected an error from a failing general package")
+	}
+}
+
+func TestRunShardPropagatesCmdFailure(t *testing.T) {
+	t.Parallel()
+
+	root := newFixtureModuleWithFailingTest(t, "cmd")
+	buildDir := filepath.Join(t.TempDir(), "build")
+	if err := Precompile(t.Context(), root, TargetLinux, buildDir); err != nil {
+		t.Fatalf("precompile: %v", err)
+	}
+	options := &RunOptions{
+		RepoRoot: root, Mode: ModeTest, Target: TargetLinux,
+		Shard: Shard{Index: 1, Count: 3}, BuildDir: buildDir, GoTestTimeout: "1m",
+	}
+	if err := RunShard(t.Context(), options); err == nil {
+		t.Fatal("expected an error from a failing cmd package")
+	}
+}
+
+func TestRunWindowsShardPropagatesEachSubStepFailure(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		failingPackage string
+	}{
+		{name: "tests binary failure", failingPackage: "tests"},
+		{name: "internal/exec binary failure", failingPackage: "exec"},
+		{name: "pkgs group failure", failingPackage: "extra2"},
+		{name: "cmd failure", failingPackage: "cmd"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			write := func(relPath, content string) {
+				full := filepath.Join(root, relPath)
+				if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write("go.mod", "module example.com/runfixture\n\ngo 1.21\n")
+			for _, pkg := range []string{"cmd", "tests", "extra1", "extra2"} {
+				write(pkg+"/"+pkg+".go", "package "+pkg+"\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n")
+				body := "func TestSample(t *testing.T) {}\n"
+				if pkg == testCase.failingPackage {
+					body = "func TestAlwaysFails(t *testing.T) {\n\tt.Fatal(\"deliberate failure\")\n}\n"
+				}
+				write(pkg+"/"+pkg+"_test.go", "package "+pkg+"\n\nimport \"testing\"\n\n"+body)
+			}
+			execBody := "func TestExecSample(t *testing.T) {}\n"
+			if testCase.failingPackage == "exec" {
+				execBody = "func TestAlwaysFails(t *testing.T) {\n\tt.Fatal(\"deliberate failure\")\n}\n"
+			}
+			write("internal/exec/exec.go", "package exec\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n")
+			write("internal/exec/exec_test.go", "package exec\n\nimport \"testing\"\n\n"+execBody)
+
+			buildDir := filepath.Join(t.TempDir(), "build")
+			if err := Precompile(t.Context(), root, TargetWindows, buildDir); err != nil {
+				t.Fatalf("precompile: %v", err)
+			}
+			options := &RunOptions{
+				RepoRoot: root, Mode: ModeTest, Target: TargetWindows,
+				Shard: Shard{Index: 1, Count: 3}, BuildDir: buildDir, GoTestTimeout: "1m",
+			}
+			if err := RunShard(t.Context(), options); err == nil {
+				t.Fatalf("expected an error from a failing %s", testCase.failingPackage)
+			}
+		})
+	}
+}
+
 func TestPrecompileLinux(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +248,114 @@ func TestPrecompilePropagatesBuildFailure(t *testing.T) {
 
 	if err := Precompile(t.Context(), root, TargetLinux, t.TempDir()); err == nil {
 		t.Fatal("expected an error compiling a package with invalid source")
+	}
+}
+
+func TestPrecompilePropagatesMkdirAllError(t *testing.T) {
+	t.Parallel()
+
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Precompile(t.Context(), t.TempDir(), TargetLinux, filepath.Join(blocker, "sub")); err == nil {
+		t.Fatal("expected an error when the output directory can't be created")
+	}
+}
+
+func TestPrecompileWindowsPropagatesTestBinaryBuildFailure(t *testing.T) {
+	t.Parallel()
+
+	root := newOrchestrationFixtureModule(t)
+	if err := os.MkdirAll(filepath.Join(root, "internal", "exec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// ./tests compiles fine (already valid from newOrchestrationFixtureModule),
+	// but ./internal/exec has invalid Go source, so the Windows-only build loop
+	// fails on its second iteration rather than the ./cmd build above it.
+	if err := os.WriteFile(filepath.Join(root, "internal", "exec", "exec.go"), []byte("package exec\n\nthis is not valid go\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Precompile(t.Context(), root, TargetWindows, t.TempDir()); err == nil {
+		t.Fatal("expected an error compiling internal/exec with invalid source")
+	}
+}
+
+func writeUnexecutableFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("\x00not a real executable\x01\x02"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunWindowsTestsPropagatesListError(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "tests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "broken.exe")
+	writeUnexecutableFile(t, binary)
+	options := &RunOptions{RepoRoot: repoRoot, TestsBinary: binary}
+	if err := runWindowsTests(t.Context(), newCommandRunner(), options); err == nil {
+		t.Fatal("expected an error when the tests binary can't be listed")
+	}
+}
+
+func TestRunWindowsExecTestsPropagatesListError(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "internal", "exec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "broken.exe")
+	writeUnexecutableFile(t, binary)
+	options := &RunOptions{RepoRoot: repoRoot, ExecTestBinary: binary}
+	if err := runWindowsExecTests(t.Context(), newCommandRunner(), options); err == nil {
+		t.Fatal("expected an error when the internal/exec binary can't be listed")
+	}
+}
+
+func TestRunCmdTestsPropagatesCoverDirMkdirAllError(t *testing.T) {
+	t.Parallel()
+
+	root := newOrchestrationFixtureModule(t)
+	buildDir := filepath.Join(t.TempDir(), "build")
+	if err := Precompile(t.Context(), root, TargetLinux, buildDir); err != nil {
+		t.Fatalf("precompile: %v", err)
+	}
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	options := &RunOptions{
+		RepoRoot: root, Target: TargetLinux, Mode: ModeCoverage,
+		BuildDir: buildDir, CoverageRoot: filepath.Join(blocker, "sub"), Shard: Shard{Index: 1, Count: 1},
+	}
+	if _, err := runCmdTests(t.Context(), newCommandRunner(), options); err == nil {
+		t.Fatal("expected an error when the coverage directory can't be created")
+	}
+}
+
+func TestRunCmdTestsPropagatesMkdirTempError(t *testing.T) {
+	// Not parallel: mutates process-wide TMPDIR/TMP/TEMP env vars that other
+	// tests' os.MkdirTemp/t.TempDir calls could otherwise observe.
+	root := newOrchestrationFixtureModule(t)
+	buildDir := filepath.Join(t.TempDir(), "build")
+	if err := Precompile(t.Context(), root, TargetLinux, buildDir); err != nil {
+		t.Fatalf("precompile: %v", err)
+	}
+	nonexistent := filepath.Join(t.TempDir(), "does-not-exist")
+	t.Setenv("TMPDIR", nonexistent)
+	t.Setenv("TMP", nonexistent)
+	t.Setenv("TEMP", nonexistent)
+
+	options := &RunOptions{RepoRoot: root, Target: TargetLinux, Mode: ModeTest, BuildDir: buildDir}
+	if _, err := runCmdTests(t.Context(), newCommandRunner(), options); err == nil {
+		t.Fatal("expected an error when the temp coverage directory can't be created")
 	}
 }
 
