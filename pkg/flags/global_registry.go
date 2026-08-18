@@ -371,6 +371,23 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		NoOptDefValNoSpaceValue: true,
 		EnvVars:                 []string{cfg.CastEnvVarName},
 	})
+
+	// Profile flag with NoOptDefVal for interactive selection, mirroring identity above.
+	// This registration is what preprocessNoOptDefValFlags (cmd/root.go) uses to rewrite
+	// ambiguous space-separated syntax ("--profile name" -> "--profile=name") before Cobra
+	// parses args. Without it, once the real --profile flag (registered separately by
+	// GlobalOptionsBuilder in global_builder.go) has NoOptDefVal set, "--profile name" would
+	// become ambiguous to pflag: the bare flag would consume the sentinel and "name" would be
+	// left as a stray positional argument. See preprocessNoOptDefValFlags in flag_parser.go for
+	// the pflag #134/#321, cobra #1962 background on why this preprocessing step exists at all.
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		Shorthand:   "",
+		Default:     []string{},
+		Description: "Activate configuration profiles (comma-separated or repeated flag)",
+		EnvVars:     []string{"ATMOS_PROFILE"},
+		NoOptDefVal: cfg.ProfileFlagSelectValue,
+	})
 }
 
 // registerProfilingFlags registers profiling configuration flags.
