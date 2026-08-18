@@ -9,6 +9,7 @@ import (
 
 	sprig "github.com/Masterminds/sprig/v3"
 
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -128,6 +129,9 @@ func templateFuncs() template.FuncMap {
 	}
 	funcs["replace"] = func(old, new, s string) string {
 		return strings.ReplaceAll(s, old, new)
+	}
+	for k, v := range templatefuncs.FuncMap() {
+		funcs[k] = v
 	}
 	return funcs
 }
