@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 )
 
 // TestCLIWorkdirCommands tests the workdir CLI commands using the workdir fixture.
@@ -120,8 +122,12 @@ func testWorkdirListAfterProvisioning(t *testing.T) {
 
 // testWorkdirShow tests the show command.
 func testWorkdirShow(t *testing.T) {
-	// Create self-contained workdir with proper structure using stack-component naming.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-show")
+	// Create self-contained workdir with proper structure via BuildPath -- the same formula
+	// GetWorkdirInfo now resolves through -- rather than a hand-rolled "stack-component"
+	// string, which would silently drift from BuildPath's real (escaped) encoding for a
+	// component name containing a literal "-", as "vpc-show" does.
+	workdirPath, err := provWorkdir.BuildPath(".", "terraform", "vpc-show", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create metadata file.
@@ -132,10 +138,7 @@ func testWorkdirShow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# vpc component"), 0o644))
 
 	stdout, stderr, err := runWorkdirCommand(t, "show", "vpc-show", "--stack", "dev")
-	if err != nil {
-		t.Logf("stdout: %s", stdout)
-		t.Logf("stderr: %s", stderr)
-	}
+	require.NoError(t, err, "stdout: %s\nstderr: %s", stdout, stderr)
 
 	// Should show component details.
 	output := stdout + stderr
@@ -144,8 +147,11 @@ func testWorkdirShow(t *testing.T) {
 
 // testWorkdirDescribe tests the describe command.
 func testWorkdirDescribe(t *testing.T) {
-	// Create self-contained workdir with proper structure using stack-component naming.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-describe")
+	// Create self-contained workdir with proper structure via BuildPath -- see testWorkdirShow
+	// for why a hand-rolled "stack-component" string would silently drift from BuildPath's
+	// real (escaped) encoding for a component name containing a literal "-".
+	workdirPath, err := provWorkdir.BuildPath(".", "terraform", "vpc-describe", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create metadata file.
@@ -156,10 +162,7 @@ func testWorkdirDescribe(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# vpc component"), 0o644))
 
 	stdout, stderr, err := runWorkdirCommand(t, "describe", "vpc-describe", "--stack", "dev")
-	if err != nil {
-		t.Logf("stdout: %s", stdout)
-		t.Logf("stderr: %s", stderr)
-	}
+	require.NoError(t, err, "stdout: %s\nstderr: %s", stdout, stderr)
 
 	// Should output manifest format.
 	output := stdout + stderr
@@ -168,8 +171,11 @@ func testWorkdirDescribe(t *testing.T) {
 
 // testWorkdirCleanSpecific tests cleaning a specific workdir.
 func testWorkdirCleanSpecific(t *testing.T) {
-	// Create a workdir to clean using stack-component naming.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-test-clean")
+	// Create a workdir to clean via BuildPath -- see testWorkdirShow for why a hand-rolled
+	// "stack-component" string would silently drift from BuildPath's real (escaped) encoding
+	// for a component name containing a literal "-", as "test-clean" does.
+	workdirPath, err := provWorkdir.BuildPath(".", "terraform", "test-clean", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
 
@@ -178,15 +184,12 @@ func testWorkdirCleanSpecific(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, ".workdir-metadata.json"), []byte(metadata), 0o644))
 
 	// Verify workdir exists.
-	_, err := os.Stat(workdirPath)
+	_, err = os.Stat(workdirPath)
 	require.NoError(t, err, "workdir should exist before clean")
 
 	// Clean the workdir using component and stack.
 	stdout, stderr, err := runWorkdirCommand(t, "clean", "test-clean", "--stack", "dev")
-	if err != nil {
-		t.Logf("stdout: %s", stdout)
-		t.Logf("stderr: %s", stderr)
-	}
+	require.NoError(t, err, "stdout: %s\nstderr: %s", stdout, stderr)
 
 	// Verify workdir was removed.
 	_, err = os.Stat(workdirPath)

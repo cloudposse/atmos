@@ -165,6 +165,48 @@ func TestProcessTemplateWithRichConfig(t *testing.T) {
 	}
 }
 
+// TestProcessTemplateHoistsMatrixOntoRoot verifies a resolved matrix
+// combination, stashed under the reserved MatrixKey, is exposed to both the
+// target path and file content as .matrix.<axis> -- not nested under
+// .Config -- matching the workflow matrix step's own namespacing.
+func TestProcessTemplateHoistsMatrixOntoRoot(t *testing.T) {
+	processor := NewProcessor()
+
+	userValues := map[string]interface{}{
+		"project_name": "test-project",
+		MatrixKey:      map[string]string{"environment": "dev", "region": "us-east-1"},
+	}
+
+	result, err := processor.ProcessTemplate(
+		`{{.Config.project_name}}/{{.matrix.environment}}/{{.matrix.region}}.yaml`,
+		"/tmp/test", nil, userValues)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "test-project/dev/us-east-1.yaml"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+// TestProcessTemplateWithoutMatrixLeavesRootUnset verifies templates that
+// never see a matrix combination don't get a stray "matrix" key.
+func TestProcessTemplateWithoutMatrixLeavesRootUnset(t *testing.T) {
+	processor := NewProcessor()
+
+	result, err := processor.ProcessTemplate(`{{if .matrix}}has-matrix{{else}}no-matrix{{end}}`,
+		"/tmp/test", nil, map[string]interface{}{"project_name": "test-project"})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "no-matrix"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
 // TestTemplateFilenameProcessing tests that file paths with templates are processed correctly.
 func TestTemplateFilenameProcessing(t *testing.T) {
 	processor := NewProcessor()

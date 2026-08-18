@@ -23,6 +23,7 @@ Valid subcommands are:
   • docs
   • emulator
   • env
+  • gcp
   • git
   • helm
   • helmfile

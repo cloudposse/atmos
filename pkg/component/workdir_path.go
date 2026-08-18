@@ -137,13 +137,16 @@ func BuildAndResolveWorkdirPath(
 ) (string, bool, error) {
 	defer perf.Track(atmosConfig, "component.BuildAndResolveWorkdirPath")()
 
-	workdirRoot := provWorkdir.BuildPath(
+	workdirRoot, err := provWorkdir.BuildPath(
 		atmosConfig.BasePath,
 		componentType,
 		info.FinalComponent,
 		info.Stack,
 		info.ComponentSection,
 	)
+	if err != nil {
+		return "", false, err
+	}
 	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
 	if err != nil {
 		return "", false, err

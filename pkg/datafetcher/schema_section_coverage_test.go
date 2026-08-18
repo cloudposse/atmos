@@ -132,8 +132,8 @@ var knownSchemaGaps = map[string]struct{}{
 var componentManifestDefs = []string{
 	"terraform_component_manifest",
 	"helmfile_component_manifest",
-	"packer_component_manifest",
 	"helm_component_manifest",
+	"packer_component_manifest",
 }
 
 // TestEverySectionConstantIsClassified fails when a `*SectionName` constant in pkg/config/const.go

@@ -20,6 +20,7 @@ import (
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -969,6 +970,9 @@ func assetTemplateFuncs() template.FuncMap {
 	}
 	funcs["replace"] = func(old, new, s string) string {
 		return strings.ReplaceAll(s, old, new)
+	}
+	for k, v := range templatefuncs.FuncMap() {
+		funcs[k] = v
 	}
 
 	return funcs
