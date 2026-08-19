@@ -55,21 +55,51 @@ This supplements the existing "Pact Contract Testing" README section
 8. Run `atmos terraform plan cdn -s plat-use2-dev --upload-status` and inspect the logged
   request body (`ATMOS_LOGS_LEVEL=Debug`) to confirm the `Command`/`Args`/`Flags` shape
   fix (FR-003b): `command` MUST be `"terraform plan"` (no `atmos` prefix), `args` MUST be
-  `["cdn"]` (not empty), and `flags` MUST be `["-s", "plat-use2-dev", "--upload-status"]`
+  `["cdn"]` (not empty), and `flags` MUST contain `"--stack"`, `"plat-use2-dev"`, and
+  `"--upload-status"` (canonical long-form names — `-s` is reported as `--stack`; array
+  order is not required to match invocation order, per the 2026-08-19 clarification)
   — never combined with `args`. This is the regression check for the always-empty-`Args`
   bug (`pkg/proexec/envelope.go:55`).
+
+9. Confirm every logged request body includes a fresh `execution_id` (UUID v4) that
+  differs between separate command invocations, and stays identical to the `run_id`
+  correlation field only by coincidence never by design — `execution_id` identifies the
+  one record, `atmos_pro_run_id` correlates records across the whole CI run (FR-003c).
+
+10. Exercise the inline-vs-blob-URL threshold (FR-011) with a plan large enough to push the
+  whole record at/over 4 MB — e.g. a component with a very large number of pending
+  resource changes, or (for a quick local check without a huge real plan) temporarily lower
+  `Settings.Pro.MaxPayloadBytes` via config to a small value and rerun a normal-sized plan:
+
+  ```yaml
+  # atmos.yaml
+  settings:
+    pro:
+      max_payload_bytes: 1024   # artificially small, for local testing only
+  ```
+
+  ```bash
+  ATMOS_LOGS_LEVEL=Debug atmos terraform plan <component> -s <stack>
+  ```
+
+  Confirm two requests are logged for the one invocation: first a `POST .../atmos/exec/data`
+  request (`execution_id` + `data`, no `batch_id`/chunking fields anywhere), then a
+  `POST .../atmos/exec` request whose `data` field is a JSON **string** (the URL returned by
+  the first request), not an inline object. Confirm the small-plan case (default
+  `max_payload_bytes`) instead sends exactly one `/exec` request with `data` inline.
 
 ## Regenerating the Pact contract
 
 ```bash
-go test -tags pact ./pkg/pro/... -v -run TestPact/UploadExecMetadata
+go test -tags pact ./pkg/pro/... -v -run 'TestPact/UploadExecMetadata|TestPact/UploadExecData'
 git diff pacts/atmos-AtmosPro.json
 ```
 
 Hand `pacts/atmos-AtmosPro.json` to the Atmos Pro team as the source of truth for
-implementing the `POST /v1/atmos/exec` provider endpoint — see
-`contracts/interactions.md` in this feature directory for the human-readable version of
-the same contract.
+implementing the `POST /v1/atmos/exec` and `POST /v1/atmos/exec/data` provider endpoints —
+see `contracts/interactions.md` in this feature directory for the human-readable version of
+the same contract, covering both `Data` shapes (inline and blob-URL) plus the new
+`/exec/data` interaction.
 
 ## New configuration surface
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,7 +62,7 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 		sha: "deadbeef",
 	}
 
-	req, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -80,7 +81,27 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 	assert.NotNil(t, req.Flags)
 	assert.Empty(t, req.Flags)
 	assert.Nil(t, req.Data)
-	assert.Nil(t, req.DataItems)
+}
+
+// TestBuildRecord_ExecutionIDIsFreshUUIDPerCall verifies FR-003c: every
+// buildRecord call generates a fresh, valid UUID v4 ExecutionID, distinct
+// from AtmosProRunID and distinct across separate calls.
+func TestBuildRecord_ExecutionIDIsFreshUUIDPerCall(t *testing.T) {
+	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	req1, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
+	require.NoError(t, err)
+	req2, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, req1.ExecutionID)
+	require.NotEmpty(t, req2.ExecutionID)
+
+	parsed1, parseErr := uuid.Parse(req1.ExecutionID)
+	require.NoError(t, parseErr, "ExecutionID must be a valid UUID")
+	assert.Equal(t, uuid.Version(4), parsed1.Version(), "ExecutionID must be a UUID v4")
+
+	assert.NotEqual(t, req1.ExecutionID, req2.ExecutionID, "ExecutionID must be fresh per call, never reused")
 }
 
 // TestBuildRecord_ArgsAndFlagsShape verifies FR-003b's Command/Args/Flags
@@ -95,7 +116,7 @@ func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 		"terraform plan",
 		[]string{"cdn"},
 		[]string{"-s", "plat-use2-dev", "--upload-status"},
-		0, testMetrics(), nil, nil, repo,
+		0, testMetrics(), nil, repo,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, req)
@@ -110,7 +131,7 @@ func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req, err := buildRecord("atmos list components", nil, nil, 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("atmos list components", nil, nil, 0, testMetrics(), nil, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -121,9 +142,6 @@ func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 
 	_, hasData := decoded["data"]
 	assert.False(t, hasData, "Data must be entirely absent from the marshaled JSON when nil")
-
-	_, hasDataItems := decoded["data_items"]
-	assert.False(t, hasDataItems, "DataItems must be entirely absent from the marshaled JSON when nil")
 }
 
 func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
@@ -133,7 +151,7 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), sample{Foo: "bar"}, nil, repo)
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), sample{Foo: "bar"}, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -149,7 +167,11 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 	assert.Equal(t, "bar", dataMap["foo"])
 }
 
-func TestBuildRecord_DataItemsPresentWhenGiven(t *testing.T) {
+// TestBuildRecord_DataAsArrayWhenGiven verifies the single Data field can
+// carry a bulk, array-shaped payload (e.g. one entry per resource change) —
+// the old dedicated DataItems field is retired (research.md Decision 16);
+// bulk data is now just another Data shape, sized by pro.UploadExecMetadata.
+func TestBuildRecord_DataAsArrayWhenGiven(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
 	type resourceChange struct {
@@ -157,19 +179,20 @@ func TestBuildRecord_DataItemsPresentWhenGiven(t *testing.T) {
 		Address string `json:"address"`
 	}
 
-	items := []any{
-		resourceChange{Action: "created", Address: "aws_s3_bucket.example"},
-		resourceChange{Action: "updated", Address: "aws_iam_role.example"},
+	items := []resourceChange{
+		{Action: "created", Address: "aws_s3_bucket.example"},
+		{Action: "updated", Address: "aws_iam_role.example"},
 	}
 
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), nil, items, repo)
+	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), items, repo)
 	require.NoError(t, err)
-	require.Len(t, req.DataItems, 2)
+	require.NotNil(t, req.Data)
 
-	var first resourceChange
-	require.NoError(t, json.Unmarshal(req.DataItems[0], &first))
-	assert.Equal(t, "created", first.Action)
-	assert.Equal(t, "aws_s3_bucket.example", first.Address)
+	var decoded []resourceChange
+	require.NoError(t, json.Unmarshal(req.Data, &decoded))
+	require.Len(t, decoded, 2)
+	assert.Equal(t, "created", decoded[0].Action)
+	assert.Equal(t, "aws_s3_bucket.example", decoded[0].Address)
 }
 
 func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
@@ -181,7 +204,7 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 
 	// A recognizable AWS access key pattern the Gitleaks-based masker detects.
 	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(),
-		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, nil, repo)
+		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 	// Masking is a no-op without an initialized masking context in this unit
@@ -192,31 +215,13 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	assert.Contains(t, decoded, "aws_key")
 }
 
-func TestBuildRecord_SecretMaskingAppliedToDataItems(t *testing.T) {
-	repo := &fakeGitRepo{info: &git.RepoInfo{}}
-
-	type sample struct {
-		AWSKey string `json:"aws_key"`
-	}
-
-	// Same masking-call-path assertion as TestBuildRecord_SecretMaskingAppliedToData,
-	// applied to each DataItems entry independently (FR-010).
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), nil,
-		[]any{sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}}, repo)
-	require.NoError(t, err)
-	require.Len(t, req.DataItems, 1)
-	var decoded map[string]any
-	require.NoError(t, json.Unmarshal(req.DataItems[0], &decoded))
-	assert.Contains(t, decoded, "aws_key")
-}
-
 func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
 	repo := &fakeGitRepo{
 		infoErr: assertError("no repo"),
 		shaErr:  assertError("no sha"),
 	}
 
-	req, err := buildRecord("atmos version", nil, nil, 0, testMetrics(), nil, nil, repo)
+	req, err := buildRecord("atmos version", nil, nil, 0, testMetrics(), nil, repo)
 	require.NoError(t, err)
 	assert.Equal(t, "", req.GitSHA)
 	assert.Equal(t, "", req.RepoURL)

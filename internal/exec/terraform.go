@@ -246,7 +246,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 	// passed" (research.md Decision 14).
 	flags := proexec.FlagsFromCommand(cmd)
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, nil, nil); syncErr != nil {
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

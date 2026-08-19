@@ -23,6 +23,12 @@ type ResourceUsageMetrics struct {
 // must be explicitly added here. Sensitive data is masked before this struct
 // is marshaled (see pkg/proexec).
 type ExecUploadRequest struct {
+	// ExecutionID uniquely identifies this single execution record — a fresh
+	// UUID v4 generated once per qualifying invocation. Distinct from
+	// AtmosProRunID, which correlates records across a whole CI run. Also
+	// sent as ExecDataUploadRequest.ExecutionID when Data requires
+	// out-of-band delivery, so Atmos Pro can associate the two (FR-003c).
+	ExecutionID   string `json:"execution_id"`
 	AtmosProRunID string `json:"atmos_pro_run_id"`
 	AtmosVersion  string `json:"atmos_version"`
 	AtmosOS       string `json:"atmos_os"`
@@ -44,25 +50,39 @@ type ExecUploadRequest struct {
 	RepoOwner string               `json:"repo_owner"`
 	RepoHost  string               `json:"repo_host"`
 	Metrics   ResourceUsageMetrics `json:"metrics"`
-	// Data is command-specific structured *summary* data (e.g. terraform
-	// plan/apply resource counts, outputs, warnings). Small and bounded —
-	// always sent in full, never chunked. Absent (nil) for commands with no
-	// structured-data extension, per FR-005/data-model.md.
+	// Data is command-specific structured data (e.g. terraform plan/apply
+	// resource counts, outputs, warnings, and per-resource change lists).
+	// Absent (nil) for commands with no structured-data extension, per
+	// FR-005/data-model.md. On the wire it is always exactly one of two
+	// shapes: an inline JSON structure (object/array), when the whole
+	// marshaled record is under the payload size threshold; or a JSON
+	// string holding a blob URL returned by POST /v1/atmos/exec/data, when
+	// the whole record is at/over the threshold (FR-011). Never chunked —
+	// UploadExecMetadata decides which shape to send, never both.
 	Data json.RawMessage `json:"data,omitempty"`
-	// DataItems is command-specific structured *bulk* data (e.g. one entry
-	// per terraform plan/apply resource change). Potentially large — split
-	// across multiple correlated requests via chunking rather than truncated
-	// or dropped when it would exceed the payload size limit (FR-011).
-	DataItems []json.RawMessage `json:"data_items,omitempty"`
-	// BatchID/BatchIndex/BatchTotal are present only when DataItems was
-	// split across multiple requests, correlating the chunks for server-side
-	// reassembly (mirrors UploadAffectedStacksRequest/InstancesUploadRequest).
-	BatchID    string `json:"batch_id,omitempty"`
-	BatchIndex *int   `json:"batch_index,omitempty"`
-	BatchTotal *int   `json:"batch_total,omitempty"`
 }
 
 // ExecUploadResponse represents the response from POST /v1/atmos/exec.
 type ExecUploadResponse struct {
 	AtmosApiResponse
+}
+
+// ExecDataUploadRequest is the request body for POST /v1/atmos/exec/data,
+// used to upload a command's structured Data out-of-band, in a single
+// request (never chunked), when the parent ExecUploadRequest would otherwise
+// exceed the payload size threshold (FR-011).
+type ExecDataUploadRequest struct {
+	// ExecutionID MUST match the corresponding ExecUploadRequest.ExecutionID,
+	// so Atmos Pro can associate this blob with that execution record.
+	ExecutionID string          `json:"execution_id"`
+	Data        json.RawMessage `json:"data"`
+}
+
+// ExecDataUploadResponse represents the response from POST
+// /v1/atmos/exec/data. URL is the blob's retrievable location, to be set as
+// the corresponding ExecUploadRequest.Data content (as a JSON string) on the
+// subsequent POST /v1/atmos/exec request.
+type ExecDataUploadResponse struct {
+	AtmosApiResponse
+	URL string `json:"url"`
 }

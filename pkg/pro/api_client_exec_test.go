@@ -154,27 +154,23 @@ func TestUploadExecMetadata_NonRetryable(t *testing.T) {
 	}
 }
 
-// TestUploadExecMetadata_Chunked verifies that an oversized DataItems array
-// is split across multiple correlated requests (never truncated or dropped),
-// mirroring UploadAffectedStacks_Chunked's coverage of the same underlying
-// sendChunked mechanism (FR-011).
-func TestUploadExecMetadata_Chunked(t *testing.T) {
-	var requestCount atomic.Int32
-	var mu sync.Mutex
-	var receivedBodies []dtos.ExecUploadRequest
+// TestUploadExecMetadata_InlineUnderThreshold verifies a record whose
+// marshaled size is under MaxPayloadBytes is sent as a single request with
+// Data inline (research.md Decision 16) — no /exec/data call is made.
+func TestUploadExecMetadata_InlineUnderThreshold(t *testing.T) {
+	var execRequests, dataRequests atomic.Int32
+	var receivedBody dtos.ExecUploadRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount.Add(1)
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-
-		var req dtos.ExecUploadRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-
-		mu.Lock()
-		receivedBodies = append(receivedBodies, req)
-		mu.Unlock()
-
+		switch r.URL.Path {
+		case "/api/atmos/exec":
+			execRequests.Add(1)
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(body, &receivedBody))
+		case "/api/atmos/exec/data":
+			dataRequests.Add(1)
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true}`))
 	}))
@@ -187,49 +183,142 @@ func TestUploadExecMetadata_Chunked(t *testing.T) {
 		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 	}
 
-	// Build a DataItems array large enough to exceed DefaultMaxPayloadBytes.
-	bigItem, err := json.Marshal(map[string]string{
-		"action":  "created",
-		"address": string(make([]byte, 1000)),
-	})
-	require.NoError(t, err)
-
-	numItems := (DefaultMaxPayloadBytes / len(bigItem)) + 50
-	dataItems := make([]json.RawMessage, numItems)
-	for i := range dataItems {
-		dataItems[i] = json.RawMessage(bigItem)
+	dto := dtos.ExecUploadRequest{
+		ExecutionID: "11111111-1111-4111-8111-111111111111",
+		Command:     "atmos terraform plan",
+		Data:        json.RawMessage(`{"resource_counts":{"create":1}}`),
 	}
 
+	err := client.UploadExecMetadata(&dto)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(1), execRequests.Load(), "exactly one /exec request for a small record")
+	assert.Equal(t, int32(0), dataRequests.Load(), "no /exec/data call for a small record")
+	assert.JSONEq(t, `{"resource_counts":{"create":1}}`, string(receivedBody.Data), "Data must be inline, unchanged")
+}
+
+// TestUploadExecMetadata_BlobURLOverThreshold verifies a record whose
+// marshaled size is at/over MaxPayloadBytes is delivered via a single
+// /exec/data upload (never chunked) followed by a single /exec request whose
+// Data is the returned URL, keyed by ExecutionID (FR-011, research.md
+// Decision 16) — replacing the retired multi-chunk model.
+func TestUploadExecMetadata_BlobURLOverThreshold(t *testing.T) {
+	var execRequests, dataRequests atomic.Int32
+	var mu sync.Mutex
+	var execBody dtos.ExecUploadRequest
+	var dataBody dtos.ExecDataUploadRequest
+
+	const blobURL = "https://blob.vercel-storage.com/atmos-exec/example/data.json"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		switch r.URL.Path {
+		case "/api/atmos/exec/data":
+			dataRequests.Add(1)
+			mu.Lock()
+			require.NoError(t, json.Unmarshal(body, &dataBody))
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":true,"url":"` + blobURL + `"}`))
+			return
+		case "/api/atmos/exec":
+			execRequests.Add(1)
+			mu.Lock()
+			require.NoError(t, json.Unmarshal(body, &execBody))
+			mu.Unlock()
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
+		MaxPayloadBytes: 128, // artificially small so the fixed test payload trips the threshold.
+	}
+
+	bigData, err := json.Marshal(map[string]string{"padding": string(make([]byte, 1000))})
+	require.NoError(t, err)
+
 	dto := dtos.ExecUploadRequest{
-		Command:   "atmos terraform plan",
-		DataItems: dataItems,
+		ExecutionID: "22222222-2222-4222-8222-222222222222",
+		Command:     "atmos terraform plan",
+		Data:        json.RawMessage(bigData),
 	}
 
 	err = client.UploadExecMetadata(&dto)
 	require.NoError(t, err)
 
-	totalRequests := int(requestCount.Load())
-	require.Greater(t, totalRequests, 1, "large DataItems should be chunked into multiple requests")
+	assert.Equal(t, int32(1), dataRequests.Load(), "exactly one /exec/data upload, never chunked")
+	assert.Equal(t, int32(1), execRequests.Load(), "exactly one /exec request following the blob upload")
 
 	mu.Lock()
-	bodies := make([]dtos.ExecUploadRequest, len(receivedBodies))
-	copy(bodies, receivedBodies)
-	mu.Unlock()
+	defer mu.Unlock()
+	assert.Equal(t, dto.ExecutionID, dataBody.ExecutionID, "ExecutionID must key the /exec/data request")
+	assert.JSONEq(t, string(bigData), string(dataBody.Data), "the original structured data must be sent to /exec/data unchanged")
 
-	require.NotEmpty(t, bodies)
-	batchID := bodies[0].BatchID
-	assert.NotEmpty(t, batchID)
+	var execDataAsString string
+	require.NoError(t, json.Unmarshal(execBody.Data, &execDataAsString), "the main /exec request's Data must be a JSON string (the blob URL), not inline")
+	assert.Equal(t, blobURL, execDataAsString)
+	assert.Equal(t, dto.ExecutionID, execBody.ExecutionID)
+}
 
-	totalItems := 0
-	for i, body := range bodies {
-		assert.Equal(t, batchID, body.BatchID)
-		require.NotNil(t, body.BatchIndex)
-		assert.Equal(t, i, *body.BatchIndex)
-		require.NotNil(t, body.BatchTotal)
-		assert.Equal(t, totalRequests, *body.BatchTotal)
-		// The base envelope is repeated in full on every chunk request.
-		assert.Equal(t, "atmos terraform plan", body.Command)
-		totalItems += len(body.DataItems)
+// TestUploadExecData_Success verifies UploadExecData's request/response
+// shape directly.
+func TestUploadExecData_Success(t *testing.T) {
+	var received dtos.ExecDataUploadRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/atmos/exec/data", r.URL.Path)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(body, &received))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"url":"https://blob.example/data.json"}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 	}
-	assert.Equal(t, numItems, totalItems, "all DataItems should be accounted for across chunks")
+
+	resp, err := client.UploadExecData(&dtos.ExecDataUploadRequest{
+		ExecutionID: "33333333-3333-4333-8333-333333333333",
+		Data:        json.RawMessage(`{"foo":"bar"}`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "https://blob.example/data.json", resp.URL)
+	assert.Equal(t, "33333333-3333-4333-8333-333333333333", received.ExecutionID)
+	assert.JSONEq(t, `{"foo":"bar"}`, string(received.Data))
+}
+
+// TestUploadExecData_Error verifies a non-2xx response surfaces as an error
+// wrapping ErrFailedToUploadExecData.
+func TestUploadExecData_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"success":false}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
+	}
+
+	resp, err := client.UploadExecData(&dtos.ExecDataUploadRequest{ExecutionID: "x", Data: json.RawMessage(`{}`)})
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadExecData))
 }

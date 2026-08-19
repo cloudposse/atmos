@@ -16,14 +16,15 @@ const defaultSyncTimeoutSeconds = 10
 
 // CaptureSync uploads an execution record for a command classified as
 // synchronous (terraform plan/apply, describe affected), blocking until the
-// complete upload — including every chunk, if dataItems required batching —
-// completes or the configured timeout elapses. It re-checks the CI+Pro gate
-// itself. Failure/timeout is warn-and-continue for all three initial
-// synchronous commands (data-model.md's Delivery Classification table): a
-// warning is logged and CaptureSync returns nil so a delivery outage never
-// turns a successful command into a failed CI run. args MUST hold only
-// positional arguments and flags MUST hold only CLI flags (FR-003b).
-func CaptureSync(atmosConfig *schema.AtmosConfiguration, cmdName string, args []string, flags []string, exitCode int, data any, dataItems []any) error {
+// complete upload — including the out-of-band data upload, if data required
+// out-of-band delivery (FR-011a) — completes or the configured timeout
+// elapses. It re-checks the CI+Pro gate itself. Failure/timeout is
+// warn-and-continue for all three initial synchronous commands
+// (data-model.md's Delivery Classification table): a warning is logged and
+// CaptureSync returns nil so a delivery outage never turns a successful
+// command into a failed CI run. args MUST hold only positional arguments and
+// flags MUST hold only CLI flags (FR-003b).
+func CaptureSync(atmosConfig *schema.AtmosConfiguration, cmdName string, args []string, flags []string, exitCode int, data any) error {
 	if !gateOpen(atmosConfig) {
 		return nil
 	}
@@ -38,7 +39,7 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, cmdName string, args []
 
 	resultCh := make(chan error, 1)
 	go func() {
-		req, buildErr := buildRecord(cmdName, args, flags, exitCode, processBaseline.Since(), data, dataItems, git.NewDefaultGitRepo())
+		req, buildErr := buildRecord(cmdName, args, flags, exitCode, processBaseline.Since(), data, git.NewDefaultGitRepo())
 		if buildErr != nil {
 			resultCh <- buildErr
 			return

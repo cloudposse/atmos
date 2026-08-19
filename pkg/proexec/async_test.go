@@ -47,15 +47,20 @@ func (f *fakeUploadClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error
 	return f.returnErr
 }
 
+func (f *fakeUploadClient) UploadExecData(*dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error) {
+	return &dtos.ExecDataUploadResponse{}, nil
+}
+
 func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	client := &fakeUploadClient{}
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	err := uploadExecMetadata("version", nil, nil, 0, nil, nil, client, repo)
+	err := uploadExecMetadata("version", nil, nil, 0, nil, client, repo)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), client.uploadCalls.Load())
 	assert.Equal(t, "version", client.lastRequest.Command)
+	assert.NotEmpty(t, client.lastRequest.ExecutionID, "async path must populate ExecutionID (FR-003c)")
 }
 
 // TestCommandArgsAndFlags_StripsRootAndSeparatesFlags verifies FR-003b's

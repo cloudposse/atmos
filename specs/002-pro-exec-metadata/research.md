@@ -475,12 +475,25 @@ over *after* Cobra has already parsed and consumed recognized atmos flags (per
 The correct source of truth is the invoking `*cobra.Command`'s own record of explicitly-set
 flags (`cmd.Flags().Visit`, `Changed == true`) — exactly the pattern the async path's
 `commandArgsAndFlags` (`pkg/proexec/async.go:109-126`) already uses, so both paths must
-converge on one shared helper. Additionally, `Flags` MUST serialize as bare tokens exactly
-as typed on the command line (`["-s", "plat-use2-dev", "--upload-status"]`) — a boolean/
-valueless flag like `--upload-status` appears alone with no synthesized value. This means
-`commandArgsAndFlags`'s current implementation, which appends `"--"+f.Name, f.Value.String()`
-unconditionally (producing `["--upload-status", "true"]` for a bool flag), is also wrong
-and must change to skip the value for bool-typed flags (`pflag.Flag.Value.Type() == "bool"`).
+converge on one shared helper (`proexec.FlagsFromCommand`, added this session). `Flags`
+MUST serialize each flag by its canonical long name (`--stack`, never the shorthand `-s`,
+since `pflag.Flag` never records which alias was typed) — a boolean/valueless flag like
+`--upload-status` appears alone with no synthesized value; this required
+`commandArgsAndFlags`'s prior implementation (which appended `"--"+f.Name, f.Value.String()`
+unconditionally, producing `["--upload-status", "true"]` for a bool flag) to change to skip
+the value for bool-typed flags (`pflag.Flag.Value.Type() == "bool"`) — implemented and
+tested this session (`TestCommandArgsAndFlags_BoolFlagOnly`).
+**Superseded (2026-08-19, later same day)**: an earlier version of this decision also
+required literal "bare tokens exactly as typed" — preserving shorthand-vs-long form and
+invocation order. Real-world testing after implementation showed `cmd.Flags().Visit()`
+structurally cannot deliver either: `pflag.Flag` has no record of which alias was typed,
+and `Visit()` iterates in flag-name lexicographic order, not invocation order. A follow-up
+`/speckit-clarify` explicitly relaxed this — canonical long-form names and
+Cobra's-own-iteration-order are now the accepted, final shape; true as-typed reconstruction
+(which would require parsing raw pre-parse command-line tokens instead of the parsed flag
+set) was evaluated and rejected as unnecessary scope. See spec.md's third 2026-08-19 Q&A
+and FR-003b's current text, which is authoritative over this paragraph's now-superseded
+"bare tokens exactly as typed" framing below.
 
 **Rationale**: A production report (2026-08-19) showed an `atmos terraform plan cdn -s
 plat-use2-dev --upload-status` invocation's sync-path execution record with a completely
@@ -520,8 +533,137 @@ not yet implemented.
 
 ---
 
+## Decision 15: `ExecutionID` — fresh UUID v4 per invocation, generated in `buildRecord`
+
+**Decision**: `buildRecord` (`pkg/proexec/envelope.go`) generates `ExecutionID :=
+uuid.New().String()` once per call (i.e. once per invocation, since `buildRecord` is called
+exactly once per `CaptureSync`/`CaptureAsync` invocation) using `github.com/google/uuid` —
+already a direct dependency, already used identically for `BatchID` generation in
+`pkg/pro/chunked_upload.go`. It is set on `dtos.ExecUploadRequest.ExecutionID` alongside the
+existing `AtmosProRunID`, and is *not* derived from or cached against any other identifier
+(git SHA, run ID, process PID) — it exists solely to uniquely name this one execution record
+and, when `Data` requires out-of-band delivery (Decision 16), to key the correlated
+`/exec/data` upload.
+
+**Rationale**: Directly implements the 2026-08-19 clarification: the existing
+`AtmosProRunID` correlates records *across* a CI run (many commands, one ID), while
+`ExecutionID` uniquely identifies *this one* record — a distinct correlation axis. Reusing
+`google/uuid` (already imported, already the project's UUID-generation library) avoids a new
+dependency; reusing the exact `uuid.New().String()` call shape `chunked_upload.go` already
+uses for `BatchID` keeps UUID generation idiomatically consistent across the Pro client
+layer.
+
+**Alternatives considered**:
+- Derive `ExecutionID` deterministically from existing fields (e.g. hash of
+  command+timestamp+PID) — rejected: a random UUID is simpler, has no collision-avoidance
+  bookkeeping to reason about, and matches the "opaque per-execution identifier" framing the
+  clarification settled on (UUID v4, not v7/time-ordered).
+- Generate `ExecutionID` at the `CaptureSync`/`CaptureAsync` call site instead of inside
+  `buildRecord` — rejected: `buildRecord` is the single place both delivery paths already
+  converge to assemble the envelope; generating it there (rather than in two separate call
+  sites) removes any chance of the two paths diverging on *how* the ID is produced, mirroring
+  the rationale behind Decision 10's single shared `IsSyncCommand` predicate.
+
+---
+
+## Decision 16: `Data` delivery redesign — inline-or-blob-URL, retiring multi-chunk `DataItems`
+
+**Decision**: The previously-shipped multi-chunk model (`dtos.ExecUploadRequest.DataItems
+[]json.RawMessage` + `BatchID`/`BatchIndex`/`BatchTotal`, `pkg/pro/api_client_exec.go`'s
+`sendChunked` call) is removed entirely and replaced with a binary choice on the single
+`Data json.RawMessage` field:
+
+- `UploadExecMetadata` (`pkg/pro/api_client_exec.go`) marshals the full record (envelope +
+  `Metrics` + `Data` inline) once and compares its byte length against the existing
+  `c.MaxPayloadBytes` (falls back to `DefaultMaxPayloadBytes = 4 * 1024 * 1024`,
+  `pkg/pro/chunked_upload.go` — already exactly 4 MB, so no new constant is introduced).
+- If under the threshold: send the marshaled record as-is to `POST /v1/atmos/exec`, `Data`
+  inline as a JSON structure — this is the common case (most commands have no `Data` at
+  all, or a small one).
+- If at/over the threshold: first call a new `UploadExecData(dto
+  *dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error)` — `POST {BaseURL}/
+  {BaseAPIEndpoint}/atmos/exec/data`, body `{execution_id, data}` — in a single request
+  (never chunked; the blob store handles arbitrarily large single uploads). On success, its
+  response's `url` field replaces `Data` (re-marshaled as a JSON string, e.g.
+  `"https://blob.vercel-storage.com/..."`) on the record, which is then sent to
+  `POST /v1/atmos/exec` as normal.
+- `dtos.ExecUploadRequest.DataItems`, `BatchID`, `BatchIndex`, `BatchTotal` are deleted.
+  `pkg/pro/chunked_upload.go` itself (`sendChunked`, `BatchInfo`, `splitSlice`) is
+  **unchanged** — it remains in active use by `UploadAffectedStacks`/`UploadInstances`; only
+  its use for `ExecUploadRequest` specifically is retired.
+- `pkg/proexec.buildRecord`, `CaptureSync`, `CaptureAsync` drop their `dataItems []any`
+  parameter; command-specific bulk data (e.g. per-resource `terraform plan`/`apply` change
+  lists, and the multi-component per-component breakdown from Decision 11) is now folded
+  into the single `data any` argument as a JSON array/object, exactly as `Data` already
+  represents "small" structured summaries today — the inline-vs-blob choice at the HTTP layer
+  makes the client-side size distinction between "small structured data" and "potentially
+  large structured data" unnecessary; `UploadExecMetadata` handles both uniformly by size.
+
+**Rationale**: Directly implements the 2026-08-19 "redo batch uploading" clarification: the
+client estimates the whole payload's size and only reaches for the out-of-band path when
+necessary, using a dedicated single-request blob-upload endpoint (Vercel Blob-backed, per the
+clarification) rather than splitting one logical `Data` value across multiple correlated
+`/exec` requests. This is a strict simplification over the multi-chunk model — one binary
+branch and, at most, one extra request — versus the prior model's variable-length chunk
+sequence, `BatchInfo` bookkeeping on every chunk, and the requirement that the full envelope
+be repeated on every chunk request. It also removes the awkward asymmetry where `Data`
+(small, never chunked) and `DataItems` (potentially large, chunked) were two different
+fields with different size-handling rules for what is conceptually one "command-specific
+structured data" concept — after this decision there is exactly one `Data` field, and its
+size-handling is uniform.
+
+**Alternatives considered**:
+- Keep `DataItems`/multi-chunk for the "already over 4 MB even as inline JSON" case and add
+  the blob-URL path only for larger cases still — rejected: this reintroduces two competing
+  size-handling mechanisms for the same conceptual field, which is exactly what this decision
+  set out to eliminate; the user's explicit instruction was to "redo" batch uploading, not
+  layer a third mechanism on top of the second.
+- Have `UploadExecMetadata` chunk the blob upload itself for extremely large `Data` — rejected
+  per the clarification: the blob store handles arbitrarily large single uploads, so
+  client-side chunking of `/exec/data` would be unused complexity with no scenario that
+  requires it.
+- Add an explicit boolean/enum field (e.g. `data_is_url`) to disambiguate `Data`'s two shapes
+  server-side instead of relying on JSON-type inspection (string vs. object/array) —
+  considered, but not required by the clarification, which described `Data` as "type of two -
+  json struct or string that would be url" without requesting a separate discriminator field;
+  Atmos Pro's provider implementation can distinguish the two shapes by JSON type alone (a
+  JSON string vs. a JSON object/array), matching how `json.RawMessage` naturally represents
+  both without a wrapper. Revisit only if Atmos Pro's implementation finds type-sniffing
+  insufficient in practice — not asserted here since this repo does not own that side.
+
+---
+
+## Decision 17: Multi-component aggregation folds into `Data`, not a separate list
+
+**Decision**: `cmd/terraform/utils.go`'s per-node accumulator (Decision 11 — collects each
+component's identity/outcome/structured-data as the multi-component graph run proceeds) now
+builds its accumulated result as the single `data` value passed to `CaptureSync`, rather than
+a separate `dataItems []any` list (which no longer exists per Decision 16). The shape is
+otherwise unchanged: one entry per component (`{"component": ..., "stack": ..., "exitCode":
+..., "action": ..., "address": ...}`-shaped items), now nested under `data`'s per-component
+array/section instead of being `DataItems`' top-level array.
+
+**Rationale**: Decision 11's aggregation point (the graph-run lifecycle in
+`cmd/terraform/utils.go`) is unaffected by Decision 16 — it still owns collecting per-node
+results into one record per invocation (FR-006a). What changes is only which single-argument
+field the accumulated result becomes: `Data`, sized by `UploadExecMetadata`'s new
+inline-vs-blob logic (Decision 16) rather than `DataItems`'s old chunking logic. A
+multi-component `--affected`/`--all` run touching thousands of resources is exactly the
+scenario most likely to exceed 4 MB and take the blob-upload path — this is expected and
+correctly handled by Decision 16's threshold check without any special-casing for the
+multi-component case.
+
+**Alternatives considered**:
+- Keep a separate "bulk" vs. "summary" split within `data` itself (e.g. `data.summary` always
+  inline, `data.items` conditionally blob-uploaded) — rejected: Decision 16 already
+  establishes that the *whole* record's size (not a sub-field) decides inline-vs-blob; adding
+  a second, nested size decision inside `data` would reintroduce the two-mechanisms problem
+  Decision 16 exists to eliminate.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,
-2026-08-18, 2026-08-19) before planning began. No NEEDS CLARIFICATION markers remain in
-this plan or the spec.
+2026-08-18, 2026-08-19 — three separate sessions that day) before planning began. No NEEDS
+CLARIFICATION markers remain in this plan or the spec.

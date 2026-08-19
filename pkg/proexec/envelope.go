@@ -5,6 +5,8 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/google/uuid"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	git "github.com/cloudposse/atmos/pkg/git"
 	io "github.com/cloudposse/atmos/pkg/io"
@@ -18,15 +20,15 @@ import (
 // Atmos Pro uploads (see internal/exec/pro.go: uploadStatus).
 const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 
-// buildRecord assembles the base execution-record envelope (version, OS,
-// arch, command path, ATMOS_PRO_RUN_ID, git info, resource-usage metrics),
-// and applies secret masking to Args, Flags, data, and dataItems (FR-010).
+// buildRecord assembles the base execution-record envelope (ExecutionID,
+// version, OS, arch, command path, ATMOS_PRO_RUN_ID, git info, resource-usage
+// metrics), and applies secret masking to Args, Flags, and data (FR-010).
 // args MUST hold only positional arguments and flags MUST hold only CLI
 // flags — the two are kept in separate fields, never combined (FR-003b). A
-// nil data/dataItems argument produces a request with that field entirely
-// absent from the marshaled JSON. Payload-size handling (FR-011) is not
-// performed here — oversized dataItems are split across multiple correlated
-// requests by pro.UploadExecMetadata, never truncated or dropped.
+// nil data argument produces a request with Data entirely absent from the
+// marshaled JSON. Payload-size handling (FR-011) is not performed here — an
+// oversized data value is uploaded out-of-band by pro.UploadExecMetadata,
+// never truncated or dropped.
 func buildRecord(
 	command string,
 	args []string,
@@ -34,7 +36,6 @@ func buildRecord(
 	exitCode int,
 	metrics process.ProcessMetrics,
 	data any,
-	dataItems []any,
 	gitRepo git.GitRepoInterface,
 ) (*dtos.ExecUploadRequest, error) {
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
@@ -64,12 +65,8 @@ func buildRecord(
 		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
 	}
 
-	dataItemsRaw, err := maskedDataItemsJSON(dataItems)
-	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
-	}
-
 	req := &dtos.ExecUploadRequest{
+		ExecutionID:   uuid.New().String(),
 		AtmosProRunID: atmosProRunID,
 		AtmosVersion:  pkgversion.Version,
 		AtmosOS:       runtime.GOOS,
@@ -85,7 +82,6 @@ func buildRecord(
 		RepoHost:      repoInfo.RepoHost,
 		Metrics:       toResourceUsageMetrics(metrics),
 		Data:          dataRaw,
-		DataItems:     dataItemsRaw,
 	}
 
 	return req, nil
@@ -119,27 +115,6 @@ func maskedDataJSON(data any) (json.RawMessage, error) {
 
 	masked := io.MaskString(string(raw))
 	return json.RawMessage(masked), nil
-}
-
-// maskedDataItemsJSON marshals each item in dataItems to JSON and runs the
-// result through the existing secret-masking path before it becomes part of
-// the upload payload (FR-010). A nil/empty dataItems argument returns a nil
-// slice so the DataItems field is omitted entirely from the marshaled
-// request.
-func maskedDataItemsJSON(dataItems []any) ([]json.RawMessage, error) {
-	if len(dataItems) == 0 {
-		return nil, nil
-	}
-
-	out := make([]json.RawMessage, len(dataItems))
-	for i, item := range dataItems {
-		raw, err := json.Marshal(item)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = json.RawMessage(io.MaskString(string(raw)))
-	}
-	return out, nil
 }
 
 // toResourceUsageMetrics converts process.ProcessMetrics to the DTO shape.

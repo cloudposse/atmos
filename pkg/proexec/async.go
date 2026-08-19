@@ -92,7 +92,7 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
 	// so the command's process doesn't exit before the request completes,
 	// and so its outcome is always logged.
-	uploadErr := uploadExecMetadata(reportedCommand, args, flags, exitCode, nil, nil, client, git.NewDefaultGitRepo())
+	uploadErr := uploadExecMetadata(reportedCommand, args, flags, exitCode, nil, client, git.NewDefaultGitRepo())
 	if uploadErr != nil {
 		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", false, "error", uploadErr)
 	} else {
@@ -163,11 +163,10 @@ func uploadExecMetadata(
 	flags []string,
 	exitCode int,
 	data any,
-	dataItems []any,
 	client pro.AtmosProAPIClientInterface,
 	gitRepo git.GitRepoInterface,
 ) error {
-	req, buildErr := buildRecord(commandPath, args, flags, exitCode, processBaseline.Since(), data, dataItems, gitRepo)
+	req, buildErr := buildRecord(commandPath, args, flags, exitCode, processBaseline.Since(), data, gitRepo)
 	if buildErr != nil {
 		return buildErr
 	}
