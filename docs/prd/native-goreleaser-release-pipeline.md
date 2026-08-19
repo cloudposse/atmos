@@ -12,9 +12,12 @@ bucket, are built and published by a pipeline that doesn't exist anywhere in thi
 fully unverified from here.
 
 This PRD proposes collapsing the release pipeline into one in-repo, auditable GitHub Actions workflow that
-invokes GoReleaser directly: build → archive → package (deb/rpm/apk) → sign → SBOM → publish, all inside the
-same atomic run that produces the artifacts. No GoReleaser Pro, no second "meta" config repo — both
-explicitly ruled out. Everything Atmos needs is available in GoReleaser OSS.
+invokes GoReleaser directly: build → archive → package (deb/rpm/apk) → sign → SBOM → publish, all inside one
+workflow run. That run has two stages, not one atomic operation: a local build/archive/package/sign/SBOM
+stage (safe to fully retry, since it only writes to `dist/`), followed by a publish stage made of several
+independent, individually-retryable publishers — the GitHub Release, the Homebrew tap, the Docker registry,
+and Cloudsmith. No GoReleaser Pro, no second "meta" config repo — both explicitly ruled out. Everything
+Atmos needs is available in GoReleaser OSS.
 
 ## Problem Statement
 
@@ -117,13 +120,16 @@ checkout (fetch-depth: 0, needed for changelog + tag history)
   → upload dist/ as a workflow artifact (debugging, short retention)
 ```
 
-Everything above the `cloudsmith-cli push` line is one atomic GoReleaser invocation — builds, archives,
-checksums, `nfpms:` packages, Homebrew tap push (`brews:`), Docker multi-arch build+push
+Everything above the `cloudsmith-cli push` line is one GoReleaser invocation, but that invocation itself
+fans out to several independent external publishers, not one atomic operation: builds, archives, checksums,
+`nfpms:` packages, Homebrew tap push (`brews:`), Docker multi-arch build+push
 (`dockers:`/`docker_manifests:`), cosign signing of the checksums file (`signs:`, keyless/OIDC — no static
 key), SBOMs of every archive (`sboms:`, syft-backed), and the GitHub Release itself (`release:` block,
-already configured with `draft: true`/`prerelease: auto` in today's `.goreleaser.yml`) all happen together.
-Docker image signing can use GoReleaser's `docker_signs:` block (confirmed OSS) to close the same
-build-vs-fetch gap for images that `build.yml`'s current pull-then-sign approach has, closing it end to end.
+already configured with `draft: true`/`prerelease: auto` in today's `.goreleaser.yml`) all happen within
+that one run — but a failure partway through can still leave some of those publishers updated and others
+not (see "Failure recovery & idempotency" below). Docker image signing can use GoReleaser's `docker_signs:`
+block (confirmed OSS) to close the same build-vs-fetch gap for images that `build.yml`'s current
+pull-then-sign approach has, closing it end to end.
 
 ### `.goreleaser.yml` additions
 
@@ -175,13 +181,36 @@ real values during implementation, not in this PRD.)
 ### The two OSS workarounds
 
 - **Nightly builds** (Pro-gated `--nightly` flag): reimplement as "compute tomorrow's-nightly version string
-  (date+SHA or reuse release-drafter's resolver), create/move a real lightweight tag, run the *same*
-  `goreleaser release --clean` job against it, marked prerelease." This is close to what the current pipeline
-  already effectively does (and identical in spirit to how `gruntwork-io/terragrunt`'s "tip builds" work) —
-  no functional loss, just workflow glue instead of a one-line flag.
+  (date+SHA or reuse release-drafter's resolver), create a unique, immutable tag containing the commit SHA
+  — never move or reuse it — run the *same* `goreleaser release --clean` job against it, marked prerelease."
+  A tag used for a signed release must never move: a moved tag can later resolve to different source while
+  the release name and signature remain unchanged. If a moving convenience alias (e.g. a `nightly` "latest"
+  pointer) is ever wanted for discoverability, it must be a separate ref, never the tag used for the signed
+  release. This is close to what the current pipeline already effectively does (and identical in spirit to
+  how `gruntwork-io/terragrunt`'s "tip builds" work) — no functional loss, just workflow glue instead of a
+  one-line flag.
 - **CloudSmith push** (Pro-gated native integration): GoReleaser OSS's `nfpms:` block still produces real
   `.deb`/`.rpm`/`.apk` files in `dist/`; add one explicit `cloudsmith-cli push deb/rpm/apk` step (or
   Cloudsmith's own GitHub Action) after the GoReleaser step, same end result as the Pro block.
+
+### Failure recovery & idempotency
+
+The publish stage's publishers (GitHub Release, Homebrew tap, Docker registry/manifest, Cloudsmith) are
+independent side effects, not one transaction — a failure partway through can leave some published and
+others not. What's known today, and what still needs confirming during implementation (not in this PRD):
+
+- **Build stage** (build/archive/package/sign/SBOM, writing only to `dist/`): always safe to retry in full —
+  `goreleaser release --clean` wipes and rebuilds `dist/` from scratch before every run.
+- **GitHub Release** (`release:` block, `draft: true`): retrying against the same tag is expected to update
+  the existing draft rather than create a duplicate — this PRD already relies on that draft-then-publish
+  behavior elsewhere.
+- **Homebrew tap, Docker registry, Cloudsmith**: retry behavior is not yet confirmed and is called out as an
+  open question below — whether a retried `brews:` push creates a duplicate tap commit, whether a retried
+  Docker push of an identical digest is a no-op, and whether Cloudsmith accepts or rejects a re-push of an
+  already-published package version.
+- **Cleanup**: a run that fails partway through (e.g. Docker pushed, Cloudsmith push failed, no retry
+  attempted) has no documented manual-cleanup runbook today — an implementation-phase gap to close, not an
+  assumption to make silently.
 
 ## Parity matrix
 
@@ -194,7 +223,7 @@ real values during implementation, not in this PRD.)
 | deb/rpm/apk | Unknown external pipeline | Native `nfpms:` + explicit CloudSmith push step, in-repo |
 | Scoop | Unknown external pipeline | Deferred — flagged as open question below |
 | Changelog + semver | release-drafter via `cloudposse/.github` chain | **Unchanged** — release-drafter, config/invocation TBD (see below) |
-| Nightly prerelease | `nightlybuilds.yml` → external chain | `nightlybuilds.yml` (or folded into `release.yml`) → real tag + same GoReleaser run |
+| Nightly prerelease | `nightlybuilds.yml` → external chain | `nightlybuilds.yml` (or folded into `release.yml`) → immutable, SHA-bearing tag + same GoReleaser run |
 | Feature-branch prerelease | `feature-release.yml` → external chain, `.goreleaser.draft.yml` reduced matrix | Same trigger, points at the new in-repo workflow |
 | Major-tag mover / release-branch mgmt / PR comment | `cloudposse/.github`'s `shared-release-branches.yml` | **Unchanged**, not broken, not in scope |
 | Trivy image scan | `build.yml`'s `docker` job | Carries over as a step after the Docker publish, unchanged in spirit |
@@ -227,6 +256,12 @@ Each phase should land as its own PR, verified via the `release/feature` label m
   `auto-release-hotfix.yml` — currently only readable from `cloudposse/.github`, not overridden here)? Leaning
   towards bringing it in-repo for full auditability, but that's more surface area to get right and isn't
   the security-critical part — could be its own follow-up PRD.
+- **Per-publisher retry/idempotency.** Confirmed: the build stage is always safe to retry in full, and a
+  retried GitHub Release publish is expected to update the existing draft rather than duplicate it. Not yet
+  confirmed: whether a retried `brews:` push creates a duplicate Homebrew tap commit, whether a retried
+  Docker push of an identical digest is a no-op, and whether Cloudsmith accepts or rejects a re-push of an
+  already-published package version — each needs verifying against the real tooling during implementation,
+  along with a documented manual-cleanup procedure for a run that fails partway through the publish stage.
 - **When does the build actually happen?** Today, GoReleaser runs on *every push to `main`/`release/v*`*,
   continuously updating a draft release so it's always ready to publish; publishing later is just a
   visibility flip, no rebuild. Moving to a tag-push trigger (Charmbracelet's model) means the build only
