@@ -452,7 +452,14 @@ severity:
 formatters:
   enable:
     - gofumpt
-    - goimports
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/cloudposse/atmos)
+      custom-order: true
   exclusions:
     generated: lax
     paths:
