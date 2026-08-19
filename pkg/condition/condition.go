@@ -47,6 +47,10 @@ type Context struct {
 	// answers) available to CEL expressions as the `answers` map. Unlike Env,
 	// values may be any type (string, bool, list, ...), not just strings.
 	Answers map[string]any
+	// Matrix carries one resolved matrix combination (e.g. a scaffold
+	// spec.files[].matrix row), available to CEL expressions as the `matrix`
+	// map, keyed by axis name. Empty outside a matrix context.
+	Matrix map[string]string
 	// OS is runtime.GOOS (e.g. "darwin", "linux", "windows"), letting `when:` replace a
 	// dedicated `platforms:` field, e.g. `when: "os == 'darwin'"`.
 	OS string

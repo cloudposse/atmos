@@ -129,6 +129,25 @@ func PromptForValue(name, title string, options []string) (string, error) {
 func PromptForMultipleValues(name, title string, options []string) ([]string, error) {
 	defer perf.Track(nil, "flags.PromptForMultipleValues")()
 
+	return promptForMultipleValues(name, title, options, options)
+}
+
+// PromptForMultipleValuesWithPreselection shows an interactive Huh multi-select with the
+// given options, pre-selecting only the names in preselected (nil/empty means none are
+// pre-checked). Returns the selected values or an error. Used when defaulting to "select
+// everything" would be surprising -- e.g. choosing which profiles to activate, where the
+// user should opt in to each one rather than opt out.
+func PromptForMultipleValuesWithPreselection(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.PromptForMultipleValuesWithPreselection")()
+
+	return promptForMultipleValues(name, title, options, preselected)
+}
+
+// promptForMultipleValues is the shared implementation behind PromptForMultipleValues and
+// PromptForMultipleValuesWithPreselection; only which options start pre-checked differs.
+func promptForMultipleValues(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.promptForMultipleValues")()
+
 	if !isInteractive() {
 		return nil, errUtils.ErrInteractiveModeNotAvailable
 	}
@@ -137,12 +156,19 @@ func PromptForMultipleValues(name, title string, options []string) ([]string, er
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrNoOptionsAvailable, name)
 	}
 
-	// Pre-select every option so the default action targets all items.
-	choices := make([]string, len(options))
-	copy(choices, options)
+	preselectedSet := make(map[string]bool, len(preselected))
+	for _, p := range preselected {
+		preselectedSet[p] = true
+	}
+
+	var choices []string
 	selectOptions := make([]huh.Option[string], len(options))
 	for i, o := range options {
-		selectOptions[i] = huh.NewOption(o, o).Selected(true)
+		selected := preselectedSet[o]
+		selectOptions[i] = huh.NewOption(o, o).Selected(selected)
+		if selected {
+			choices = append(choices, o)
+		}
 	}
 
 	// Create custom keymap that adds ESC to quit keys.

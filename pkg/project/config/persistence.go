@@ -25,6 +25,9 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	if err := validateFieldDefinitions(scaffoldConfig); err != nil {
 		return nil, err
 	}
+	if err := validateFileMatrix(scaffoldConfig); err != nil {
+		return nil, err
+	}
 	return scaffoldConfig, nil
 }
 

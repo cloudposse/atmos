@@ -289,8 +289,12 @@ func WithNoOptDefVal(flagName, value string) Option {
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
-		if strFlag, ok := flag.(*StringFlag); ok {
-			strFlag.NoOptDefVal = value
+		switch f := flag.(type) {
+		case *StringFlag:
+			f.NoOptDefVal = value
+			// Note: No need to re-register - we're just updating the field in place.
+		case *StringSliceFlag:
+			f.NoOptDefVal = value
 			// Note: No need to re-register - we're just updating the field in place.
 		}
 	}
@@ -304,9 +308,13 @@ func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
-		if strFlag, ok := flag.(*StringFlag); ok {
-			strFlag.NoOptDefVal = value
-			strFlag.NoOptDefValNoSpaceValue = true
+		switch f := flag.(type) {
+		case *StringFlag:
+			f.NoOptDefVal = value
+			f.NoOptDefValNoSpaceValue = true
+		case *StringSliceFlag:
+			f.NoOptDefVal = value
+			f.NoOptDefValNoSpaceValue = true
 		}
 	}
 }
@@ -432,8 +440,11 @@ func WithOptionalValuePrompt(flagName, promptTitle string, completionFunc Comple
 	return func(c *parserConfig) {
 		// Set NoOptDefVal to sentinel value.
 		flag := c.registry.Get(flagName)
-		if strFlag, ok := flag.(*StringFlag); ok {
-			strFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
+		switch f := flag.(type) {
+		case *StringFlag:
+			f.NoOptDefVal = cfg.IdentityFlagSelectValue
+		case *StringSliceFlag:
+			f.NoOptDefVal = cfg.IdentityFlagSelectValue
 		}
 
 		// Store prompt config.

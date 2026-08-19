@@ -581,8 +581,8 @@ Each toolchain command is implemented in its own file for maintainability:
 - `which.go` - Locate tool binaries
 - `info.go` - Display tool information
 - `clean.go` - Clean tools and cache
-- `aliases.go` - List configured aliases
 - `set.go` - Set default versions
+- `update.go` - Update tools to their newest available version
 
 ## Advanced Topics
 
@@ -689,6 +689,13 @@ atmos toolchain install terraform@latest
 atmos toolchain install terraform@"~>1.9.0"
 atmos toolchain install terraform@">=1.8.0,<2.0.0"
 ```
+
+Range/constraint syntax here is planned, not implemented — `.tool-versions` is
+intentionally exact-version-only (asdf-compatible format; asdf itself has no
+range support). For range-based pinning today, use
+[`dependencies.tools`](/stacks/dependencies) in a stack manifest, or
+[`atmos version track`](/cli/commands/version/track) — both support real
+SemVer constraints and are resolved independently of `.tool-versions`.
 
 ### Caching
 

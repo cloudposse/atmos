@@ -12,6 +12,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -61,7 +62,7 @@ func ExecutePackerOutput(
 		if provSource.HasSource(info.ComponentSection) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext, provisioner.OutputWriters{}); err != nil {
 				return nil, fmt.Errorf("failed to auto-provision component source: %w", errors.Join(errUtils.ErrSourceProvision, err))
 			}
 

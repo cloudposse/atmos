@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -164,8 +163,13 @@ func TestStackConfigSetTool_Execute_ExplicitFile(t *testing.T) {
 	assert.Equal(t, "us-west-2", got)
 }
 
-func TestStackConfigSetTool_Execute_InheritedValueRequiresFile(t *testing.T) {
-	atmosConfig, _ := stackConfigLiveFixture(t)
+// TestStackConfigSetTool_Execute_ImportOnlyValue covers a value that's only
+// ever declared in the imported catalog manifest (vars.region), never
+// re-declared by the importing stack -- resolveStackEditTarget now resolves
+// this to the catalog file (a concrete editable node), so it succeeds without
+// needing an explicit "file" param.
+func TestStackConfigSetTool_Execute_ImportOnlyValue(t *testing.T) {
+	atmosConfig, stacksDir := stackConfigLiveFixture(t)
 	tool := NewStackConfigSetTool(atmosConfig)
 
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
@@ -174,9 +178,12 @@ func TestStackConfigSetTool_Execute_InheritedValueRequiresFile(t *testing.T) {
 		"path":         "vars.region",
 		"value":        "us-west-2",
 	})
-	require.Error(t, err)
-	assert.False(t, result.Success)
-	require.ErrorIs(t, err, errUtils.ErrAIStackConfigPathNotEditable)
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+
+	got, err := atmosyaml.GetFile(filepath.Join(stacksDir, "catalog", "vpc.yaml"), "components.terraform.vpc.vars.region")
+	require.NoError(t, err)
+	assert.Equal(t, "us-west-2", got)
 }
 
 // TestStackConfigSetTool_Execute_TypedValue targets a brand new path, so

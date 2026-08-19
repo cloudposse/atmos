@@ -101,6 +101,12 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "false",
 		},
+		{
+			name:         "merge-driver flag",
+			flagName:     "merge-driver",
+			shorthand:    "",
+			defaultValue: "auto",
+		},
 	}
 
 	for _, tt := range tests {
@@ -454,6 +460,18 @@ func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(tmpDir, "README.md"))
+}
+
+func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "simple",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		mergeDriver:  "bogus",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
 }
 
 func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {

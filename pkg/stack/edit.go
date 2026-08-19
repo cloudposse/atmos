@@ -58,13 +58,24 @@ func BuildComponentYqPath(componentType, componentName, relPath string) string {
 
 // PickProvenanceFile returns the source file (and line) of the winning provenance
 // entry for a path. Provenance records entries in merge order, so the LAST entry
-// is the one whose value is effective after deep-merge. Returns ok=false when
-// there are no entries (the path is not defined anywhere).
+// is usually the one whose value is effective after deep-merge -- but every
+// ancestor stack file in an import chain re-walks the already-merged tree and
+// records its own pass-through entry (Line: 0) even for keys it never actually
+// sets, so a value defined only in an imported file is otherwise shadowed by a
+// phantom trailing entry. Scan backward for the last entry with a concrete
+// position (Line > 0); fall back to the literal last entry only if none
+// qualify. Returns ok=false when there are no entries (the path is not defined
+// anywhere).
 func PickProvenanceFile(entries []merge.ProvenanceEntry) (file string, line int, ok bool) {
 	defer perf.Track(nil, "stack.PickProvenanceFile")()
 
 	if len(entries) == 0 {
 		return "", 0, false
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Line > 0 {
+			return entries[i].File, entries[i].Line, true
+		}
 	}
 	last := entries[len(entries)-1]
 	return last.File, last.Line, true
