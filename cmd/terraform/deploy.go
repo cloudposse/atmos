@@ -1,12 +1,9 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -77,12 +74,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
-		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts()
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 

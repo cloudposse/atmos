@@ -58,6 +58,13 @@ type shellCommandConfig struct {
 	// sync capture, instead of a pass-through-args collection that cannot
 	// contain atmos-recognized flags (research.md Decision 14).
 	invokingCmd *cobra.Command
+	// execMetadataParser, when set, is called once by captureExecMetadataSync
+	// (sync-allowlisted commands only) to obtain command-specific structured
+	// data (FR-006) for the execution record. cmd/terraform supplies this —
+	// it can safely call pkg/ci/plugins/terraform's output parser, unlike
+	// internal/exec, which cannot import it without reintroducing a confirmed
+	// import cycle (research.md Decision 18).
+	execMetadataParser func(subCommand string) any
 }
 
 // WithInvokingCommand provides the Cobra command the user actually invoked,
@@ -78,6 +85,28 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 		opt(&cfg)
 	}
 	return cfg.invokingCmd
+}
+
+// WithExecMetadataParser provides a closure that, given the invoking
+// subcommand name, returns command-specific structured data (FR-006) for the
+// execution record — or nil if there is none to report. cmd/terraform
+// supplies this closure so ExecuteTerraform's exec-metadata sync capture can
+// obtain parsed terraform plan/apply/deploy output without internal/exec
+// itself importing the CI plugin's parser (research.md Decision 18).
+func WithExecMetadataParser(fn func(subCommand string) any) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.execMetadataParser = fn
+	}
+}
+
+// execMetadataParserFromOpts extracts the parser closure (if any) set via
+// WithExecMetadataParser among opts.
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string) any {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.execMetadataParser
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.

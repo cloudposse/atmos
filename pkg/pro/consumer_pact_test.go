@@ -376,11 +376,12 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 	err := mockProvider.
 		AddInteraction().
 		Given("workspace exists and accepts execution metadata").
-		UponReceiving("a request to upload command-execution metadata").
+		UponReceiving("a request to upload command-execution metadata with inline data").
 		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
 			b.Header("Authorization", matchers.Like("Bearer test-token")).
 				Header("Content-Type", matchers.S("application/json")).
 				JSONBody(body{
+					"execution_id":     matchers.Like("b3b1e2b0-1234-4a1b-8c1d-1234567890ab"),
 					"atmos_pro_run_id": matchers.Like("run-12345"),
 					"atmos_version":    matchers.Like("1.2.3"),
 					"atmos_os":         matchers.Like("linux"),
@@ -414,11 +415,11 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 							"destroy": matchers.Like(0),
 						},
 						"warnings": matchers.EachLike("deprecated argument used", 1),
+						"changes": matchers.EachLike(body{
+							"action":  matchers.Like("created"),
+							"address": matchers.Like("aws_s3_bucket.example"),
+						}, 1),
 					},
-					"data_items": matchers.EachLike(body{
-						"action":  matchers.Like("created"),
-						"address": matchers.Like("aws_s3_bucket.example"),
-					}, 1),
 				})
 		}).
 		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
@@ -436,18 +437,15 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 					"destroy": 0,
 				},
 				"warnings": []string{"deprecated argument used"},
-			})
-			if err != nil {
-				return err
-			}
-			dataItem, err := json.Marshal(map[string]any{
-				"action":  "created",
-				"address": "aws_s3_bucket.example",
+				"changes": []map[string]any{
+					{"action": "created", "address": "aws_s3_bucket.example"},
+				},
 			})
 			if err != nil {
 				return err
 			}
 			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "b3b1e2b0-1234-4a1b-8c1d-1234567890ab",
 				AtmosProRunID: "run-12345",
 				AtmosVersion:  "1.2.3",
 				AtmosOS:       "linux",
@@ -473,8 +471,7 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 					VolCtxSwitches:   30,
 					InvolCtxSwitches: 5,
 				},
-				Data:      data,
-				DataItems: []json.RawMessage{dataItem},
+				Data: data,
 			})
 		})
 	require.NoError(t, err)
@@ -495,6 +492,7 @@ func TestPact_UploadExecMetadata_NoData(t *testing.T) {
 			b.Header("Authorization", matchers.Like("Bearer test-token")).
 				Header("Content-Type", matchers.S("application/json")).
 				JSONBody(body{
+					"execution_id":     matchers.Like("c4c2f3c1-2345-4b2c-9d2e-234567890abc"),
 					"atmos_pro_run_id": matchers.Like("run-12345"),
 					"atmos_version":    matchers.Like("1.2.3"),
 					"atmos_os":         matchers.Like("linux"),
@@ -523,6 +521,7 @@ func TestPact_UploadExecMetadata_NoData(t *testing.T) {
 		ExecuteTest(t, func(config consumer.MockServerConfig) error {
 			client := newPactClient(config)
 			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "c4c2f3c1-2345-4b2c-9d2e-234567890abc",
 				AtmosProRunID: "run-12345",
 				AtmosVersion:  "1.2.3",
 				AtmosOS:       "linux",
@@ -546,21 +545,53 @@ func TestPact_UploadExecMetadata_NoData(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestPact_UploadExecMetadata_Chunked verifies the consumer contract for
-// POST /api/v1/atmos/exec when DataItems is split across multiple correlated
-// requests (batch_id/batch_index/batch_total present on each), per
-// contracts/interactions.md's "Batch correlation fields" section and FR-011
-// (structured data is never truncated — only chunked). MaxPayloadBytes is
-// set to 1 to deterministically force one DataItems entry per request,
-// regardless of envelope/overhead size.
-func TestPact_UploadExecMetadata_Chunked(t *testing.T) {
+// TestPact_UploadExecMetadata_BlobURL verifies the consumer contract for the
+// out-of-band delivery path (FR-011, research.md Decision 16): when the
+// marshaled record is at/over the payload size threshold, the client first
+// calls POST /api/v1/atmos/exec/data (keyed by execution_id) to upload Data,
+// then sends POST /api/v1/atmos/exec with Data replaced by the returned URL
+// (a JSON string, not an inline object) — replacing the retired multi-chunk
+// model (no batch_id/batch_index/batch_total anywhere). MaxPayloadBytes is
+// set to 1 to deterministically force this path regardless of envelope size.
+func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 	mockProvider := newHTTPMockProvider(t)
 
-	chunkRequest := func(index, total int, action, address string) func(b *consumer.V2RequestBuilder) {
-		return func(b *consumer.V2RequestBuilder) {
+	const executionID = "d5d3a4d2-3456-4c3d-ae3f-34567890abcd"
+	const blobURL = "https://blob.vercel-storage.com/atmos-exec/d5d3a4d2/data.json"
+
+	mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload out-of-band command-execution structured data").
+		WithRequest("POST", "/api/v1/atmos/exec/data", func(b *consumer.V2RequestBuilder) {
 			b.Header("Authorization", matchers.Like("Bearer test-token")).
 				Header("Content-Type", matchers.S("application/json")).
 				JSONBody(body{
+					"execution_id": matchers.Like(executionID),
+					"data": body{
+						"changes": matchers.EachLike(body{
+							"action":  matchers.Like("created"),
+							"address": matchers.Like("aws_s3_bucket.example"),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+				"url":     matchers.Like(blobURL),
+			})
+		})
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload command-execution metadata with out-of-band data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like(executionID),
 					"atmos_pro_run_id": matchers.Like(""),
 					"atmos_version":    matchers.Like(""),
 					"atmos_os":         matchers.Like(""),
@@ -579,59 +610,32 @@ func TestPact_UploadExecMetadata_Chunked(t *testing.T) {
 						"user_cpu_time_ms":   matchers.Like(0),
 						"system_cpu_time_ms": matchers.Like(0),
 					},
-					// batch_index/action/address are exact (not Like-wrapped) values so
-					// the mock server can distinguish this interaction from the other
-					// chunk's — Like() only asserts JSON type, which would make both
-					// chunk interactions structurally identical and ambiguous to match.
-					"batch_id":    matchers.Like("b3b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d"),
-					"batch_index": index,
-					"batch_total": matchers.Like(total),
-					"data_items": []interface{}{
-						body{
-							"action":  action,
-							"address": address,
-						},
-					},
+					"data": matchers.Like(blobURL),
 				})
-		}
-	}
-
-	mockProvider.
-		AddInteraction().
-		Given("workspace exists and accepts execution metadata").
-		UponReceiving("a chunked request to upload command-execution metadata (chunk 1 of 2)").
-		WithRequest("POST", "/api/v1/atmos/exec", chunkRequest(0, 2, "created", "aws_s3_bucket.example")).
-		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
-			b.JSONBody(body{"success": matchers.Like(true)})
-		})
-
-	err := mockProvider.
-		AddInteraction().
-		Given("workspace exists and accepts execution metadata").
-		UponReceiving("a chunked request to upload command-execution metadata (chunk 2 of 2)").
-		WithRequest("POST", "/api/v1/atmos/exec", chunkRequest(1, 2, "updated", "aws_iam_role.example")).
+		}).
 		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
 			b.JSONBody(body{"success": matchers.Like(true)})
 		}).
 		ExecuteTest(t, func(config consumer.MockServerConfig) error {
 			client := newPactClient(config)
-			client.MaxPayloadBytes = 1 // Forces exactly one DataItems entry per chunk.
+			client.MaxPayloadBytes = 1 // Forces the out-of-band path regardless of envelope size.
 
-			item1, err := json.Marshal(map[string]any{"action": "created", "address": "aws_s3_bucket.example"})
-			if err != nil {
-				return err
-			}
-			item2, err := json.Marshal(map[string]any{"action": "updated", "address": "aws_iam_role.example"})
+			data, err := json.Marshal(map[string]any{
+				"changes": []map[string]any{
+					{"action": "created", "address": "aws_s3_bucket.example"},
+				},
+			})
 			if err != nil {
 				return err
 			}
 
 			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
-				Command:   "atmos terraform plan",
-				Args:      []string{},
-				Flags:     []string{},
-				ExitCode:  0,
-				DataItems: []json.RawMessage{item1, item2},
+				ExecutionID: executionID,
+				Command:     "atmos terraform plan",
+				Args:        []string{},
+				Flags:       []string{},
+				ExitCode:    0,
+				Data:        data,
 			})
 		})
 	require.NoError(t, err)

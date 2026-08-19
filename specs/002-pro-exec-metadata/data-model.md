@@ -90,6 +90,17 @@ Both portions are nested together in the single `Data` value (e.g.
 `{"resource_counts": {...}, "outputs": {...}, "warnings": [...], "changes": [{"action":
 "created", "address": "aws_vpc.this"}, ...]}`), not split into two top-level fields.
 
+**Population (research.md Decision 17/18)**: For a multi-component `--affected`/`--all`/query
+run, `cmd/terraform/utils.go`'s `terraformNodeHooks` populates this per-node, folding each
+node's parsed changes (flat `execNodeResult` entries, plus `component`/`stack`/`exitCode`)
+into the aggregate record — implemented (Decision 17). For a single-component invocation,
+`internal/exec/terraform.go`'s `captureExecMetadataSync` populates this combined-object shape
+via a caller-supplied parser closure threaded in from `cmd/terraform/plan.go`/`apply.go`/
+`deploy.go` (`WithExecMetadataParser`, a new `ShellCommandOption`) — `internal/exec` never
+imports the CI plugin's parser directly, since doing so would reintroduce a confirmed import
+cycle (`pkg/ci/plugins/terraform` → `internal/exec`); planned this session (Decision 18),
+not yet implemented — see tasks.md's Phase 5 status.
+
 ### ExecUploadResponse
 
 | Field | Type | Notes |

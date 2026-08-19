@@ -4,124 +4,104 @@
 
 **Input**: Feature specification from `specs/002-pro-exec-metadata/spec.md`
 
-**Note**: This is a fourth re-plan. US1/US2/US3 and the `Command`/`Args`/`Flags`
-correctness fixes (third re-plan) are already implemented and present in the current tree.
-This revision covers two new `/speckit-clarify` (2026-08-19, later same day) decisions that
-change the wire shape of the execution record:
-
-1. **`ExecutionID`** — a new UUID v4, generated once per qualifying invocation, added to the
-   base envelope alongside the existing `AtmosProRunID`.
-2. **`Data` delivery redesign ("batch upload redo")** — the previously-shipped multi-chunk
-   `DataItems`/`BatchID`/`BatchIndex`/`BatchTotal` model (`pkg/pro/api_client_exec.go`,
-   `pkg/pro/dtos/exec.go`) is retired entirely and replaced with a binary choice on the
-   single `Data` field: inline JSON when the whole record is under a fixed 4 MB, or a
-   string URL to a blob uploaded via a new `POST /v1/atmos/exec/data` endpoint (always
-   exactly one request, never chunked) when at/over 4 MB. The blob upload is keyed by
-   `execution_id` so Atmos Pro can associate it with the corresponding `/exec` record.
-
-Both changes are additive/replacing at the DTO and client level; the gate, delivery
-classification (sync allowlist), timeout mechanics, multi-component aggregation point, and
-`Command`/`Args`/`Flags` shape from prior re-plans are all unchanged and are not
-re-litigated here.
+**Note**: This is a fifth re-plan. `ExecutionID`, the `Data` inline-or-blob-URL redesign
+(fourth re-plan), and the multi-component half of US3 (structured infrastructure-change
+data folded into the aggregate record) are already implemented and present in the current
+tree. This revision covers the one piece explicitly left open at the end of that
+implementation pass: **threading parsed `terraform plan`/`apply`/`deploy` structured data
+into the *single-component* synchronous execution record** (`internal/exec`'s
+`captureExecMetadataSync`), which a confirmed Go import cycle prevents from calling the CI
+plugin's output parser directly.
 
 ## Summary
 
-Add `ExecutionID` (UUID v4) to every execution record, and replace the existing
-multi-chunk `DataItems` batching mechanism with a size-gated choice: `Data` is sent inline
-when the whole marshaled record is under 4 MB, or uploaded once (no chunking) to
-`POST /v1/atmos/exec/data` — keyed by `execution_id` — with the returned blob URL sent in
-`Data`'s place on the main `POST /v1/atmos/exec` request. Both the data-upload step (when
-required) and the main upload count toward the same existing delivery-timing budget already
-established for sync (~10s total) and async (~2s flush) commands — no new timing surface.
-The Pact consumer contract is extended/regenerated to cover both `Data` shapes plus the new
-`/exec/data` interaction.
+Add a new `ShellCommandOption`, `WithExecMetadataParser`, that lets `cmd/terraform`
+(`plan.go`/`apply.go`/`deploy.go` — which can safely import `pkg/ci/plugins/terraform`,
+unlike `internal/exec`) hand `internal/exec`'s `captureExecMetadataSync` a closure that
+produces the parsed `TerraformExecData` on demand. `internal/exec` never imports the parser
+itself — it only invokes the closure, exactly mirroring the existing
+`WithInvokingCommand`/`invokingCommandFromOpts` pattern already used for `Flags` sourcing.
+Decouple `WithStdoutCapture`/`WithStderrCapture` construction from the `ciMode` gate in
+`plan.go`/`apply.go`/`deploy.go` (capture is cheap — an in-memory buffer append — so this
+carries negligible cost, matching research.md Decision 12's own prior reasoning), so the
+buffer is always available for the new parser closure to read, regardless of whether Native
+CI job summaries are also enabled.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26
 
 **Primary Dependencies**:
-- `pkg/pro/dtos/exec.go` (existing, shipped) — modified: add `ExecutionID string
-  \`json:"execution_id"\`` to `ExecUploadRequest`; remove `DataItems`, `BatchID`,
-  `BatchIndex`, `BatchTotal` (retired); `Data json.RawMessage` is unchanged in type — its
-  *content* is now either an inline JSON structure or a JSON string holding a blob URL,
-  decided by the client before marshaling, never both. New DTOs: `ExecDataUploadRequest`
-  (`execution_id string`, `data json.RawMessage`) and `ExecDataUploadResponse`
-  (embeds `AtmosApiResponse`, adds `url string`) for the new endpoint.
-- `pkg/pro/api_client_exec.go` (existing, shipped) — `UploadExecMetadata` no longer calls
-  `sendChunked`/`BatchInfo`; instead it marshals the full record once, compares its byte
-  length against the existing `DefaultMaxPayloadBytes`/`c.MaxPayloadBytes` (already `4 *
-  1024 * 1024` — the 4 MB threshold requires no new constant), and when at/over the
-  threshold calls a new `UploadExecData(dto *dtos.ExecDataUploadRequest)
-  (*dtos.ExecDataUploadResponse, error)` method (`POST {BaseURL}/{BaseAPIEndpoint}/atmos/
-  exec/data`, same `doWithRetry`/`getAuthenticatedRequest`/`handleAPIResponse` shape as
-  every other Pro client method) before re-marshaling the record with `Data` replaced by
-  the returned URL and sending it to `/exec`. Added to `AtmosProAPIClientInterface`.
-- `pkg/proexec/envelope.go` (existing, shipped) — `buildRecord` gains `ExecutionID`
-  generation (`uuid.New().String()`, `github.com/google/uuid` — already a direct
-  dependency, already used identically by `pkg/pro/chunked_upload.go`'s `BatchID`
-  generation) and drops the `dataItems`/`maskedDataItemsJSON` parameter and helper (no
-  replacement needed — masking still applies to `data` exactly as today; the multi-component
-  aggregation that used to populate `dataItems` now populates `data` as a JSON array
-  instead, see Decision 17 in research.md).
-- `pkg/proexec/sync.go` / `async.go` (existing, shipped) — `CaptureSync`/`CaptureAsync`
-  signatures drop the `dataItems []any` parameter (folded into `data any`); no change to
-  their timeout/flush mechanics, since the data-upload step is fully contained inside the
-  existing `UploadExecMetadata` call these functions already race against a timer.
-- `cmd/terraform/utils.go` (existing, shipped — multi-component aggregation, research.md
-  Decision 11) — the per-component accumulator that used to build a `dataItems []any` list
-  now builds a single `data` value shaped as `{summary: ..., components: [...]}` (or
-  equivalent), since `DataItems` no longer exists as a separate field.
-- `github.com/google/uuid` (existing direct dependency — no new dependency added).
+- `internal/exec/shell_utils.go` (existing, shipped) — new `WithExecMetadataParser(fn
+  func(subCommand string) any) ShellCommandOption`, storing `fn` on
+  `shellCommandConfig.execMetadataParser`, and a new `execMetadataParserFromOpts(opts
+  ...ShellCommandOption) func(subCommand string) any` extractor, mirroring
+  `WithInvokingCommand`/`invokingCommandFromOpts` exactly.
+- `internal/exec/terraform.go` (existing, shipped — `captureExecMetadataSync`) — modified to
+  accept the extracted parser closure (via the existing `opts ...ShellCommandOption` already
+  in scope at its call site) and, when non-nil, call `parser(subCommand)` to obtain `data
+  any` for `proexec.CaptureSync`, instead of always passing `nil`.
+- `cmd/terraform/plan.go`/`apply.go`/`deploy.go` (existing, shipped) — modified to: (a)
+  always construct `stdoutBuf`/`stderrBuf` and pass `WithStdoutCapture`/`WithStderrCapture`,
+  decoupled from the `ciMode` conditional (the separate `capturedPlanOutput`/CI-job-summary
+  post-processing stays `ciMode`-gated — unrelated, independently-configured feature, per
+  research.md Decision 12's rationale for keeping the two gates distinct); (b) pass a new
+  `WithExecMetadataParser` closure that lazily reads `stdoutBuf`/`stderrBuf` (by the time
+  `captureExecMetadataSync` invokes it, `executeCommandPipeline` has already finished writing
+  into them) and calls a new `buildTerraformExecData` helper.
+- `cmd/terraform/utils.go` (existing, shipped this session's Phase 4/5 work) — refactor:
+  extract the JSON-mirror decoding step already used by `parseTerraformResourceChanges` into
+  a shared `parseTerraformOutputMirror(subCommand, output string)
+  (*terraformOutputDataMirror, bool)` helper, so both `parseTerraformResourceChanges`
+  (multi-component, flat per-resource entries) and the new `buildTerraformExecData`
+  (single-component, one combined object) decode via the same code path — no duplicated
+  `citerraform.ParseOutput`/JSON-round-trip logic.
+- `citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"` (existing direct
+  dependency, already imported by `cmd/terraform/utils.go` this session) — no new dependency.
 
-**Storage**: N/A — unchanged; no local persistence. The new blob storage (Vercel Blob,
-per the clarification) is entirely Atmos-Pro-side; the Atmos client only calls the new
-`/exec/data` endpoint and stores the returned URL string in-memory before the next request.
+**Storage**: N/A — unchanged.
 
-**Testing**: `atmos test` (unit, table-driven, mocked/`httptest`-faked Atmos Pro server).
-New/changed cases needed: `UploadExecMetadata` size-threshold branch (record under 4 MB →
-single `/exec` call, `Data` inline; record at/over 4 MB → `/exec/data` call first, then
-`/exec` with `Data` = URL string), `UploadExecData` request/response shape, `buildRecord`'s
-`ExecutionID` generation (non-empty, valid UUID v4, fresh per call), and removal of the
-now-dead chunking test cases (`TestSendChunked`-style cases against `ExecUploadRequest`
-specifically — `pkg/pro/chunked_upload.go` itself is unchanged and still used by
-`UploadAffectedStacks`/`UploadInstances`, only its use for `ExecUploadRequest` is retired).
-Pact consumer suite (`pkg/pro/consumer_pact_test.go`, `//go:build pact`) gains a 10th
-interaction (`UploadExecData`) and the existing 9th interaction (`UploadExecMetadata`)
-splits into two example cases — inline `Data` (small record) and blob-URL `Data` (record
-that exceeded 4 MB) — per the user's explicit request to generate pacts for "multiple cases
-(single and batched mode)".
+**Testing**: `atmos test` (unit, table-driven). New/changed cases needed:
+`execMetadataParserFromOpts`/`WithExecMetadataParser` round-trip (mirrors the existing
+`invokingCommandFromOpts` test shape), `captureExecMetadataSync` calling the parser only for
+sync-allowlisted commands and folding its result into `CaptureSync`'s `data` argument (a new
+case alongside the existing `TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired`),
+`buildTerraformExecData`'s combined-object shape against the same
+`pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt` fixture already used by this
+session's multi-component tests, and a `cmd/terraform/plan_test.go` case asserting
+`stdoutBuf`/`WithStdoutCapture` are wired regardless of `ciMode`.
 
 **Target Platform**: Linux, macOS, Windows — unchanged.
 
-**Project Type**: CLI feature — targeted redesign of already-shipped `pkg/pro/dtos/exec.go`,
-`pkg/pro/api_client_exec.go`, `pkg/proexec/envelope.go`, `pkg/proexec/sync.go`/`async.go`,
-and `cmd/terraform/utils.go`'s multi-component aggregation. No new packages.
+**Project Type**: CLI feature — targeted addition to already-shipped
+`internal/exec/shell_utils.go`, `internal/exec/terraform.go`, `cmd/terraform/plan.go`/
+`apply.go`/`deploy.go`, `cmd/terraform/utils.go`. No new packages, no new DTO/wire-shape
+changes (the wire shape for single-component `Data` was already specified by FR-006/
+data-model.md's `TerraformExecData` in the fourth re-plan — this delta only makes
+`internal/exec` able to populate it for the single-component path).
 
-**Performance Goals**: Unchanged (SC-003/SC-004) — the data-upload step is folded into the
-same existing timing budgets, not a new one.
+**Performance Goals**: Unchanged — the always-on stdout/stderr capture is an in-memory
+`bytes.Buffer` append with no additional I/O, negligible relative to a real
+`terraform plan`/`apply` subprocess run (research.md Decision 12).
 
 **Constraints**:
-- No new user-facing configuration surface — the 4 MB threshold is fixed, not exposed via
-  `atmos.yaml`/env (per clarification), matching the spec's Assumptions ("no new
-  configuration surface").
-- `ExecutionID` MUST be a fresh UUID v4 per invocation (`uuid.New()`, which is
-  version-4/random by default in `google/uuid`) — no reuse across retries within the same
-  invocation's own request(s); if `UploadExecMetadata` retries via `doWithRetry`, the same
-  already-generated `ExecutionID` is reused across retry attempts (it identifies the
-  *invocation*, not the individual HTTP attempt).
-- Masking (FR-010) continues to apply to `Data`'s content before either the inline-JSON
-  path or the blob-upload path — i.e. masking happens once, before the size check, not
-  duplicated per path.
-- The `/exec/data` upload, when required, MUST happen *before* the main `/exec` request for
-  the same invocation (sequential dependency — the URL must exist before it can be embedded
-  in `Data`); no concurrency between the two requests is introduced.
+- `internal/exec` MUST NOT gain a new import of `pkg/ci/plugins/terraform` or
+  `pkg/ci/internal/plugin` — the whole point of this design is avoiding the confirmed import
+  cycle (`pkg/ci/plugins/terraform` → `internal/exec`) by inversion of control (a
+  caller-supplied closure), not by restructuring package boundaries.
+- The parser closure is invoked **at most once per invocation**, only when
+  `proexec.IsSyncCommand` is true for that subcommand (mirrors the existing gate order in
+  `captureExecMetadataSync` — the `info.NodeHooks != nil` multi-component skip still runs
+  first) — never for async/non-allowlisted commands, so there is no added parsing cost for
+  the overwhelming majority of `atmos` invocations.
+- No new user-facing configuration surface — this is purely an internal wiring change; FR-006
+  already mandates the behavior, Assumptions already defer the "how" to implementation.
 
-**Scale/Scope**: 1 new field (`ExecutionID`) on 1 existing DTO, 4 fields removed
-(`DataItems`/`BatchID`/`BatchIndex`/`BatchTotal`), 2 new DTOs (`ExecDataUploadRequest`/
-`ExecDataUploadResponse`), 1 new client method (`UploadExecData`), 0 new packages. This
-redesign touches every place that previously threaded `dataItems`/`BatchInfo` through the
-exec-metadata path — smaller in field count than the multi-chunk model it replaces.
+**Scale/Scope**: 1 new `ShellCommandOption` + extractor function (mirrors an existing
+pattern exactly), 1 new helper function (`buildTerraformExecData`) reusing already-shipped
+parsing logic via a small refactor (no new parsing code, just de-duplication), 3 call-site
+changes (`plan.go`/`apply.go`/`deploy.go`'s shellOpts construction), 1 call-site change
+(`captureExecMetadataSync`). 0 new packages, 0 new wire-shape/DTO changes.
 
 ## Constitution Check
 
@@ -129,19 +109,16 @@ exec-metadata path — smaller in field count than the multi-chunk model it repl
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags; a new Atmos Pro client method (`UploadExecData`) added to the existing `AtmosProAPIClientInterface`, following the same pattern as the other five methods already on it — not a new registry. |
-| II. Interface-Driven Design with DI | ✅ Pass | `UploadExecData` is added to `AtmosProAPIClientInterface` (mockgen-generated mock regenerated); `buildRecord`/`CaptureSync`/`CaptureAsync` remain plain functions with injected `pro.AtmosProAPIClientInterface`/`git.GitRepoInterface`, unchanged pattern. |
-| III. Test-First with 80% Coverage | ✅ Pass | Bug-fixing/redesign workflow: write failing tests for the new threshold branch and `UploadExecData` shape before implementing (CLAUDE.md's Bug-Fixing Workflow, applied here since this replaces already-shipped, tested behavior). Removed `DataItems`-chunking tests are deleted, not left skipped (CLAUDE.md's "remove always-skipped tests"). |
-| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output; `ui.Warningf`/`log.Debug` call sites in `sync.go`/`async.go` are unchanged. |
-| V. Simplicity and No Over-Engineering | ✅ Pass | Rejected keeping both the old chunk model and the new blob model side-by-side "for compatibility" — the old model is unshipped-to-any-external-consumer (Atmos Pro provider side does not exist yet; this feature's own Pact contract is the only consumer), so there is no compatibility burden to preserve, and running two size-handling mechanisms for the same field would be exactly the kind of premature-flexibility CLAUDE.md's Simplicity principle forbids. |
+| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags/endpoints; a new functional option on an already-established options pattern (`ShellCommandOption`), not a new extensibility mechanism. |
+| II. Interface-Driven Design with DI | ✅ Pass | The parser is injected as a plain closure (`func(string) any`), exactly matching how `WithInvokingCommand` already injects the `*cobra.Command` — no new interface needed since there is exactly one implementer (`cmd/terraform`) and no test double is required (`captureExecMetadataSync`'s existing tests just pass `nil` or a stub closure). |
+| III. Test-First with 80% Coverage | ✅ Pass | New tests planned for every new function (`WithExecMetadataParser`/extractor, `captureExecMetadataSync`'s parser-invocation branch, `buildTerraformExecData`, the decoupled-from-`ciMode` capture wiring) before implementation, per CLAUDE.md's Bug-Fixing/feature workflow. |
+| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output. |
+| V. Simplicity and No Over-Engineering | ✅ Pass | Rejected restructuring `pkg/ci`'s package boundaries (e.g. extracting the parser into a new leaf package) as a larger, riskier change than a single caller-supplied closure; rejected introducing a new interface type for a single implementer (YAGNI, matches the existing `WithInvokingCommand` precedent exactly rather than inventing a second, inconsistent pattern). |
 
-**Post-design re-check**: ✅ Pass. Phase 1 complete — `data-model.md`'s `ExecutionRecord`
-table now carries `ExecutionID` and the single redesigned `Data` field (old `DataItems`/
-`BatchID`/`BatchIndex`/`BatchTotal` rows removed, new `ExecDataUploadRequest`/
-`ExecDataUploadResponse` entities added); `contracts/interactions.md` now documents three
-interactions (9: inline `Data`, 10: blob-URL `Data`, 11: `UploadExecData`) in place of the
-old single chunked interaction; `quickstart.md` gained steps 9-10 for exercising
-`ExecutionID` and the 4 MB threshold. No new violations introduced.
+**Post-design re-check**: ✅ Pass. Phase 1 complete — `data-model.md`'s `TerraformExecData`
+section now notes how the single-component path populates it (no wire-shape change, so
+`contracts/interactions.md` needs no edit); `quickstart.md` gained a step for manually
+verifying single-component structured data. No new violations introduced.
 
 ## Project Structure
 
@@ -149,50 +126,49 @@ old single chunked interaction; `quickstart.md` gained steps 9-10 for exercising
 
 ```text
 specs/002-pro-exec-metadata/
-├── plan.md                 # This file — fourth re-plan: ExecutionID + Data blob-upload redesign
-├── research.md              # Phase 0 output — Decisions 15–17 appended for this delta
-├── data-model.md            # Phase 1 output — ExecutionRecord/Data/new ExecDataUpload* entities updated
-├── quickstart.md            # Phase 1 output — new step for exercising the 4MB threshold + blob path
+├── plan.md                 # This file — fifth re-plan: single-component US3 wiring
+├── research.md              # Phase 0 output — Decision 18 appended for this delta
+├── data-model.md            # Phase 1 output — TerraformExecData note updated (no wire-shape change)
+├── quickstart.md            # Phase 1 output — new step for single-component structured data
 ├── contracts/
-│   └── interactions.md      # Phase 1 output — interaction 9 split into two Data-shape cases; new interaction 10 (/exec/data)
-└── tasks.md                  # Phase 2 output (/speckit-tasks) — NEEDS REGENERATION for this delta (DataItems/BatchID tasks superseded)
+│   └── interactions.md      # Unchanged — no wire-shape change, single-component Data already matches the documented inline/blob-URL shapes
+└── tasks.md                  # Phase 2 output (/speckit-tasks) — T019/T020/T022/T023 NEED REGENERATION against this concrete design
 ```
 
 ### Source Code (repository root)
 
 ```text
-pkg/pro/dtos/exec.go
-├── ExecUploadRequest           # Modified — +ExecutionID; -DataItems/-BatchID/-BatchIndex/-BatchTotal
-├── ExecDataUploadRequest       # New — execution_id, data
-└── ExecDataUploadResponse      # New — embeds AtmosApiResponse, +url
+internal/exec/shell_utils.go
+├── WithExecMetadataParser        # New — injects func(subCommand string) any
+└── execMetadataParserFromOpts     # New — extractor, mirrors invokingCommandFromOpts
 
-pkg/pro/api_client_exec.go
-├── UploadExecMetadata          # Modified — size check (4MB) replaces sendChunked; calls
-│                                  UploadExecData first when over threshold, then sends /exec
-│                                  with Data replaced by the returned URL
-└── UploadExecData              # New — POST /v1/atmos/exec/data, single request, no chunking
+internal/exec/terraform.go
+└── captureExecMetadataSync        # Modified — calls the extracted parser closure (if any)
+                                      when IsSyncCommand and info.NodeHooks == nil, passing
+                                      its result as CaptureSync's data argument
 
-pkg/proexec/envelope.go
-└── buildRecord                  # Modified — generates ExecutionID (uuid.New().String());
-                                    drops dataItems param/maskedDataItemsJSON helper
-
-pkg/proexec/sync.go
-└── CaptureSync                  # Modified — drops dataItems parameter (folded into data)
-
-pkg/proexec/async.go
-└── CaptureAsync / uploadExecMetadata   # Modified — drops dataItems parameter
+cmd/terraform/plan.go
+cmd/terraform/apply.go
+cmd/terraform/deploy.go
+└── RunE                            # Modified — stdoutBuf/stderrBuf + WithStdoutCapture/
+                                      WithStderrCapture construction decoupled from ciMode;
+                                      new WithExecMetadataParser(buildTerraformExecData)
+                                      passed into shellOpts
 
 cmd/terraform/utils.go
-└── (multi-component aggregation, research.md Decision 11)   # Modified — accumulates into
-                                    a single `data` value (JSON array/object) instead of a
-                                    separate dataItems list, since DataItems no longer exists
+├── parseTerraformOutputMirror      # New — extracted shared decode step (refactor, no new
+│                                     parsing logic) used by both call sites below
+├── parseTerraformResourceChanges   # Modified — now calls parseTerraformOutputMirror
+└── buildTerraformExecData          # New — single-component combined-object shape
+                                      (resource_counts/outputs/warnings/changes), using
+                                      parseTerraformOutputMirror
 ```
 
-**Structure Decision**: No new packages, no new files beyond test files. This delta
-modifies the same five call sites the third re-plan already touched (`pkg/pro/dtos/exec.go`,
-`pkg/pro/api_client_exec.go`, `pkg/proexec/envelope.go`, `pkg/proexec/sync.go`/`async.go`,
-`cmd/terraform/utils.go`), replacing the multi-chunk mechanism in place rather than adding a
-parallel path, consistent with the constitution's simplicity principle.
+**Structure Decision**: No new packages, no new files beyond test files. This delta adds one
+new option/extractor pair (following an existing, proven pattern exactly) and one new helper
+function that reuses already-shipped parsing/decoding logic via a small refactor, rather than
+introducing a second, divergent parsing path or restructuring `pkg/ci`'s package boundaries —
+consistent with the constitution's simplicity principle.
 
 ## Complexity Tracking
 

@@ -1,13 +1,10 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -86,12 +83,7 @@ For complete Terraform/OpenTofu documentation, see:
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
-		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts()
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 

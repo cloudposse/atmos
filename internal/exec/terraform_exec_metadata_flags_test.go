@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -80,7 +82,7 @@ func TestCaptureExecMetadataSync_FlagsReflectRealInvocation(t *testing.T) {
 		AdditionalArgsAndFlags: []string{},
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, plan, nil)
+	captureExecMetadataSync(atmosConfig, "plan", info, plan, nil, nil)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -88,4 +90,136 @@ func TestCaptureExecMetadataSync_FlagsReflectRealInvocation(t *testing.T) {
 	require.Len(t, received, 1, "expected exactly one exec-metadata upload for a single invocation")
 	assert.ElementsMatch(t, []string{"--stack", "plat-use2-dev", "--upload-status"}, received[0].Flags,
 		"execution record's Flags must reflect the real CLI flags used, as bare tokens with no synthesized value for the bool flag")
+}
+
+// fakeNodeHooks is a minimal schema.ComponentNodeHooks implementation used
+// only to give info.NodeHooks a non-nil value — captureExecMetadataSync only
+// checks it for nilness, it never calls through the interface.
+type fakeNodeHooks struct{}
+
+func (fakeNodeHooks) Before(_ context.Context, _ *schema.ConfigAndStacksInfo) error { return nil }
+
+func (fakeNodeHooks) After(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, _ error) error {
+	return nil
+}
+
+// TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired is the
+// regression test for FR-006a: a multi-component graph run must never
+// produce one execution record per node — cmd/terraform/utils.go's
+// terraformNodeHooks aggregates and fires a single record after the whole
+// run completes instead (captureMultiComponentExecMetadata). This is
+// signaled to captureExecMetadataSync via info.NodeHooks being non-nil,
+// exactly as cmd/terraform/utils.go's wirePerComponentHook sets it for
+// --affected/--all/query multi-component runs.
+func TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired(t *testing.T) {
+	t.Setenv("CI", "true")
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Settings.Pro.Token = "test-token"
+	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = 2
+
+	plan := &cobra.Command{Use: "plan"}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "cdn",
+		Stack:            "plat-use2-dev",
+		NodeHooks:        fakeNodeHooks{},
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, plan, nil, nil)
+
+	assert.Equal(t, int32(0), requestCount.Load(),
+		"a multi-component graph node must not fire its own exec-metadata upload — the aggregate call after the whole run completes owns delivery")
+}
+
+// TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent is
+// the regression test for research.md Decision 18: for a single-component
+// sync-allowlisted invocation (info.NodeHooks == nil), captureExecMetadataSync
+// MUST call the supplied parser closure exactly once and forward its return
+// value as the uploaded record's Data.
+func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t *testing.T) {
+	t.Setenv("CI", "true")
+
+	var received dtos.ExecUploadRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Settings.Pro.Token = "test-token"
+	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = 2
+
+	plan := &cobra.Command{Use: "plan"}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "cdn", Stack: "plat-use2-dev"}
+
+	var calls atomic.Int32
+	var gotSubCommand string
+	parser := func(subCommand string) any {
+		calls.Add(1)
+		gotSubCommand = subCommand
+		return map[string]any{"resource_counts": map[string]any{"create": 1}}
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, plan, parser, nil)
+
+	assert.Equal(t, int32(1), calls.Load(), "parser must be called exactly once")
+	assert.Equal(t, "plan", gotSubCommand)
+	require.NotNil(t, received.Data)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(received.Data, &decoded))
+	assert.Contains(t, decoded, "resource_counts")
+}
+
+// TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand verifies
+// the parser closure is never invoked for a subcommand outside the
+// synchronous exec-metadata allowlist.
+func TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{}
+
+	var calls atomic.Int32
+	parser := func(string) any {
+		calls.Add(1)
+		return "should never be reached"
+	}
+
+	captureExecMetadataSync(atmosConfig, "validate", info, nil, parser, nil)
+
+	assert.Equal(t, int32(0), calls.Load())
+}
+
+// TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired verifies the
+// parser closure is never invoked for a multi-component node
+// (info.NodeHooks != nil) — that path's structured data is folded in by
+// cmd/terraform/utils.go's aggregator instead (research.md Decision 17).
+func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{NodeHooks: fakeNodeHooks{}}
+
+	var calls atomic.Int32
+	parser := func(string) any {
+		calls.Add(1)
+		return "should never be reached"
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, nil, parser, nil)
+
+	assert.Equal(t, int32(0), calls.Load())
 }

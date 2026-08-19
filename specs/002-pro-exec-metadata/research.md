@@ -662,6 +662,89 @@ multi-component case.
 
 ---
 
+## Decision 18: Single-component structured data — caller-supplied parser closure, not a package restructure
+
+**Decision**: `internal/exec/shell_utils.go` gains a new `ShellCommandOption`,
+`WithExecMetadataParser(fn func(subCommand string) any) ShellCommandOption`, storing `fn` on
+`shellCommandConfig.execMetadataParser`, plus an `execMetadataParserFromOpts(opts
+...ShellCommandOption) func(subCommand string) any` extractor — both exactly mirroring the
+already-shipped `WithInvokingCommand`/`invokingCommandFromOpts` pair (same file, same
+pattern, same rationale: thread caller-only-available data through the options list without
+adding a parameter to every call in between). `internal/exec/terraform.go`'s
+`captureExecMetadataSync` extracts this closure via `execMetadataParserFromOpts(opts...)`
+and, only when it is non-nil AND `proexec.IsSyncCommand` is true AND `info.NodeHooks == nil`
+(the existing multi-component skip, Decision 16/17's session), calls `parser(subCommand)`
+once to obtain `data any` for `proexec.CaptureSync` — never more than once per invocation,
+never for async/non-allowlisted commands.
+
+`cmd/terraform/plan.go`/`apply.go`/`deploy.go` supply this closure. Each already constructs
+`stdoutBuf`/`stderrBuf` `bytes.Buffer`s and passes them to `WithStdoutCapture`/
+`WithStderrCapture` — this construction moves outside the existing `ciMode` conditional (see
+below) so the buffers are always populated by the time `ExecuteTerraform`'s
+`captureExecMetadataSync` call (at the very end of the pipeline) invokes the closure. The
+closure itself is a thin call to a new `cmd/terraform/utils.go` helper,
+`buildTerraformExecData(subCommand string, output string) any`, which calls
+`citerraform.ParseOutput(output, mappedCommand)` (safe from `cmd/terraform`, per Decision
+17's finding) and decodes the result via a shared `parseTerraformOutputMirror` helper
+(refactored out of the already-shipped `parseTerraformResourceChanges`, so both call sites
+decode through one code path) into the single-component combined-object shape
+(`resource_counts`/`outputs`/`warnings`/`changes`) that `data-model.md`'s `TerraformExecData`
+already specifies — no new wire shape, this only makes `internal/exec` able to populate a
+shape the wire contract already defined.
+
+**`ciMode` decoupling**: `WithStdoutCapture`/`WithStderrCapture` construction in `plan.go`/
+`apply.go`/`deploy.go` moves outside the `if ciMode` block entirely — capture always happens
+now. The *separate*, `ciMode`-gated post-processing (`capturedPlanOutput` assignment, used
+only by the independently-configured Native CI job-summary feature) is untouched and stays
+gated exactly as before; only the underlying buffer construction/option-wiring is now
+unconditional, since both consumers (CI job summaries and, now, exec-metadata) need the same
+tee'd buffer and there is no reason to build it twice or gate one consumer on the other's
+flag.
+
+**Rationale**: Directly resolves the architecture question the previous implementation pass
+left open (tasks.md's Phase 5 "Status" note, this session). Two options were on the table
+going in: (a) restructure `pkg/ci`'s package boundaries so `internal/exec` could safely
+import the parser directly, or (b) invert control so the one package that already can call
+the parser (`cmd/terraform` — proven safe this session, Decision 17) supplies the result to
+the one package that needs it (`internal/exec`) via a caller-injected closure, never
+importing the parser itself. (b) is chosen: it requires no changes to `pkg/ci`'s existing
+import graph (zero risk of breaking that package's own tests/behavior), and it reuses a
+pattern (`WithInvokingCommand`) already proven in this exact file for the exact same kind of
+problem (Cobra-command-only-available-to-the-caller data needed deep inside
+`ExecuteTerraform`). Restructuring `pkg/ci`'s packages was rejected as strictly higher-risk
+for no additional benefit — nothing about the wire contract or spec requires the parser to
+live somewhere `internal/exec` can import; the constraint is purely "no cycle," which a
+closure satisfies trivially.
+
+Decoupling stdout/stderr capture from `ciMode` was already argued for by Decision 12
+("capture itself is cheap... gating it saves negligible cost while adding a second condition
+to reason about") but not implemented in that session, since nothing yet consumed the buffer
+outside the `ciMode` path. This decision is what finally requires it: the exec-metadata
+parser closure needs the buffer populated regardless of whether Native CI job summaries are
+also enabled, since the two features are independently gated (exec-metadata by
+`telemetry.IsCI() && Pro-configured`, Native CI by `atmosConfig.CI.Enabled`) and a run can
+have one true without the other.
+
+**Alternatives considered**:
+- Restructure `pkg/ci/plugins/terraform`/`pkg/ci/internal/plugin` so the parser (or a
+  narrower "just extract resource changes" function) lives in a package neither
+  `internal/exec` nor `pkg/ci/plugins/terraform` needs to avoid importing — rejected: a much
+  larger, riskier change (touches a package this feature does not otherwise own) for no
+  benefit over the closure approach, which fully resolves the cycle with a one-file addition.
+- Give `internal/exec` its own, independent, duplicate parsing logic (re-implement resource
+  extraction without calling `pkg/ci/plugins/terraform` at all) — rejected: would create two
+  independently-maintained terraform-output parsers that could silently drift apart; the
+  whole point of Decision 17's finding was that the *existing* parser is safely callable
+  (from the right package), so duplicating it defeats that finding's purpose.
+- A new `ExecMetadataDataProvider` interface instead of a plain closure — rejected per YAGNI
+  (constitution's Simplicity principle): there is exactly one implementer
+  (`cmd/terraform`), and the existing `WithInvokingCommand` precedent in the same file already
+  establishes "plain closure/value via functional option" as this codebase's answer to
+  exactly this kind of problem; introducing a second, interface-based pattern alongside it
+  for no functional gain would be inconsistent, not more flexible.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,

@@ -198,7 +198,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
 
-	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, invokingCommandFromOpts(opts...), err)
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, invokingCommandFromOpts(opts...), execMetadataParserFromOpts(opts...), err)
 
 	return err
 }
@@ -211,20 +211,30 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
 // misattributed to `apply`.
 //
-// NOTE (scoping judgment call): the structured plugin.TerraformOutputData
-// enrichment described for User Story 3 is NOT wired in here. That type
-// lives under pkg/ci/internal/plugin — a Go "internal" package only
-// importable from within the pkg/ci tree — so internal/exec cannot reference
-// it directly, and it is only actually populated when Native CI hooks
-// (atmosConfig.CI.Enabled) run via pkg/hooks.RunCIHooks -> pkg/ci.Execute,
-// which is a narrower, independently-gated feature. Reusing it here would
-// require exposing the terraform CI plugin's parser as a standalone,
-// non-internal function. Data is passed as nil for now; the base envelope
-// (US1/US2) still reports normally regardless of whether Native CI is
-// enabled.
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, cmdErr error) {
+// Multi-component invocations (info.NodeHooks != nil, wired by
+// cmd/terraform/utils.go's wirePerComponentHook for --affected/--all/query
+// runs) are skipped here: this function fires once per graph node, but
+// FR-006a requires exactly one execution record for the whole invocation.
+// cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
+// identity/outcome instead and fires a single aggregate CaptureSync call
+// after the graph run completes (research.md Decisions 11/17).
+//
+// structured plugin.TerraformOutputData enrichment described for User Story 3
+// is obtained via parser, a closure supplied by cmd/terraform through
+// WithExecMetadataParser (research.md Decision 18) — internal/exec never
+// imports pkg/ci/plugins/terraform directly, since pkg/ci/internal/plugin is
+// only importable from within the pkg/ci tree and, independently,
+// pkg/ci/plugins/terraform itself imports internal/exec (a confirmed import
+// cycle). parser is nil for callers that don't wire one (e.g. tests), in
+// which case data is reported as nil, same as before this data was wired.
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, parser func(subCommand string) any, cmdErr error) {
 	commandPath := "atmos terraform " + subCommand
 	if !proexec.IsSyncCommand(commandPath) {
+		return
+	}
+
+	if info.NodeHooks != nil {
+		log.Debug("Skipping per-node exec-metadata sync capture: part of a multi-component run.", "component", info.ComponentFromArg)
 		return
 	}
 
@@ -246,7 +256,12 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 	// passed" (research.md Decision 14).
 	flags := proexec.FlagsFromCommand(cmd)
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, nil); syncErr != nil {
+	var data any
+	if parser != nil {
+		data = parser(subCommand)
+	}
+
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, data); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

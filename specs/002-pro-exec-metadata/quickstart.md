@@ -88,10 +88,19 @@ This supplements the existing "Pact Contract Testing" README section
   the first request), not an inline object. Confirm the small-plan case (default
   `max_payload_bytes`) instead sends exactly one `/exec` request with `data` inline.
 
+11. **(research.md Decision 18)** Run a plain, single-component `atmos terraform plan
+  <component> -s <stack>` (no `--affected`/`--all`) against a component with pending changes,
+  and inspect the logged request body's `data` field: it MUST contain
+  `resource_counts`/`outputs`/`warnings`/`changes` (matching `data-model.md`'s
+  `TerraformExecData` shape), not `null` — this is the single-component counterpart to step
+  10's multi-component coverage (`cmd/terraform/utils_exec_metadata_test.go`'s
+  `TestTerraformNodeHooks_RecordExecResultAccumulates`), verifying
+  `captureExecMetadataSync`'s new `WithExecMetadataParser`-supplied closure actually ran.
+
 ## Regenerating the Pact contract
 
 ```bash
-go test -tags pact ./pkg/pro/... -v -run 'TestPact/UploadExecMetadata|TestPact/UploadExecData'
+go test -tags pact ./pkg/pro/... -v -run 'TestPact_UploadExecMetadata|TestPact_UploadExecData'
 git diff pacts/atmos-AtmosPro.json
 ```
 

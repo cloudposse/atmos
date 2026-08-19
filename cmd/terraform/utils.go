@@ -1,7 +1,9 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -23,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
+	citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -31,6 +35,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -507,9 +512,226 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 type terraformNodeHooks struct {
 	cmd           *cobra.Command
 	args          []string
+	subCommand    string
 	beforeEvent   h.HookEvent
 	afterEvent    h.HookEvent
 	skipPerNodeCI bool
+
+	// mu guards results, accumulated concurrently as the scheduler dispatches
+	// graph nodes (research.md Decision 11/17).
+	mu      sync.Mutex
+	results []execNodeResult
+}
+
+// execNodeResult is one multi-component graph node's identity and outcome,
+// folded into the single aggregate execution record's Data field after the
+// whole run completes (FR-006a) — never sent as a separate execution record
+// per node. Field names/shape match data-model.md's multi-component example.
+// Action/Address are only set on the extra entries parseTerraformResourceChanges
+// appends per resource change (FR-006, data-model.md Decision 17); the base
+// per-node entry always has them empty/omitted so a node's identity/outcome
+// is reported even when it had no resource changes at all.
+type execNodeResult struct {
+	Component string `json:"component"`
+	Stack     string `json:"stack"`
+	ExitCode  int    `json:"exitCode"`
+	Action    string `json:"action,omitempty"`
+	Address   string `json:"address,omitempty"`
+}
+
+// recordExecResult accumulates one node's identity/outcome — plus, for
+// plan/apply/deploy, one entry per resource change parsed from its captured
+// output — for the aggregate exec-metadata record built after the graph run
+// completes. Safe for concurrent use by multiple in-flight scheduler nodes.
+func (n *terraformNodeHooks) recordExecResult(info *schema.ConfigAndStacksInfo, output string, execErr error) {
+	exitCode := 0
+	if execErr != nil {
+		exitCode = errUtils.GetExitCode(execErr)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+
+	changes := parseTerraformResourceChanges(n.subCommand, output)
+
+	n.mu.Lock()
+	n.results = append(n.results, execNodeResult{Component: info.Component, Stack: info.Stack, ExitCode: exitCode})
+	for _, c := range changes {
+		c.Component = info.Component
+		c.Stack = info.Stack
+		c.ExitCode = exitCode
+		n.results = append(n.results, c)
+	}
+	n.mu.Unlock()
+}
+
+// terraformOutputDataMirror locally mirrors the JSON shape of
+// pkg/ci/internal/plugin.TerraformOutputData so cmd/terraform can decode
+// citerraform.ParseOutput's result without importing that internal package
+// directly (which would reintroduce the cmd/terraform -> internal/exec ->
+// pkg/ci/plugins/terraform -> internal/exec import cycle research.md
+// Decision 12 identified). Calling the parser itself is safe: its return
+// type is only ever accessed here via a JSON round-trip, never named.
+type terraformOutputDataMirror struct {
+	ResourceCounts struct {
+		Create  int `json:"Create"`
+		Change  int `json:"Change"`
+		Replace int `json:"Replace"`
+		Destroy int `json:"Destroy"`
+	} `json:"ResourceCounts"`
+	CreatedResources  []string `json:"CreatedResources"`
+	UpdatedResources  []string `json:"UpdatedResources"`
+	ReplacedResources []string `json:"ReplacedResources"`
+	DeletedResources  []string `json:"DeletedResources"`
+	MovedResources    []struct {
+		From string `json:"From"`
+		To   string `json:"To"`
+	} `json:"MovedResources"`
+	ImportedResources []string                   `json:"ImportedResources"`
+	Outputs           map[string]json.RawMessage `json:"Outputs"`
+	HasOutputChanges  bool                       `json:"HasOutputChanges"`
+	ChangedResult     string                     `json:"ChangedResult"`
+	Warnings          []string                   `json:"Warnings"`
+}
+
+// terraformOutputResultMirror mirrors pkg/ci/internal/plugin.OutputResult's
+// JSON shape — only the Data field is needed here.
+type terraformOutputResultMirror struct {
+	Data *terraformOutputDataMirror `json:"Data"`
+}
+
+// parseTerraformOutputMirror calls citerraform.ParseOutput (safe from
+// cmd/terraform per research.md Decision 17) and decodes its result via a
+// JSON round-trip into terraformOutputDataMirror, without ever importing or
+// naming pkg/ci/internal/plugin directly (which would reintroduce the
+// cmd/terraform -> internal/exec -> pkg/ci/plugins/terraform -> internal/exec
+// import cycle, research.md Decisions 12/17/18). Shared by
+// parseTerraformResourceChanges (multi-component, US2/US3) and
+// buildTerraformExecData (single-component, US3, Decision 18). "deploy" is
+// parsed as "apply", matching pkg/ci/plugins/terraform's own onAfterDeploy
+// override ("deploy is semantically apply for CI purposes"). Returns
+// (nil, false) for subcommands with no terraform-shaped output, empty
+// output, or when parsing finds nothing.
+func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputDataMirror, bool) {
+	if output == "" {
+		return nil, false
+	}
+
+	parseCommand := subCommand
+	if parseCommand == "deploy" {
+		parseCommand = "apply"
+	}
+	if parseCommand != "plan" && parseCommand != "apply" {
+		return nil, false
+	}
+
+	raw, err := json.Marshal(citerraform.ParseOutput(output, parseCommand))
+	if err != nil {
+		return nil, false
+	}
+
+	var parsed terraformOutputResultMirror
+	if err := json.Unmarshal(raw, &parsed); err != nil || parsed.Data == nil {
+		return nil, false
+	}
+
+	return parsed.Data, true
+}
+
+// terraformResourceChanges flattens a terraformOutputDataMirror's per-action
+// resource slices into one {action, address} entry per resource change,
+// shared by parseTerraformResourceChanges and buildTerraformExecData.
+func terraformResourceChanges(data *terraformOutputDataMirror) []execNodeResult {
+	var changes []execNodeResult
+	appendAll := func(action string, addresses []string) {
+		for _, addr := range addresses {
+			changes = append(changes, execNodeResult{Action: action, Address: addr})
+		}
+	}
+	appendAll("created", data.CreatedResources)
+	appendAll("updated", data.UpdatedResources)
+	appendAll("replaced", data.ReplacedResources)
+	appendAll("deleted", data.DeletedResources)
+	appendAll("imported", data.ImportedResources)
+	for _, m := range data.MovedResources {
+		changes = append(changes, execNodeResult{Action: "moved", Address: m.To})
+	}
+	return changes
+}
+
+// parseTerraformResourceChanges parses a captured terraform plan/apply/deploy
+// node's combined output into one {action, address} entry per resource
+// change (Component/Stack/ExitCode left zero — the caller fills those in),
+// for folding into the multi-component aggregate exec-metadata record
+// (FR-006, data-model.md Decision 17). Returns nil when
+// parseTerraformOutputMirror finds nothing to parse.
+func parseTerraformResourceChanges(subCommand, output string) []execNodeResult {
+	data, ok := parseTerraformOutputMirror(subCommand, output)
+	if !ok {
+		return nil
+	}
+	return terraformResourceChanges(data)
+}
+
+// buildTerraformExecData parses a captured single-component terraform
+// plan/apply/deploy invocation's combined output into the combined-object
+// Data shape data-model.md's TerraformExecData specifies
+// (resource_counts/outputs/warnings/changes), for internal/exec's
+// captureExecMetadataSync (via WithExecMetadataParser, research.md Decision
+// 18) to attach to the execution record. Returns nil when
+// parseTerraformOutputMirror finds nothing to parse (e.g. a non-terraform
+// subcommand, or empty output).
+func buildTerraformExecData(subCommand, output string) any {
+	data, ok := parseTerraformOutputMirror(subCommand, output)
+	if !ok {
+		return nil
+	}
+
+	return map[string]any{
+		"resource_counts": map[string]any{
+			"create":  data.ResourceCounts.Create,
+			"change":  data.ResourceCounts.Change,
+			"replace": data.ResourceCounts.Replace,
+			"destroy": data.ResourceCounts.Destroy,
+		},
+		"outputs":  data.Outputs,
+		"warnings": data.Warnings,
+		"changes":  terraformResourceChanges(data),
+	}
+}
+
+// terraformCaptureShellOpts builds the stdout/stderr capture
+// ShellCommandOptions shared by plan/apply/deploy's RunE. Capture always
+// runs now, decoupled from ciMode (research.md Decision 18) — it's a cheap
+// in-memory buffer append, and the WithExecMetadataParser closure needs the
+// buffers populated regardless of whether Native CI job summaries are also
+// enabled. Callers read the returned buffers themselves for their own
+// ciMode-gated CI-job-summary post-processing (e.g. capturedPlanOutput).
+func terraformCaptureShellOpts() (opts []e.ShellCommandOption, stdoutBuf, stderrBuf *bytes.Buffer) {
+	stdoutBuf = &bytes.Buffer{}
+	stderrBuf = &bytes.Buffer{}
+	opts = []e.ShellCommandOption{
+		e.WithStdoutCapture(stdoutBuf),
+		e.WithStderrCapture(stderrBuf),
+		e.WithExecMetadataParser(terraformExecMetadataParserFunc(stdoutBuf, stderrBuf)),
+	}
+	return opts, stdoutBuf, stderrBuf
+}
+
+// terraformExecMetadataParserFunc builds the closure passed to
+// WithExecMetadataParser, reading whatever stdoutBuf/stderrBuf contain at
+// call time (by the time captureExecMetadataSync invokes it,
+// executeCommandPipeline has already finished writing into them). Split out
+// from terraformCaptureShellOpts so it's directly unit-testable without
+// reaching into e.ShellCommandOption's private fields.
+func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer) func(subCommand string) any {
+	return func(subCommand string) any {
+		combined := stdoutBuf.String()
+		if errOut := stderrBuf.String(); errOut != "" {
+			combined += "\n" + errOut
+		}
+		return buildTerraformExecData(subCommand, ansi.Strip(combined))
+	}
 }
 
 // Before implements schema.ComponentNodeHooks.
@@ -563,6 +785,9 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNode(&atmosConfig, info, output, execErr)
 	}
+
+	n.recordExecResult(info, output, execErr)
+
 	return hookErr
 }
 
@@ -744,12 +969,58 @@ func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, a
 	info.NodeHooks = &terraformNodeHooks{
 		cmd:         actualCmd,
 		args:        args,
+		subCommand:  subCommand,
 		beforeEvent: before,
 		afterEvent:  after,
 		// deploy never uses the aggregate CI handler above (it isn't in that
 		// switch), so it always gets a per-node CI hook regardless of CI mode —
 		// matching the CI-hook behavior this wiring replaces.
 		skipPerNodeCI: ciAggregate && subCommand != "deploy",
+	}
+}
+
+// captureMultiComponentExecMetadata reports exactly one execution record for
+// a whole multi-component graph run (FR-006a), once it has fully completed,
+// folding each node's accumulated identity/outcome (terraformNodeHooks.
+// recordExecResult) into the single aggregate record's Data field. No-op if
+// no NodeHooks were wired (e.g. the subcommand isn't in terraformHookEvents)
+// or if subCommand is not on the synchronous exec-metadata allowlist
+// (research.md Decisions 11/17) — matching internal/exec's per-node skip
+// (captureExecMetadataSync's info.NodeHooks != nil guard) so a multi-component
+// run produces exactly one record, never zero and never N.
+func captureMultiComponentExecMetadata(info *schema.ConfigAndStacksInfo, subCommand string, runErr error) {
+	hooks, ok := info.NodeHooks.(*terraformNodeHooks)
+	if !ok || hooks == nil {
+		return
+	}
+
+	commandPath := "atmos terraform " + subCommand
+	if !proexec.IsSyncCommand(commandPath) {
+		return
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Debug("Skipping multi-component exec-metadata capture: failed to init Atmos config.", "error", err)
+		return
+	}
+
+	exitCode := 0
+	if runErr != nil {
+		exitCode = errUtils.GetExitCode(runErr)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+
+	flags := proexec.FlagsFromCommand(hooks.cmd)
+
+	hooks.mu.Lock()
+	data := hooks.results
+	hooks.mu.Unlock()
+
+	if syncErr := proexec.CaptureSync(&atmosConfig, "terraform "+subCommand, nil, flags, exitCode, data); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }
 
@@ -1011,7 +1282,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
-		return executeAffectedCommand(ctx, parentCmd, args, &info)
+		runErr := executeAffectedCommand(ctx, parentCmd, args, &info)
+		captureMultiComponentExecMetadata(&info, subCommand, runErr)
+		return runErr
 	}
 	// --all routes to ExecuteTerraformAll for dependency-ordered execution.
 	// --components / --query / bare `-s stack` continue to route to ExecuteTerraformQuery.
@@ -1021,7 +1294,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
-		return e.ExecuteTerraformAllWithContext(ctx, &info)
+		runErr := e.ExecuteTerraformAllWithContext(ctx, &info)
+		captureMultiComponentExecMetadata(&info, subCommand, runErr)
+		return runErr
 	}
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
@@ -1029,7 +1304,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		wirePerComponentHook(&info, subCommand, actualCmd, args)
 		ctx, stop := terraformSignalContext(actualCmd)
 		defer stop()
-		return e.ExecuteTerraformQueryWithContext(ctx, &info)
+		runErr := e.ExecuteTerraformQueryWithContext(ctx, &info)
+		captureMultiComponentExecMetadata(&info, subCommand, runErr)
+		return runErr
 	}
 	wasMultiComponentExecution = false
 
