@@ -4,6 +4,7 @@ description: "YAML functions: !terraform.state, !terraform.output, !store, !stor
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 references:
   - references/yaml-functions.md
 ---

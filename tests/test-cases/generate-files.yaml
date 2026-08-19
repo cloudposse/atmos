@@ -77,6 +77,9 @@ tests:
     tty: false
     description: "Verify demo component can be described"
     workdir: "../examples/generate-files/"
+    env:
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
+      ATMOS_DESCRIBE_PROVENANCE: "false"
     command: "atmos"
     args:
       - "describe"

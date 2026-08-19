@@ -28,10 +28,11 @@ type DeprecatedYAMLSchema struct {
 }
 
 // FindDeprecatedYAMLFields finds authored properties marked with the standard
-// JSON Schema deprecated annotation. x-atmos-replacement is optional guidance
-// emitted alongside the warning. The scanner deliberately follows only local
-// references: remote schemas are still validated normally, but must be a single
-// self-contained document before their annotations can be inspected.
+// JSON Schema deprecated annotation. The optional x-atmos-replacement field
+// provides guidance emitted alongside the warning. The scanner deliberately
+// follows only local references: remote schemas are still validated normally,
+// but must be a single self-contained document before their annotations can
+// be inspected.
 func FindDeprecatedYAMLFields(atmosConfig *schema.AtmosConfiguration, schemaSource string, yamlContent []byte) ([]DeprecatedField, error) {
 	defer perf.Track(atmosConfig, "validator.FindDeprecatedYAMLFields")()
 
@@ -103,39 +104,65 @@ func walkDeprecatedSchema(root, current map[string]any, node *yaml.Node, path st
 
 	switch node.Kind {
 	case yaml.MappingNode:
-		properties, _ := current["properties"].(map[string]any)
-		patterns, _ := current["patternProperties"].(map[string]any)
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			key, value := node.Content[i].Value, node.Content[i+1]
-			propertySchema, ok := properties[key].(map[string]any)
-			if !ok {
-				for pattern, candidate := range patterns {
-					matched, err := regexp.MatchString(pattern, key)
-					if err == nil && matched {
-						propertySchema, ok = candidate.(map[string]any)
-						break
-					}
-				}
-			}
-			if !ok {
-				propertySchema, ok = current["additionalProperties"].(map[string]any)
-			}
-			if !ok {
-				continue
-			}
-			propertyPath := joinSchemaPath(path, key)
-			if deprecated, replacement := deprecatedSchemaAnnotation(root, propertySchema); deprecated {
-				findings[propertyPath] = DeprecatedField{Path: propertyPath, Replacement: replacement}
-			}
-			propertySchema = resolveLocalRef(root, propertySchema)
-			walkDeprecatedSchema(root, propertySchema, value, propertyPath, findings)
-		}
+		walkDeprecatedSchemaMapping(root, current, node, path, findings)
 	case yaml.SequenceNode:
 		items, _ := current["items"].(map[string]any)
 		for i, child := range node.Content {
 			walkDeprecatedSchema(root, items, child, fmt.Sprintf("%s[%d]", path, i), findings)
 		}
 	}
+}
+
+// walkDeprecatedSchemaMapping walks a YAML mapping node's keys, resolving each
+// key's property schema (direct match, pattern match, or additionalProperties
+// fallback) and recursing into its value.
+func walkDeprecatedSchemaMapping(root, current map[string]any, node *yaml.Node, path string, findings map[string]DeprecatedField) {
+	properties, _ := current["properties"].(map[string]any)
+	patterns, _ := current["patternProperties"].(map[string]any)
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key, value := node.Content[i].Value, node.Content[i+1]
+		propertySchema, ok := resolvePropertySchema(current, key, properties, patterns)
+		if !ok {
+			continue
+		}
+		propertyPath := joinSchemaPath(path, key)
+		if deprecated, replacement := deprecatedSchemaAnnotation(root, propertySchema); deprecated {
+			findings[propertyPath] = DeprecatedField{Path: propertyPath, Replacement: replacement}
+		}
+		propertySchema = resolveLocalRef(root, propertySchema)
+		walkDeprecatedSchema(root, propertySchema, value, propertyPath, findings)
+	}
+}
+
+// resolvePropertySchema finds the schema that applies to a mapping key: an
+// exact match in properties, a regex match in patternProperties, or the
+// enclosing schema's additionalProperties fallback.
+func resolvePropertySchema(current map[string]any, key string, properties, patterns map[string]any) (map[string]any, bool) {
+	if propertySchema, ok := properties[key].(map[string]any); ok {
+		return propertySchema, true
+	}
+	if propertySchema, ok := matchPatternProperty(patterns, key); ok {
+		return propertySchema, true
+	}
+	propertySchema, ok := current["additionalProperties"].(map[string]any)
+	return propertySchema, ok
+}
+
+// matchPatternProperty returns the schema for the first patternProperties
+// regex that matches key. Mirrors the original loop's break-on-first-match
+// semantics: a matching pattern whose schema isn't a map still stops the
+// search (falling through to additionalProperties) rather than trying
+// subsequent patterns.
+func matchPatternProperty(patterns map[string]any, key string) (map[string]any, bool) {
+	for pattern, candidate := range patterns {
+		matched, err := regexp.MatchString(pattern, key)
+		if err != nil || !matched {
+			continue
+		}
+		propertySchema, ok := candidate.(map[string]any)
+		return propertySchema, ok
+	}
+	return nil, false
 }
 
 func deprecatedSchemaAnnotation(root, current map[string]any) (bool, string) {

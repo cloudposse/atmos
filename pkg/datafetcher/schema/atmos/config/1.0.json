@@ -1400,6 +1400,39 @@
       "type": "object",
       "description": "Ansible defines configuration for Ansible components."
     },
+    "Artifacts": {
+      "properties": {
+        "paths": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Paths lists glob patterns for this step's expected output files. Named Paths, not Files,\nsince artifacts aren't always known file-by-file (e.g. a directory glob)."
+        }
+      },
+      "type": "object",
+      "description": "Artifacts declares a step's expected output files -- a sibling of Inputs, not nested inside\nit (sources are inputs; artifacts are outputs, and the two must not be conflated under one\ncontainer). A missing Artifacts path always forces checksum.changed/timestamp.changed to true,\nregardless of Inputs.Sources. Exposed to `when:` as the resolved match list (`artifacts`)."
+    },
     "Atlantis": {
       "properties": {
         "path": {
@@ -3043,6 +3076,103 @@
       },
       "type": "object"
     },
+    "Cluster": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the cluster name (required by aws/eks, azure/aks, and gcp/gke)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region where the cluster is located (required for aws/eks)."
+        },
+        "resource_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ResourceGroup is the Azure resource group containing the cluster (required for azure/aks)."
+        },
+        "subscription_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SubscriptionID optionally overrides the Azure subscription used to address\nthe cluster (azure/aks); defaults to the identity's subscription."
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ProjectID is the GCP project containing the cluster (required for gcp/gke)."
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Location is the GCP region or zone containing the cluster (required for gcp/gke)."
+        },
+        "alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID)."
+        },
+        "kubeconfig": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KubeconfigSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Kubeconfig contains kubeconfig file settings (optional)."
+        }
+      },
+      "type": "object",
+      "description": "Cluster represents a Kubernetes cluster configuration shared by aws/eks,\nazure/aks, and gcp/gke integrations. Each integration kind reads only the\nfields it needs: aws/eks requires Name+Region; azure/aks requires\nName+ResourceGroup; gcp/gke requires Name+ProjectID+Location."
+    },
     "Command": {
       "properties": {
         "name": {
@@ -3268,6 +3398,47 @@
               "type": "null"
             }
           ]
+        },
+        "aliases": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Aliases lists alternative names this command is also invocable under. Native, in-process\nCobra aliases (the same *cobra.Command registered under extra names) -- distinct from the\ntop-level `command_aliases:` map (CommandAliases), which redirects to a possibly-unrelated\ncommand via a subprocess re-exec."
+        },
+        "internal": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Internal hides this command from help/list output while leaving it fully invocable,\nmirroring go-task's `internal: true` (maps to Cobra's Command.Hidden)."
         }
       },
       "type": "object",
@@ -3341,6 +3512,33 @@
             }
           ],
           "description": "Type specifies the semantic type of this argument: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Values restricts this argument to a fixed set of allowed strings, validated the same way\npkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When\nRequired and missing in an interactive terminal, the user is prompted to pick one instead\nof erroring, reusing pkg/flags/interactive.go's PromptForPositionalArg machinery."
         }
       },
       "type": "object",
@@ -3512,6 +3710,33 @@
             }
           ],
           "description": "SemanticType specifies the semantic type of this flag: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Values restricts this flag to a fixed set of allowed strings, validated the same way\npkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When\nRequired and missing in an interactive terminal, the user is prompted to pick one instead\nof erroring, reusing pkg/flags/interactive.go's PromptForMissingRequired machinery."
         }
       },
       "type": "object",
@@ -3856,7 +4081,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Deprecated indicates if this configuration should no longer be used."
+          "description": "Deprecated: this configuration should no longer be used."
         }
       },
       "type": "object",
@@ -4141,6 +4366,34 @@
             }
           ],
           "description": "Folders lists folder paths whose changes mark the declaring component as\naffected by `atmos describe affected`. Each entry may be a plain string\n(the folder path) or, in the future, an object with additional options."
+        },
+        "commands": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitDependencies"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Commands lists named custom commands that must complete before this command/workflow\nruns its own steps. Resolved and executed concurrently by pkg/taskgraph, sharing the\nsame generic DAG scheduler used by `parallel`/`matrix` `needs:` and Terraform's\n`dependencies.components`. Entries may be a plain name string or a structured object\n(for parameterized dependencies)."
+        },
+        "workflows": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitDependencies"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Workflows lists named workflows that must complete before this command/workflow runs\nits own steps. A plain name resolves within the current workflow file; a structured\nentry with `file:` resolves cross-file, exactly as the CLI's `atmos workflow \u003cname\u003e -f\n\u003cfile\u003e` already does."
         }
       },
       "type": "object",
@@ -4184,6 +4437,34 @@
             }
           ],
           "description": "ErrorMode is the project-wide default for the `describe` commands' (`describe stacks`,\n`describe affected`, `describe dependents`) `--error-mode` flag: how to handle a\nrecoverable per-value YAML function error (e.g. a Terraform backend that has not been\nprovisioned yet). Values: \"strict\", \"warn\" (default), \"silent\". An explicit --error-mode\nflag or ATMOS_DESCRIBE_ERROR_MODE env var overrides this."
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Provenance is the project-wide default for `describe component --provenance`:\nannotate the component configuration with the stack file each value came from.\nEnabled by default (journaled in pkg/edition); an explicit --provenance flag\nor ATMOS_DESCRIBE_PROVENANCE env var overrides this."
+        },
+        "component": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DescribeComponentSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Component configures `describe component` output."
         }
       },
       "type": "object",
@@ -4222,6 +4503,23 @@
       "type": "object",
       "description": "DescribeAffected contains configuration for the `atmos describe affected` command."
     },
+    "DescribeComponentSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Filter selects the output scope: \"schema\" (default; only the sections a\nstack manifest can define — vars, settings, env, backend, metadata, and\nfriends) or \"full\" (every internal field Atmos computes during\nprocessing). Journaled in pkg/edition; ATMOS_DESCRIBE_COMPONENT_FILTER\noverrides."
+        }
+      },
+      "type": "object",
+      "description": "DescribeComponentSettings configures `describe component` output."
+    },
     "DescribeSettings": {
       "properties": {
         "include_empty": {
@@ -4236,6 +4534,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "eager_evaluation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "EagerEvaluation disables the early-skip scope optimization for `--tags`/`--labels`\nbulk Terraform selection and `list dependencies`: when true, every stack is fully\nevaluated (templates, YAML functions, auth) before filtering, matching pre-optimization\nbehavior. Use as a rollback if a repo has templated metadata.tags/metadata.labels that\nthe lightweight scope pass cannot safely resolve. See\ndocs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md."
         }
       },
       "type": "object",
@@ -4407,85 +4719,6 @@
         }
       },
       "type": "object"
-    },
-    "ECRRegistry": {
-      "properties": {
-        "account_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object",
-      "description": "ECRRegistry represents an ECR registry configuration for aws/ecr integrations."
-    },
-    "EKSCluster": {
-      "properties": {
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Name is the EKS cluster name (required)."
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Region is the AWS region where the cluster is located (required)."
-        },
-        "alias": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Alias is the context name in kubeconfig (optional, defaults to cluster ARN)."
-        },
-        "kubeconfig": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/KubeconfigSettings"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "Kubeconfig contains kubeconfig file settings (optional)."
-        }
-      },
-      "type": "object",
-      "description": "EKSCluster represents an EKS cluster configuration for aws/eks integrations."
     },
     "EditorConfig": {
       "properties": {
@@ -5662,6 +5895,26 @@
       },
       "type": "object"
     },
+    "HelpSettings": {
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Filter renders a focused bare `--help` (local flags only, no GLOBAL FLAGS\nsection, with a `--help=all` hint). Enabled by default (journaled in\npkg/edition); disable to restore the full pre-filter help output."
+        }
+      },
+      "type": "object",
+      "description": "HelpSettings controls how `--help` output is rendered."
+    },
     "Identity": {
       "properties": {
         "kind": {
@@ -5900,6 +6153,39 @@
       "type": "object",
       "description": "ImportsSettings holds global defaults applied when processing stack imports."
     },
+    "Inputs": {
+      "properties": {
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Sources lists glob patterns for files whose content determines checksum.changed /\ncontributes to timestamp.changed. Exposed to `when:` as the resolved match list (`sources`)."
+        }
+      },
+      "type": "object",
+      "description": "Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:\nwith fields that feed CEL facts consumed via the existing `when:` condition engine rather\nthan a second, bespoke skip mechanism. See pkg/runner/freshness for the checker that computes\nthese facts, and pkg/condition for how they're exposed to `when:`. Inputs stays a general\ncontainer (not narrowed to just file globs) since sources are one kind of input among others\nthat may be added later."
+    },
     "Integration": {
       "properties": {
         "kind": {
@@ -5942,7 +6228,7 @@
         }
       },
       "type": "object",
-      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS).\nIntegrations derive credentials from identities for service-specific access."
+      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS, GKE).\nIntegrations derive credentials from identities for service-specific access."
     },
     "IntegrationSpec": {
       "properties": {
@@ -5963,7 +6249,7 @@
         "registry": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ECRRegistry"
+              "$ref": "#/$defs/Registry"
             },
             {
               "type": "null"
@@ -5972,12 +6258,12 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Single ECR registry for aws/ecr integrations."
+          "description": "Registry for aws/ecr and azure/acr integrations."
         },
         "cluster": {
           "anyOf": [
             {
-              "$ref": "#/$defs/EKSCluster"
+              "$ref": "#/$defs/Cluster"
             },
             {
               "type": "null"
@@ -5986,7 +6272,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "EKS cluster for aws/eks integrations."
+          "description": "Cluster for aws/eks and azure/aks integrations."
         },
         "repos": {
           "anyOf": [
@@ -6723,7 +7009,8 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Enabled controls whether Atmos can run as an MCP server (default: false)."
         },
         "servers": {
           "anyOf": [
@@ -7640,6 +7927,39 @@
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
     },
+    "Preconditions": {
+      "properties": {
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Tools lists executable names resolved via exec.LookPath (no shell, so no\nwhich-vs-where cross-platform mismatch). preconditions.success is true iff every entry\nresolves without error."
+        }
+      },
+      "type": "object",
+      "description": "Preconditions declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/\nDependencies: the block can hold multiple check kinds (currently Tools; more may follow)."
+    },
     "ProSettings": {
       "properties": {
         "base_url": {
@@ -8202,6 +8522,56 @@
       },
       "type": "object",
       "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
+    },
+    "Registry": {
+      "properties": {
+        "account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "AccountID is the AWS account ID (required for aws/ecr)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region (required for aws/ecr)."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the Azure Container Registry name (required for azure/acr).\nThe login server is Name + \".azurecr.io\"."
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "TenantID optionally overrides the Azure AD tenant used for the ACR\nOAuth2 token exchange (azure/acr); defaults to the identity's tenant."
+        }
+      },
+      "type": "object",
+      "description": "Registry represents a container registry configuration shared by aws/ecr\nand azure/acr integrations. Each integration kind reads only the fields it\nneeds: aws/ecr requires AccountID+Region; azure/acr requires Name and\noptionally TenantID."
     },
     "ResourcePath": {
       "properties": {
@@ -8960,7 +9330,8 @@
       "type": "object"
     },
     "StoreRegistry": {
-      "type": "object"
+      "type": "object",
+      "description": "StoreRegistry is a map of store name to a live store implementation."
     },
     "SyntaxHighlighting": {
       "properties": {
@@ -9205,6 +9576,29 @@
             }
           ],
           "description": "When controls whether the task runs."
+        },
+        "continue": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Continue controls whether a failure of this task is forgiven: subsequent tasks still run\nand the overall command/workflow exit status is unaffected (like GitHub Actions'\ncontinue-on-error). Evaluated against this task's own outcome after it runs, unlike When\n(evaluated before, against the running status). Unset means no forgiveness (today's\nfail-stop behavior, unchanged)."
         },
         "interactive": {
           "anyOf": [
@@ -10424,6 +10818,48 @@
           ],
           "description": "Extra remediation note appended to the failure error (supports templates)."
         },
+        "inputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inputs"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Inputs declares this step's freshness sources, exposing checksum.changed/timestamp.changed/\nsources as `when:` CEL facts. See pkg/runner/freshness. An unset `when:` alongside a non-nil\nInputs or Artifacts implicitly means `when: checksum.changed`, mirroring the existing\nimplicit-success default for `when:`."
+        },
+        "artifacts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Artifacts"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See the Artifacts type doc for why."
+        },
+        "preconditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Preconditions"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied, exposing preconditions.success as a `when:` CEL fact. An unset `when:`\nalongside a non-nil Preconditions (and no Inputs/Artifacts) implicitly means\n`when: \"!preconditions.success\"` -- note the negation: success means already-satisfied,\ni.e. skip, the opposite polarity from checksum.changed. See the Preconditions type doc."
+        },
         "outputs": {
           "anyOf": [
             {
@@ -11051,6 +11487,19 @@
             },
             {
               "type": "null"
+            }
+          ]
+        },
+        "help": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HelpSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
           ]
         }
@@ -12142,6 +12591,114 @@
       "type": "object",
       "description": "TopLevelListConfig holds command-specific list configurations.\nThis is a top-level configuration that separates settings for different list commands."
     },
+    "UnitDependencies": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/UnitDependency"
+          },
+          {
+            "type": "string",
+            "description": "Dependency name shorthand, equivalent to {name: \u003cvalue\u003e}."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "type": "array",
+      "description": "UnitDependencies is a list of UnitDependency that supports flexible YAML/mapstructure\nunmarshaling: each element can be a plain name string (the common case) or a structured\nobject (for parameterized invocation or a cross-file workflow reference), mirroring the\nexisting polymorphic-element pattern already used by schema.Tasks."
+    },
+    "UnitDependency": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the target command or workflow name."
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "File is the workflow file to resolve Name in, for cross-file workflow references. Only\nmeaningful for Workflows entries; ignored for Commands (which resolve globally, since\natmosConfig.Commands is already flat-merged before any command runs)."
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Flags carries parameterized flag overrides for this dependency invocation. Two entries\nreferencing the same Name with the same Flags/Args collapse into a single executed\nDAG node (automatic dedup); different Flags/Args produce distinct nodes that both run."
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Args carries parameterized positional-argument overrides for this dependency invocation."
+        },
+        "fail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Fail controls failure propagation across the WHOLE dependency run (not just this entry's\nown siblings, despite the field living on a single entry): wait_all (default), fail_fast,\nor best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's\nParallelFailConfig. If any direct dependency declares best_effort, the entire run's\nfailures are forgiven, including siblings that declared no fail: at all; if any declares\nfail_fast (and none declare best_effort), the whole run cancels remaining work on the\nfirst failure. Mixing modes across sibling dependencies is legal but has this one\nrun-wide outcome — it is not resolved per entry."
+        }
+      },
+      "type": "object",
+      "description": "UnitDependency references a single named command or workflow that must complete before the\ndeclaring command/workflow runs. Supports both a plain name string\n(`commands: [build]`) and a structured object (`commands: [{name: build, flags: {env:\ndev}}]`) for parameterized invocation."
+    },
     "Validate": {
       "properties": {
         "format": {
@@ -12184,6 +12741,17 @@
           ],
           "description": "Path to vendor configuration file or directory containing vendor files.\nIf a directory is specified, all .yaml files in the directory will be processed in lexicographical order."
         },
+        "lock_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "LockFile is the committed vendor materialization lock. Relative paths are\nresolved from the Atmos base path. It defaults to vendor.lock.yaml."
+        },
         "list": {
           "anyOf": [
             {
@@ -12211,9 +12779,417 @@
             }
           ],
           "description": "Retry configuration for vendor operations (global default)."
+        },
+        "update": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Update configures selection and execution policy for `atmos vendor update`."
+        },
+        "ci": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorCIConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "CI configures optional CI-only publishing and reporting for vendor updates."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorLockConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift."
         }
       },
       "type": "object"
+    },
+    "VendorCIConfig": {
+      "properties": {
+        "pull_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorPullRequestConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorSummaryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorCIConfig configures provider-backed publishing for vendor updates."
+    },
+    "VendorLockConfig": {
+      "properties": {
+        "enforcement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Enforcement is \"warn\" (the default when omitted), \"silent\", or \"strict\".\n  - \"silent\": re-fetch the drifted package with no reporting.\n  - \"warn\": re-fetch the drifted package and print one warning per package naming why it\n    drifted.\n  - \"strict\": refuse to run (before any fetch/copy/write) when a drifted package is found and\n    `--refresh-lock` was not explicitly passed, naming every drifted package and its reason."
+        }
+      },
+      "type": "object",
+      "description": "VendorLockConfig configures how `atmos vendor pull` reacts when a package's on-disk state no\nlonger matches its vendor.lock.yaml receipt."
+    },
+    "VendorPullRequestConfig": {
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "base_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "branch_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "reviewers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "assignees": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorPullRequestConfig configures pull request publishing for vendor CI."
+    },
+    "VendorSummaryConfig": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled defaults to true when omitted. The command treats false as an\nexplicit opt-out only when the summary map is present in configuration."
+        }
+      },
+      "type": "object",
+      "description": "VendorSummaryConfig configures CI summary output for vendor updates."
+    },
+    "VendorUpdateBatchingConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"scope\" (the only supported value today - one branch/PR for the whole update run).\nPer-component batching (one isolated branch/PR per updated component) is a deferred future\nfeature; see docs/prd/vendor-lock.md's Known Limitations."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateBatchingConfig configures the batching strategy for vendor updates."
+    },
+    "VendorUpdateConfig": {
+      "properties": {
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateExecutionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorUpdateBatchingConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "groups": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VendorUpdateGroupConfig"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateConfig configures the local part of component updates. Publishing\nconfiguration intentionally lives under VendorCIConfig so normal updates stay\nindependent of a CI provider."
+    },
+    "VendorUpdateExecutionConfig": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode is \"current\" (the default) or \"worktree\"."
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateExecutionConfig configures the execution mode for vendor updates."
+    },
+    "VendorUpdateGroupConfig": {
+      "properties": {
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VendorUpdateGroupConfig selects components for a named vendor update group."
     },
     "Version": {
       "properties": {
@@ -13658,6 +14634,29 @@
             }
           ]
         },
+        "continue": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Continue controls whether a failure of this step is forgiven: subsequent steps still run\nand the overall workflow exit status is unaffected (like GitHub Actions'\ncontinue-on-error). Evaluated against this step's own outcome after it runs, unlike When\n(evaluated before, against the running status). Unset means no forgiveness (today's\nfail-stop behavior, unchanged)."
+        },
         "interactive": {
           "anyOf": [
             {
@@ -14908,6 +15907,48 @@
           ],
           "description": "Extra remediation note appended to the failure error (supports templates)."
         },
+        "inputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inputs"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Inputs declares this step's freshness sources. See pkg/schema/task.go's Inputs type and\npkg/runner/freshness."
+        },
+        "artifacts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Artifacts"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Artifacts declares this step's expected output files -- a sibling of Inputs, not nested\ninside it. See pkg/schema/task.go's Artifacts type."
+        },
+        "preconditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Preconditions"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Preconditions declares tools that must already be on PATH for this step to be considered\nalready satisfied. See pkg/schema/task.go's Preconditions type."
+        },
         "outputs": {
           "anyOf": [
             {
@@ -15103,6 +16144,17 @@
           "type": "null"
         }
       ]
+    },
+    "edition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Date anchor (\"YYYY\", \"YYYY-MM\", or \"YYYY-MM-DD\") that pins defaults to how they stood on that date."
     },
     "cast": {
       "anyOf": [
@@ -15378,6 +16430,26 @@
         },
         {
           "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "vendorDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workflowsDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
         }
       ]
     },

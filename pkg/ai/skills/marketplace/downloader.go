@@ -20,8 +20,9 @@ func NewDownloader() *Downloader {
 	return &Downloader{}
 }
 
-// Download clones a Git repository to a temporary directory.
-// Returns the path to the temporary directory.
+// Download clones a Git repository to a temporary directory, or, for a "local"
+// source (see ParseSource), copies it from disk instead. Either way it returns the
+// path to the temporary directory the caller should treat as the downloaded skill.
 func (d *Downloader) Download(ctx context.Context, source *SourceInfo) (string, error) {
 	defer perf.Track(nil, "marketplace.Downloader.Download")()
 
@@ -29,6 +30,17 @@ func (d *Downloader) Download(ctx context.Context, source *SourceInfo) (string, 
 	tempDir, err := os.MkdirTemp("", "atmos-skill-*")
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create temp directory: %w", ErrDownloadFailed, err)
+	}
+
+	if source.Type == "local" {
+		// No network or Git clone involved -- just copy the directory tree,
+		// reusing the same copyDir helper the multi-skill and client-distribution
+		// paths already use.
+		if err := copyDir(source.URL, tempDir); err != nil {
+			os.RemoveAll(tempDir)
+			return "", fmt.Errorf("%w: failed to copy local skill source %s: %w", ErrDownloadFailed, source.URL, err)
+		}
+		return tempDir, nil
 	}
 
 	// Clone options.

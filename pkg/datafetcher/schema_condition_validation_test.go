@@ -185,6 +185,540 @@ func TestManifestSchema_TerraformComponentMocks(t *testing.T) {
 	}
 }
 
+// TestManifestSchema_KubernetesComponentValidateField guards against the
+// validate property drifting out of sync between the schema copies again: it
+// was added to stack-config/1.0.json but omitted from atmos/manifest/1.0.json,
+// the schema that atmos describe stacks and atmos validate stacks actually
+// enforce by default, causing an additionalProperties rejection. The fixture
+// copy under tests/fixtures/schemas predates the Kubernetes component feature
+// entirely and is intentionally excluded here.
+func TestManifestSchema_KubernetesComponentValidateField(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts validate false", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithValidate(false))
+		})
+
+		t.Run(schemaName+"/accepts validate true", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithValidate(true))
+		})
+	}
+}
+
+func TestManifestSchema_KubernetesComponentProvisionTargetSplitField(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts split true", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(true))
+		})
+
+		t.Run(schemaName+"/accepts split false", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, kubernetesComponentManifestWithProvisionSplit(false))
+		})
+
+		t.Run(schemaName+"/rejects non-bool split", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, kubernetesComponentManifestWithProvisionSplit("yes"))
+		})
+	}
+}
+
+// TestManifestSchema_ContainerRuntimeProviderAuto guards against container_runtime.provider
+// rejecting "auto" -- a value pkg/schema/container_config.go documents as a first-class supported
+// option (distinct from "", though both mean the same thing at runtime: auto-detect Docker, then
+// Podman) and website/docs/cli/commands/container/usage.mdx shows literally in examples. The
+// fixture copy under tests/fixtures/schemas predates the container component feature entirely (it
+// has no "container" key anywhere) and is intentionally excluded here, same as
+// TestManifestSchema_KubernetesComponentValidateField.
+func TestManifestSchema_ContainerRuntimeProviderAuto(t *testing.T) {
+	// loadWebsiteSchemaBytes is intentionally omitted here: it returns the exact
+	// same bytes as loadEmbeddedSchemaBytes (see its doc comment), so pairing it
+	// alongside "embedded" would validate identical bytes twice under different
+	// subtest names without adding any drift-detection value.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		for _, provider := range []string{"", "auto", "docker", "podman"} {
+			t.Run(schemaName+"/accepts "+provider, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, containerComponentManifestWithRuntimeProvider(provider))
+			})
+		}
+
+		t.Run(schemaName+"/rejects unknown provider", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, containerComponentManifestWithRuntimeProvider("crioengine"))
+		})
+	}
+}
+
+func containerComponentManifestWithRuntimeProvider(provider string) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"container": map[string]any{
+				"demo": map[string]any{
+					"image": "alpine",
+					"run": map[string]any{
+						"runtime": map[string]any{
+							"provider": provider,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestManifestSchema_SourceTTLField guards against the source.ttl field being rejected. Go reads
+// it at pkg/provisioner/source/extract.go ("Optional: ttl") and website/docs/cli/commands/terraform/
+// source/source.mdx documents it as a per-component override of the global cache TTL default.
+func TestManifestSchema_SourceTTLField(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts ttl", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, terraformSourceManifest(map[string]any{
+				"uri": "github.com/org/repo//path",
+				"ttl": "24h",
+			}))
+		})
+	}
+}
+
+func terraformSourceManifest(source any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": source,
+				},
+			},
+		},
+	}
+}
+
+// TestManifestSchema_RootOneOfAllowsWorkflowsWithStackFields guards against the root schema's
+// oneOf rejecting a manifest that combines workflows with ordinary stack-manifest fields such as
+// vars, settings, or terraform.
+//
+// Found during the #2919 field test. The root oneOf's second branch was an anyOf list. Its first
+// entry alone matched any object lacking a workflows key, which made every other entry in that
+// list dead weight. That caused two problems. First, whenever workflows was present alongside
+// e.g. vars, branch 0 (which requires workflows) and branch 1 (via the unrelated vars entry)
+// both matched at once, failing oneOf with an uninformative error: "(root): valid against
+// schemas at indexes 0 and 1" at position 0:0. Second, the real, load-bearing rule was simply
+// "not workflows-shaped": a mixin fragment with an arbitrary top-level key not covered by that
+// anyOf list (see tests/test-cases/validate-type-mismatch/stacks/mixins/subnet-config.yaml,
+// included into another manifest via merge) only ever validated because of that same catch-all
+// entry.
+//
+// The fix collapses branch 1 to a single "not workflows" check, which resolves the ambiguity
+// while preserving the schema's original permissiveness for arbitrary non-workflow shapes. An
+// earlier attempt instead enumerated the allowed root keys explicitly, which broke that
+// mixin-fragment fixture.
+func TestManifestSchema_RootOneOfAllowsWorkflowsWithStackFields(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts vars+workflows together", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"vars": map[string]any{"stage": "dev"},
+				"workflows": map[string]any{
+					"demo": map[string]any{
+						"steps": []any{
+							map[string]any{"command": "echo hi"},
+						},
+					},
+				},
+			})
+		})
+
+		t.Run(schemaName+"/accepts settings+workflows together", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"settings": map[string]any{"foo": "bar"},
+				"workflows": map[string]any{
+					"demo": map[string]any{
+						"steps": []any{
+							map[string]any{"command": "echo hi"},
+						},
+					},
+				},
+			})
+		})
+
+		t.Run(schemaName+"/still accepts workflows alone", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{"command": "echo hi"}))
+		})
+
+		t.Run(schemaName+"/still accepts stack fields alone", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"vars": map[string]any{"stage": "dev"},
+			})
+		})
+
+		t.Run(schemaName+"/still accepts an arbitrary non-workflow mixin fragment", func(t *testing.T) {
+			// Mirrors tests/test-cases/validate-type-mismatch/stacks/mixins/subnet-config.yaml: a
+			// merge-only fragment whose only top-level key isn't a recognized manifest section at
+			// all. additionalProperties:true at the root already allows this; the oneOf must not
+			// re-impose a closed allow-list on top of it.
+			assertSchemaValid(t, schemaData, map[string]any{
+				"subnets": []any{
+					map[string]any{"cidr": "10.0.1.0/24", "az": "us-east-1a", "type": "public"},
+				},
+			})
+		})
+	}
+}
+
+// TestManifestSchema_OverridesFieldCoverage guards against terraform.overrides rejecting fields
+// that internal/exec/stack_processor_process_stacks_helpers_overrides.go actually merges (hooks,
+// generate, secrets, auth, retry, required_providers, required_version), which previously only
+// allowed command/vars/env/settings/providers -- see website/docs/stacks/overrides.mdx, which
+// documents overrides.hooks and overrides.generate directly.
+func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts hooks/generate/secrets/auth/retry/required_*", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"terraform": map[string]any{
+					"overrides": map[string]any{
+						"hooks": map[string]any{
+							"test": map[string]any{
+								"kind":    "command",
+								"command": "echo",
+							},
+						},
+						"generate": map[string]any{
+							"backend": map[string]any{
+								"enabled": true,
+							},
+						},
+						"secrets": map[string]any{
+							"vars": map[string]any{
+								"API_KEY": map[string]any{
+									"store":     "ssm",
+									"reference": "/api-key",
+								},
+							},
+						},
+						"auth": map[string]any{
+							"realm": "readonly",
+						},
+						"retry": map[string]any{
+							"max_attempts": 3,
+							"conditions":   []any{"rate limit"},
+						},
+						"required_version": ">= 1.5",
+						"required_providers": map[string]any{
+							"aws": map[string]any{
+								"source":  "hashicorp/aws",
+								"version": "~> 5.0",
+							},
+						},
+					},
+				},
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{},
+					},
+				},
+			})
+		})
+	}
+}
+
+// TestManifestSchema_ComponentLevelRetry guards against the component-level retry: block being
+// entirely unsupported (issue found during the #2919 field test: retry is documented at
+// website/docs/stacks/components/terraform/retry.mdx and extracted for every component type by
+// internal/exec/stack_processor_process_stacks_helpers_extraction.go, but the embedded schema had
+// no retry definition at all prior to this fix).
+func TestManifestSchema_ComponentLevelRetry(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+	retry := map[string]any{
+		"max_attempts": 3,
+		"conditions":   []any{"rate limit exceeded"},
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/terraform", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{"retry": retry},
+					},
+				},
+			})
+		})
+
+		t.Run(schemaName+"/helmfile", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"components": map[string]any{
+					"helmfile": map[string]any{
+						"app": map[string]any{"retry": retry},
+					},
+				},
+			})
+		})
+
+		t.Run(schemaName+"/packer", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"components": map[string]any{
+					"packer": map[string]any{
+						"ami": map[string]any{"retry": retry},
+					},
+				},
+			})
+		})
+	}
+}
+
+// TestManifestSchema_RequiredVersionAndProviders guards against terraform.required_version /
+// required_providers being rejected at the component level -- documented at
+// website/docs/cli/configuration/describe.mdx and extracted by
+// internal/exec/stack_processor_process_stacks_helpers_extraction.go (DEV-3124).
+func TestManifestSchema_RequiredVersionAndProviders(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts required_version and required_providers", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"required_version": ">= 1.5",
+							"required_providers": map[string]any{
+								"aws": map[string]any{
+									"source":  "hashicorp/aws",
+									"version": "~> 5.0",
+								},
+							},
+						},
+					},
+				},
+			})
+		})
+	}
+}
+
+// TestManifestSchema_KubernetesComponentSecrets guards against components.kubernetes.<c>.secrets
+// being rejected: secrets declarations are extracted for all component types ("Available for all
+// component types", stack_processor_process_stacks_helpers_extraction.go), and kubernetes already
+// supports the sibling auth section -- secrets was the one omission. The fixture copy predates the
+// Kubernetes component feature entirely (see TestManifestSchema_KubernetesComponentValidateField)
+// and is intentionally excluded here; stack-config/1.0.json has no component_secrets definition at
+// all (component-level `secrets:` is unwired there for every component type, not just kubernetes --
+// a separate, pre-existing structural gap in that schema copy, out of scope for this fix since
+// stack-config.json isn't what `atmos describe stacks`/`validate stacks` enforce by default), and is
+// also excluded here.
+func TestManifestSchema_KubernetesComponentSecrets(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts secrets", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, map[string]any{
+				"components": map[string]any{
+					"kubernetes": map[string]any{
+						"app": map[string]any{
+							"metadata": map[string]any{"type": "real"},
+							"manifests": []any{
+								map[string]any{"apiVersion": "v1", "kind": "ConfigMap"},
+							},
+							"secrets": map[string]any{
+								"vars": map[string]any{
+									"API_KEY": map[string]any{
+										"store":     "ssm",
+										"reference": "/api-key",
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+		})
+	}
+}
+
+// TestManifestSchema_BackendTypeCoverage guards against the backend_type /
+// remote_state_backend_type enum and the backend_manifest.properties allow-list
+// drifting apart -- either between the three schema copies (embedded,
+// stack-config, fixture) or between the enum and the properties within a
+// single copy. See https://github.com/cloudposse/atmos/issues/2919: the
+// enum previously only listed local/s3/remote/vault/static/azurerm/gcs/cloud,
+// silently rejecting real Terraform/OpenTofu backends -- consul/cos/http/
+// kubernetes/oss/pg -- that website/docs/components/terraform/backends.mdx
+// already documents as supported.
+func TestManifestSchema_BackendTypeCoverage(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	backendTypes := []string{
+		"local", "s3", "remote", "vault", "static", "azurerm", "gcs", "cloud",
+		"consul", "cos", "http", "kubernetes", "oss", "pg",
+	}
+
+	for schemaName, schemaData := range schemas {
+		for _, backendType := range backendTypes {
+			t.Run(schemaName+"/backend/"+backendType, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, terraformBackendManifest(backendType))
+			})
+
+			t.Run(schemaName+"/remote_state_backend/"+backendType, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, terraformRemoteStateBackendManifest(backendType))
+			})
+		}
+
+		t.Run(schemaName+"/rejects unknown backend_type value", func(t *testing.T) {
+			// Isolate the enum check: "s3" is a valid, recognized key under backend:, so
+			// the only possible cause of rejection is backend_type's own enum -- unlike
+			// asserting on an unrecognized backend: key (which additionalProperties:false
+			// would also reject on its own, even with the enum check deleted entirely).
+			manifest := terraformBackendManifest("s3")
+			manifest["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)["backend_type"] = "not-a-real-backend"
+			assertSchemaInvalid(t, schemaData, manifest)
+		})
+
+		t.Run(schemaName+"/rejects unrecognized backend key", func(t *testing.T) {
+			// Isolate the backend_manifest allow-list: backend_type stays valid, so the
+			// only possible cause of rejection is the unrecognized key under backend:.
+			manifest := terraformBackendManifest("s3")
+			component := manifest["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)
+			component["backend"] = map[string]any{
+				"not-a-real-backend": map[string]any{"address": "https://example.com/state"},
+			}
+			assertSchemaInvalid(t, schemaData, manifest)
+		})
+	}
+}
+
+func terraformBackendManifest(backendType string) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"backend_type": backendType,
+					"backend": map[string]any{
+						backendType: map[string]any{
+							"address": "https://example.com/state",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func terraformRemoteStateBackendManifest(backendType string) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"backend_type": backendType,
+					"backend": map[string]any{
+						backendType: map[string]any{
+							"address": "https://example.com/state",
+						},
+					},
+					"remote_state_backend_type": backendType,
+					"remote_state_backend": map[string]any{
+						backendType: map[string]any{
+							"address": "https://example.com/state",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func kubernetesComponentManifestWithProvisionSplit(split any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"kubernetes": map[string]any{
+				"gitops-target": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"manifests": []any{
+						map[string]any{
+							"apiVersion": "v1",
+							"kind":       "ConfigMap",
+						},
+					},
+					"provision": map[string]any{
+						"targets": map[string]any{
+							"deployment-repo": map[string]any{
+								"kind":  "git",
+								"path":  "clusters/dev/demo",
+								"split": split,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func kubernetesComponentManifestWithValidate(validate bool) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"kubernetes": map[string]any{
+				"legacy-manifests": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"validate": validate,
+					"manifests": []any{
+						map[string]any{
+							"apiVersion": "v1",
+							"kind":       "ConfigMap",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func workflowManifestWithWhen(condition any) map[string]any {
 	return workflowManifestWithStep(map[string]any{
 		"command": "echo ok",

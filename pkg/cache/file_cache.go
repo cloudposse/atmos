@@ -203,6 +203,23 @@ func (c *FileCache) Set(key string, content []byte) error {
 	})
 }
 
+// Delete removes a cached entry. A missing entry is treated as already deleted.
+// Like Get and Set, deletion is serialized across Atmos processes.
+func (c *FileCache) Delete(key string) error {
+	defer perf.Track(nil, "cache.FileCache.Delete")()
+
+	path := filepath.Join(c.baseDir, keyToFilename(key))
+	return c.lock.WithLock(func() error {
+		if err := c.fs.Remove(path); err != nil && !os.IsNotExist(err) {
+			return errUtils.Build(errUtils.ErrCacheWrite).
+				WithCause(err).
+				WithContext("key", key).
+				Err()
+		}
+		return nil
+	})
+}
+
 // GetPath returns the filesystem path for a cached key.
 // Returns (path, true) if the key exists in cache, (path, false) otherwise.
 // This is useful when callers need the file path rather than content.

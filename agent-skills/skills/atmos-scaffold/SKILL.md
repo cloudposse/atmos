@@ -4,6 +4,7 @@ description: "Scaffold templates: authoring scaffold.yaml, form fields (types, v
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: scaffolding
 references:
   - references/scaffold-yaml-schema.md
   - references/merge-strategy.md
@@ -121,13 +122,42 @@ spec:
 ```
 
 This is *static* gating over a fixed, enumerable set of files the template author
-already created — not a loop generating an unbounded number of files per answer
-(no `for_each:`; that's a future enhancement, see the PRD).
+already created — one file stays one file. For generating a variable number of files
+(one per selected value, or one per resolved combination of several axes), see
+`spec.files[].matrix` below.
 
 This is distinct from the older path-templating trick: if a file's *path itself* is a
 Go template that renders to `""`, `"false"`, `"null"`, or `"<no value>"`, the engine
 skips it too (`ShouldSkipFile`). Prefer declarative `when:` for new templates — it's
 evaluated before any rendering and doesn't require crafting a path template.
+
+## Dynamic File Generation (matrix)
+
+`spec.files[].matrix` expands one discovered file into one generated file per resolved
+combination of one or more axes — the same `map[axis][]values` shape workflow `matrix:`
+steps use. Requires `target:` (a Go-template string overriding the discovered `path:`),
+since a single `path:` can't serve as the output for more than one file.
+
+```yaml
+spec:
+  files:
+    - path: templates/deploy.yaml
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: answers.environments        # a list-shaped answer
+        region: [us-east-1, us-west-2]            # a literal list
+      when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+Each axis's value is a literal list, a dot-path into `answers.*` referencing an
+already list-shaped answer, or a Go-template expression computing the list from
+nested/structured or free-text answer data (e.g. `'{{ collectKeys answers.environments
+"regions" }}'` for a computed axis, or `'{{ splitList "," answers.environments_csv
+}}'` for a free-text one — see `atmos-templates` for `collectKeys`). The resolved
+combination is available as `.matrix.<axis>` in `target:`, in `when:` (pruning
+combinations that don't apply), and in the file's own rendered content.
+
+Full schema: [references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md#specfilesmatrix--dynamic-file-generation).
 
 ## Hooks
 

@@ -16,6 +16,8 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+type terraformStateNotProvisionedCacheEntry struct{}
+
 // invalidateTerraformStateCache removes the cached outputs for one component.
 // Terraform can create an empty state file while selecting a workspace, then later
 // populate that same file during apply or deploy. Keeping the empty map cached would
@@ -70,7 +72,10 @@ func GetTerraformState(
 	// If the result for the component in the stack already exists in the cache, return it.
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
-		if found && backend != nil {
+		if found {
+			if _, notProvisioned := backend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
+				return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
+			}
 			log.Debug(
 				"Cache hit",
 				"function", yamlFunc,
@@ -178,15 +183,10 @@ func GetTerraformState(
 		return nil, er
 	}
 
-	// If `backend` is `nil`, the component in the stack has not been provisioned yet: return a
-	// recoverable error so callers can use YQ defaults if available. Do NOT cache this result -
-	// storing a nil map[string]any into the `any`-typed cache would box a non-nil interface with
-	// a nil value, which `found && backend != nil` below treats as a cache HIT forever (Go's
-	// typed-nil-in-interface semantics). During a `deploy --all` DAG run a dependency can be
-	// provisioned by an earlier node after this "not yet provisioned" read; later reads of the
-	// same component must see its real state once it exists, not a poisoned nil frozen from
-	// before the dependency was ever deployed.
+	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
+	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
+		terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
 

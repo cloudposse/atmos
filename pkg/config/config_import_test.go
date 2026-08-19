@@ -294,6 +294,67 @@ commands:
 	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
 }
 
+// TestMergeConfig_AtmosDCommandsMerging_TopLevelYamlFunction reproduces
+// https://github.com/cloudposse/atmos/issues/2570: a top-level Atmos YAML
+// function directly on a command's own field (not nested inside a
+// sub-command) in the last-processed .atmos.d file must not clobber
+// commands merged in from earlier .atmos.d files.
+func TestMergeConfig_AtmosDCommandsMerging_TopLevelYamlFunction(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	err := os.Mkdir(atmosDDir, 0o755)
+	require.NoError(t, err)
+
+	aContent := `
+commands:
+  - name: "alpha"
+    steps:
+      - echo "a"
+`
+	createConfigFile(t, atmosDDir, "a.yaml", aContent)
+
+	bContent := `
+commands:
+  - name: "bravo"
+    working_directory: !repo-root .
+    steps:
+      - echo "b"
+`
+	createConfigFile(t, atmosDDir, "b.yaml", bContent)
+
+	mainContent := `
+base_path: ./
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	commands := v.Get("commands")
+	assert.NotNil(t, commands)
+
+	commandsList, ok := commands.([]interface{})
+	assert.True(t, ok, "commands should be a slice")
+	assert.Equal(t, 2, len(commandsList), "should have both commands (alpha from a.yaml + bravo from b.yaml)")
+
+	commandNames := make(map[string]bool)
+	for _, cmd := range commandsList {
+		cmdMap, ok := cmd.(map[string]interface{})
+		assert.True(t, ok, "command should be a map")
+		name, ok := cmdMap["name"].(string)
+		assert.True(t, ok, "command should have a name")
+		commandNames[name] = true
+		t.Logf("Found command: %s", name)
+	}
+
+	assert.True(t, commandNames["alpha"], "alpha command from a.yaml should be present")
+	assert.True(t, commandNames["bravo"], "bravo command from b.yaml should be present")
+}
+
 func TestMergeConfig_ProcessImportsWithInvalidYAML(t *testing.T) {
 	// Test error handling when import file contains invalid YAML.
 	setupTestAdapters()

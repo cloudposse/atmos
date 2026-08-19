@@ -48,8 +48,9 @@ type SourceUpdateResult struct {
 	// resolved under, populated only for component.yaml-declared sources (ResolvedSource.ComponentType;
 	// see updateResolvedSource). Empty for vendor.yaml-declared sources, which don't carry a single
 	// type the same way (each source's own Targets can point anywhere). Used by
-	// cmd/vendor/update.go's partitionUpdatedResults to group a repo-wide "--pull" batch by type,
-	// since a component-manifest sweep (DiscoverAllComponentManifests) can mix types in one report.
+	// cmd/vendor/update.go's partitionPullResults/partitionReportResults to group a repo-wide
+	// "--pull" batch by type, since a component-manifest sweep (DiscoverAllComponentManifests) can
+	// mix types in one report.
 	ComponentType string
 }
 
@@ -372,12 +373,15 @@ func isNewer(current, latest string) bool {
 	return latest != "" && latest != current
 }
 
-// sourceMatchesFilter applies the component, tags, and type filters.
-func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string, componentType string) bool {
+// MatchesComponentTags reports whether src matches an explicit --component name (exact) and/or
+// --tags filter (any), the AND-of-both-when-both-given semantics `vendor update` and `vendor pull`
+// both apply against a vendor.yaml source. Exported so internal/exec's shouldSkipSource (pull) can
+// share this instead of hand-maintaining its own copy -- previously the two were independently
+// implemented, near-identical functions.
+func MatchesComponentTags(src *schema.AtmosVendorSource, component string, tags []string) bool {
+	defer perf.Track(nil, "vendoring.MatchesComponentTags")()
+
 	if component != "" && src.Component != component {
-		return false
-	}
-	if componentType != "" && !sourceTargetsType(src, componentType) {
 		return false
 	}
 	if len(tags) == 0 {
@@ -391,6 +395,14 @@ func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags [
 		}
 	}
 	return false
+}
+
+// sourceMatchesFilter applies the component, tags, and type filters.
+func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string, componentType string) bool {
+	if !MatchesComponentTags(src, component, tags) {
+		return false
+	}
+	return componentType == "" || sourceTargetsType(src, componentType)
 }
 
 func sourceTargetsType(src *schema.AtmosVendorSource, componentType string) bool {

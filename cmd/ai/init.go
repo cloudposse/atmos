@@ -163,6 +163,32 @@ func selectManualServers(servers map[string]schema.MCPServerConfig, mcpServerNam
 	return filtered
 }
 
+// clientConfigForMCP returns atmosConfig unchanged, unless both the provider is a
+// CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) and mcpServers
+// (the --mcp flag) was given, in which case it returns a copy with MCP.Servers
+// filtered to the requested subset.
+//
+// CLI-provider clients (pkg/ai/agent/{claudecode,codexcli,copilotcli,geminicli})
+// read atmosConfig.MCP.Servers directly and pass every configured server through
+// unconditionally, ignoring --mcp entirely — unlike API providers, where MCP
+// servers are exposed as tools via initializeAIToolsAndExecutor/
+// registerMCPServerTools, which already applies this same --mcp filtering (and
+// prints the same selection/warning messages). Filtering only for CLI providers
+// here fixes the CLI-provider gap without emitting the "MCP servers selected via
+// --mcp flag" message a second time for API providers.
+//
+// The atmosConfig parameter is taken by pointer (it's large) but returned by
+// value: the returned struct is a copy, so reassigning its MCP.Servers field
+// to a new map cannot affect the caller's original struct.
+func clientConfigForMCP(atmosConfig *schema.AtmosConfiguration, mcpServers []string) schema.AtmosConfiguration {
+	if len(mcpServers) == 0 || !ai.IsCLIProvider(atmosConfig.AI.DefaultProvider) {
+		return *atmosConfig
+	}
+	result := *atmosConfig
+	result.MCP.Servers = selectManualServers(atmosConfig.MCP.Servers, mcpServers)
+	return result
+}
+
 // selectRoutedServers uses the AI provider to select relevant servers, with validation.
 func selectRoutedServers(atmosConfig *schema.AtmosConfiguration, servers map[string]schema.MCPServerConfig, question string) map[string]schema.MCPServerConfig {
 	selected := routeWithAI(atmosConfig, question)

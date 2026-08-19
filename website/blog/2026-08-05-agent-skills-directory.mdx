@@ -1,0 +1,62 @@
+---
+slug: agent-skills-directory
+title: "Browse, Search, and Copy Any Atmos Agent Skill Before You Install It"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Before you install a skill, you want to read what it does. Atmos agent skills did not let you do that. You
+had to install a skill first to read its full instructions. Or you had to find its file in the Atmos
+repository on GitHub. An AI agent had the same problem. No page listed every skill with its full content. No
+single URL let an agent fetch a skill's content on its own.
+
+<!--truncate-->
+
+## The Problem
+
+The [`atmos ai skill list`](/cli/commands/ai/skill) command already listed every official skill, showing
+each skill's name, source, and install status. Add `--detailed`, and it also showed a one-line description.
+But no view showed a skill's full instructions -- the actual content that teaches the AI its domain
+knowledge.
+
+To read that content, you had two options. Install the skill first. Or open the Atmos repository on GitHub
+and find the right `SKILL.md` file. Neither option let you compare skills quickly. Neither option gave an AI
+agent a direct way to fetch and read a skill's content on its own.
+
+## The Fix
+
+The [Agent Skills Directory](/ai/skills) lists every skill with its full content. Open the directory. Search
+by name, description, or category. Click a skill to read its complete instructions -- no install step
+required. Add a new skill to the Atmos repository, and it appears in the directory automatically.
+
+Each skill's page also has a raw Markdown version. Add `.md` to the page's URL. This is the same convention
+the rest of the Atmos docs site uses. An AI agent can fetch this URL directly and read the skill's content.
+
+Each skill's page also has a "Copy as Markdown" button. Use it to copy the skill's full content. Paste it
+into a chat session, or review it, before you install anything.
+
+The `atmos ai skill list` command also gained a `--format` flag and a Category column, so the same
+categorization shown in the directory is available from the CLI.
+
+## How to Use It
+
+Browse and search the directory at [atmos.tools/ai/skills](/ai/skills). Or fetch a skill's content directly:
+
+```shell
+# Raw Markdown for one skill - readable by a human, fetchable by an agent
+skill_name=atmos-ai
+curl "https://atmos.tools/ai/skills/${skill_name}.md"
+
+# Table view, now with a Category column
+atmos ai skill list
+
+# Machine-readable output for scripting
+atmos ai skill list --format=json
+atmos ai skill list --format=yaml
+```
+
+## Get Involved
+
+See the [Agent Skills](/cli/commands/ai/skill) guide to learn how skills are structured. It also explains
+how to contribute one. Share skill ideas and contributions in the
+[Atmos community](https://github.com/cloudposse/atmos).

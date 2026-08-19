@@ -742,6 +742,7 @@ func TestRunCICheckout_WithStub(t *testing.T) {
 	ciCtx := &ci.Context{
 		Repository: "acme/my-repo",
 		Ref:        "refs/heads/main",
+		Branch:     "main",
 		CloneURL:   "https://github.com/acme/my-repo.git",
 	}
 	err := runCICheckout(context.Background(), "github", ciCtx, opts)
@@ -770,7 +771,7 @@ func TestRunCICheckout_ProviderSuppliedHost(t *testing.T) {
 	assert.Equal(t, "https://ghe.acme.com/acme/repo.git", clonedURI)
 }
 
-func TestRunCICheckout_BranchFromRef(t *testing.T) {
+func TestRunCICheckout_BranchFromCIContext(t *testing.T) {
 	var capturedBranch string
 	withTestProvider(t, &stubGitProvider{
 		cloneFn: func(_ context.Context, opts *atmosgit.CloneOptions) error {
@@ -780,9 +781,14 @@ func TestRunCICheckout_BranchFromRef(t *testing.T) {
 	})
 
 	opts := &cloneOptions{Workdir: t.TempDir()}
+	// Ref carries the full ref path a real CI provider reports (e.g.
+	// GITHUB_REF); Branch is the already-parsed short name. `git clone
+	// --branch` requires the short name, so the checkout must use Branch,
+	// not Ref, even though both are populated here.
 	ciCtx := &ci.Context{
 		Repository: "acme/repo",
-		Ref:        "feature/x",
+		Ref:        "refs/heads/feature/x",
+		Branch:     "feature/x",
 		CloneURL:   "https://github.com/acme/repo.git",
 	}
 	err := runCICheckout(context.Background(), "github", ciCtx, opts)

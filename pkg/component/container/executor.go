@@ -109,14 +109,14 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 // runtime detects the container runtime and forwards the resolved environment
 // (so registry auth and app credentials reach the docker/podman subprocess).
 func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
-	runtime, err := detectRuntime(ctx, r.runtimePref, r.autoStart)
+	resolution, err := resolveRuntimeForContainerCommand(ctx, r.runtimePref, r.autoStart)
 	if err != nil {
 		return nil, err
 	}
-	if setter, ok := runtime.(ctr.EnvSetter); ok {
+	if setter, ok := resolution.runtime.(ctr.EnvSetter); ok {
 		setter.SetEnv(r.envList)
 	}
-	return runtime, nil
+	return resolution.runtime, nil
 }
 
 // mounts returns runtime mounts with bind sources made absolute against the
@@ -272,7 +272,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err := r.ensureImage(ctx, runtime, image); err != nil {
 		return err
 	}
-	_, err = ctr.RunEphemeralContainer(ctx, runtime, &ctr.EphemeralConfig{
+	runConfig := &ctr.EphemeralConfig{
 		Name:    ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component),
 		Image:   image,
 		Command: []string{"/bin/sh", "-lc", r.spec.Run.Command},
@@ -282,8 +282,9 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		User:    r.runUser(),
 		Labels:  ctr.InstanceLabels(r.stack, cfg.ContainerComponentType, r.component),
 		Host:    r.spec.HostRuntime(),
-	})
-	if err != nil {
+	}
+	ctr.AttachSharedNetwork(ctx, runtime, &runConfig.Networks, r.stack, r.component)
+	if _, err := ctr.RunEphemeralContainer(ctx, runtime, runConfig); err != nil {
 		return fmt.Errorf("%w: run %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
 	return nil
@@ -328,6 +329,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+	ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
 	if err := r.ensureImage(ctx, runtime, image); err != nil {
 		return err
 	}

@@ -1,0 +1,13 @@
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: comp-a-vendor-config
+  description: Vendor configuration for the comp-a component (regression fixture for --stack/--labels)
+spec:
+  source:
+    uri: "../../../../../components/terraform/mock"
+    included_paths:
+      - "**/*.tf"
+      - "**/*.md"
+  targets:
+    - "components/terraform/comp-a"

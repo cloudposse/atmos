@@ -47,6 +47,7 @@ type EphemeralConfig struct {
 	WorkspaceReadOnly bool
 	Mounts            []Mount
 	Ports             []PortBinding
+	Networks          []NetworkAttachment
 	Env               []string
 	User              string
 	Labels            map[string]string
@@ -56,7 +57,9 @@ type EphemeralConfig struct {
 	TTY               bool
 	Interactive       bool
 	Stdin             io.Reader
-	Host              bool // grant access to the host container runtime (Docker-out-of-Docker)
+	Host              bool           // grant access to the host container runtime (Docker-out-of-Docker).
+	Restart           *RestartPolicy // restart policy (nil = runtime default).
+	HealthCheck       *HealthCheck   // health check (nil = inherit image healthcheck).
 }
 
 // EphemeralResult is the result of a one-shot container execution.
@@ -215,11 +218,14 @@ func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {
 		WorkspaceFolder: config.WorkspaceFolder,
 		Mounts:          mounts,
 		Ports:           config.Ports,
+		Networks:        config.Networks,
 		User:            config.User,
 		Labels:          config.Labels,
 		RunArgs:         config.RunArgs,
 		OverrideCommand: true,
 		Host:            config.Host,
+		Restart:         config.Restart,
+		HealthCheck:     config.HealthCheck,
 	}
 }
 
@@ -320,6 +326,8 @@ func appendEphemeralPreviewFlags(args []string, config *EphemeralConfig) []strin
 	for _, env := range config.Env {
 		args = append(args, "-e", env)
 	}
+	args = addRestartFlag(args, config.Restart)
+	args = addHealthFlags(args, config.HealthCheck)
 	return args
 }
 

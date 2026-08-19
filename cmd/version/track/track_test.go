@@ -106,21 +106,6 @@ func newTrackCommand(source *cobra.Command, opts ...flags.Option) *cobra.Command
 	return cmd
 }
 
-func newRenderCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:  trackRenderCmd.Use,
-		Args: trackRenderCmd.Args,
-		RunE: trackRenderCmd.RunE,
-	}
-	flags.NewStandardParser(
-		flags.WithStringFlag("track", "", "", "Version track to operate on"),
-		flags.WithStringFlag("file", "", "", "Template source file to render"),
-		flags.WithStringFlag("output", "", "", "Rendered output file"),
-		flags.WithBoolFlag("check", "", false, "Check rendered output"),
-	).RegisterFlags(cmd)
-	return cmd
-}
-
 func trackConfig(t *testing.T) *schema.AtmosConfiguration {
 	t.Helper()
 	dir := t.TempDir()
@@ -373,34 +358,6 @@ func TestTrackAddSetRemoveCommandsEditConfig(t *testing.T) {
 	content, _ = os.ReadFile(configPath)
 	if strings.Contains(string(content), "checkout:") {
 		t.Fatalf("config after remove =\n%s", content)
-	}
-}
-
-func TestTrackRenderCommandCheckMode(t *testing.T) {
-	cfg := trackConfig(t)
-	setTrackConfigForTest(t, cfg)
-	setupTrackOutput(t)
-
-	source := filepath.Join(cfg.BasePath, "versions.txt.tmpl")
-	output := filepath.Join(cfg.BasePath, "versions.txt")
-	if err := os.WriteFile(source, []byte("static content\n"), 0o644); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
-	if err := os.WriteFile(output, []byte("static content\n"), 0o644); err != nil {
-		t.Fatalf("write output: %v", err)
-	}
-	if err := runTrackCommand(t, newRenderCommand(), "--file", source, "--output", output, "--check"); err != nil {
-		t.Fatalf("render check returned error: %v", err)
-	}
-
-	if err := os.WriteFile(output, []byte("drifted\n"), 0o644); err != nil {
-		t.Fatalf("write drifted output: %v", err)
-	}
-	if err := runTrackCommand(t, newRenderCommand(), "--file", source, "--output", output, "--check"); !errors.Is(err, ErrRenderDrift) {
-		t.Fatalf("render drift error = %v, want %v", err, ErrRenderDrift)
-	}
-	if err := runTrackCommand(t, newRenderCommand()); !errors.Is(err, ErrRenderFileRequired) {
-		t.Fatalf("render missing file error = %v, want %v", err, ErrRenderFileRequired)
 	}
 }
 

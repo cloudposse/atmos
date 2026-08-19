@@ -22,8 +22,18 @@ const (
 )
 
 // CleanWorkdir removes the working directory for a specific component in a stack.
-// The workdir name follows the stack-component naming convention (e.g., "dev-vpc").
-func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
+// Delegates to BuildPath -- the single canonical formula every workdir consumer must share --
+// rather than reimplementing the stack-component naming convention, so this can always find
+// what Service.Provision actually created (see BuildPath's doc comment for the component-name
+// encoding that makes this necessary for hyphenated or nested component names). The
+// componentConfig parameter is passed straight through to BuildPath so it can honor an
+// "atmos_component" instance-name override the same way provisioning did -- without it,
+// cleanup for a component provisioned under an atmos_component override would derive the base
+// component's path instead of the actual instance path, find nothing there, and silently
+// report success without removing the real workdir. It may be nil when the caller has no stack
+// config available (e.g. TTL-based expiry, which only has the workdir's on-disk name, not its
+// originating componentConfig).
+func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) error {
 	defer perf.Track(atmosConfig, "workdir.CleanWorkdir")()
 
 	basePath := atmosConfig.BasePath
@@ -31,9 +41,15 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack strin
 		basePath = "."
 	}
 
-	// Construct workdir name using stack-component naming convention.
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
+	workdirPath, err := BuildPath(basePath, "terraform", component, stack, componentConfig)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrWorkdirClean).
+			WithCause(err).
+			WithExplanation("failed to resolve component workdir path").
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
 
 	// Check if workdir exists.
 	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
@@ -96,6 +112,10 @@ type CleanOptions struct {
 	// Stack is the stack name (required when Component is specified).
 	Stack string
 
+	// ComponentConfig is the resolved stack config for Component (used to honor an
+	// "atmos_component" instance-name override the same way provisioning did). May be nil.
+	ComponentConfig map[string]any
+
 	// All cleans all workdirs in the project.
 	All bool
 
@@ -145,7 +165,7 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 			errs = append(errs, err)
 		}
 	case opts.Component != "" && opts.Stack != "":
-		if err := CleanWorkdir(atmosConfig, opts.Component, opts.Stack); err != nil {
+		if err := CleanWorkdir(atmosConfig, opts.Component, opts.Stack, opts.ComponentConfig); err != nil {
 			errs = append(errs, err)
 		}
 	default:

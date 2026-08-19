@@ -50,7 +50,8 @@ func GetLatestRelease(owner string, repo string) (string, error) {
 func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "github.GetReleases")()
 
-	log.Debug("Fetching releases from GitHub API",
+	log.Debug(
+		"Fetching releases from GitHub API",
 		logFieldOwner, opts.Owner,
 		logFieldRepo, opts.Repo,
 		"limit", opts.Limit,
@@ -67,7 +68,8 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 		remaining := rateLimits.Core.Remaining
 		limit := rateLimits.Core.Limit
 
-		log.Debug("GitHub API rate limits",
+		log.Debug(
+			"GitHub API rate limits",
 			"remaining", remaining,
 			"limit", limit,
 			"resetAt", rateLimits.Core.Reset.Time,
@@ -106,6 +108,7 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 
 	// Apply filters.
 	allReleases = filterPrereleases(allReleases, opts.IncludePrereleases)
+	allReleases = filterDrafts(allReleases)
 	allReleases = filterByDate(allReleases, opts.Since)
 
 	// Apply offset and limit.
@@ -157,6 +160,20 @@ func filterPrereleases(releases []*github.RepositoryRelease, includePrereleases 
 	filtered := make([]*github.RepositoryRelease, 0, len(releases))
 	for _, release := range releases {
 		if !release.GetPrerelease() {
+			filtered = append(filtered, release)
+		}
+	}
+
+	return filtered
+}
+
+// filterDrafts removes draft releases; drafts are never eligible for resolution or listing.
+func filterDrafts(releases []*github.RepositoryRelease) []*github.RepositoryRelease {
+	defer perf.Track(nil, "github.filterDrafts")()
+
+	filtered := make([]*github.RepositoryRelease, 0, len(releases))
+	for _, release := range releases {
+		if !release.GetDraft() {
 			filtered = append(filtered, release)
 		}
 	}

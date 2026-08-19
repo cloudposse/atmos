@@ -1,10 +1,12 @@
 package hooks
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -185,6 +188,54 @@ func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
 	out, err := runEngineWithKind(t, kind, hook)
 	require.NoError(t, err)
 	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
+}
+
+func TestCommandEngine_RoutesSubprocessOutputToContextWriters(t *testing.T) {
+	exe := testExePath(t)
+	terraformDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(terraformDir, "test-component"), 0o755))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	kind := &Kind{Name: "command", OnFailure: OnFailureWarn, Engine: &CommandEngine{}}
+	ctx := &ExecContext{
+		Hook: kind.ResolveDefaults(&Hook{
+			Kind:    "command",
+			Command: exe,
+			Args:    []string{"-test.run", "^$"},
+			Env: map[string]string{
+				"_ATMOS_TEST_ECHO_STDOUT": "1",
+				"_ATMOS_TEST_STDOUT_BODY": "hook progress\rhook complete\n",
+				"_ATMOS_TEST_ECHO_STDERR": "1",
+				"_ATMOS_TEST_STDERR_BODY": "hook warning\n",
+			},
+		}),
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: terraformDir,
+		},
+		Info:   &schema.ConfigAndStacksInfo{Stack: "test-stack", ComponentFromArg: "test-component"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+
+	_, err := ctx.Kind.Engine.Run(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "hook progress\rhook complete\n", stdout.String())
+	assert.Equal(t, "hook warning\n", stderr.String())
+}
+
+func TestRenderTerminalRoutesSummaryToContextStderr(t *testing.T) {
+	var stderr bytes.Buffer
+	writer := iolib.NewLinePrefixWriter("test/component", &stderr, &sync.Mutex{})
+
+	renderTerminal(&ExecContext{Stderr: writer}, &Output{
+		Summary: &Summary{Body: "**hook summary**\n"},
+	})
+	require.NoError(t, writer.Flush())
+
+	assert.Contains(t, stderr.String(), "[test/component] ")
+	assert.Contains(t, stderr.String(), "hook summary")
 }
 
 func TestRunSubprocess_CaptureStdoutCreateFailurePropagates(t *testing.T) {

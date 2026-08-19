@@ -1,7 +1,10 @@
 package list
 
 import (
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -10,6 +13,7 @@ const (
 	flagColumns = "columns"
 	flagSkip    = "skip"
 	flagFormat  = "format"
+	flagTags    = "tags"
 
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
@@ -43,7 +47,7 @@ func WithFormatFlag(options *[]flags.Option) {
 }
 
 // WithDependenciesFormatFlag adds the output format flag for the dependencies
-// command, which supports only tree (default), json, and yaml.
+// command, which supports tree (default), json, yaml, and levels.
 // Uses ATMOS_LIST_DEPENDENCIES_FORMAT (not ATMOS_LIST_FORMAT) so that users
 // who export ATMOS_LIST_FORMAT=table/csv/matrix for other list verbs are not
 // affected; the dependencies subcommand rejects those values.
@@ -53,9 +57,9 @@ func WithDependenciesFormatFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml"),
+		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml, levels"),
 		flags.WithEnvVars(flagFormat, "ATMOS_LIST_DEPENDENCIES_FORMAT"),
-		flags.WithValidValues(flagFormat, "tree", "json", "yaml"),
+		flags.WithValidValues(flagFormat, "tree", "json", "yaml", dependencies.FormatLevels),
 	)
 }
 
@@ -256,19 +260,36 @@ func WithTagsFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+		flags.WithStringFlag(flagTags, "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithEnvVars(flagTags, "ATMOS_COMPONENT_TAGS"),
 	)
 }
 
-// WithLabelsFlag adds a labels filter flag (comma-separated key=value pairs, matches all).
+// WithVendorTagsFlag adds a tags filter flag for vendor manifest tags.
+// Vendor tags come from `tags:` entries on vendor manifest sources
+// (vendor.yaml), not from component `metadata.tags`, so the env var is
+// deliberately distinct from ATMOS_COMPONENT_TAGS — sharing it would make a
+// component-metadata filter exported for other list commands silently filter
+// vendor listings by an unrelated concept.
+// Used by: vendor.
+func WithVendorTagsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithVendorTagsFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag(flagTags, "", "", "Filter by vendor manifest tags (comma-separated, matches any): --tags=networking,storage"),
+		flags.WithEnvVars(flagTags, "ATMOS_VENDOR_TAGS"),
+	)
+}
+
+// WithLabelsFlag adds a labels filter flag (comma-separated key=value or key:value pairs, matches all).
 // Used by: components.
 func WithLabelsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithLabelsFlag")()
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 		flags.WithEnvVars("labels", "ATMOS_COMPONENT_LABELS"),
 	)
 }
@@ -523,6 +544,39 @@ func WithIncludeDependentsFlag(options *[]flags.Option) {
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components and stacks"),
 		flags.WithEnvVars("include-dependents", "ATMOS_AFFECTED_INCLUDE_DEPENDENTS"),
 	)
+}
+
+// WithClosureFlags adds the depth-carrying dependency-closure preview flags
+// (--include-dependencies/--include-dependents: bare = unlimited, =N bounds
+// the expansion), matching the terraform bulk commands so a list command can
+// preview the exact selection a bulk run would execute.
+// Used by: components, stacks, instances.
+func WithClosureFlags(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithClosureFlags")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag(flags.FlagIncludeDependencies, "", "", "Also include everything the selected components depend on (their prerequisites). Optionally bound the expansion: --include-dependencies=N"),
+		flags.WithEnvVars(flags.FlagIncludeDependencies, "ATMOS_INCLUDE_DEPENDENCIES"),
+		flags.WithNoOptDefValNoSpaceValue(flags.FlagIncludeDependencies, flags.ClosureDepthUnlimited),
+		flags.WithStringFlag(flags.FlagIncludeDependents, "", "", "Also include everything that depends on the selected components. Optionally bound the expansion: --include-dependents=N"),
+		flags.WithEnvVars(flags.FlagIncludeDependents, "ATMOS_INCLUDE_DEPENDENTS"),
+		flags.WithNoOptDefValNoSpaceValue(flags.FlagIncludeDependents, flags.ClosureDepthUnlimited),
+	)
+}
+
+// parseListClosureOptions parses the depth-carrying closure preview flags
+// registered by WithClosureFlags into their internal encoding (0 = off,
+// -1 = unlimited, N>0 = N levels).
+func parseListClosureOptions(v *viper.Viper, includeDependencies, includeDependents *int) error {
+	defer perf.Track(nil, "list.parseListClosureOptions")()
+
+	var err error
+	if *includeDependencies, err = flags.ParseClosureDepth(flags.FlagIncludeDependencies, v.GetString(flags.FlagIncludeDependencies)); err != nil {
+		return err
+	}
+	*includeDependents, err = flags.ParseClosureDepth(flags.FlagIncludeDependents, v.GetString(flags.FlagIncludeDependents))
+	return err
 }
 
 // WithExcludeLockedFlag adds exclude locked components flag.

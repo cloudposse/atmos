@@ -215,7 +215,7 @@ func TestResolveMaxFindings(t *testing.T) {
 		{
 			name:      "no flag, no env — defaultMaxFindings",
 			flagSet:   false,
-			flagValue: maxFindingsUnset,
+			flagValue: defaultMaxFindings,
 			want:      defaultMaxFindings,
 		},
 	}
@@ -232,7 +232,7 @@ func TestResolveMaxFindings(t *testing.T) {
 	})
 
 	t.Run("nil cmd with sentinel falls back to default", func(t *testing.T) {
-		assert.Equal(t, defaultMaxFindings, resolveMaxFindings(nil, maxFindingsUnset))
+		assert.Equal(t, defaultMaxFindings, resolveMaxFindings(nil, defaultMaxFindings))
 	})
 }
 
@@ -242,7 +242,7 @@ func TestResolveMaxFindings(t *testing.T) {
 func newMaxFindingsTestCmd(t *testing.T, flagSet bool, flagValue int) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{Use: "test", Run: func(*cobra.Command, []string) {}}
-	cmd.Flags().Int(maxFindingsFlagName, maxFindingsUnset, "")
+	cmd.Flags().Int(maxFindingsFlagName, defaultMaxFindings, "")
 	if flagSet {
 		require.NoError(t, cmd.Flags().Set(maxFindingsFlagName, strconv.Itoa(flagValue)))
 	}

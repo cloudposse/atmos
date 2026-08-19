@@ -126,6 +126,7 @@ const (
 	PathsSectionName                  = "paths"
 	ManifestsSectionName              = "manifests"
 	RenderSectionName                 = "render"
+	ValidateSectionName               = "validate"
 	ValuesSectionName                 = "values"
 	ValuesFilesSectionName            = "values_files"
 	PluginsSectionName                = "plugins"
@@ -189,6 +190,9 @@ const (
 	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Profile flags.
+	ProfileFlagSelectValue = "__SELECT__" // Special value when --profile is used without argument (interactive picker).
 
 	// Cast recording flag.
 	CastFlagName      = "cast"

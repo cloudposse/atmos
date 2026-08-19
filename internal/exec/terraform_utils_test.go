@@ -224,6 +224,8 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		skip []string,
 		gotAuthManager auth.AuthManager,
 		useMocks bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
 	) (map[string]any, error) {
 		described = true
 		require.NotNil(t, atmosConfig)
@@ -238,6 +240,8 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		require.Equal(t, []string{"skip-me"}, skip)
 		require.Equal(t, authManager, gotAuthManager)
 		require.False(t, useMocks)
+		require.Nil(t, tagsFilter)
+		require.Nil(t, labelsFilter)
 		return stacks, nil
 	})
 	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
@@ -449,6 +453,8 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			[]string,
 			auth.AuthManager,
 			bool,
+			[]string,
+			map[string]string,
 		) (map[string]any, error) {
 			return nil, expectedErr
 		})
@@ -486,6 +492,8 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			[]string,
 			auth.AuthManager,
 			bool,
+			[]string,
+			map[string]string,
 		) (map[string]any, error) {
 			return map[string]any{}, nil
 		})

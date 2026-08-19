@@ -41,6 +41,13 @@ var uninstallCmd = &cobra.Command{
 			return err
 		}
 
+		// Reject an unsupported --client before doing any work; BindFlagsToViper
+		// alone doesn't validate ValidValues (that only happens inside Parse()),
+		// so this command validates explicitly.
+		if err := uninstallParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
+
 		// Get flags from Viper (supports CLI > ENV > config > defaults).
 		force := v.GetBool("force")
 
@@ -85,11 +92,12 @@ func init() {
 	uninstallParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
-		flags.WithStringSliceFlag("client", "c", nil, "AI client to remove the skill from (repeatable): claude-code, vscode, gemini"),
-		flags.WithEnvVars("client", "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to remove the skill from (repeatable): claude-code, vscode, gemini"),
+		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithValidValues(clientFlag, marketplace.SupportedClients...),
 		flags.WithBoolFlag("all-clients", "", false, "Remove the skill from all supported AI clients"),
 		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
-		flags.WithStringFlag(scopeFlag, "", marketplace.ScopeProject, "Distribution scope: project or user"),
+		flags.WithStringFlag(scopeFlag, "", marketplace.ScopeProject, "Distribution scope: project or user (wins over --global if both are set)"),
 		flags.WithEnvVars(scopeFlag, "ATMOS_AI_SKILL_SCOPE"),
 		flags.WithValidValues(scopeFlag, marketplace.ScopeProject, marketplace.ScopeUser),
 		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),

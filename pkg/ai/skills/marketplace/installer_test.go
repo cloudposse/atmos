@@ -31,6 +31,20 @@ func (m *mockDownloader) Download(ctx context.Context, source *SourceInfo) (stri
 	return "", errors.New("download not implemented")
 }
 
+// mockValidator implements SkillValidator for testing, letting tests force a
+// validation failure without depending on real (always-valid) bundled-skill
+// content, which never declares a version requirement or tool conflict.
+type mockValidator struct {
+	validateFunc func(skillPath string, metadata *SkillMetadata) error
+}
+
+func (m *mockValidator) Validate(skillPath string, metadata *SkillMetadata) error {
+	if m.validateFunc != nil {
+		return m.validateFunc(skillPath, metadata)
+	}
+	return nil
+}
+
 // mockLocalRegistry provides a test implementation of LocalRegistry methods.
 type mockLocalRegistry struct {
 	skills map[string]*InstalledSkill
@@ -1424,6 +1438,76 @@ func TestInstall_MultiSkillPackage_AllInvalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "no valid skills found")
 }
 
+// TestInstall_MultiSkillPackage_IncompatibleVersionSkipsThatSkillOnly covers the
+// version-compatibility validation gate that installOneSkillFromPackage runs before
+// registering a skill from a multi-skill Git package: one skill in the package
+// declares a compatibility.atmos requirement the installer can never satisfy, so it
+// is rejected while its well-formed sibling still installs -- a validation failure
+// for one skill in a batch must not abort the rest.
+func TestInstall_MultiSkillPackage_IncompatibleVersionSkipsThatSkillOnly(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := t.TempDir()
+
+	goodSkillDir := filepath.Join(packageDir, "agent-skills", "skills", "good-skill")
+	require.NoError(t, os.MkdirAll(goodSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(goodSkillDir, "SKILL.md"), []byte(`---
+name: good-skill
+description: A well-formed, compatible skill
+metadata:
+  display_name: Good Skill
+  version: 1.0.0
+---
+
+# Good Skill
+
+Body content.
+`), 0o644))
+
+	incompatibleSkillDir := filepath.Join(packageDir, "agent-skills", "skills", "incompatible-skill")
+	require.NoError(t, os.MkdirAll(incompatibleSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(incompatibleSkillDir, "SKILL.md"), []byte(`---
+name: incompatible-skill
+description: Requires a far-future Atmos version
+compatibility:
+  atmos: ">=99.0.0"
+metadata:
+  display_name: Incompatible Skill
+  version: 1.0.0
+---
+
+# Incompatible Skill
+
+Body content.
+`), 0o644))
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyTo := filepath.Join(t.TempDir(), "pkg-copy")
+			require.NoError(t, os.MkdirAll(copyTo, 0o755))
+			require.NoError(t, copyDirRecursive(packageDir, copyTo))
+			return copyTo, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	// The batch as a whole does not fail; only the incompatible skill is skipped.
+	require.NoError(t, installer.Install(ctx, "github.com/test/mixed-pkg", opts))
+
+	_, err = installer.Get("good-skill")
+	assert.NoError(t, err, "the compatible skill must still be installed")
+
+	_, err = installer.Get("incompatible-skill")
+	assert.True(t, errors.Is(err, ErrSkillNotFound), "the incompatible skill must not be registered")
+}
+
 func TestInstall_SingleSkillWithRootSKILLMD(t *testing.T) {
 	// Verify single-skill path is taken when SKILL.md exists at root.
 	tempDir := t.TempDir()
@@ -2056,4 +2140,83 @@ func TestUninstall_UserScope_RemovesHomeDirClientCopy(t *testing.T) {
 	// The project path must never have been touched.
 	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "test-skill"))
 	assert.True(t, os.IsNotExist(err), "project path must remain untouched by a user-scope uninstall")
+}
+
+// TestInstall_LocalPathSource_EndToEnd exercises a real (non-mocked) local-path
+// install end to end: ParseSource recognizing an existing directory as Type
+// "local", the real Downloader copying it instead of git-cloning, and the normal
+// single-skill install/validate/register flow completing. Uses a plain
+// t.TempDir() directory (no Git repo involved) containing a minimal SKILL.md, per
+// the "local source" contract documented on SourceInfo.Type.
+func TestInstall_LocalPathSource_EndToEnd(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	sourceDir := t.TempDir()
+	skillMD := `---
+name: local-test-skill
+description: A skill installed from a local path
+metadata:
+  display_name: Local Test Skill
+  version: 1.0.0
+---
+
+# Local Test Skill
+
+Body content.
+`
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "SKILL.md"), []byte(skillMD), 0o644))
+
+	// installer.downloader is left as NewInstaller's real *Downloader (not a
+	// mockDownloader), since this test's whole point is exercising the local-copy
+	// branch added to Downloader.Download.
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, installer.Install(ctx, sourceDir, InstallOptions{SkipConfirm: true}))
+
+	skill, err := installer.Get("local-test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "Local Test Skill", skill.DisplayName)
+	assert.Equal(t, "1.0.0", skill.Version)
+	assert.FileExists(t, filepath.Join(skill.Path, "SKILL.md"))
+
+	// The original source directory was copied, not moved.
+	assert.FileExists(t, filepath.Join(sourceDir, "SKILL.md"))
+}
+
+// TestInstall_LocalPathSource_FileURL covers the file:// form of a local source
+// end to end, same as TestInstall_LocalPathSource_EndToEnd but through the
+// explicit URL prefix instead of a bare existing path.
+func TestInstall_LocalPathSource_FileURL(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	sourceDir := t.TempDir()
+	skillMD := `---
+name: local-fileurl-skill
+description: A skill installed from a file:// source
+metadata:
+  display_name: Local File URL Skill
+  version: 1.0.0
+---
+
+# Local File URL Skill
+
+Body content.
+`
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "SKILL.md"), []byte(skillMD), 0o644))
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, installer.Install(ctx, "file://"+sourceDir, InstallOptions{SkipConfirm: true}))
+
+	skill, err := installer.Get("local-fileurl-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "Local File URL Skill", skill.DisplayName)
 }

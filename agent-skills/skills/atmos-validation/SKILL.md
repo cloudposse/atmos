@@ -4,6 +4,7 @@ description: "Validate Atmos projects, components, arbitrary JSON Schema inputs,
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.1.0"
+  category: security
 references:
   - references/json-schema.md
   - references/opa-policies.md

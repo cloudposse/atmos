@@ -5,6 +5,7 @@ import (
 	"testing"
 	"text/template"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +37,32 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, r)
 	assert.NotNil(t, r.output)
 	assert.Equal(t, format.FormatJSON, r.format)
+}
+
+// TestNew_WithTableOptions covers the Option-applying path: without any options, a
+// renderer's tableOptions must stay nil (styled tables fall back to their own
+// defaults); WithTableOptions must both be invoked by New's opts loop and set the
+// exact options struct passed in.
+func TestNew_WithTableOptions(t *testing.T) {
+	configs := []column.Config{
+		{Name: "Component", Value: "{{ .component }}"},
+	}
+	selector, err := column.NewSelector(configs, template.FuncMap{})
+	require.NoError(t, err)
+
+	noOpts := New([]filter.Filter{}, selector, []*sort.Sorter{}, format.FormatTable, "")
+	assert.Nil(t, noOpts.tableOptions, "tableOptions must stay nil when no Option is passed")
+
+	tableOptions := format.TableOptions{
+		SemanticCellStyling: false,
+		ColumnRoles:         []format.ColumnRole{format.ColumnRoleMuted},
+	}
+	withOpts := New(
+		[]filter.Filter{}, selector, []*sort.Sorter{}, format.FormatTable, "",
+		WithTableOptions(tableOptions),
+	)
+	require.NotNil(t, withOpts.tableOptions, "WithTableOptions must be applied by New's opts loop")
+	assert.Equal(t, tableOptions, *withOpts.tableOptions)
 }
 
 func TestRenderer_Render_Complete(t *testing.T) {
@@ -302,6 +329,34 @@ func TestRenderer_Render_TableFormat(t *testing.T) {
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
+}
+
+// TestFormatStyledTableOrPlain_UsesTableOptionsOnTTY covers the r.tableOptions != nil
+// dispatch inside formatStyledTableOrPlain's interactive-terminal branch: when set (e.g.
+// via WithTableOptions), it must forward to CreateStyledTableWithOptions with those exact
+// options rather than falling back to CreateStyledTable's SemanticCellStyling:true default.
+func TestFormatStyledTableOrPlain_UsesTableOptionsOnTTY(t *testing.T) {
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+
+	headers := []string{"Component", "Enabled"}
+	rows := [][]string{{"vpc", "true"}, {"eks", "false"}}
+
+	options := format.TableOptions{
+		SemanticCellStyling: false,
+		ColumnRoles:         []format.ColumnRole{format.ColumnRoleIdentifier, format.ColumnRoleMuted},
+	}
+
+	withOptions := (&Renderer{tableOptions: &options}).formatStyledTableOrPlain(headers, rows)
+	assert.Equal(t, format.CreateStyledTableWithOptions(headers, rows, options), withOptions,
+		"a set tableOptions must be forwarded verbatim to CreateStyledTableWithOptions")
+	assert.Contains(t, withOptions, "Component")
+	assert.Contains(t, withOptions, "vpc")
+
+	withoutOptions := (&Renderer{}).formatStyledTableOrPlain(headers, rows)
+	assert.Equal(t, format.CreateStyledTable(headers, rows), withoutOptions,
+		"a nil tableOptions must fall back to CreateStyledTable's own default")
 }
 
 func TestRenderer_Render_InvalidColumnTemplate(t *testing.T) {

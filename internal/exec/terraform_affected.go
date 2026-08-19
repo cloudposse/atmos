@@ -217,9 +217,26 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		Info:        info,
 		Stacks:      stacks,
 		Executor:    executeTerraformQueryComponent,
-		Selection: &scheduleradapters.TerraformSelection{
-			NodeIDs:           extractAffectedNodeIDs(affectedList),
-			IncludeDependents: args.IncludeDependents,
-		},
+		Selection:   affectedTerraformSelection(affectedList, args, info),
 	})
+}
+
+// affectedTerraformSelection builds the scheduler selection for the affected
+// set. The args.IncludeDependents bool bridges the depth-carrying
+// --include-dependents flag, so the selection must also carry the parsed depth
+// from info: the closure spec merges selection and info keeping the most
+// permissive depth per direction, and a zero DependentDepth means *unlimited*
+// in dependency.Filter encoding — leaving it unset would silently erase a
+// user-supplied --include-dependents=N bound. When the bool is set without a
+// flag-side depth (e.g. dependents forced programmatically), zero is kept and
+// correctly means unlimited.
+func affectedTerraformSelection(affectedList []schema.Affected, args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) *scheduleradapters.TerraformSelection {
+	selection := &scheduleradapters.TerraformSelection{
+		NodeIDs:           extractAffectedNodeIDs(affectedList),
+		IncludeDependents: args.IncludeDependents,
+	}
+	if args.IncludeDependents && info != nil {
+		selection.DependentDepth = scheduleradapters.FlagDepthToFilterDepth(info.IncludeDependents)
+	}
+	return selection
 }

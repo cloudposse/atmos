@@ -24,6 +24,18 @@ var (
 	// ErrInvalidYAMLExpression is returned when a dot-path or yq expression cannot be parsed or evaluated.
 	ErrInvalidYAMLExpression = errors.New("invalid YAML path or expression")
 
+	// ErrInvalidTypedValue is returned when a value fails validation against an explicitly
+	// requested --type (e.g. "abc" isn't a valid int/float/bool) or an unknown --type name is
+	// given. Distinct from ErrInvalidYAMLExpression: the path is fine here, only the value/type
+	// is the problem, and the two must render different error headlines.
+	ErrInvalidTypedValue = errors.New("value does not match the requested type")
+
+	// ErrTypeInferenceNonScalar is returned when --type=auto resolves to a path whose existing
+	// value is a list or map (see GetType's TypeYAML case). A plain CLI string argument can never
+	// be a faithful auto-inferred replacement for a list/map, so callers must refuse instead of
+	// silently collapsing the existing structure into a string.
+	ErrTypeInferenceNonScalar = errors.New("auto type inference cannot replace an existing list or map")
+
 	// ErrYAMLPathNotFound is returned when a requested path does not exist in the document.
 	ErrYAMLPathNotFound = errors.New("YAML path not found")
 

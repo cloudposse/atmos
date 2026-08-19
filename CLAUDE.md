@@ -34,7 +34,7 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ## Hourly PR Maintenance Loop (RECOMMENDED)
 
-On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that works the PR toward merge-ready: rebases against `main` when behind, checks CI, addresses and resolves unresolved CodeRabbit threads, and runs the patch-scoped `lint` and `test-coverage` skills. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup. For a single on-demand pass without starting a recurring loop, invoke the **`fix-all`** skill directly (also mirrored at the CLI as `atmos fix --all`).
+On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that works the PR toward merge-ready: rebases against `main` when behind, checks CI, addresses and resolves unresolved CodeRabbit threads, and runs the patch-scoped `lint`, `test-coverage`, and `code-hygiene` skills. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup. For a single on-demand pass without starting a recurring loop, invoke the **`fix-all`** skill directly (also mirrored at the CLI as `atmos fix --all`).
 
 ## Essential Commands
 
@@ -165,7 +165,7 @@ Three groups separated by blank lines, sorted alphabetically:
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
 ### Go Formatting (MANDATORY)
-Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `gci` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
 
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.

@@ -4,6 +4,7 @@ description: "Atmos container components: components.container, Docker Compose m
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Container Components
@@ -93,13 +94,13 @@ Migration process:
 
 1. Inventory Compose services and split long-lived services into separate container components.
 2. Move shared `.env` values into stack vars, component env, declared secrets, or `!secret`
-   references.
+    references.
 3. Use `composition: <name>` so former Compose services validate and run as one system.
 4. Replace `docker compose up/down/logs/exec/ps` with the matching `atmos container` commands.
 5. Use workflow `container`, `wait`, `wait-all`, and explicit dependencies for startup order
-   instead of Compose-only `depends_on` assumptions.
+    instead of Compose-only `depends_on` assumptions.
 6. Prefer first-class `components.container` for Atmos-managed services. Keep a native Compose
-   file only when the project must remain compatible with external Compose tooling.
+    file only when the project must remain compatible with external Compose tooling.
 
 ## Operational Guidance
 

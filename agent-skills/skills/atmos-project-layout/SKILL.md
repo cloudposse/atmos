@@ -4,6 +4,7 @@ description: "Atmos project layout: base_path, relative path resolution, root st
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Project Layout

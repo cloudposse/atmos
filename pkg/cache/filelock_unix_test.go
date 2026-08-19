@@ -71,6 +71,14 @@ func TestNewFileLock_LockPathSuffix(t *testing.T) {
 	assert.Equal(t, "/some/path/cache.lock", flockLock.lockPath)
 }
 
+func TestNewFileLockAtPath_UsesExactPath(t *testing.T) {
+	lock := NewFileLockAtPath("/some/path/repositories.lock")
+
+	flockLock, ok := lock.(*flockFileLock)
+	require.True(t, ok, "should return a flockFileLock")
+	assert.Equal(t, "/some/path/repositories.lock", flockLock.lockPath)
+}
+
 func TestWithLock_Success(t *testing.T) {
 	tempDir := t.TempDir()
 	lockPath := filepath.Join(tempDir, "test-lock")
@@ -199,6 +207,91 @@ func TestWithRLock_FallbackWithoutLock(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, executed, "function should be executed without lock as fallback")
+}
+
+// TestTryWithRLock_ResultMatrix covers the full TryWithRLock contract: successful
+// acquisition, callback-error propagation while the lock is held, contention
+// (returns (false, nil) without invoking fn), and a lock-acquisition error.
+func TestTryWithRLock_ResultMatrix(t *testing.T) {
+	errCallback := errors.New("callback failure")
+
+	tests := []struct {
+		name         string
+		lockPath     func(t *testing.T) string
+		setup        func(t *testing.T, lockPath string) (cleanup func())
+		callbackErr  error
+		wantAcquired bool
+		wantExecuted bool
+		wantErr      error
+	}{
+		{
+			name: "successful acquisition",
+			lockPath: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "test-lock")
+			},
+			wantAcquired: true,
+			wantExecuted: true,
+		},
+		{
+			name: "callback error propagates while lock held",
+			lockPath: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "test-lock")
+			},
+			callbackErr:  errCallback,
+			wantAcquired: true,
+			wantExecuted: true,
+			wantErr:      errCallback,
+		},
+		{
+			name: "contention returns false, nil without invoking fn",
+			lockPath: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "contended.lock")
+			},
+			setup: func(t *testing.T, lockPath string) func() {
+				blocker := flock.New(lockPath)
+				locked, err := blocker.TryLock()
+				require.NoError(t, err)
+				require.True(t, locked, "blocker should acquire lock")
+				return func() { _ = blocker.Unlock() }
+			},
+			wantAcquired: false,
+			wantExecuted: false,
+		},
+		{
+			name: "lock acquisition error",
+			lockPath: func(t *testing.T) string {
+				return "/nonexistent/dir/test.lock"
+			},
+			wantAcquired: false,
+			wantExecuted: false,
+			wantErr:      errUtils.ErrCacheLocked,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lockPath := tt.lockPath(t)
+			if tt.setup != nil {
+				cleanup := tt.setup(t, lockPath)
+				defer cleanup()
+			}
+
+			executed := false
+			acquired, err := NewFileLockAtPath(lockPath).TryWithRLock(func() error {
+				executed = true
+				return tt.callbackErr
+			})
+
+			assert.Equal(t, tt.wantAcquired, acquired)
+			assert.Equal(t, tt.wantExecuted, executed)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestWithLock_InvalidLockPath(t *testing.T) {

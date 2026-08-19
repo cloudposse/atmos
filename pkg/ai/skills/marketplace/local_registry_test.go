@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -76,10 +78,19 @@ func TestNewLocalRegistry_CorruptedFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(registryDir, "registry.json"), []byte("not json{{{"), 0o600)
 	require.NoError(t, err)
 
+	registryPath := filepath.Join(registryDir, "registry.json")
+
 	_, err = NewLocalRegistry()
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registry file corrupted")
+	assert.True(t, errors.Is(err, ErrRegistryCorrupted))
+
+	// The error must carry actionable hints, not just the bare sentinel message.
+	assert.True(t, errUtils.HasHint(err, "rm "+registryPath),
+		"hint should tell the user how to delete/repair the corrupted file")
+	assert.True(t, errUtils.HasHint(err, "recreate an empty registry"),
+		"hint should explain that Atmos will recreate the registry on next run")
 }
 
 func TestLocalRegistry_Update_Success(t *testing.T) {

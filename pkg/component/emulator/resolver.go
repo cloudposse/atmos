@@ -63,9 +63,21 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 		return emu.Profile{}, err
 	}
 
-	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), atmosConfig.Container.Runtime.AutoStart)
+	// Identity/profile resolution only queries for an emulator that is already
+	// running (e.g. from a `!terraform.state` lookup or an emulator-bound
+	// identity's PrepareEnvironment during Terraform preflight). Unlike
+	// `atmos emulator up`, recovering the underlying container runtime here
+	// (initializing/starting a Podman machine) cannot make the target emulator
+	// container itself appear — nothing calls `Up` on this path — so honoring
+	// `container.runtime.auto_start` would only block callers (including
+	// `--dry-run` preflight) on a VM boot before still reporting the emulator
+	// as not running. newReadOnlyManager skips recovery unconditionally
+	// (including the ATMOS_CONTAINER_RUNTIME_AUTO_START env override); explicit
+	// lifecycle commands still honor auto_start via prepare()/manager().
+	runtimePref := strings.TrimSpace(atmosConfig.Container.Runtime.Provider)
+	manager := newReadOnlyManager(runtimePref)
 	if configured != nil {
-		manager = configured.manager()
+		manager = newReadOnlyManager(configured.runtimePref)
 	}
 	statuses, err := manager.Ps(ctx, "")
 	if err != nil {
@@ -86,7 +98,7 @@ func resolveEmulatorProfile(ctx context.Context, reference string) (emu.Profile,
 		}
 	}
 
-	_, profile, err := r.manager().Resolve(ctx, &r.spec, match.Stack, ref.Name)
+	_, profile, err := newReadOnlyManager(r.runtimePref).Resolve(ctx, &r.spec, match.Stack, ref.Name)
 	if err != nil {
 		return emu.Profile{}, err
 	}

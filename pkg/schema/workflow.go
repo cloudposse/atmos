@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -154,7 +156,7 @@ func (d *ContainerDriverConfig) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.MappingNode:
 		type containerDriverConfig ContainerDriverConfig
 		var decoded containerDriverConfig
-		if err := value.Decode(&decoded); err != nil {
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
 			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
 		}
 		*d = ContainerDriverConfig(decoded)
@@ -265,7 +267,7 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.MappingNode:
 		type workflowContainer WorkflowContainer
 		var decoded workflowContainer
-		if err := value.Decode(&decoded); err != nil {
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
 			return fmt.Errorf("%w: container must be a mapping or boolean: %w", ErrInvalidWorkflowContainer, err)
 		}
 		*c = WorkflowContainer(decoded)
@@ -273,6 +275,53 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("%w: container must be a mapping or boolean, got YAML node kind %d", ErrInvalidWorkflowContainer, value.Kind)
 	}
+}
+
+// workflowContainerJSON mirrors WorkflowContainer's fields for JSON
+// marshaling, adding an explicit "enabled" key. WorkflowContainer's own
+// struct tag hides Enabled from JSON (`json:"-"`) because it's normally
+// populated only by UnmarshalYAML's polymorphic bool-or-mapping decode, not
+// by generic reflection-based decoding. That's fine for the YAML config-load
+// path, but it means a generic JSON-based deep copy -- e.g.
+// cmd/cmd_utils.go's cloneCommand, which round-trips a schema.Command
+// (including any step's Container) through json.Marshal/json.Unmarshal to
+// give each custom command's Cobra closure an independent copy -- silently
+// dropped a step's `container: false` opt-out: Enabled came back nil, which
+// IsEnabled() treats as enabled, inverting the opt-out. MarshalJSON/
+// UnmarshalJSON below make WorkflowContainer round-trip through JSON
+// losslessly, the same way UnmarshalYAML already does for YAML.
+type workflowContainerJSON struct {
+	Enabled           *bool             `json:"enabled,omitempty"`
+	Image             string            `json:"image,omitempty"`
+	Shell             string            `json:"shell,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+	RuntimeAutoStart  bool              `json:"runtime_auto_start,omitempty"`
+	Pull              string            `json:"pull,omitempty"`
+	Workspace         string            `json:"workspace,omitempty"`
+	WorkspaceReadOnly bool              `json:"workspace_read_only,omitempty"`
+	Cleanup           string            `json:"cleanup,omitempty"`
+	User              string            `json:"user,omitempty"`
+	RunArgs           []string          `json:"run_args,omitempty"`
+	Mounts            []ContainerMount  `json:"mounts,omitempty"`
+	Ports             []ContainerPort   `json:"ports,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+}
+
+// MarshalJSON serializes Enabled alongside the rest of the fields; see
+// workflowContainerJSON for why this is needed.
+func (c *WorkflowContainer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(workflowContainerJSON(*c))
+}
+
+// UnmarshalJSON is the counterpart to MarshalJSON; see workflowContainerJSON
+// for why this is needed.
+func (c *WorkflowContainer) UnmarshalJSON(data []byte) error {
+	var decoded workflowContainerJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidWorkflowContainer, err)
+	}
+	*c = WorkflowContainer(decoded)
+	return nil
 }
 
 // IsEnabled reports whether the container config should be applied.
@@ -294,6 +343,12 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
+	// and the overall workflow exit status is unaffected (like GitHub Actions'
+	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When
+	// (evaluated before, against the running status). Unset means no forgiveness (today's
+	// fail-stop behavior, unchanged).
+	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -447,6 +502,18 @@ type WorkflowStep struct {
 	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
 	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
 
+	// Inputs declares this step's freshness sources. See pkg/schema/task.go's Inputs type and
+	// pkg/runner/freshness.
+	Inputs *Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+
+	// Artifacts declares this step's expected output files -- a sibling of Inputs, not nested
+	// inside it. See pkg/schema/task.go's Artifacts type.
+	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
+
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied. See pkg/schema/task.go's Preconditions type.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
+
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
 
@@ -479,6 +546,8 @@ type WorkflowStep struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	type plain WorkflowStep
 	// Decode into a zero-value temp first so a reused receiver does not retain
@@ -692,14 +761,33 @@ func decodeContainerWith(node *yaml.Node, action string, t containerActionTarget
 	}
 }
 
-// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it in dst.
+// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it
+// in dst, rejecting any field not defined on T (e.g. a typo'd `platforms:` on
+// a `with:` block that only supports `context`/`tags`/etc.) rather than
+// silently dropping it. See decodeYAMLKnownFields for why plain node.Decode
+// can't do this.
 func decodeYAMLInto[T any](node *yaml.Node, dst **T) error {
 	var cfg T
-	if err := node.Decode(&cfg); err != nil {
-		return err
+	if err := decodeYAMLKnownFields(node, &cfg); err != nil {
+		return fmt.Errorf("%w: %w", ErrWorkflowControlStepInvalid, err)
 	}
 	*dst = &cfg
 	return nil
+}
+
+// decodeYAMLKnownFields decodes node into dst, rejecting fields not defined on
+// dst's type (including nested structs). Only the stream-level yaml.Decoder
+// supports a strict/KnownFields mode -- plain node.Decode has no such option
+// -- so this re-marshals node and decodes it through a yaml.Decoder with
+// KnownFields(true) instead.
+func decodeYAMLKnownFields(node *yaml.Node, dst any) error {
+	nodeBytes, err := yaml.Marshal(node)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(nodeBytes))
+	dec.KnownFields(true)
+	return dec.Decode(dst)
 }
 
 // normalizeContainerAction returns the canonical container verb, defaulting an

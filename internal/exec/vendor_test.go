@@ -1,0 +1,500 @@
+package exec
+
+import (
+	"testing"
+
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
+)
+
+// newVendorPullFlagSet mirrors the flags cmd/vendor/vendor.go registers on the
+// `atmos vendor pull` command, so parseVendorFlags tests exercise the exact flag
+// shape parseVendorFlags is invoked with in production.
+func newVendorPullFlagSet(withRefreshLock bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withRefreshLock {
+		flags.Bool("refresh-lock", false, "")
+	}
+	return flags
+}
+
+// newVendorPullFlagSetWithLockEnforcement mirrors cmd/vendor/vendor.go's vendorPullCmd flag set
+// including the "lock-enforcement" flag, for TestParseVendorFlags_LockEnforcement.
+func newVendorPullFlagSetWithLockEnforcement(withFlag bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withFlag {
+		flags.String("lock-enforcement", "", "")
+	}
+	return flags
+}
+
+// TestParseVendorFlags_LockEnforcement proves the --lock-enforcement precedence: an explicitly
+// passed flag wins, otherwise a non-empty atmosConfig.Vendor.Lock.Enforcement wins, otherwise
+// DefaultLockEnforcement's "warn" fallback applies. Every case matches the precedence
+// DefaultLockEnforcement/parseVendorFlags document.
+func TestParseVendorFlags_LockEnforcement(t *testing.T) {
+	t.Run("explicit flag wins over config", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithLockEnforcement(true)
+		require.NoError(t, flags.Set("lock-enforcement", "strict"))
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Vendor.Lock.Enforcement = install.LockEnforcementSilent
+
+		vendorFlags, err := parseVendorFlags(flags, atmosConfig)
+
+		require.NoError(t, err)
+		assert.Equal(t, install.LockEnforcementStrict, vendorFlags.LockEnforcement)
+	})
+
+	t.Run("config value is used when the flag is not explicitly passed", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithLockEnforcement(true)
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Vendor.Lock.Enforcement = install.LockEnforcementSilent
+
+		vendorFlags, err := parseVendorFlags(flags, atmosConfig)
+
+		require.NoError(t, err)
+		assert.Equal(t, install.LockEnforcementSilent, vendorFlags.LockEnforcement)
+	})
+
+	t.Run("defaults to warn when neither flag nor config is set", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithLockEnforcement(true)
+
+		vendorFlags, err := parseVendorFlags(flags, &schema.AtmosConfiguration{})
+
+		require.NoError(t, err)
+		assert.Equal(t, install.LockEnforcementWarn, vendorFlags.LockEnforcement)
+	})
+
+	t.Run("defaults to warn when atmosConfig is nil", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithLockEnforcement(true)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, install.LockEnforcementWarn, vendorFlags.LockEnforcement)
+	})
+
+	t.Run("flag not registered at all does not error and still resolves the config/default value", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithLockEnforcement(false)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, install.LockEnforcementWarn, vendorFlags.LockEnforcement)
+	})
+}
+
+// TestValidateVendorFlags_LockEnforcement proves validateVendorFlags accepts every documented
+// enforcement level and rejects anything else.
+func TestValidateVendorFlags_LockEnforcement(t *testing.T) {
+	for _, value := range []string{install.LockEnforcementStrict, install.LockEnforcementWarn, install.LockEnforcementSilent, ""} {
+		t.Run("accepts "+value, func(t *testing.T) {
+			require.NoError(t, validateVendorFlags(&VendorFlags{LockEnforcement: value}))
+		})
+	}
+
+	t.Run("rejects an unrecognized value", func(t *testing.T) {
+		err := validateVendorFlags(&VendorFlags{LockEnforcement: "bogus"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidLockEnforcement)
+	})
+}
+
+// TestParseVendorFlags_RefreshLock proves parseVendorFlags reads the `refresh-lock` flag when the
+// calling command registers it (cmd/vendor/vendor.go's vendorPullCmd), and defaults to false
+// without erroring when the flag isn't registered at all (parseVendorFlags is also reachable from
+// paths that don't define it).
+func TestParseVendorFlags_RefreshLock(t *testing.T) {
+	t.Run("refresh-lock flag set to true is read", func(t *testing.T) {
+		flags := newVendorPullFlagSet(true)
+		require.NoError(t, flags.Set("refresh-lock", "true"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.True(t, vendorFlags.RefreshLock)
+	})
+
+	t.Run("refresh-lock flag left at its default is false", func(t *testing.T) {
+		flags := newVendorPullFlagSet(true)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.False(t, vendorFlags.RefreshLock)
+	})
+
+	t.Run("refresh-lock flag not registered at all does not error", func(t *testing.T) {
+		flags := newVendorPullFlagSet(false)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.False(t, vendorFlags.RefreshLock)
+	})
+
+	t.Run("refresh-lock flag registered with the wrong type surfaces GetBool's error", func(t *testing.T) {
+		flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+		flags.Bool("dry-run", false, "")
+		flags.String("component", "", "")
+		flags.String("tags", "", "")
+		flags.Bool("everything", false, "")
+		flags.String("refresh-lock", "", "") // Wrong type: GetBool must fail.
+
+		_, err := parseVendorFlags(flags, nil)
+
+		require.Error(t, err)
+	})
+}
+
+// newVendorPullFlagSetWithType mirrors cmd/vendor/vendor.go's vendorPullCmd flag set including the
+// "type" flag (default "terraform", matching production), for TestParseVendorFlags_TypeChanged.
+func newVendorPullFlagSetWithType(withType bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withType {
+		flags.StringP("type", "t", "terraform", "")
+	}
+	return flags
+}
+
+// TestParseVendorFlags_TypeChanged proves parseVendorFlags tracks whether --type was explicitly
+// passed (flags.Changed("type")), not just its resolved value - handleVendorPullSweep needs this to
+// distinguish "the user wants only this one type" from "no --type given, sweep every type", since
+// --type defaults to a non-empty "terraform" on vendorPullCmd (cmd/vendor/vendor.go).
+func TestParseVendorFlags_TypeChanged(t *testing.T) {
+	t.Run("type flag left at its default is not changed", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithType(true)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "terraform", vendorFlags.ComponentType)
+		assert.False(t, vendorFlags.TypeChanged)
+	})
+
+	t.Run("type flag explicitly set to its default value is still changed", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithType(true)
+		require.NoError(t, flags.Set("type", "terraform"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "terraform", vendorFlags.ComponentType)
+		assert.True(t, vendorFlags.TypeChanged, "explicitly setting --type must be tracked even when the value equals the default")
+	})
+
+	t.Run("type flag explicitly set to a non-default value is changed", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithType(true)
+		require.NoError(t, flags.Set("type", "helmfile"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "helmfile", vendorFlags.ComponentType)
+		assert.True(t, vendorFlags.TypeChanged)
+	})
+
+	t.Run("type flag not registered at all does not error and is not changed", func(t *testing.T) {
+		flags := newVendorPullFlagSetWithType(false)
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.False(t, vendorFlags.TypeChanged)
+	})
+}
+
+// newVendorPullFlagSetWithStack mirrors cmd/vendor/vendor.go's vendorPullCmd flag set including
+// the "stack" flag, for TestParseVendorFlags_Stack.
+func newVendorPullFlagSetWithStack(withStack bool) *pflag.FlagSet {
+	flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flags.Bool("dry-run", false, "")
+	flags.String("component", "", "")
+	flags.String("tags", "", "")
+	flags.Bool("everything", false, "")
+	if withStack {
+		flags.StringP("stack", "s", "", "")
+	}
+	return flags
+}
+
+// TestParseVendorFlags_Stack proves parseVendorFlags reads --stack when the calling command
+// registers it (cmd/vendor/vendor.go's vendorPullCmd), and defaults to "" without erroring when
+// the flag isn't registered at all ('vendor update --pull' delegates to parseVendorFlags with a
+// FlagSet that doesn't define "stack").
+func TestParseVendorFlags_Stack(t *testing.T) {
+	cases := []struct {
+		name          string
+		registerStack bool
+		setValue      string // "" means don't call flags.Set
+		wantStack     string
+	}{
+		{"stack flag set is read", true, "dev-us-west-2", "dev-us-west-2"},
+		{"stack flag left at its default is empty", true, "", ""},
+		{"stack flag not registered at all does not error", false, "", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := newVendorPullFlagSetWithStack(tc.registerStack)
+			if tc.setValue != "" {
+				require.NoError(t, flags.Set("stack", tc.setValue))
+			}
+
+			vendorFlags, err := parseVendorFlags(flags, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantStack, vendorFlags.Stack)
+		})
+	}
+}
+
+// TestParseVendorFlags_MalformedLabelsPropagatesError proves that a malformed --labels value
+// surfaces as parseVendorFlags' own return error (not just parseOptionalLabelsFlag's, which
+// TestParseOptionalLabelsFlag already covers directly) -- the caller's own "if err != nil { return
+// vendorFlags, err }" check around that call.
+func TestParseVendorFlags_MalformedLabelsPropagatesError(t *testing.T) {
+	flags := newVendorPullFlagSetWithStack(true)
+	flags.String("labels", "", "")
+	require.NoError(t, flags.Set("labels", "not-a-pair"))
+
+	_, err := parseVendorFlags(flags, nil)
+
+	require.Error(t, err)
+}
+
+// TestValidateVendorFlags_Stack proves validateVendorFlags rejects --stack combined with
+// --component or --everything, while allowing --stack on its own and together with --tags -- --tags
+// is an independent filter that composes with --stack (narrowed downstream by handleStackVendor via
+// filterStackComponentsByTags), not a fourth mutually exclusive selector "mode".
+func TestValidateVendorFlags_Stack(t *testing.T) {
+	for _, tc := range []validateVendorFlagsCase{
+		{"stack alone is valid", &VendorFlags{Stack: "dev-us-west-2"}, nil},
+		{"component and stack together is rejected", &VendorFlags{Component: "vpc", Stack: "dev-us-west-2"}, ErrValidateComponentStackFlag},
+		{"stack and tags together is valid", &VendorFlags{Stack: "dev-us-west-2", Tags: []string{"networking"}}, nil},
+		{"everything and stack together is rejected", &VendorFlags{Everything: true, Stack: "dev-us-west-2"}, ErrValidateEverythingFlag},
+	} {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+// TestValidateVendorFlags_Labels proves validateVendorFlags rejects --labels combined with
+// --component or --everything (mirroring --stack's own exclusivity rules), while allowing --labels
+// on its own, together with --stack (both resolve the same stack-declared component set --
+// --labels narrows it further, not a separate mode), and together with --tags (an independent
+// filter that composes with --stack/--labels, same as it does with --stack alone).
+func TestValidateVendorFlags_Labels(t *testing.T) {
+	for _, tc := range []validateVendorFlagsCase{
+		{"labels alone is valid", &VendorFlags{Labels: map[string]string{"tier": "1"}}, nil},
+		{"stack and labels together is valid", &VendorFlags{Stack: "dev-us-west-2", Labels: map[string]string{"tier": "1"}}, nil},
+		{"component and labels together is rejected", &VendorFlags{Component: "vpc", Labels: map[string]string{"tier": "1"}}, ErrValidateComponentLabelsFlag},
+		{"tags and labels together is valid", &VendorFlags{Tags: []string{"networking"}, Labels: map[string]string{"tier": "1"}}, nil},
+		{"everything and labels together is rejected", &VendorFlags{Everything: true, Labels: map[string]string{"tier": "1"}}, ErrValidateEverythingFlag},
+	} {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+// validateVendorFlagsCase is a shared table-driven case shape for validateVendorFlags, used by both
+// TestValidateVendorFlags_Stack and TestValidateVendorFlags_Labels since they exercise the same
+// function signature and pass/fail/sentinel-error contract.
+type validateVendorFlagsCase struct {
+	name    string
+	flags   *VendorFlags
+	wantErr error // nil means no error
+}
+
+func (tc validateVendorFlagsCase) run(t *testing.T) {
+	t.Helper()
+
+	err := validateVendorFlags(tc.flags)
+	if tc.wantErr == nil {
+		require.NoError(t, err)
+		return
+	}
+	require.Error(t, err)
+	require.ErrorIs(t, err, tc.wantErr)
+}
+
+// TestValidateVendorFlags_ComponentAndTagsCompose proves --component and --tags are no longer
+// rejected together: both operate on vendor.yaml Sources[] (ExecuteAtmosVendorInternal already ANDs
+// them via shouldSkipSource) or, when no vendor.yaml exists, handleVendorConfig treats a component
+// with no declared tags as excluded by a non-empty --tags filter (see its own doc comment) rather
+// than rejecting the flag combination up front.
+func TestValidateVendorFlags_ComponentAndTagsCompose(t *testing.T) {
+	require.NoError(t, validateVendorFlags(&VendorFlags{Component: "vpc", Tags: []string{"networking"}}))
+}
+
+// TestParseOptionalLabelsFlag proves parseOptionalLabelsFlag reads --labels when the calling
+// command registers it, defaults to nil without erroring when the flag isn't registered at all
+// ('vendor update --pull' delegates to parseVendorFlags with a FlagSet that doesn't define
+// "labels"), and propagates a malformed value's parse error.
+func TestParseOptionalLabelsFlag(t *testing.T) {
+	cases := []struct {
+		name         string
+		registerFlag bool
+		setValue     string // "" means don't call flags.Set
+		wantLabels   map[string]string
+		wantErr      bool
+	}{
+		{
+			name:         "labels flag set is read",
+			registerFlag: true,
+			setValue:     "tier=1,cost-center:platform",
+			wantLabels:   map[string]string{"tier": "1", "cost-center": "platform"},
+		},
+		{
+			name:         "labels flag not registered at all does not error",
+			registerFlag: false,
+		},
+		{
+			name:         "malformed labels value propagates a parse error",
+			registerFlag: true,
+			setValue:     "not-a-pair",
+			wantErr:      true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+			if tc.registerFlag {
+				flags.String("labels", "", "")
+				if tc.setValue != "" {
+					require.NoError(t, flags.Set("labels", tc.setValue))
+				}
+			}
+
+			labels, err := parseOptionalLabelsFlag(flags)
+
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantLabels, labels)
+		})
+	}
+}
+
+// TestSetDefaultEverythingFlag_Stack proves --stack alone (like --component and --tags) suppresses
+// the "no flags given" default that otherwise sets Everything to true.
+func TestSetDefaultEverythingFlag_Stack(t *testing.T) {
+	cases := []struct {
+		name           string
+		vendorFlags    *VendorFlags
+		wantEverything bool
+	}{
+		{"stack set suppresses the everything default", &VendorFlags{Stack: "dev-us-west-2"}, false},
+		{"no flags given still defaults everything to true", &VendorFlags{}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := newVendorPullFlagSetWithStack(true)
+
+			setDefaultEverythingFlag(flags, tc.vendorFlags)
+
+			assert.Equal(t, tc.wantEverything, tc.vendorFlags.Everything)
+		})
+	}
+}
+
+// TestParseVendorFlags_ComponentSliceFlag proves parseVendorFlags tolerates the flag shape
+// `vendor update --pull` delegates with: vendorUpdateCmd registers --component as a repeatable
+// string slice (cmd/vendor/update.go), while vendorPullCmd registers a plain string. A
+// stringSlice-typed --component must parse (not hard-error via pflag's GetString type check),
+// yield the single element when one is set, and reject multi-element selections explicitly.
+func TestParseVendorFlags_ComponentSliceFlag(t *testing.T) {
+	newSliceFlagSet := func() *pflag.FlagSet {
+		flags := pflag.NewFlagSet("vendor update", pflag.ContinueOnError)
+		flags.Bool("dry-run", false, "")
+		flags.StringSlice("component", []string{}, "")
+		flags.String("tags", "", "")
+		flags.Bool("everything", false, "")
+		return flags
+	}
+
+	t.Run("unset slice flag parses as empty component", func(t *testing.T) {
+		vendorFlags, err := parseVendorFlags(newSliceFlagSet(), nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, vendorFlags.Component)
+	})
+
+	t.Run("single-element slice yields that component", func(t *testing.T) {
+		flags := newSliceFlagSet()
+		require.NoError(t, flags.Set("component", "vpc"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", vendorFlags.Component)
+	})
+
+	t.Run("multi-element slice is rejected with the sentinel", func(t *testing.T) {
+		flags := newSliceFlagSet()
+		require.NoError(t, flags.Set("component", "vpc"))
+		require.NoError(t, flags.Set("component", "eks"))
+
+		_, err := parseVendorFlags(flags, nil)
+
+		require.ErrorIs(t, err, ErrSingleComponentRequired)
+	})
+
+	t.Run("string-typed component flag still parses", func(t *testing.T) {
+		flags := newVendorPullFlagSet(false)
+		require.NoError(t, flags.Set("component", "vpc"))
+
+		vendorFlags, err := parseVendorFlags(flags, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", vendorFlags.Component)
+	})
+}
+
+// TestParseVendorTagsFlag proves --tags trims whitespace around each tag and drops empty
+// segments, matching cmd/vendor's splitTags (e.g. "networking, database" yields "networking" and
+// "database" with no leading space, and "a,,b" doesn't yield an empty entry).
+func TestParseVendorTagsFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		csv  string
+		want []string
+	}{
+		{"empty string", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single tag", "networking", []string{"networking"}},
+		{"comma separated with a space", "networking, database", []string{"networking", "database"}},
+		{"leading and trailing commas", ",networking,database,", []string{"networking", "database"}},
+		{"whitespace around tags", " networking , database ", []string{"networking", "database"}},
+		{"empty segments between commas", "networking,,database", []string{"networking", "database"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := newVendorPullFlagSet(false)
+			require.NoError(t, flags.Set("tags", tt.csv))
+
+			vendorFlags, err := parseVendorFlags(flags, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, vendorFlags.Tags)
+		})
+	}
+}

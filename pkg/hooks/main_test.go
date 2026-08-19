@@ -22,6 +22,8 @@ import (
 //     os.Stdout, then exit 0. Lets tests simulate a tool that emits structured
 //     output to stdout (e.g. tflint --format=sarif) so the engine's
 //     CaptureStdout redirect can be verified cross-platform via os.Executable().
+//   - _ATMOS_TEST_ECHO_STDERR: write the value of _ATMOS_TEST_STDERR_BODY to
+//     os.Stderr, then exit 0. Lets tests verify subprocess stderr routing.
 //   - _ATMOS_TEST_WRITE_CWD: write the subprocess working directory and
 //     ATMOS_COMPONENT_PATH to ATMOS_OUTPUT_FILE, separated by a newline.
 func TestMain(m *testing.M) {
@@ -41,6 +43,11 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" {
 		fmt.Fprint(os.Stdout, os.Getenv("_ATMOS_TEST_STDOUT_BODY"))
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDERR") == "1" {
+		fmt.Fprint(os.Stderr, os.Getenv("_ATMOS_TEST_STDERR_BODY"))
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" || os.Getenv("_ATMOS_TEST_ECHO_STDERR") == "1" {
 		os.Exit(0)
 	}
 	if os.Getenv("_ATMOS_TEST_WRITE_CWD") == "1" {

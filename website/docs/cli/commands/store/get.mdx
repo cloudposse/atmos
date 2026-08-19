@@ -1,0 +1,98 @@
+---
+title: atmos store get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+description: Retrieve a value from a store, scoped to the same stack and component it was set with.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Retrieve a value from a configured store backend. Scope the value with `--stack` and `--component`, the same way [`store set`](/cli/commands/store/set) writes it. If you omit `--stack` and `--component`, Atmos reads back a value that was set without them.
+</Intro>
+
+<CastPlayer title="atmos store get --help" src="/casts/screengrabs/atmos-store-get--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store get STORE KEY [flags]
+```
+
+## Examples
+
+```shell
+# Retrieve a value scoped to a stack and component
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+
+# Retrieve a store-global value (no --stack/--component)
+atmos store get app-metadata shared_config
+
+# Output as JSON
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=json
+
+# Output as a shell-sourceable env assignment
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --format=env
+
+# Redirect the raw value to a file with no trailing newline
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --raw > image_tag.txt
+
+# macOS: copy the raw value to the clipboard with no trailing newline
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service --raw | pbcopy
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    The name of the configured store backend to read from.
+  </dd>
+
+  <dt>`KEY`</dt>
+  <dd>
+    The key to retrieve.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    The Atmos stack used to scope the key when set. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    The Atmos component used to scope the key when set. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The identity Atmos uses to access the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--format`</dt>
+  <dd>
+    The output format. Choices are `text`, `json`, or `env`. The default is `text`.
+  </dd>
+
+  <dt>`--raw` <em>(alias `-r`)</em></dt>
+  <dd>
+    Print the raw value with no trailing newline. This flag works only with the `text` format. Use it to pipe the value into another command. You can also redirect it to a file, for example `--raw > image_tag.txt`. On macOS, you can pipe it to the clipboard with `--raw | pbcopy`. You cannot combine this flag with `--format=json` or `--format=env`.
+  </dd>
+</dl>
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group
+- [`!store` YAML function](/functions/yaml/store) — Read a value in stack configuration
+- [`!store.get` YAML function](/functions/yaml/store.get) — Read a value directly by key in stack configuration

@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,56 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestProcessStacks_DoesNotEvaluateConfigSources(t *testing.T) {
+	fixtureDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(fixtureDir, "stacks", "catalog"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "atmos.yaml"), []byte(`
+base_path: "."
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  excluded_paths: ["**/catalog/**"]
+components:
+  terraform:
+    base_path: components/terraform
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "stacks", "catalog", "base.yaml"), []byte(`
+components:
+  terraform:
+    vpc:
+      vars:
+        value: "!exec __atmos_nonexistent_cmd_abc123_xyz"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "stacks", "dev.yaml"), []byte(`
+import:
+  - catalog/base
+components:
+  terraform:
+    vpc:
+      vars:
+        value: safe
+`), 0o644))
+
+	t.Chdir(fixtureDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := ProcessStacks(&atmosConfig, schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+		StackFromArg:     "dev",
+		ComponentType:    cfg.TerraformComponentType,
+	}, true, true, true, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "safe", result.ComponentVarsSection["value"])
+	sources, ok := result.ComponentSection["sources"].(schema.ConfigSources)
+	require.True(t, ok)
+	require.Len(t, sources["vars"]["value"].StackDependencies, 2)
+	assert.Equal(t, "!exec __atmos_nonexistent_cmd_abc123_xyz", sources["vars"]["value"].StackDependencies[1].VariableValue)
+}
 
 func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 	tests := []struct {
@@ -570,4 +622,36 @@ func TestGetFindStacksMapCacheKey(t *testing.T) {
 	assert.NotEmpty(t, key3)
 	assert.NotEmpty(t, key4)
 	assert.NotEmpty(t, key5)
+}
+
+// TestProcessStacks_DirectoryStackType covers the atmosConfig.StackType == "Directory"
+// branch in processStacks: when the `--stack` argument is a physical path (contains a
+// "/") that matches a stack manifest file directly rather than a logical stack name,
+// config.InitCliConfig resolves atmosConfig.StackType to "Directory" and processStacks
+// must route through processComponentConfig using that literal file path instead of the
+// logical-name lookup used by the "Logical" branch (exercised by the sibling
+// TestProcessStacks_FindsComponentByManifestName/ByTemplateName tests in
+// stack_manifest_name_test.go, which both use logical names against a name_template).
+func TestProcessStacks_DirectoryStackType(t *testing.T) {
+	// atmos-functions' stacks/deploy/nonprod.yaml has no name_template/name_pattern
+	// configured, so "deploy/nonprod" only resolves via the physical-path (Directory)
+	// lookup, not as a logical stack name.
+	fixturesDir := "../../tests/fixtures/scenarios/atmos-functions"
+	t.Chdir(fixturesDir)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "component-1",
+		Stack:            "deploy/nonprod",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+	require.Equal(t, "Directory", atmosConfig.StackType, "a slash-containing stack argument that matches a manifest file must resolve to the Directory stack type")
+
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+	require.NoError(t, err, "ProcessStacks should resolve the component via the Directory stack-type branch")
+
+	assert.Equal(t, "component-1", result.ComponentFromArg)
+	assert.Equal(t, "deploy/nonprod", result.StackFile, "StackFile should be the physical manifest path used for lookup")
+	assert.Equal(t, "foo-component-1", result.ComponentVarsSection["foo"], "component vars from the matched manifest should be populated")
 }

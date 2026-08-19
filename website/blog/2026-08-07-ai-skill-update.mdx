@@ -1,0 +1,65 @@
+---
+slug: ai-skill-update
+title: "Keep Installed AI Skills Up to Date"
+authors: [osterman]
+tags: [feature]
+---
+
+Package managers normally tell you when an installed package is out of date and let you refresh
+just that one. Installed AI skills did not work that way: `atmos ai skill install` copies a
+bundled skill's content once, and upgrading the `atmos` binary afterward never touches that
+already-installed copy, even when the new release ships updated skill content.
+
+<!--truncate-->
+
+## The Problem
+
+Official Atmos skills (`atmos-terraform`, `atmos-stacks`, and the rest of the catalog) are
+embedded directly in the `atmos` binary. Installing one by name copies its `SKILL.md` and
+supporting files to `~/.atmos/skills/` at that point in time. If a later `atmos` release bundles
+an improved version of that skill, nothing tells you, and nothing refreshes your local copy — the
+only way to pick it up was `atmos ai skill install <name> --force`, applied on faith, one skill at
+a time, with no way to check first whether anything had actually changed.
+
+`atmos ai skill list --detailed` already surfaced an "update available" hint when an installed
+skill's version drifted from the catalog. There was no command that acted on it.
+
+## The Fix
+
+`atmos ai skill update` closes that gap. It compares each installed bundled skill's recorded
+version against the catalog embedded in the running binary and reinstalls only the ones that are
+actually outdated — skills already at the current version are left untouched.
+
+Run it with no arguments to refresh every installed bundled skill that has an update available (a
+single confirmation, not one per skill), or name one skill to update just that one. Skills that
+are already current report "already up to date" and nothing is rewritten, so it's safe to run
+`atmos ai skill update` repeatedly, including as a habit after every `atmos` upgrade.
+
+An outdated skill is reinstalled the same way `atmos ai skill install <name> --force` would
+install it, so `--client`, `--scope`, `--global`, `--all-clients`, and `--path` all work exactly as
+they do on `install`.
+
+Skills installed from a GitHub repository aren't covered yet — there's no cheap way to check
+whether a git-sourced skill's upstream has moved without re-fetching it. Run
+`atmos ai skill install <source> --force` to refresh one of those manually.
+
+## How to Use It
+
+```shell
+# Update a single bundled skill if a newer version is available.
+atmos ai skill update atmos-terraform
+
+# Update every installed bundled skill that has an update available.
+atmos ai skill update
+
+# Skip the confirmation prompt (for automation).
+atmos ai skill update --yes
+
+# Update and redistribute to a specific AI client.
+atmos ai skill update atmos-terraform --client vscode
+```
+
+## Get Involved
+
+Read the [`atmos ai skill`](/cli/commands/ai/skill) documentation for the full command reference.
+To share feedback or request an improvement, [open an issue](https://github.com/cloudposse/atmos/issues).

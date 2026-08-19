@@ -40,9 +40,9 @@ func TestParse(t *testing.T) {
 	require.Len(t, providers, 3)
 
 	// Assert element contents, not just length: first and last by value.
-	assert.Equal(t, Provider{Source: "registry.terraform.io/hashicorp/aws", Version: "5.95.0"}, providers[0])
-	assert.Equal(t, Provider{Source: "registry.opentofu.org/hashicorp/random", Version: "3.6.0"}, providers[2])
-	assert.Equal(t, Provider{Source: "registry.terraform.io/hashicorp/null", Version: "3.2.2"}, providers[1])
+	assert.Equal(t, Provider{Source: "registry.terraform.io/hashicorp/aws", Version: "5.95.0", Constraints: ">= 5.0.0", Hashes: []string{"h1:abcdef==", "zh:0123456789"}}, providers[0])
+	assert.Equal(t, Provider{Source: "registry.opentofu.org/hashicorp/random", Version: "3.6.0", Constraints: "~> 3.0"}, providers[2])
+	assert.Equal(t, Provider{Source: "registry.terraform.io/hashicorp/null", Version: "3.2.2", Hashes: []string{"h1:zzz=="}}, providers[1])
 }
 
 func TestParseEmpty(t *testing.T) {

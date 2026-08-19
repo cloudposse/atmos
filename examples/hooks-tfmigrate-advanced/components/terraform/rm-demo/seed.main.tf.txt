@@ -1,0 +1,28 @@
+# Seed-only file, NOT compiled by Terraform (.tf.txt extension).
+#
+# Temporarily copy this over main.tf and apply to create random_pet.temp,
+# simulating a resource that later needs to be handed off / dropped from
+# Terraform management without destroying it. Then restore the real main.tf
+# (which no longer declares random_pet.temp) and run the rm migration.
+#
+#   cp seed.main.tf.txt main.tf
+#   atmos terraform apply rm-demo -s test -auto-approve
+#   git checkout -- main.tf   # or restore from the committed version
+#
+resource "random_pet" "temp" {
+  length = 2
+  keepers = {
+    environment = var.environment
+  }
+}
+
+resource "random_pet" "keep" {
+  length = 2
+  keepers = {
+    environment = var.environment
+  }
+}
+
+output "keep_name" {
+  value = random_pet.keep.id
+}

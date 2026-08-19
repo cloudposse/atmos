@@ -23,9 +23,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
   Keep the desired objects in stack configuration, then use `delete` when a
   component should be removed from an environment.
   <div>
-    <PrimaryCTA to="/stacks/components/kubernetes">
-      Stack Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">Stack Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -94,6 +92,6 @@ atmos kubernetes delete --affected --labels cost-center=platform
   `--labels` <em>(optional)</em>
 </dt>
 <dd>
-  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>

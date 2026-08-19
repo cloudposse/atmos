@@ -13,6 +13,7 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -392,17 +393,30 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
 	//
-	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
-	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
-	// to forward slashes, which would turn \u003e into /u003e.
+	// First, protect JSON unicode escapes like \u003e and escaped quotes like \" from
+	// being corrupted by filepath.ToSlash and the path normalization regex below. On
+	// Windows, filepath.ToSlash converts ALL backslashes to forward slashes, which would
+	// turn \u003e into /u003e and \" into /" (e.g. a quoted provenance template embedding
+	// `env \"USER\"`).
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	const escapedQuotePlaceholder = "\x00ESCAPED_QUOTE\x00"
+	// A trailing backslash in a help example is shell continuation syntax, not
+	// a path separator. Preserve it before Windows path normalization.
+	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
+	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
+	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
+	protectedOutput = strings.ReplaceAll(protectedOutput, `\"`, escapedQuotePlaceholder)
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
-	// Restore protected unicode escapes.
+	// Restore protected unicode escapes and escaped quotes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, escapedQuotePlaceholder, `\"`)
+
+	// Restore shell continuations after path normalization.
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -559,9 +573,18 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
-	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// When followed by a provenance comment, its rendered padding also depends on that
+	// value's display width, so normalize the padding too (to a single space) so different
+	// username lengths collapse to identical output; but don't invent a trailing space where
+	// none existed (e.g. a bare "provisioned_by_user: <value>" with no comment/padding). The
+	// first-character exclusion of quotes/apostrophes keeps this from matching a quoted value.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^'"\s][^\s]*([ \t]*)`)
+	result = provisionedByUserRegex.ReplaceAllStringFunc(result, func(match string) string {
+		if provisionedByUserRegex.FindStringSubmatch(match)[1] != "" {
+			return "provisioned_by_user: user "
+		}
+		return "provisioned_by_user: user"
+	})
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
@@ -1397,6 +1420,12 @@ func TestCLICommands(t *testing.T) {
 		t.Fatalf("Failed to load test suites: %v", err)
 	}
 
+	shard, shardCount := testShard(t)
+	var workdirShard map[string]int
+	if shardCount > 1 {
+		workdirShard = assignWorkdirsToShards(testSuite.Tests, shardCount)
+	}
+
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
 			logger.Warn("Skipping disabled test", "test", tc.Name)
@@ -1409,11 +1438,98 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
+		// Skip cases not assigned to this shard. Filtering happens outside t.Run so
+		// unselected cases don't show up as noise in per-shard CI logs/results.
+		if shardCount > 1 && workdirShard[tc.Workdir] != shard {
+			continue
+		}
+
 		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+// testShard reads ATMOS_TEST_SHARD (1-based) and ATMOS_TEST_SHARD_COUNT from the
+// environment so CI can split TestCLICommands' cases across parallel jobs. Both
+// unset (the local dev default) disables sharding: every case runs, unchanged
+// from historical behavior.
+func testShard(t *testing.T) (shard, shardCount int) {
+	t.Helper()
+
+	shardCountStr := os.Getenv("ATMOS_TEST_SHARD_COUNT")
+	if shardCountStr == "" {
+		return 0, 1
+	}
+
+	shardCount, err := strconv.Atoi(shardCountStr)
+	if err != nil || shardCount < 1 {
+		t.Fatalf("invalid ATMOS_TEST_SHARD_COUNT %q: must be a positive integer", shardCountStr)
+	}
+
+	shardStr := os.Getenv("ATMOS_TEST_SHARD")
+	shard, err = strconv.Atoi(shardStr)
+	if err != nil || shard < 1 || shard > shardCount {
+		t.Fatalf("invalid ATMOS_TEST_SHARD %q: must be an integer between 1 and ATMOS_TEST_SHARD_COUNT (%d)", shardStr, shardCount)
+	}
+
+	return shard, shardCount
+}
+
+// assignWorkdirsToShards deterministically assigns every distinct test-case
+// workdir to a 1-based shard index in [1, shardCount], and returns the
+// resulting workdir -> shard map.
+//
+// Sharding by workdir (rather than by individual test name) keeps every test
+// case for a given fixture directory in the same shard: several test-case
+// YAML files rely on cases within the same workdir running together, in their
+// original relative order, within one process - e.g.
+// tests/test-cases/auth-mock.yaml's "atmos auth login --identity mock-identity-2"
+// populates an in-memory (ATMOS_KEYRING_TYPE=memory) keyring that a later
+// "atmos auth list" case in the same file reads back. Splitting cases like
+// these across separate shard processes silently breaks that dependency -
+// sharding by name alone did exactly that and produced deterministic,
+// reproducible failures on whichever shard happened to land the dependent
+// case without its prerequisite.
+//
+// Grouping by workdir alone would badly imbalance shards (some fixtures have
+// far more cases than others), so this assigns workdirs to shards via a
+// longest-processing-time-first greedy bin-pack: workdirs are sorted by case
+// count descending (ties broken alphabetically for determinism), then each is
+// assigned to whichever shard currently holds the fewest cases. Every shard
+// process computes this independently from the same (deterministically
+// ordered) input, so they agree on the assignment without coordination.
+func assignWorkdirsToShards(tests []TestCase, shardCount int) map[string]int {
+	counts := make(map[string]int)
+	for i := range tests {
+		counts[tests[i].Workdir]++
+	}
+
+	workdirs := make([]string, 0, len(counts))
+	for wd := range counts {
+		workdirs = append(workdirs, wd)
+	}
+	sort.Slice(workdirs, func(i, j int) bool {
+		if counts[workdirs[i]] != counts[workdirs[j]] {
+			return counts[workdirs[i]] > counts[workdirs[j]]
+		}
+		return workdirs[i] < workdirs[j]
+	})
+
+	load := make([]int, shardCount+1) // 1-indexed; load[0] unused.
+	assignment := make(map[string]int, len(workdirs))
+	for _, wd := range workdirs {
+		best := 1
+		for s := 2; s <= shardCount; s++ {
+			if load[s] < load[best] {
+				best = s
+			}
+		}
+		assignment[wd] = best
+		load[best] += counts[wd]
+	}
+	return assignment
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
@@ -1741,7 +1857,15 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
 		return false
 	}
-	if looksLikeDataLine(trimmed) {
+	if looksLikeDataLine(trimmed) || strings.HasPrefix(nextTrimmed, "export ") {
+		return false
+	}
+	// A renderer can wrap prose at the terminal width, but it must not turn
+	// explicit boundaries between completed sentences, command examples, or
+	// URL lines into spaces while normalizing snapshots.
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, ")") || strings.HasSuffix(trimmed, ":") ||
+		strings.HasPrefix(nextTrimmed, "\"") || strings.HasPrefix(nextTrimmed, "http://") || strings.HasPrefix(nextTrimmed, "https://") ||
+		strings.HasPrefix(nextTrimmed, "atmos ") {
 		return false
 	}
 	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
@@ -1751,10 +1875,10 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 }
 
 // snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
-// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
-// at the start of a rendered log line. These must never be merged into
-// adjacent markdown prose during snapshot normalization.
-var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "TRCE ", "FATA ")
+// as emitted at the start of a rendered log line. These must never be merged
+// into adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|TRCE|FATA)\s`)
 
 // snapshotToastIconPrefixes lists the canonical single-line toast icons from
 // pkg/ui/theme/icons.go. A line starting with one of these icons is always an
@@ -1802,6 +1926,9 @@ func isSnapshotStructuralLine(line string) bool {
 }
 
 func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "export ") {
+		return true
+	}
 	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
 		return true
 	}
@@ -1812,6 +1939,41 @@ func looksLikeDataLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "shell exports",
+			input: "export FIRST=value\nexport SECOND=value\n",
+			want:  "export FIRST=value\nexport SECOND=value\n",
+		},
+		{
+			name:  "documentation URLs",
+			input: "For complete documentation, see:\nhttps://example.com/docs\n",
+			want:  "For complete documentation, see:\nhttps://example.com/docs\n",
+		},
+		{
+			name:  "separate command examples",
+			input: "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+			want:  "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+		},
+		{
+			name:  "terminal wrapped prose",
+			input: "This deliberately long sentence is wrapped by the terminal renderer before its final words\nare written to the output stream.\n",
+			want:  "This deliberately long sentence is wrapped by the terminal renderer before its final words are written to the output stream.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
 }
 
 // Generate a unified diff using gotextdiff.

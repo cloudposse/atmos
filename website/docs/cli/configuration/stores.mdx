@@ -5,6 +5,7 @@ sidebar_class_name: command
 id: stores
 description: Configure external stores for sharing data between components in atmos.yaml.
 ---
+import CastPlayer from '@site/src/components/CastPlayer'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
@@ -405,8 +406,50 @@ components:
 
 This writes Terraform outputs to the configured store after apply completes. The output values starting with `.` reference Terraform output names.
 
+## Use Stores from the CLI or a Workflow Step
+
+You can get raw read and write access to any configured store. This access does not depend on a
+Terraform output. Use the [`atmos store`](/cli/commands/store/usage) CLI command group or a
+[`type: store`](/workflows/steps/type/store) workflow step. Not every backend supports every
+operation. For example, `atmos store delete` returns an error for Redis and Artifactory, because
+these backends do not support deletion:
+
+```shell
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+```
+
+To list the key/value pairs stored inside a backend, pass a store name to
+[`atmos store list`](/cli/commands/store/list). Most backends support this. 1Password and the
+default system keychain backend do not, because their underlying APIs do not support enumeration.
+Run `atmos store list` with no arguments to check the `Listable` column for a given store:
+
+```shell
+atmos store list app-metadata --stack=prod --component=ecs-service
+```
+
+The recording below runs this raw CRUD sequence, along with identity-backed store access, against
+a local AWS emulator, so it needs no real `AWS` account:
+
+<CastPlayer src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
+
+[View the full example](/examples/auth-stores)
+
+```yaml
+steps:
+  - name: record-tag
+    type: store
+    action: write
+    with:
+      store: app-metadata
+      key: image_tag
+      value: "{{ .steps.push.metadata.digest }}"
+```
+
 ## Related
 
 - [External Stores](/stacks/sharing-state/stores) - Using `!store` function in stacks
 - [Hooks](/stacks/hooks) - Writing to stores with hooks
+- [`atmos store` CLI](/cli/commands/store/usage) - Read, write, delete, and list store values
+- [`type: store` workflow step](/workflows/steps/type/store) - Write a store value from a workflow, custom command, or hook
 - [Terraform State](/stacks/sharing-state/terraform-state) - Alternative data sharing method

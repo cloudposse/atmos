@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -24,17 +25,20 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // MockLayer implements v1.Layer for testing.
 type MockLayer struct {
-	digestVal        v1.Hash
-	sizeVal          int64
-	uncompressedErr  error
-	compressedErr    error
-	mediaTypeVal     types.MediaType
-	uncompressedData []byte
+	digestVal         v1.Hash
+	sizeVal           int64
+	uncompressedErr   error
+	compressedErr     error
+	mediaTypeVal      types.MediaType
+	uncompressedData  []byte
+	uncompressedErrs  []error
+	uncompressedCalls int
 }
 
 func (m *MockLayer) Digest() (v1.Hash, error) {
@@ -50,6 +54,11 @@ func (m *MockLayer) Compressed() (io.ReadCloser, error) {
 }
 
 func (m *MockLayer) Uncompressed() (io.ReadCloser, error) {
+	call := m.uncompressedCalls
+	m.uncompressedCalls++
+	if call < len(m.uncompressedErrs) && m.uncompressedErrs[call] != nil {
+		return nil, m.uncompressedErrs[call]
+	}
 	if m.uncompressedErr != nil {
 		return nil, m.uncompressedErr
 	}
@@ -92,6 +101,72 @@ func TestProcessLayer_DecompressionError(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrLayerDecompression), "Expected ErrLayerDecompression, got: %v", err)
 	assert.Contains(t, err.Error(), "layer decompression")
+}
+
+func TestProcessLayerWithRetry_TransientErrorEventuallySucceeds(t *testing.T) {
+	dest := t.TempDir()
+	tarBuf := writeTestTar(t, map[string]string{"main.tf": "# recovered download\n"})
+	mockLayer := &MockLayer{
+		digestVal:        v1.Hash{Algorithm: "sha256", Hex: "retry123"},
+		uncompressedErrs: []error{&net.OpError{Op: "read", Err: errors.New("connection reset")}},
+		uncompressedData: tarBuf.Bytes(),
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, dest, testOCILayerRetryConfig())
+	require.NoError(t, err)
+	assert.Equal(t, 2, mockLayer.uncompressedCalls)
+
+	content, err := os.ReadFile(filepath.Join(dest, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# recovered download\n", string(content))
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryNonNetworkFailure(t *testing.T) {
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "invalid123"},
+		uncompressedErr: errors.New("invalid gzip header"),
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
+	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryAuthenticationFailure(t *testing.T) {
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "auth123"},
+		uncompressedErr: &transport.Error{StatusCode: 403},
+	}
+
+	err := processLayerWithRetry(context.Background(), mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrLayerDecompression)
+	assert.Equal(t, 1, mockLayer.uncompressedCalls)
+}
+
+func TestProcessLayerWithRetry_DoesNotRetryExpiredContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mockLayer := &MockLayer{
+		digestVal:       v1.Hash{Algorithm: "sha256", Hex: "cancelled123"},
+		uncompressedErr: &net.OpError{Op: "read", Err: errors.New("connection reset")},
+	}
+
+	err := processLayerWithRetry(ctx, mockLayer, 0, t.TempDir(), testOCILayerRetryConfig())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 0, mockLayer.uncompressedCalls)
+}
+
+func testOCILayerRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociLayerRetryMaxAttempts
+	initialDelay := time.Duration(0)
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+	}
 }
 
 // TestProcessLayer_ZipMediaType tests that a layer declaring the OpenTofu
@@ -574,4 +649,145 @@ func TestPullImage_RichError_ContextAndHints(t *testing.T) {
 	assert.Contains(t, contextBlob, "registry=ghcr.io")
 	assert.Contains(t, contextBlob, "auth_attempted=")
 	assert.Contains(t, contextBlob, "status=403")
+}
+
+// TestResolveImage_Success resolves a real (in-process) OCI manifest and
+// asserts the returned identity: a resolvable reference name and a
+// content-addressable "sha256:..." digest suitable for locks/SBOM.
+func TestResolveImage_Success(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "resolve/success:v1", map[string]string{
+		"main.tf": "# resolve target\n",
+	})
+
+	resolved, err := ResolveImage(context.Background(), &schema.AtmosConfiguration{}, imageRef)
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, imageRef, resolved.Reference)
+	assert.Regexp(t, `^sha256:[a-f0-9]{64}$`, resolved.Digest)
+	assert.NotEmpty(t, resolved.MediaType)
+}
+
+// TestResolveImage_InvalidReference asserts a malformed image reference is
+// rejected before any network call, wrapped in ErrInvalidImageReference.
+func TestResolveImage_InvalidReference(t *testing.T) {
+	resolved, err := ResolveImage(context.Background(), &schema.AtmosConfiguration{}, "invalid::image//name")
+	require.Error(t, err)
+	assert.Nil(t, resolved)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
+}
+
+// TestResolveImage_PullError asserts a registry-level failure during
+// resolution surfaces as an error (wrapping ErrPullImage) with a nil result,
+// rather than a partially populated ResolvedImage.
+func TestResolveImage_PullError(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 500}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := "registry.example.com/myimage:v1"
+	resolved, err := ResolveImage(context.Background(), &schema.AtmosConfiguration{}, ref)
+	require.Error(t, err)
+	assert.Nil(t, resolved)
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+// TestProcessImageWithFS_Success exercises the full pull->extract success
+// path against a real (in-process) registry: manifest resolution, artifact
+// type check, layer retrieval, and extraction all succeed and the layer's
+// files land in destDir.
+func TestProcessImageWithFS_Success(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "process/success:v1", map[string]string{
+		"main.tf": "# process target\n",
+	})
+
+	dest := t.TempDir()
+	err := processImageWithFS(context.Background(), &schema.AtmosConfiguration{}, imageRef, dest, defaultFileSystem)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dest, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# process target\n", string(content))
+}
+
+// TestProcessImageWithFS_NoLayers asserts a manifest that resolves but has
+// zero layers fails with the dedicated ErrNoLayers sentinel, distinct from a
+// network/auth failure.
+func TestProcessImageWithFS_NoLayers(t *testing.T) {
+	imageRef := ocitest.NewEmptyRegistry(t, "process/empty:v1")
+
+	err := processImageWithFS(context.Background(), &schema.AtmosConfiguration{}, imageRef, t.TempDir(), defaultFileSystem)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrNoLayers))
+}
+
+// TestProcessImageWithFS_LayerProcessingFailure asserts that when a layer
+// fails to process (non-retryable decompression failure), the loop stops and
+// returns an error wrapping both ErrProcessLayer and the underlying cause,
+// with the layer index in the message.
+func TestProcessImageWithFS_LayerProcessingFailure(t *testing.T) {
+	imageRef := ocitest.NewBrokenLayerRegistry(t, "process/broken:v1")
+
+	err := processImageWithFS(context.Background(), &schema.AtmosConfiguration{}, imageRef, t.TempDir(), defaultFileSystem)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrProcessLayer))
+	assert.True(t, errors.Is(err, errUtils.ErrLayerDecompression))
+	assert.Contains(t, err.Error(), "layer 0")
+}
+
+// TestDefaultOCILayerRetryConfig asserts the production retry configuration
+// used by processImageWithFS has the documented bounded attempts and delays,
+// so a regression here (e.g. accidentally unbounded retries) is caught.
+func TestDefaultOCILayerRetryConfig(t *testing.T) {
+	cfg := defaultOCILayerRetryConfig()
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.MaxAttempts)
+	assert.Equal(t, ociLayerRetryMaxAttempts, *cfg.MaxAttempts)
+	require.NotNil(t, cfg.InitialDelay)
+	assert.Equal(t, ociLayerRetryInitialDelay, *cfg.InitialDelay)
+	require.NotNil(t, cfg.MaxDelay)
+	assert.Equal(t, ociLayerRetryMaxDelay, *cfg.MaxDelay)
+	assert.Equal(t, schema.BackoffExponential, cfg.BackoffStrategy)
+}
+
+// TestIsRetryableOCILayerError covers the pure-decision branches of
+// isRetryableOCILayerError directly: nil/context errors are never retryable,
+// errors unrelated to layer decompression are never retryable, and a
+// decompression failure wrapping a definitively transient cause (unexpected
+// EOF, closed connection) is retryable even when it doesn't implement
+// net.Error.
+func TestIsRetryableOCILayerError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil error", err: nil, want: false},
+		{name: "context canceled", err: context.Canceled, want: false},
+		{name: "context deadline exceeded", err: context.DeadlineExceeded, want: false},
+		{name: "unrelated error is not retryable", err: errors.New("some other failure"), want: false},
+		{
+			name: "decompression failure wrapping unexpected EOF is retryable",
+			err:  errors.Join(errUtils.ErrLayerDecompression, io.ErrUnexpectedEOF),
+			want: true,
+		},
+		{
+			name: "decompression failure wrapping closed network connection is retryable",
+			err:  errors.Join(errUtils.ErrLayerDecompression, net.ErrClosed),
+			want: true,
+		},
+		{
+			name: "decompression failure wrapping non-network cause is not retryable",
+			err:  errors.Join(errUtils.ErrLayerDecompression, errors.New("invalid gzip header")),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isRetryableOCILayerError(tt.err))
+		})
+	}
 }

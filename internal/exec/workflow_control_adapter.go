@@ -16,6 +16,8 @@ type workflowControlContext struct {
 	workflowDefinition  *schema.WorkflowDefinition
 	dryRun              bool
 	commandLineStack    string
+	commandLineTags     []string
+	commandLineLabels   string
 	commandLineIdentity string
 	baseEnv             []string
 	persistentEnv       map[string]string
@@ -28,6 +30,8 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 		BasePath:            control.atmosConfig.BasePath,
 		BaseEnv:             control.baseEnv,
 		CommandLineStack:    control.commandLineStack,
+		CommandLineTags:     control.commandLineTags,
+		CommandLineLabels:   control.commandLineLabels,
 		CommandLineIdentity: control.commandLineIdentity,
 		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
 			return prepareStepEnvironment(baseEnv, identity, stepName, control.authManager, workflowEnv, control.persistentEnv, stepEnv)

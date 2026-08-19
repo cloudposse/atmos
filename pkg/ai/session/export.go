@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ExportSession exports a session to a checkpoint file.
@@ -63,6 +64,8 @@ func (m *Manager) ExportSessionByName(ctx context.Context, sessionName string, o
 
 // buildCheckpoint builds a checkpoint from a session and messages.
 func (m *Manager) buildCheckpoint(session *Session, messages []*Message, opts ExportOptions) *Checkpoint {
+	warnIfCheckpointMayNotReimport(session, messages)
+
 	checkpoint := &Checkpoint{
 		Version:    CheckpointVersion,
 		ExportedAt: time.Now(),
@@ -119,6 +122,26 @@ func (m *Manager) buildCheckpoint(session *Session, messages []*Message, opts Ex
 	}
 
 	return checkpoint
+}
+
+// warnIfCheckpointMayNotReimport warns (without blocking the export) when a
+// session has no recorded model or no messages. The validateCheckpointSession
+// function (import.go) requires both a non-empty Model and at least one message before
+// a checkpoint can be imported, so a session missing either — most commonly a
+// session created against a CLI provider with no explicit `model` configured
+// before this was fixed to resolve from the constructed client, or a session
+// that was never actually used — would otherwise only surface as an opaque
+// import failure much later. Export itself still succeeds: a user should be
+// able to export for inspection even if the result won't re-import cleanly.
+func warnIfCheckpointMayNotReimport(session *Session, messages []*Message) {
+	switch {
+	case session.Model == "" && len(messages) == 0:
+		ui.Warning(fmt.Sprintf("session %q has no recorded model and no messages; the exported checkpoint will not be re-importable", session.Name))
+	case session.Model == "":
+		ui.Warning(fmt.Sprintf("session %q has no recorded model; the exported checkpoint will not be re-importable", session.Name))
+	case len(messages) == 0:
+		ui.Warning(fmt.Sprintf("session %q has no messages; the exported checkpoint will not be re-importable", session.Name))
+	}
 }
 
 // extractContext extracts project context for the checkpoint.

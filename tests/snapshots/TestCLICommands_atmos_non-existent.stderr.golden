@@ -11,6 +11,7 @@ Valid subcommands are:
   • atlantis
   • auth
   • aws
+  • azure
   • cast
   • ci
   • completion
@@ -22,6 +23,7 @@ Valid subcommands are:
   • docs
   • emulator
   • env
+  • gcp
   • git
   • helm
   • helmfile
@@ -34,9 +36,11 @@ Valid subcommands are:
   • packer
   • pro
   • profile
+  • sbom
   • scaffold
   • secret
   • stack
+  • store
   • support
   • terraform
   • theme

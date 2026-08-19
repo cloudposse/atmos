@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -14,12 +16,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
+var cleanParser *flags.StandardParser
+
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean tools and cache directories",
-	Long:  `Remove all installed tools and cached downloads.`,
-	Args:  cobra.NoArgs,
+	Long: `Remove all installed tools and cached downloads.
+
+By default this prompts for confirmation before deleting anything (use --force to skip the
+prompt, or --dry-run to preview what would be deleted without removing anything).`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Bind flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := cleanParser.BindFlagsToViper(cmd, v); err != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrFlagBinding, err)
+		}
+
 		toolsDir := toolchain.GetInstallPath()
 
 		// Use XDG-compliant cache directory.
@@ -35,8 +48,35 @@ var cleanCmd = &cobra.Command{
 		}
 
 		tempCacheDir := filepath.Join(os.TempDir(), "atmos-toolchain-cache")
-		return toolchain.CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir)
+
+		opts := toolchain.CleanOptions{
+			DryRun:    v.GetBool("dry-run"),
+			CacheOnly: v.GetBool("cache-only"),
+			Force:     v.GetBool("force"),
+		}
+
+		return toolchain.RunClean(toolsDir, cacheDir, tempCacheDir, opts)
 	},
+}
+
+func init() {
+	// Create parser with clean-specific flags.
+	cleanParser = flags.NewStandardParser(
+		flags.WithBoolFlag("dry-run", "", false, "Show what would be cleaned without actually removing anything"),
+		flags.WithBoolFlag("cache-only", "", false, "Only clean the download cache, not installed tools"),
+		flags.WithBoolFlag("force", "", false, "Skip the confirmation prompt and immediately clean"),
+		flags.WithEnvVars("dry-run", "ATMOS_TOOLCHAIN_DRY_RUN"),
+		flags.WithEnvVars("cache-only", "ATMOS_TOOLCHAIN_CACHE_ONLY"),
+		flags.WithEnvVars("force", "ATMOS_TOOLCHAIN_FORCE"),
+	)
+
+	// Register flags.
+	cleanParser.RegisterFlags(cleanCmd)
+
+	// Bind flags to Viper.
+	if err := cleanParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 // CleanCommandProvider implements the CommandProvider interface.
@@ -55,7 +95,7 @@ func (c *CleanCommandProvider) GetGroup() string {
 }
 
 func (c *CleanCommandProvider) GetFlagsBuilder() flags.Builder {
-	return nil
+	return cleanParser
 }
 
 func (c *CleanCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {

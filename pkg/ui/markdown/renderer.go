@@ -389,7 +389,13 @@ func WithTerminal(term terminal.Terminal) Option {
 }
 
 func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Docs.MaxWidth
+	// Prefer the modern settings.terminal.max_width; settings.docs.max_width is
+	// deprecated but still honored as a fallback. Zero means unlimited (the
+	// detected terminal width is used as-is).
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		maxWidth = atmosConfig.Settings.Docs.MaxWidth //nolint:staticcheck // Deliberate fallback for the deprecated field so old configs keep working.
+	}
 	term := terminal.New()
 	screenWidth := uint(defaultWidth)
 	if width := term.Width(terminal.Stdout); width > 0 {

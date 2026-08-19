@@ -488,6 +488,37 @@ func TestInfof(t *testing.T) {
 	}
 }
 
+func TestOutput(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	_, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+	const secret = "super-secret"
+	globalIO.Masker().RegisterSecret(secret)
+
+	var output bytes.Buffer
+	uiOutput := New(&output)
+	uiOutput.Success("Deployment complete: " + secret)
+	uiOutput.Successf("Deployed %d components: %s", 42, secret)
+	uiOutput.Warning("Stack is deprecated: " + secret)
+	uiOutput.Warningf("Deprecated in version %s: %s", "2.0", secret)
+	uiOutput.Info("Processing components: " + secret)
+	uiOutput.Infof("Processing %d components: %s", 42, secret)
+	New(nil).Warning("Fallback warning")
+
+	assertions := []string{"Deployment complete", "Deployed 42 components", "Stack is deprecated", "Deprecated in version 2.0", "Processing components", "Processing 42 components"}
+	for _, assertion := range assertions {
+		if !strings.Contains(output.String(), assertion) {
+			t.Errorf("writer output does not contain %q: %q", assertion, output.String())
+		}
+	}
+	if strings.Contains(output.String(), secret) {
+		t.Errorf("writer output contains secret: %q", output.String())
+	}
+	if !strings.Contains(stderr.String(), "Fallback warning") {
+		t.Errorf("fallback UI output does not contain warning: %q", stderr.String())
+	}
+}
+
 func TestMarkdown(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()

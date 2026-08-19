@@ -96,6 +96,13 @@ func printFullHelp(ctx *helpRenderContext, cmd *cobra.Command) {
 }
 
 func printDefaultHelp(ctx *helpRenderContext, cmd *cobra.Command) {
+	// settings.terminal.help.filter=false restores the pre-filter full help
+	// (FLAGS + GLOBAL FLAGS, no topic hint) — the behavior before PR #2696,
+	// journaled in pkg/edition so an edition pin can restore it too.
+	if ctx.atmosConfig != nil && !ctx.atmosConfig.Settings.Terminal.Help.Filter {
+		printFullHelp(ctx, cmd)
+		return
+	}
 	printCommonHelpSections(ctx, cmd)
 	printLocalFlagsOnly(ctx.writer, cmd, ctx.atmosConfig, ctx.styles)
 	printCompatibilityFlags(ctx.writer, cmd, ctx.styles)

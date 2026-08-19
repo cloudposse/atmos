@@ -2,12 +2,15 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -568,8 +571,8 @@ func TestAskCommand_FlagCount(t *testing.T) {
 			count++
 		}
 	})
-	// Expected: include, exclude, no-auto-context, no-tools, mcp = 5 flags.
-	assert.Equal(t, 5, count, "ask command should have exactly 5 custom flags")
+	// Expected: include, exclude, no-auto-context, no-tools, mcp, session = 6 flags.
+	assert.Equal(t, 6, count, "ask command should have exactly 6 custom flags")
 }
 
 func TestAskCommand_AIEnabledButClientCreationFails(t *testing.T) {
@@ -2446,4 +2449,132 @@ ai:
 
 	err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
 	require.NoError(t, err, "RunE should succeed and render the Markdown response")
+}
+
+// TestAskCommand_SessionPersistence_RoundTrip is the real round-trip test for
+// the new --session flag on `ask`: it runs `ask --session` twice against the
+// same session name and confirms the second call's HTTP request to the model
+// includes the first turn's question and answer as prior context, and that
+// both turns end up durably persisted and queryable via the session manager
+// afterward. Before this change, `ask` had no --session flag at all.
+func TestAskCommand_SessionPersistence_RoundTrip(t *testing.T) {
+	var mu sync.Mutex
+	var capturedRequests []string
+	responses := []string{"First answer", "Second answer"}
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+
+		mu.Lock()
+		idx := len(capturedRequests)
+		capturedRequests = append(capturedRequests, string(bodyBytes))
+		mu.Unlock()
+
+		content := "no more canned responses"
+		if idx < len(responses) {
+			content = responses[idx]
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index":         0,
+					"message":       map[string]interface{}{"role": "assistant", "content": content},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+		})
+	}))
+	defer mockServer.Close()
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: ollama
+  send_context: false
+  providers:
+    ollama:
+      base_url: "` + mockServer.URL + `"
+      model: "llama3.3:70b"
+      max_tokens: 4096
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	data.SetMarkdownRenderer(ui.Format)
+
+	newTestCmd := func() *cobra.Command {
+		testCmd := &cobra.Command{Use: "ask", Args: cobra.MinimumNArgs(1)}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", true, "Disable tool execution")
+		testCmd.Flags().String("session", "", "Session ID")
+		return testCmd
+	}
+
+	firstCmd := newTestCmd()
+	require.NoError(t, firstCmd.Flags().Set("session", "ask-roundtrip-session"))
+	require.NoError(t, askCmd.RunE(firstCmd, []string{"First", "question"}))
+
+	secondCmd := newTestCmd()
+	require.NoError(t, secondCmd.Flags().Set("session", "ask-roundtrip-session"))
+	require.NoError(t, askCmd.RunE(secondCmd, []string{"Second", "question"}))
+
+	require.Len(t, capturedRequests, 2)
+	assert.Contains(t, capturedRequests[1], "First question")
+	assert.Contains(t, capturedRequests[1], "First answer")
+	assert.Contains(t, capturedRequests[1], "Second question")
+	assert.NotContains(t, capturedRequests[0], "Second question")
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	ctx := context.Background()
+	sess, getErr := manager.GetSessionByName(ctx, "ask-roundtrip-session")
+	require.NoError(t, getErr)
+
+	messages, msgErr := manager.GetMessages(ctx, sess.ID, 0)
+	require.NoError(t, msgErr)
+	require.Len(t, messages, 4)
+	assert.Equal(t, "user", messages[0].Role)
+	assert.Equal(t, "First question", messages[0].Content)
+	assert.Equal(t, "assistant", messages[1].Role)
+	assert.Equal(t, "First answer", messages[1].Content)
+	assert.Equal(t, "user", messages[2].Role)
+	assert.Equal(t, "Second question", messages[2].Content)
+	assert.Equal(t, "assistant", messages[3].Role)
+	assert.Equal(t, "Second answer", messages[3].Content)
 }

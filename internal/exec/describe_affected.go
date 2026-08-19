@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -205,7 +206,6 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"ssh-key":                        &describe.SSHKeyPath,
 		"ssh-key-password":               &describe.SSHKeyPassword,
 		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
-		"include-dependents":             &describe.IncludeDependents,
 		"include-settings":               &describe.IncludeSettings,
 		"upload":                         &describe.Upload,
 		"clone-target-ref":               &describe.CloneTargetRef,
@@ -245,6 +245,15 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+	// --include-dependents is a plain bool on `atmos describe affected` but a
+	// depth-carrying string flag on the terraform commands (bare = unlimited,
+	// --include-dependents=N bounds the expansion), so it cannot go through the
+	// typed map above — read it according to the flag type actually registered.
+	if flags.Changed(flagsPkg.FlagIncludeDependents) {
+		describe.IncludeDependents, err = includeDependentsFlagValue(flags)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Resolve --base flag: auto-detect ref vs SHA and populate the appropriate field.
 	if describe.Base != "" {
 		if ci.IsCommitSHA(describe.Base) {
@@ -267,6 +276,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+}
+
+// includeDependentsFlagValue reads the include-dependents flag as a boolean
+// regardless of how the owning command registered it: `atmos describe affected`
+// uses a bool flag, while the terraform commands use a depth-carrying string
+// flag where any enabled depth (unlimited or bounded) means "include them".
+func includeDependentsFlagValue(flags *pflag.FlagSet) (bool, error) {
+	flag := flags.Lookup(flagsPkg.FlagIncludeDependents)
+	if flag == nil {
+		return false, nil
+	}
+	if flag.Value.Type() == "bool" {
+		return flags.GetBool(flagsPkg.FlagIncludeDependents)
+	}
+	value, err := flags.GetString(flagsPkg.FlagIncludeDependents)
+	if err != nil {
+		return false, err
+	}
+	depth, err := flagsPkg.ParseClosureDepth(flagsPkg.FlagIncludeDependents, value)
+	if err != nil {
+		return false, err
+	}
+	return depth != 0, nil
 }
 
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.

@@ -2,9 +2,12 @@ package github
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -37,6 +40,18 @@ func isGitHubTransientError(err error) bool {
 		return githubError.Response.StatusCode >= http.StatusInternalServerError
 	}
 
+	// A *url.Error means the request never got an HTTP response at all -- DNS
+	// resolution, connection refused/reset, a timeout, or a TLS certificate
+	// trust failure reaching a well-behaved host like api.github.com (seen on
+	// a Windows CI runner). handleGitHubAPIError passes these through
+	// unwrapped when resp is nil, so this is squarely a CI-runner
+	// networking/trust-store issue outside the test's control, not a real
+	// API/application error.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+
 	// Fallback for API calls that don't use handleGitHubAPIError.
 	errMsg := err.Error()
 	return strings.Contains(errMsg, "rate limit exceeded") ||
@@ -48,6 +63,35 @@ func TestIsGitHubTransientError(t *testing.T) {
 	assert.True(t, isGitHubTransientError(&github.ErrorResponse{
 		Response: &http.Response{StatusCode: http.StatusServiceUnavailable},
 	}))
+	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusNotFound},
+	}))
+}
+
+// TestIsGitHubTransientError_TransportFailure is a regression test: a live-network test can fail
+// before ever getting an HTTP response -- DNS resolution, connection refused/reset, timeouts, or
+// (observed on a Windows CI runner) a TLS certificate trust failure reaching a well-behaved host
+// like api.github.com. Since resp is nil in that case, neither handleGitHubAPIError's 401 nor
+// rate-limit branch applies, so the *url.Error the net/http client constructs passes straight
+// through unwrapped, and the classifier under test must recognize that as transient: it's a
+// CI-runner networking/trust-store issue outside the test's control, not a real API/application
+// error.
+func TestIsGitHubTransientError_TransportFailure(t *testing.T) {
+	certErr := &url.Error{
+		Op:  "Get",
+		URL: "https://api.github.com/repos/cloudposse/atmos",
+		Err: &tls.CertificateVerificationError{
+			Err: x509.UnknownAuthorityError{},
+		},
+	}
+	assert.True(t, isGitHubTransientError(certErr))
+
+	dnsErr := &url.Error{Op: "Get", URL: "https://api.github.com/repos/cloudposse/atmos", Err: &net.DNSError{IsTimeout: true}}
+	assert.True(t, isGitHubTransientError(dnsErr))
+
+	// A real API error (non-nil response, 404 status) must NOT be swallowed by the transport
+	// check -- confirms *url.Error handling doesn't overshadow the existing github.ErrorResponse
+	// classification for genuine application-level errors.
 	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
 		Response: &http.Response{StatusCode: http.StatusNotFound},
 	}))
@@ -574,6 +618,60 @@ func TestFilterPrereleases(t *testing.T) {
 				for _, release := range result {
 					assert.False(t, release.GetPrerelease(), "Should not contain prereleases")
 				}
+			}
+		})
+	}
+}
+
+// TestFilterDrafts tests the filterDrafts function.
+func TestFilterDrafts(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name         string
+		releases     []*github.RepositoryRelease
+		expectedTags []string
+	}{
+		{
+			name: "filters out draft releases",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.226.0"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.225.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.225.0"},
+		},
+		{
+			name:         "handles empty slice",
+			releases:     []*github.RepositoryRelease{},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles all drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v2.0.0-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.1-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles no drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.1.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.1.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDrafts(tt.releases)
+			require.Len(t, result, len(tt.expectedTags))
+
+			for i, release := range result {
+				assert.False(t, release.GetDraft(), "Should not contain draft releases")
+				assert.Equal(t, tt.expectedTags[i], release.GetTagName(), "tag at index %d should match expected order", i)
 			}
 		})
 	}

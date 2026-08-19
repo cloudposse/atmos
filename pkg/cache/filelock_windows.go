@@ -17,6 +17,12 @@ func NewFileLock(_ string) FileLock {
 	return &noopFileLock{}
 }
 
+// NewFileLockAtPath creates a FileLock for an explicit lock path. Windows
+// uses the same graceful-degradation behavior as NewFileLock.
+func NewFileLockAtPath(_ string) FileLock {
+	return &noopFileLock{}
+}
+
 // WithLock executes fn without a native lock and gives Windows time to release
 // file handles before another cache operation starts.
 func (n *noopFileLock) WithLock(fn func() error) error {
@@ -36,4 +42,9 @@ func (n *noopFileLock) WithLockContext(_ context.Context, fn func() error) error
 // WithRLock executes cache reads without a native lock on Windows.
 func (n *noopFileLock) WithRLock(fn func() error) error {
 	return fn()
+}
+
+// TryWithRLock executes fn without locking on Windows.
+func (n *noopFileLock) TryWithRLock(fn func() error) (bool, error) {
+	return true, fn()
 }

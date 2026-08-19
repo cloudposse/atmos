@@ -1814,7 +1814,9 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label", "exports")
+		workdirRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "null-label", "dev", nil)
+		require.NoError(t, err)
+		workdirPath := filepath.Join(workdirRoot, "exports")
 		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 		info := &schema.ConfigAndStacksInfo{
 			BaseComponentPath: "exports",

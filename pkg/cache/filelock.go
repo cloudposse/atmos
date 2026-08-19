@@ -19,4 +19,9 @@ type FileLock interface {
 	// WithRLock executes fn while holding a shared read lock where supported.
 	// Windows cache reads execute best-effort without native file locking.
 	WithRLock(fn func() error) error
+
+	// TryWithRLock executes fn while holding a shared read lock when it can be
+	// acquired quickly. It returns false, nil when another process holds an
+	// exclusive lock. On Windows, it executes without locking and returns true.
+	TryWithRLock(fn func() error) (acquired bool, err error)
 }

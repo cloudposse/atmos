@@ -1,9 +1,10 @@
 ---
 name: atmos-stores
-description: "Store backends: AWS SSM, AWS Secrets Manager, Azure Key Vault, Google Secret Manager, Redis, Artifactory configuration, hooks integration, cross-component data sharing"
+description: "Store backends: AWS SSM, AWS Secrets Manager, Azure Key Vault, Google Secret Manager, Redis, Artifactory configuration, hooks integration, cross-component data sharing, atmos store CLI CRUD, type: store workflow step"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 ---
 
 # Atmos External Stores
@@ -323,6 +324,47 @@ components:
 ```
 
 Atmos merges these into a complete hook definition at resolution time.
+
+## Write to Stores with the CLI or a Workflow Step
+
+For raw CRUD access to any configured store, use the `atmos store` CLI command family or the
+`type: store` workflow step. This access works for any store, not only Terraform outputs. Neither
+method requires a declaration. Both operate directly on any store configured under `stores:`, by
+name.
+
+```shell
+# CLI: set, get, delete, list -- scope to a stack and component, or omit for a global value
+atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
+atmos store get app-metadata image_tag --stack=prod --component=ecs-service
+atmos store list
+atmos store list app-metadata --stack=prod --component=ecs-service
+```
+
+Passing a store name to `atmos store list` lists the key/value pairs stored under a scope
+(instead of the configured backends themselves), for backends that support key enumeration. Most
+backends support it. 1Password and the default system keychain backend do not, because their
+underlying APIs do not support enumeration. Check the `Listable` column in a bare
+`atmos store list` before relying on it for a given store. Values are masked the same way
+`atmos store get` masks a single value.
+
+```yaml
+# Workflow, custom-command, or hook step: write a value, for example an image tag from a build step
+- name: record-tag
+  type: store
+  action: write
+  with:
+    store: app-metadata
+    key: image_tag
+    value: "{{ .steps.push.metadata.digest }}"
+    stack: prod
+    component: ecs-service
+```
+
+Atmos allows you to write to a `secret: true` store this way, for example to write a generated
+password. But this write skips the `atmos secret` declaration and scope system. When a value must
+be tracked as a formal secret, use `secrets.vars` and `atmos secret set` instead. See the
+`atmos-secrets` skill for that system. See the `atmos-steps` skill and the
+`/workflows/steps/type/store` docs for the step type.
 
 ## Cross-Account and Cross-Region Access
 

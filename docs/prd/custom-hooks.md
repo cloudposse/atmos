@@ -104,6 +104,44 @@ This pre-provisioning is scoped to components that have hooks: every terraform s
 
 Component/stack metadata resolution ahead of hook discovery (the `ProcessStacks` call in `prepareHookContext` that resolves `metadata.component`, described above) is similarly best-effort: on failure it logs and falls back to the unresolved component/stack rather than returning an error, so an objectively invalid stack or component (a scenario the command is going to reject anyway) is rejected by Terraform's own validation with its normal message, not by hook-context preparation with a different one.
 
+### `working_directory:` anchoring for step-backed hooks (`kind: step`/`kind: steps`)
+
+`kind: step`/`kind: steps` hooks (`pkg/hooks/step_engine.go`) bridge to the shared workflow/
+custom-command step registry (`pkg/runner/step`), and each step in that registry accepts its own
+`working_directory:`. Because hooks are always component-scoped — `ComponentPath(ctx)` (above) is
+always available — a relative `working_directory:` on a hook step follows the same
+Empty/Dot/Bare/Absolute value classification the
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) defines for `base_path`,
+with **the component directory as a third possible anchor** alongside "config dir" and "CWD":
+
+| Value | Anchor |
+|---|---|
+| Empty (unset) | Component directory (`ComponentPath(ctx)`) |
+| Dot (`./foo`, `.`, `..`, `../foo`) | CWD — `exec.Cmd.Dir` already resolves a dot-prefixed relative `Dir` against the ambient process working directory, matching the "runtime source" convention the base-path PRD establishes for env vars/CLI flags |
+| Bare (`foo`, `foo/bar`) | Component directory — joined onto `ComponentPath(ctx)`, same anchor as the empty case |
+| Absolute | Passthrough, unchanged |
+
+```yaml
+hooks:
+  after-terraform-apply:
+    kind: step
+    type: shell
+    command: ./scripts/notify.sh    # dot-prefixed: runs from wherever `atmos` was invoked (CWD)
+    working_directory: scripts      # bare: runs from <component-dir>/scripts
+    # working_directory: ./scripts  # dot-prefixed: runs from <CWD>/scripts instead
+```
+
+Before this rule, a non-empty `working_directory:` — bare or dot-prefixed alike — fell straight
+through to `exec.Cmd`'s own default (relative to the ambient process CWD), silently identical
+regardless of prefix. That contradicted the *already-established* default for an **empty**
+`working_directory:` (component directory, per the table above) and meant `working_directory: foo`
+never actually ran inside the component the hook was scoped to. Implementation:
+`setDefaultStepWorkingDirectory`, `pkg/hooks/step_engine.go`.
+
+This anchoring is specific to hooks (`pkg/hooks`), not `pkg/runner/step` generally — a workflow or
+custom-command step's `working_directory:` has no component to anchor a bare value to, since
+workflows and custom commands aren't inherently component-scoped the way a hook is.
+
 ### Pro integration — implicit upload, kind-driven
 
 If Pro is configured for the project (same connection that drives instance-status and affected-stacks uploads today), hook output flows to Pro automatically.
@@ -439,3 +477,4 @@ Assertions:
 - [Native CI Integration](./native-ci-integration.md) — same philosophy: Atmos works identically locally and in CI; no wrapper scripts.
 - [CI Summary Templates](./ci-summary-templates.md) — summary envelope format borrows from CI plugin templates.
 - [Native CI Artifact Storage](./native-ci-artifact-storage.md) — `pkg/ci/artifact/` is the upload abstraction the Pro backend extends.
+- [Base Path Resolution Semantics](./base-path-resolution-semantics.md) — Empty/Dot/Bare/Absolute value classification, generalized here with the component directory as a third anchor for hook `working_directory:`.

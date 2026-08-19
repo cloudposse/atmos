@@ -165,6 +165,48 @@ func TestProcessTemplateWithRichConfig(t *testing.T) {
 	}
 }
 
+// TestProcessTemplateHoistsMatrixOntoRoot verifies a resolved matrix
+// combination, stashed under the reserved MatrixKey, is exposed to both the
+// target path and file content as .matrix.<axis> -- not nested under
+// .Config -- matching the workflow matrix step's own namespacing.
+func TestProcessTemplateHoistsMatrixOntoRoot(t *testing.T) {
+	processor := NewProcessor()
+
+	userValues := map[string]interface{}{
+		"project_name": "test-project",
+		MatrixKey:      map[string]string{"environment": "dev", "region": "us-east-1"},
+	}
+
+	result, err := processor.ProcessTemplate(
+		`{{.Config.project_name}}/{{.matrix.environment}}/{{.matrix.region}}.yaml`,
+		"/tmp/test", nil, userValues)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "test-project/dev/us-east-1.yaml"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+// TestProcessTemplateWithoutMatrixLeavesRootUnset verifies templates that
+// never see a matrix combination don't get a stray "matrix" key.
+func TestProcessTemplateWithoutMatrixLeavesRootUnset(t *testing.T) {
+	processor := NewProcessor()
+
+	result, err := processor.ProcessTemplate(`{{if .matrix}}has-matrix{{else}}no-matrix{{end}}`,
+		"/tmp/test", nil, map[string]interface{}{"project_name": "test-project"})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "no-matrix"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
 // TestTemplateFilenameProcessing tests that file paths with templates are processed correctly.
 func TestTemplateFilenameProcessing(t *testing.T) {
 	processor := NewProcessor()
@@ -638,6 +680,40 @@ func TestProcessFile_RejectsSymlinkedDirectoryEscape(t *testing.T) {
 
 	if _, statErr := os.Stat(filepath.Join(outsideDir, "test.txt")); !os.IsNotExist(statErr) {
 		t.Error("expected no file to be written outside targetPath")
+	}
+}
+
+// TestProcessFile_RelativeTargetPath verifies ProcessFile succeeds when
+// targetPath is relative (e.g. the CLI's default "./my-project"), not just
+// when it's absolute. Regression test for #2851: validateWriteTarget used to
+// compare an absolutized realBase against a still-relative realDir, so the
+// containment check never matched and every relative-target write was
+// rejected as a false-positive path traversal.
+func TestProcessFile_RelativeTargetPath(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+
+	processor := NewProcessor()
+
+	file := File{
+		Path:        "README.md",
+		Content:     "Hello, World!",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, "./my-project", false, false, nil, nil)
+	if err != nil {
+		t.Fatalf("expected no error for relative target path, got: %v", err)
+	}
+
+	filePath := filepath.Join(root, "my-project", "README.md")
+	content, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		t.Fatalf("expected file to be created at %s: %v", filePath, readErr)
+	}
+	if string(content) != "Hello, World!" {
+		t.Errorf("expected content 'Hello, World!', got '%s'", string(content))
 	}
 }
 

@@ -431,6 +431,56 @@ func TestLabelFilter_Apply(t *testing.T) {
 	})
 }
 
+func TestNewPredicateFilter(t *testing.T) {
+	predicate := func(map[string]any) bool { return true }
+	filter := NewPredicateFilter("membership", predicate)
+	require.NotNil(t, filter)
+	assert.Equal(t, "membership", filter.Name)
+	assert.NotNil(t, filter.Predicate)
+}
+
+func TestPredicateFilter_Apply(t *testing.T) {
+	data := []map[string]any{
+		{"component": "vpc"},
+		{"component": "eks"},
+		{"component": "rds"},
+	}
+
+	t.Run("keeps only rows the predicate accepts", func(t *testing.T) {
+		filter := NewPredicateFilter("only-vpc", func(item map[string]any) bool {
+			return item["component"] == "vpc"
+		})
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+
+		filtered, ok := result.([]map[string]any)
+		require.True(t, ok)
+		require.Len(t, filtered, 1)
+		assert.Equal(t, "vpc", filtered[0]["component"])
+	})
+
+	t.Run("nil predicate keeps every row unchanged", func(t *testing.T) {
+		filter := &PredicateFilter{Name: "no-op"}
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Equal(t, data, result)
+	})
+
+	t.Run("predicate rejecting everything returns an empty result", func(t *testing.T) {
+		filter := NewPredicateFilter("none", func(map[string]any) bool { return false })
+		result, err := filter.Apply(data)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("invalid data type errors", func(t *testing.T) {
+		filter := NewPredicateFilter("any", func(map[string]any) bool { return true })
+		_, err := filter.Apply("not a slice")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	})
+}
+
 func TestNewChain(t *testing.T) {
 	filter1 := NewColumnFilter("col1", "val1")
 	filter2 := NewColumnFilter("col2", "val2")

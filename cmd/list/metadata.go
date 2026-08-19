@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var metadataParser *flags.StandardParser
@@ -24,6 +25,8 @@ type MetadataOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	Tags             []string
+	LabelsRaw        string
 }
 
 // metadataCmd lists metadata across stacks.
@@ -72,6 +75,8 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
 }
 
@@ -110,6 +115,8 @@ func init() {
 		WithMetadataColumnsFlag,
 		WithSortFlag,
 		WithFilterFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
@@ -161,6 +168,8 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
 		Skip:             opts.Skip,
+		Tags:             opts.Tags,
+		LabelsRaw:        opts.LabelsRaw,
 	}
 
 	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)

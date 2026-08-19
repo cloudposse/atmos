@@ -1,0 +1,22 @@
+base_path: "./"
+
+settings:
+  experimental: warn
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    auto_generate_backend_file: true
+    workspaces_enabled: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

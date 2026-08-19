@@ -196,6 +196,80 @@ func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
 		"the distribution line must show claude-code's actual skill directory, not Atmos's own ~/.atmos/skills store")
 }
 
+// TestInstallCmd_RunE_PathWithClientWarns covers the case where a user passes an
+// explicit --path alongside --client: --path takes full manual control and skips
+// auto-distribution, so --client silently did nothing before this warning existed.
+// The install must still succeed (silently discarding the flag is intentional --
+// only the lack of any explanation was the bug), but must warn so the user isn't
+// left wondering why nothing landed in their client's skill directory.
+func TestInstallCmd_RunE_PathWithClientWarns(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetFlagChangedForTest(t, installCmd, "path")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	require.NoError(t, installCmd.Flags().Set("path", overridePath))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "--path skips auto-distribution")
+	assert.Contains(t, output, "--client")
+
+	// --path is honored as full manual control: no client copy is created...
+	assert.NoFileExists(t, filepath.Join(tempHome, ".claude", "skills", "atmos-terraform", "SKILL.md"))
+	// ...and the skill lands only at the explicit --path location.
+	assert.FileExists(t, filepath.Join(overridePath, "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn covers the
+// unremarkable case: --path alone (no --client/--scope/--global/--all-clients
+// explicitly set) must not print the warning, since there is nothing being
+// silently ignored.
+func TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetFlagChangedForTest(t, installCmd, "path")
+		resetFlagChangedForTest(t, installCmd, "scope")
+		resetFlagChangedForTest(t, installCmd, "global")
+		resetFlagChangedForTest(t, installCmd, "all-clients")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	require.NoError(t, installCmd.Flags().Set("path", overridePath))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.NotContains(t, output, "skips auto-distribution")
+}
+
 // TestInstallCmd_RunE_AlreadyInstalledOmitsHintAndLocation covers the exact
 // screenshot bug: re-running install with everything already installed (0
 // new, 0 updated) must not claim a location or print the chat hint -- there
@@ -438,6 +512,26 @@ func TestInstallCmd_RunE_InvalidSource(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInstallCmd_RunE_InvalidClientRejected covers the end-to-end wiring of
+// flags.WithValidValues("client", ...) + ValidateFlagValues: an unsupported
+// --client value must be rejected before the command does any work (network,
+// registry, or disk I/O), not silently ignored.
+func TestInstallCmd_RunE_InvalidClientRejected(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	require.NoError(t, installCmd.Flags().Set("client", "bogus-name"))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+	assert.Contains(t, err.Error(), "client")
 }
 
 func TestInstallCmd_RunE_WithFlags(t *testing.T) {

@@ -4,6 +4,7 @@ description: "Introspection & Querying: describe/list commands, config filtering
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 references:
   - references/commands-reference.md
 ---

@@ -762,6 +762,24 @@ func TestFindOrInstallVersionWithConfig_ExistingInstall(t *testing.T) {
 	assert.Equal(t, 0, installer.callCount)
 }
 
+func TestFindOrInstallVersionWithConfig_ReleaseCandidate(t *testing.T) {
+	// Regression test for https://github.com/cloudposse/atmos/issues/2839:
+	// release-candidate semver strings must be accepted, not rejected as an
+	// invalid version format.
+	finder := &mockVersionFinder{
+		findBinaryPathFunc: func(owner, repo, version string) (string, error) {
+			return "/path/to/atmos", nil
+		},
+	}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	path, err := findOrInstallVersionWithConfig("1.225.0-rc.3", cfg)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/path/to/atmos", path)
+}
+
 func TestFindOrInstallVersionWithConfig_NeedsInstall(t *testing.T) {
 	findCallCount := 0
 	finder := &mockVersionFinder{

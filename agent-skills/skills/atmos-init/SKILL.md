@@ -4,6 +4,7 @@ description: "Bootstrapping new Atmos projects with atmos init: built-in templat
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: scaffolding
 ---
 
 # Atmos Init

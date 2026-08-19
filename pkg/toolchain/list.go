@@ -2,12 +2,15 @@ package toolchain
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -213,8 +216,29 @@ func printAtmosVersionTable(rows []atmosVersionRow) {
 }
 
 // RunList prints a table of tools from .tool-versions, marking installed/default versions.
+//
+// Deprecated: kept for backward compatibility with existing callers/tests. Prefer
+// RunListWithOptions, which supports output format selection and installed/pending filtering.
 func RunList() error {
 	defer perf.Track(nil, "toolchain.RunList")()
+
+	return RunListWithOptions(defaultListFormat, false, false)
+}
+
+// defaultListFormat is the default --format value for `atmos toolchain list`.
+const defaultListFormat = "table"
+
+// RunListWithOptions prints tools from .tool-versions in the requested format, optionally
+// filtered to only installed or only pending (not-yet-installed) tools.
+func RunListWithOptions(format string, installedOnly, pendingOnly bool) error {
+	defer perf.Track(nil, "toolchain.RunListWithOptions")()
+
+	if !slices.Contains(supportedListFormats, format) {
+		return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, format, supportedListFormats)
+	}
+	if installedOnly && pendingOnly {
+		return errUtils.ErrMutuallyExclusiveFlags
+	}
 
 	installer := NewInstaller()
 	toolVersionsFile := GetToolVersionsFilePath()
@@ -226,12 +250,102 @@ func RunList() error {
 	}
 
 	if len(toolVersions.Tools) == 0 {
+		if format == "json" {
+			// JSON consumers expect valid (possibly empty) JSON, not a human-readable message.
+			return printToolRowsJSON(nil)
+		}
 		ui.Writeln("No tools configured in .tool-versions file")
 		return nil
 	}
 
 	rows := buildToolRows(toolVersions, installer)
+	rows = filterToolRowsByStatus(rows, installedOnly, pendingOnly)
 	sortToolRows(rows)
+
+	switch format {
+	case "json":
+		return printToolRowsJSON(rows)
+	case "plain":
+		return printToolRowsPlain(rows)
+	default:
+		printToolRowsTable(rows)
+		return nil
+	}
+}
+
+// filterToolRowsByStatus filters rows down to only installed, or only pending (not installed),
+// tools. Reuses the isInstalled field already computed per-row by buildToolRow. When neither
+// filter is requested, rows is returned unchanged.
+func filterToolRowsByStatus(rows []toolRow, installedOnly, pendingOnly bool) []toolRow {
+	if !installedOnly && !pendingOnly {
+		return rows
+	}
+
+	filtered := make([]toolRow, 0, len(rows))
+	for _, row := range rows {
+		if installedOnly && !row.isInstalled {
+			continue
+		}
+		if pendingOnly && row.isInstalled {
+			continue
+		}
+		filtered = append(filtered, row)
+	}
+	return filtered
+}
+
+// ListToolEntry is one entry in a `atmos toolchain list --format=json` listing.
+type ListToolEntry struct {
+	Registry    string `json:"registry" yaml:"registry"`
+	Alias       string `json:"alias,omitempty" yaml:"alias,omitempty"`
+	Binary      string `json:"binary" yaml:"binary"`
+	Version     string `json:"version" yaml:"version"`
+	Default     bool   `json:"default" yaml:"default"`
+	Installed   bool   `json:"installed" yaml:"installed"`
+	InstallDate string `json:"install_date,omitempty" yaml:"install_date,omitempty"`
+	Size        string `json:"size,omitempty" yaml:"size,omitempty"`
+}
+
+// ListToolsOutput is the --format=json output shape for `atmos toolchain list`.
+type ListToolsOutput struct {
+	Tools []ListToolEntry `json:"tools" yaml:"tools"`
+}
+
+// printToolRowsJSON writes structured tool listing data to the data channel (stdout).
+func printToolRowsJSON(rows []toolRow) error {
+	entries := make([]ListToolEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, ListToolEntry{
+			Registry:    row.registry,
+			Alias:       row.alias,
+			Binary:      row.binary,
+			Version:     row.version,
+			Default:     row.isDefault,
+			Installed:   row.isInstalled,
+			InstallDate: row.installDate,
+			Size:        row.size,
+		})
+	}
+	return data.WriteJSON(ListToolsOutput{Tools: entries})
+}
+
+// printToolRowsPlain writes one "registry@version" line per tool to the data channel (stdout),
+// with no styling — intended for shell scripting/pipelines.
+func printToolRowsPlain(rows []toolRow) error {
+	for _, row := range rows {
+		if err := data.Writeln(fmt.Sprintf("%s@%s", row.registry, row.version)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// printToolRowsTable renders rows as a formatted table to the UI channel (stderr).
+func printToolRowsTable(rows []toolRow) {
+	if len(rows) == 0 {
+		ui.Writeln("No tools match the given filter")
+		return
+	}
 
 	// Calculate column widths and create table.
 	terminalWidth := getTerminalWidth()
@@ -256,8 +370,6 @@ func RunList() error {
 
 	// Print the table with conditional styling.
 	ui.Writeln(renderTableWithConditionalStyling(&t, rows))
-
-	return nil
 }
 
 // min returns the smaller of two integers.

@@ -95,6 +95,20 @@ export interface FileBrowserOptions {
   githubBranch: string;
   githubPath: string;
   disclaimer?: string;
+  /** Shows a free-text search box on the index page when true. */
+  searchable?: boolean;
+  /** Card icon name (see ICON_MAP in IndexPage.tsx). Defaults to 'folder'. */
+  cardIcon?: string;
+  /** Card call-to-action label. Defaults to 'Open'. */
+  cardCtaLabel?: string;
+  /** Shows a "Copy as Markdown" button on each item's root page when true. */
+  enableCopyMarkdown?: boolean;
+  /** Renders each item's title as a code-formatted `/name`, signaling how it's invoked. */
+  titleAsCode?: boolean;
+  /** Label for the per-item install command box (e.g. "Use this skill"). Unset = box hidden. */
+  installCommandLabel?: string;
+  /** Command template for the per-item install box; `{name}` is replaced with the item's directory name. */
+  installCommandTemplate?: string;
 }
 
 /**

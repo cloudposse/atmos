@@ -16,7 +16,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // String constants for logging.
@@ -178,13 +177,11 @@ func (e *Executor) GetAllOutputs(
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, err
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return outputs, nil
 }
 
@@ -213,9 +210,8 @@ func (e *Executor) GetOutput(
 
 	// Check cache first.
 	if !skipCache {
-		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
-			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
+			return result.value, result.exists, result.err
 		}
 	}
 
@@ -233,8 +229,7 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -244,12 +239,10 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				ui.ClearLine()
-				ui.Error(message)
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			ui.ClearLine()
-			ui.Success(message)
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -260,8 +253,7 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -273,13 +265,11 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 
@@ -311,9 +301,8 @@ func (e *Executor) GetOutputWithOptions(
 
 	// Check cache first.
 	if !skipCache {
-		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
-			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
+			return result.value, result.exists, result.err
 		}
 	}
 
@@ -339,8 +328,7 @@ func (e *Executor) GetOutputWithOptions(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -350,12 +338,10 @@ func (e *Executor) GetOutputWithOptions(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				ui.ClearLine()
-				ui.Error(message)
+				outputLookupFailed(message)
 				return nil, false, resultErr
 			}
-			ui.ClearLine()
-			ui.Success(message)
+			outputLookupSucceeded(message)
 			return value, exists, nil
 		}
 	}
@@ -366,8 +352,7 @@ func (e *Executor) GetOutputWithOptions(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -379,13 +364,11 @@ func (e *Executor) GetOutputWithOptions(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		ui.ClearLine()
-		ui.Error(message)
+		outputLookupFailed(message)
 		return nil, false, resultErr
 	}
 
-	ui.ClearLine()
-	ui.Success(message)
+	outputLookupSucceeded(message)
 	return value, exists, nil
 }
 

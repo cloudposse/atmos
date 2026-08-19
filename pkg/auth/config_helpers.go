@@ -11,8 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// CopyGlobalAuthConfig creates a deep copy of global auth config.
-// Copies all fields: providers, identities, logs, keyring, and identity case map.
+// CopyGlobalAuthConfig creates an independent copy of global auth configuration.
+// Mutable integration and console settings are cloned so component-level merges
+// cannot mutate the caller's global configuration.
 func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	if globalAuth == nil {
 		return &schema.AuthConfig{}
@@ -48,6 +49,21 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 		}
 	}
 
+	if globalAuth.Console != nil {
+		config.Console = &schema.AuthConsoleConfig{}
+		if globalAuth.Console.Isolated != nil {
+			isolated := *globalAuth.Console.Isolated
+			config.Console.Isolated = &isolated
+		}
+	}
+
+	if globalAuth.Integrations != nil {
+		config.Integrations = make(map[string]schema.Integration, len(globalAuth.Integrations))
+		for name, integration := range globalAuth.Integrations {
+			config.Integrations[name] = copyIntegration(integration)
+		}
+	}
+
 	if globalAuth.IdentityCaseMap != nil {
 		config.IdentityCaseMap = make(map[string]string, len(globalAuth.IdentityCaseMap))
 		for k, v := range globalAuth.IdentityCaseMap {
@@ -56,6 +72,46 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	}
 
 	return config
+}
+
+// copyIntegration clones an integration and all of its mutable nested configuration.
+func copyIntegration(integration schema.Integration) schema.Integration {
+	result := schema.Integration{Kind: integration.Kind}
+
+	if integration.Via != nil {
+		via := *integration.Via
+		result.Via = &via
+	}
+
+	if integration.Spec != nil {
+		spec := *integration.Spec
+		if integration.Spec.AutoProvision != nil {
+			autoProvision := *integration.Spec.AutoProvision
+			spec.AutoProvision = &autoProvision
+		}
+		if integration.Spec.Registry != nil {
+			registry := *integration.Spec.Registry
+			spec.Registry = &registry
+		}
+		if integration.Spec.Cluster != nil {
+			cluster := *integration.Spec.Cluster
+			if integration.Spec.Cluster.Kubeconfig != nil {
+				kubeconfig := *integration.Spec.Cluster.Kubeconfig
+				cluster.Kubeconfig = &kubeconfig
+			}
+			spec.Cluster = &cluster
+		}
+		if integration.Spec.Repos != nil {
+			spec.Repos = append([]string(nil), integration.Spec.Repos...)
+		}
+		if integration.Spec.RevokeOnExit != nil {
+			revokeOnExit := *integration.Spec.RevokeOnExit
+			spec.RevokeOnExit = &revokeOnExit
+		}
+		result.Spec = &spec
+	}
+
+	return result
 }
 
 // AuthConfigToMap converts AuthConfig struct to map[string]any for deep merging.
@@ -175,17 +231,29 @@ func normalizeComponentIdentityDefaultMarkers(
 
 	normalizedIdentities := make(map[string]any, len(identities))
 	for identityName, rawIdentity := range identities {
-		canonicalName, value, keep, err := resolveComponentIdentityMarker(globalAuth, identityName, rawIdentity)
+		marker, err := resolveComponentIdentityMarker(globalAuth, identityName, rawIdentity)
 		if err != nil {
 			return nil, err
 		}
-		if keep {
-			normalizedIdentities[canonicalName] = value
+		if marker.keep {
+			normalizedIdentities[marker.canonicalName] = marker.value
 		}
 	}
 
 	normalized["identities"] = normalizedIdentities
 	return normalized, nil
+}
+
+// componentIdentityMarker is the classification of a single component
+// identity entry, returned by resolveComponentIdentityMarker.
+type componentIdentityMarker struct {
+	// canonicalName is the key to write value back under: the globally-configured
+	// casing when the entry resolves to a global identity, otherwise identityName unchanged.
+	canonicalName string
+	// value is what to store under canonicalName; nil when keep is false.
+	value any
+	// keep reports whether this entry should remain in the normalized identities map.
+	keep bool
 }
 
 // resolveComponentIdentityMarker classifies a single component identity entry: entries that
@@ -203,27 +271,26 @@ func resolveComponentIdentityMarker(
 	globalAuth *schema.AuthConfig,
 	identityName string,
 	rawIdentity any,
-) (canonicalName string, value any, keep bool, err error) {
-	canonicalName = identityName
+) (componentIdentityMarker, error) {
 	identity, isIdentityMap := rawIdentity.(map[string]any)
 	defaultValue, hasDefault := identity["default"]
 	isDefault, isBooleanDefault := defaultValue.(bool)
 
 	// Entries are markers only when they contain exactly one boolean `default` field.
 	if !isIdentityMap || len(identity) != 1 || !hasDefault || !isBooleanDefault {
-		return canonicalName, rawIdentity, true, nil
+		return componentIdentityMarker{canonicalName: identityName, value: rawIdentity, keep: true}, nil
 	}
 
 	if resolved, ok := resolveGlobalIdentityKey(globalAuth, identityName); ok {
-		return resolved, rawIdentity, true, nil
+		return componentIdentityMarker{canonicalName: resolved, value: rawIdentity, keep: true}, nil
 	}
 
 	if !isDefault {
 		// An undefined false-only marker has no identity to override and must not create one.
-		return canonicalName, nil, false, nil
+		return componentIdentityMarker{canonicalName: identityName, keep: false}, nil
 	}
 
-	return canonicalName, nil, false, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+	return componentIdentityMarker{}, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
 		WithExplanationf("Component default identity %q is not defined in the active global auth configuration", identityName).
 		WithHint("Define the identity in atmos.yaml or the active profile, or select an existing identity").
 		WithContext("identity", identityName).

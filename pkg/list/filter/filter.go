@@ -254,6 +254,46 @@ func (f *LabelFilter) Apply(data interface{}) (interface{}, error) {
 	return filtered, nil
 }
 
+// PredicateFilter keeps rows satisfying an arbitrary predicate. Used for
+// selections computed outside the row data itself (e.g. dependency-closure
+// membership), where no single field comparison can express the filter.
+type PredicateFilter struct {
+	// Name identifies the filter in debugging output.
+	Name string
+	// Predicate reports whether a row is kept. A nil predicate keeps every row.
+	Predicate func(map[string]any) bool
+}
+
+// NewPredicateFilter creates a filter keeping rows for which predicate is true.
+func NewPredicateFilter(name string, predicate func(map[string]any) bool) *PredicateFilter {
+	defer perf.Track(nil, "filter.NewPredicateFilter")()
+
+	return &PredicateFilter{Name: name, Predicate: predicate}
+}
+
+// Apply filters rows by the predicate.
+func (f *PredicateFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.PredicateFilter.Apply")()
+
+	items, ok := data.([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(errFmtExpectedRows, errUtils.ErrInvalidConfig, data)
+	}
+
+	if f.Predicate == nil {
+		return items, nil
+	}
+
+	var filtered []map[string]any
+	for _, item := range items {
+		if f.Predicate(item) {
+			filtered = append(filtered, item)
+		}
+	}
+
+	return filtered, nil
+}
+
 // NewChain creates a filter chain that applies filters in sequence (AND logic).
 func NewChain(filters ...Filter) *Chain {
 	defer perf.Track(nil, "filter.NewChain")()

@@ -7,6 +7,8 @@ description: Configure file managers that render locked versions into project fi
 ---
 
 import File from '@site/src/components/File'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 `version.files` declares which files carry managed versions. [`atmos version track apply`](/cli/commands/version/track/apply) rewrites those files from the lock file, and [`verify`](/cli/commands/version/track/verify) fails when they drift.
 
@@ -47,22 +49,147 @@ When `version.files` is empty, managers with default paths run over those defaul
   <dd>Renders `*.tmpl` source files to sibling files using the `.version` context.</dd>
 </dl>
 
-## Marker Example
+## Updating Dockerfiles
 
-```dockerfile
-# atmos:version opentofu
-ENV TOFU_VERSION=1.10.6
-```
+Annotate the line to update with an `atmos:version` comment. The `marker` manager rewrites the version token in place from the lock file, matching entries by name. Given this `atmos.yaml`:
 
+<File title="atmos.yaml">
 ```yaml
-tofu_version: 1.10.6 # atmos:version opentofu
-```
+version:
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.12"
 
-Use `match=` when the default token detection is ambiguous:
+    terraform:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: terraform
+      desired: "~1.15"
 
-```shell
-DOWNLOAD_URL="https://example.com/tool/v1.2.3/tool.tgz" # atmos:version tool match=/tool/(v[^/]+)/tool.tgz
+  files:
+    - manager: marker
+      paths:
+        - Dockerfile
 ```
+</File>
+
+`atmos version track apply prod` keeps annotated lines in sync with the locked versions:
+
+<Tabs>
+  <TabItem value="single" label="Single Tool" default>
+    <File title="Dockerfile">
+    ```dockerfile
+    # atmos:version opentofu
+    ENV TOFU_VERSION=1.12.4
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="multiple" label="Multiple Tools">
+    A file can track more than one tool — each just needs its own marker line:
+
+    <File title="Dockerfile">
+    ```dockerfile
+    # atmos:version opentofu
+    ENV TOFU_VERSION=1.12.4
+
+    # atmos:version terraform
+    ENV TERRAFORM_VERSION=1.15.6
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="yaml" label="YAML">
+    The same annotation works in any commented format — the manager rewrites whatever token it finds on the marked line, not just Dockerfile `ENV` statements:
+
+    <File title="versions.yaml">
+    ```yaml
+    tofu_version: 1.12.4 # atmos:version opentofu
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="match" label="Custom Match Pattern">
+    Use `match=` when the default token detection is ambiguous, for example a version-shaped path segment appearing before the actual version. A **trailing** comment marks its own line:
+
+    <File title="Dockerfile">
+    ```dockerfile
+    RUN curl -fsSL https://releases.hashicorp.com/terraform/1.15.6/terraform_1.15.6_linux_amd64.zip # atmos:version terraform match=terraform_([0-9.]+)_linux
+    ```
+    </File>
+
+    A **standalone** comment on the preceding line marks the next non-blank, non-comment line instead:
+
+    <File title="Dockerfile">
+    ```dockerfile
+    # atmos:version terraform match=terraform_([0-9.]+)_linux
+    RUN curl -fsSL https://releases.hashicorp.com/terraform/1.15.6/terraform_1.15.6_linux_amd64.zip
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+## Updating GitHub Action Workflows
+
+The `github-actions` manager rewrites `uses:` refs in workflow files, matching entries by `owner/repo` package.
+
+<Tabs>
+  <TabItem value="bump" label="Version Bump" default>
+    Add a dependency for the action and register the manager:
+
+    <File title="atmos.yaml">
+    ```yaml
+    version:
+      dependencies:
+        checkout:
+          ecosystem: github/actions
+          datasource: github-tags
+          provider: github
+          package: actions/checkout
+          desired: "v6"
+
+      files:
+        - manager: github-actions
+          paths:
+            - .github/workflows/*.yaml
+    ```
+    </File>
+
+    `atmos version track apply prod` rewrites the matching `uses:` line to the locked version:
+
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@v6
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="pin" label="Pinned to SHA">
+    Set `update.pin: sha` to pin third-party actions to their immutable commit SHA instead — Atmos writes the SHA with the human-readable version as a trailing comment, matching the Renovate/Dependabot convention:
+
+    <File title="atmos.yaml">
+    ```yaml
+    version:
+      dependencies:
+        checkout:
+          ecosystem: github/actions
+          datasource: github-tags
+          provider: github
+          package: actions/checkout
+          desired: "v6"
+          update:
+            pin: sha
+    ```
+    </File>
+
+    <File title=".github/workflows/ci.yaml">
+    ```yaml
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+    ```
+    </File>
+  </TabItem>
+</Tabs>
 
 ## Examples
 

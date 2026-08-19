@@ -451,6 +451,132 @@ func TestExtractZipFile_WithDirectory(t *testing.T) {
 	assert.Equal(t, "nested content", string(content))
 }
 
+func TestExtractZipFile_RawTraversalName(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "evil.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Entry name contains ".." directly; the raw substring guard in extractZipFile
+	// must reject it before sanitizeZipPath is even consulted.
+	createTestZip(t, zipPath, map[string][]byte{
+		"../evil.txt": []byte("malicious"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "Zip Slip")
+}
+
+func TestExtractZipFile_ParentDirCreationFails(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Pre-create a regular file where the entry's parent directory needs to go,
+	// forcing os.MkdirAll(parentDir, ...) to fail with "not a directory".
+	blockedPath := filepath.Join(extractDir, "blocked")
+	require.NoError(t, os.WriteFile(blockedPath, []byte("i am a file, not a dir"), 0o644))
+
+	createTestZip(t, zipPath, map[string][]byte{
+		"blocked/file.txt": []byte("content"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "failed to create parent dir")
+}
+
+func TestExtractZipFile_EntryCreationFails(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Pre-create a directory at the exact destination path of the file entry,
+	// forcing os.Create(destPath) inside extractZipEntry to fail.
+	collidingPath := filepath.Join(extractDir, "file.txt")
+	require.NoError(t, os.MkdirAll(collidingPath, 0o755))
+
+	createTestZip(t, zipPath, map[string][]byte{
+		"file.txt": []byte("content"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+}
+
+func TestVerifyWithinDestDir(t *testing.T) {
+	baseDir := t.TempDir()
+	cleanDestDir := filepath.Clean(baseDir) + string(os.PathSeparator)
+
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{
+			name:    "path within dest dir",
+			path:    filepath.Join(baseDir, "sub", "file.txt"),
+			wantErr: false,
+		},
+		{
+			name:    "path exactly at dest dir root",
+			path:    filepath.Clean(baseDir),
+			wantErr: false,
+		},
+		{
+			name:    `path is parent of dest dir (rel == "..")`,
+			path:    filepath.Dir(filepath.Clean(baseDir)),
+			wantErr: true,
+		},
+		{
+			name:    `path is sibling of dest dir (rel starts with "../")`,
+			path:    filepath.Join(filepath.Dir(filepath.Clean(baseDir)), "sibling", "file.txt"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verifyWithinDestDir(tt.path, cleanDestDir, "entry.txt")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+				assert.Contains(t, err.Error(), "escapes destination")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestExtractZipEntry_PathEscape(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	createTestZip(t, zipPath, map[string][]byte{"file.txt": []byte("content")})
+
+	r, err := zip.OpenReader(zipPath)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+
+	// destPath is outside cleanDestDir even though the entry name itself is benign,
+	// forcing extractZipEntry's own adjacent-to-sink guard to reject it.
+	cleanDestDir := filepath.Join(tempDir, "extract") + string(os.PathSeparator)
+	outsidePath := filepath.Join(tempDir, "outside", "file.txt")
+
+	err = extractZipEntry(r.File[0], outsidePath, cleanDestDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "escapes destination")
+}
+
 func TestCopyFile_DestDirNotFound(t *testing.T) {
 	tempDir := t.TempDir()
 	srcPath := filepath.Join(tempDir, "source.txt")

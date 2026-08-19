@@ -36,6 +36,13 @@ var (
 	newManager = func(runtimePref string, autoStart bool) emulatorManager {
 		return emu.NewManager(runtimePref, autoStart)
 	}
+	// The newReadOnlyManager seam constructs the manager used for read-only
+	// emulator lookups (identity/profile resolution, `emulator ps`/`list`). It
+	// never attempts Podman auto-recovery — see emu.NewManagerNoRecovery —
+	// since those callers only look for an emulator that is already running.
+	newReadOnlyManager = func(runtimePref string) emulatorManager {
+		return emu.NewManagerNoRecovery(runtimePref)
+	}
 )
 
 // emulatorManager is the subset of *emu.Manager the executor, resolver, and
@@ -287,17 +294,19 @@ func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, run
 	info.ComponentType = cfg.EmulatorComponentType
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
-		return nil, err
+		return emptyStatusesOrError(err)
 	}
 
-	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), false)
+	// Listing status is read-only; never attempt Podman auto-recovery just to
+	// check whether emulators are running (see NewManagerNoRecovery).
+	manager := newReadOnlyManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider))
 	if runtimeOnly {
 		return manager.Ps(ctx, info.Stack)
 	}
 
 	configured, err := configuredEmulators(&atmosConfig, info.Stack)
 	if err != nil {
-		return nil, err
+		return emptyStatusesOrError(err)
 	}
 	if len(configured) == 0 {
 		return []emu.Status{}, nil
@@ -310,6 +319,16 @@ func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, run
 		return nil, err
 	}
 	return joinConfiguredStatuses(configured, runtimeStatuses), nil
+}
+
+// emptyStatusesOrError degrades a "no stacks/imports" error (e.g. running outside
+// an Atmos project, where zero stack manifests implies zero configured emulator
+// components) into an empty status list, and propagates any other error.
+func emptyStatusesOrError(err error) ([]emu.Status, error) {
+	if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStacksFound) {
+		return []emu.Status{}, nil
+	}
+	return nil, err
 }
 
 func configuredEmulators(atmosConfig *schema.AtmosConfiguration, stack string) ([]configuredEmulator, error) {

@@ -1,218 +1,106 @@
 package store
 
 import (
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewStoreRegistry_SSMWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-ssm": StoreConfig{
-			Type:     "aws-ssm-parameter-store",
-			Identity: "prod-admin",
-			Options:  map[string]interface{}{"region": "us-east-1"},
-		},
+// TestRegisterConcurrentWithNewStoreRegistry verifies that the storeFactories map
+// is safe for concurrent access. Register (a write) and NewStoreRegistry (a read)
+// run from many goroutines at once; without the guarding mutex this would trip the
+// Go runtime's concurrent map read/write detector under `go test -race`.
+func TestRegisterConcurrentWithNewStoreRegistry(t *testing.T) {
+	const goroutines = 50
+
+	t.Cleanup(Reset)
+
+	factory := func(_ string, _ StoreConfig) (Store, error) {
+		return nil, nil //nolint:nilnil // Dummy factory; never invoked in this test.
 	}
 
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
+	var wg sync.WaitGroup
+	wg.Add(goroutines * 2)
 
-	// Verify SSM store was created with identity and deferred client init.
-	ssmStore, ok := registry["prod-ssm"].(*SSMStore)
-	assert.True(t, ok)
-	assert.Equal(t, "prod-admin", ssmStore.identityName)
-	assert.Nil(t, ssmStore.client) // Lazy init — no client created yet.
+	for i := 0; i < goroutines; i++ {
+		// Writer: register a unique throwaway type to avoid the duplicate panic.
+		go func(n int) {
+			defer wg.Done()
+			Register(fmt.Sprintf("concurrent-test-type-%d", n), factory)
+		}(i)
+
+		// Reader: NewStoreRegistry reads storeFactories while writers mutate it.
+		go func() {
+			defer wg.Done()
+			config := &StoresConfig{
+				"probe": StoreConfig{Type: "definitely-not-registered"},
+			}
+			// Returns ErrStoreTypeNotFound; we only care that the map read is race-free.
+			_, _ = NewStoreRegistry(config)
+		}()
+	}
+
+	wg.Wait()
 }
 
-func TestNewStoreRegistry_AzureWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-azure": StoreConfig{
-			Type:     "azure-key-vault",
-			Identity: "azure-prod",
-			Options:  map[string]interface{}{"vault_url": "https://prod.vault.azure.net"},
-		},
-	}
-
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
-
-	// Verify Azure store was created with identity and deferred client init.
-	azStore, ok := registry["prod-azure"].(*AzureKeyVaultStore)
-	assert.True(t, ok)
-	assert.Equal(t, "azure-prod", azStore.identityName)
-	assert.Nil(t, azStore.client) // Lazy init — no client created yet.
+// noopFactory is a throwaway factory whose body is never invoked.
+func noopFactory(_ string, _ StoreConfig) (Store, error) {
+	return nil, nil //nolint:nilnil // Dummy factory.
 }
 
-func TestNewStoreRegistry_GSMWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-gsm": StoreConfig{
-			Type:     "google-secret-manager",
-			Identity: "gcp-prod",
-			Options:  map[string]interface{}{"project_id": "my-project"},
-		},
-	}
+// TestRegister_DuplicatePanics verifies that registering the same store type
+// twice panics, surfacing the programming error of two factories claiming a type.
+func TestRegister_DuplicatePanics(t *testing.T) {
+	t.Cleanup(Reset)
 
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
+	Register("dup-type", noopFactory)
 
-	// Verify GSM store was created with identity and deferred client init.
-	gsmStore, ok := registry["prod-gsm"].(*GSMStore)
-	assert.True(t, ok)
-	assert.Equal(t, "gcp-prod", gsmStore.identityName)
-	assert.Nil(t, gsmStore.client) // Lazy init — no client created yet.
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "expected a panic on duplicate registration")
+	}()
+
+	Register("dup-type", noopFactory) // Second registration must panic.
 }
 
-func TestNewStoreRegistry_RedisWithIdentityWarning(t *testing.T) {
-	config := &StoresConfig{
-		"cache": StoreConfig{
-			Type:     "redis",
-			Identity: "prod-admin",
-			Options:  map[string]interface{}{"url": "redis://localhost:6379"},
-		},
-	}
+// TestReset_ClearsFactories verifies that Reset removes all registered factories.
+func TestReset_ClearsFactories(t *testing.T) {
+	t.Cleanup(Reset)
 
-	// Redis stores log a warning for identity (unsupported) but still create successfully.
-	registry, err := NewStoreRegistry(config)
+	Register("reset-type", noopFactory)
+
+	// Sanity check: the type resolves before Reset.
+	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
 	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
 
-	// Verify the store is created (identity is ignored by Redis).
-	_, ok := registry["cache"].(*RedisStore)
-	assert.True(t, ok)
+	Reset()
+
+	// After Reset the type is gone.
+	_, err = NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
+	assert.ErrorIs(t, err, ErrStoreTypeNotFound)
 }
 
-func TestNewStoreRegistry_ArtifactoryWithIdentityWarning(t *testing.T) {
-	config := &StoresConfig{
-		"artifacts": StoreConfig{
-			Type:     "artifactory",
-			Identity: "prod-admin",
-			Options: map[string]interface{}{
-				"access_token": "anonymous",
-				"url":          "https://example.jfrog.io/artifactory",
-				"repo_name":    "test-repo",
-			},
-		},
-	}
+// TestNewStoreRegistry_UnknownType verifies the not-found error for unregistered types.
+func TestNewStoreRegistry_UnknownType(t *testing.T) {
+	t.Cleanup(Reset)
+	Reset()
 
-	// Artifactory stores log a warning for identity (unsupported) but still create successfully.
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
-
-	_, ok := registry["artifacts"].(*ArtifactoryStore)
-	assert.True(t, ok)
+	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "no-such-type"}})
+	assert.ErrorIs(t, err, ErrStoreTypeNotFound)
 }
 
-func TestNewStoreRegistry_GSMAliasWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-gsm": StoreConfig{
-			Type:     "gsm", // Test the alias.
-			Identity: "gcp-prod",
-			Options:  map[string]interface{}{"project_id": "my-project"},
-		},
-	}
+// TestNewStoreRegistry_FactoryError verifies that a factory error propagates.
+func TestNewStoreRegistry_FactoryError(t *testing.T) {
+	t.Cleanup(Reset)
 
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 1)
+	sentinel := errors.New("factory boom")
+	Register("err-type", func(_ string, _ StoreConfig) (Store, error) {
+		return nil, sentinel
+	})
 
-	gsmStore, ok := registry["prod-gsm"].(*GSMStore)
-	assert.True(t, ok)
-	assert.Equal(t, "gcp-prod", gsmStore.identityName)
-	assert.Nil(t, gsmStore.client)
-}
-
-func TestNewStoreRegistry_MixedIdentityStores(t *testing.T) {
-	config := &StoresConfig{
-		"identity-ssm": StoreConfig{
-			Type:     "aws-ssm-parameter-store",
-			Identity: "prod-admin",
-			Options:  map[string]interface{}{"region": "us-east-1"},
-		},
-		"identity-azure": StoreConfig{
-			Type:     "azure-key-vault",
-			Identity: "azure-prod",
-			Options:  map[string]interface{}{"vault_url": "https://vault.azure.net"},
-		},
-		"identity-gsm": StoreConfig{
-			Type:     "google-secret-manager",
-			Identity: "gcp-prod",
-			Options:  map[string]interface{}{"project_id": "my-project"},
-		},
-	}
-
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-	assert.Len(t, registry, 3)
-
-	// All stores should implement IdentityAwareStore and have nil clients.
-	for name, s := range registry {
-		ias, ok := s.(IdentityAwareStore)
-		assert.True(t, ok, "store %q should implement IdentityAwareStore", name)
-		_ = ias
-	}
-}
-
-func TestNewStoreRegistry_CustomEndpointOptions(t *testing.T) {
-	config := &StoresConfig{
-		"local-ssm": StoreConfig{
-			Kind:     KindAWSSSM,
-			Identity: "aws/local",
-			Options: map[string]interface{}{
-				"region":   "us-east-1",
-				"endpoint": "http://localhost:4566",
-			},
-		},
-		"local-asm": StoreConfig{
-			Kind:     KindAWSASM,
-			Identity: "aws/local",
-			Options: map[string]interface{}{
-				"region":       "us-east-1",
-				"endpoint_url": "http://localhost:4566",
-			},
-		},
-		"local-azure": StoreConfig{
-			Kind:     KindAzureKeyVault,
-			Identity: "azure/local",
-			Options: map[string]interface{}{
-				"endpoint": "http://localhost:4567",
-				"disable_challenge_resource_verification": true,
-				"without_authentication":                  true,
-			},
-		},
-		"local-gcp": StoreConfig{
-			Kind:     KindGCPSecret,
-			Identity: "gcp/local",
-			Options: map[string]interface{}{
-				"project_id":             "local-project",
-				"endpoint":               "http://localhost:4568",
-				"endpoint_insecure":      true,
-				"without_authentication": true,
-			},
-		},
-	}
-
-	registry, err := NewStoreRegistry(config)
-	assert.NoError(t, err)
-
-	ssmStore := registry["local-ssm"].(*SSMStore)
-	assert.Equal(t, "http://localhost:4566", ssmStore.endpoint)
-
-	asmStore := registry["local-asm"].(*SecretsManagerStore)
-	assert.Equal(t, "http://localhost:4566", asmStore.endpoint)
-
-	azureStore := registry["local-azure"].(*AzureKeyVaultStore)
-	assert.Equal(t, "http://localhost:4567", azureStore.vaultURL)
-	assert.True(t, azureStore.clientOptions.DisableChallengeResourceVerification)
-	assert.True(t, azureStore.clientOptions.InsecureAllowCredentialWithHTTP)
-	assert.True(t, azureStore.withoutAuth)
-
-	gsmStore := registry["local-gcp"].(*GSMStore)
-	assert.Equal(t, "http://localhost:4568", gsmStore.endpoint)
-	assert.True(t, gsmStore.endpointInsecure)
-	assert.True(t, gsmStore.withoutAuthentication)
+	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "err-type"}})
+	assert.ErrorIs(t, err, sentinel)
 }

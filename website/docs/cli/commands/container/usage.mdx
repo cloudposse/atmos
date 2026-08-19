@@ -360,7 +360,7 @@ compositions:
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all` to narrow the selected set further; cannot be combined with a `<component>` argument.</dd>
 
   <dt>`--labels` <em>(bulk verbs only)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--tags`; cannot be combined with a `<component>` argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--tags`; cannot be combined with a `<component>` argument.</dd>
 
   <dt>`--follow` / `-f` <em>(logs)</em></dt>
   <dd>Stream logs continuously. With multiple components the streams are interleaved and each line is

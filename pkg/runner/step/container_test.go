@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -69,6 +71,75 @@ func TestContainerHandlerBuildConfig(t *testing.T) {
 // (directories, sockets) must never be mounted — mounting SHELL=/bin/zsh or a
 // 1Password agent socket broke `podman create` with "statfs … operation not
 // supported".
+func TestResolveContainerStepStack(t *testing.T) {
+	tests := []struct {
+		name    string
+		step    *schema.WorkflowStep
+		flags   map[string]string
+		env     map[string]string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:  "step stack wins over flag and env",
+			step:  &schema.WorkflowStep{Stack: "dev"},
+			flags: map[string]string{"stack": "flag-stack"},
+			env:   map[string]string{"ATMOS_STACK": "env-stack"},
+			want:  "dev",
+		},
+		{
+			name:  "flag wins over env when step stack unset",
+			step:  &schema.WorkflowStep{},
+			flags: map[string]string{"stack": "flag-stack"},
+			env:   map[string]string{"ATMOS_STACK": "env-stack"},
+			want:  "flag-stack",
+		},
+		{
+			name: "falls back to ATMOS_STACK env",
+			step: &schema.WorkflowStep{},
+			env:  map[string]string{"ATMOS_STACK": "env-stack"},
+			want: "env-stack",
+		},
+		{
+			name: "empty when nothing resolves a stack",
+			step: &schema.WorkflowStep{},
+			want: "",
+		},
+		{
+			name:    "propagates template resolution errors",
+			step:    &schema.WorkflowStep{Stack: "{{ .steps.missing.value"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vars := NewVariables()
+			for k, v := range tt.flags {
+				vars.Flags[k] = v
+			}
+			vars.Env = map[string]string{}
+			for k, v := range tt.env {
+				vars.Env[k] = v
+			}
+
+			got, err := resolveContainerStepStack(tt.step, vars)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestContainerStepIdentity(t *testing.T) {
+	assert.Equal(t, "smoke", containerStepIdentity("smoke"))
+	assert.Equal(t, "step", containerStepIdentity(""))
+	assert.Equal(t, "step", containerStepIdentity("   "))
+}
+
 func TestCredentialFileMounts(t *testing.T) {
 	dir := t.TempDir()
 
@@ -149,9 +220,11 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 		},
 	}, vars)
 	require.NoError(t, err)
-	assert.Equal(t, ".", buildCfg.Context)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, cwd, buildCfg.Context)
 	assert.Equal(t, "buildx", buildCfg.Engine)
-	assert.Equal(t, "Dockerfile", buildCfg.Dockerfile)
+	assert.Equal(t, filepath.Join(cwd, "Dockerfile"), buildCfg.Dockerfile)
 	assert.Equal(t, []string{"app:test"}, buildCfg.Tags)
 	assert.Equal(t, map[string]string{"VERSION": "1.0.0"}, buildCfg.Args)
 	assert.Equal(t, "runtime", buildCfg.Target)
@@ -165,8 +238,8 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 	assert.Equal(t, []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}}, buildCfg.Cache.From)
 	assert.Equal(t, []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}}, buildCfg.Cache.To)
 	require.NotNil(t, buildCfg.Bake)
-	assert.Equal(t, "docker-bake.hcl", buildCfg.Bake.File)
-	assert.Equal(t, []string{"docker-bake.override.hcl"}, buildCfg.Bake.Files)
+	assert.Equal(t, filepath.Join(cwd, "docker-bake.hcl"), buildCfg.Bake.File)
+	assert.Equal(t, []string{filepath.Join(cwd, "docker-bake.override.hcl")}, buildCfg.Bake.Files)
 	assert.Equal(t, "app:test", buildCfg.Bake.Target)
 	assert.Equal(t, []string{"worker"}, buildCfg.Bake.Targets)
 	assert.Equal(t, []string{"*.tags=app:test"}, buildCfg.Bake.Set)
@@ -277,4 +350,26 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 			Cache:    &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}},
 		},
 	}))
+}
+
+// TestContainerHandlerValidateInvalidPullEchoesValue confirms that the default
+// (non-verbose) error for an invalid `run.pull` value echoes the actual value the
+// user typed, rather than only listing the valid options.
+func TestContainerHandlerValidateInvalidPullEchoesValue(t *testing.T) {
+	handler := &ContainerHandler{}
+
+	err := handler.Validate(&schema.WorkflowStep{
+		Name: "run",
+		Type: "container",
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine",
+			Command: "echo ok",
+			Pull:    "sometimes",
+		},
+	})
+	require.Error(t, err)
+
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.Contains(t, formatted, "Pull policy must be", "default message should keep the valid-options explanation")
+	assert.Contains(t, formatted, "sometimes", "default message should echo the actual invalid value")
 }

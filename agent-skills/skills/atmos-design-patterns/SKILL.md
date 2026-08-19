@@ -4,6 +4,7 @@ description: "Design patterns: stack organization, component catalogs, inheritan
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Design Patterns

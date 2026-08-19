@@ -6,14 +6,19 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
+
+var describeComponentErrorModeParser *flags.StandardParser
 
 // describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
@@ -53,6 +58,8 @@ type describeComponentFlags struct {
 	query                string
 	skip                 []string
 	provenance           bool
+	provenanceExplicit   bool
+	errorMode            string
 }
 
 // parseDescribeComponentFlags extracts all flag values from the command.
@@ -88,6 +95,8 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 	if f.provenance, err = flags.GetBool("provenance"); err != nil {
 		return f, err
 	}
+	// An explicit --provenance beats the `describe.provenance` config default.
+	f.provenanceExplicit = flags.Changed("provenance")
 	return f, nil
 }
 
@@ -124,10 +133,13 @@ type resolveAuthManagerParams struct {
 	processYamlFunctions bool
 }
 
-// resolveAuthManager creates an AuthManager when YAML functions are enabled or identity
-// is explicitly requested via CLI flag.
+// resolveAuthManager creates an AuthManager when identity is explicitly requested or when
+// enabled YAML functions can read an identity-backed store. The latter manager is deliberately
+// unauthenticated: the store resolver authenticates its configured identity only if the store
+// is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
-	if !p.processYamlFunctions && !p.identityExplicit {
+	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
+	if !p.identityExplicit && !needsStoreAuth {
 		return nil, nil
 	}
 
@@ -155,7 +167,30 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
+	if !p.identityExplicit {
+		return auth.CreateManagerWithAtmosConfigForStack(mergedAuthConfig, p.atmosConfig, p.stack)
+	}
+
 	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig, p.stack)
+}
+
+// hasIdentityBackedStore reports whether a configured store requires Atmos identity
+// resolution. Stores without an identity retain their ambient SDK credential behavior.
+func hasIdentityBackedStore(atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil {
+		return false
+	}
+
+	for name, storeConfig := range atmosConfig.StoresConfig {
+		if storeConfig.Identity == "" {
+			continue
+		}
+		if _, ok := atmosConfig.Stores[name].(store.IdentityAwareStore); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func getRunnableDescribeComponentCmd(
@@ -186,6 +221,18 @@ func getRunnableDescribeComponentCmd(
 		atmosConfig, err := g.initCliConfig(info, needsPathResolution)
 		if err != nil {
 			return handleConfigError(err, needsPathResolution, component, f.stack)
+		}
+		if cmd.Flags().Lookup(describeErrorModeFlagName) != nil {
+			if err = resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeComponentErrorModeParser); err != nil {
+				return err
+			}
+			if f.errorMode, err = cmd.Flags().GetString(describeErrorModeFlagName); err != nil {
+				return err
+			}
+		}
+		f.errorMode = e.ResolveErrorMode(f.errorMode, atmosConfig.Describe.ErrorMode)
+		if f.errorMode != "strict" && f.errorMode != "warn" && f.errorMode != "silent" {
+			return fmt.Errorf("%w: %q", e.ErrInvalidErrorMode, f.errorMode)
 		}
 
 		component, err = resolveComponentFromPathIfNeeded(&g, &atmosConfig, component, f.stack, needsPathResolution)
@@ -219,6 +266,8 @@ func getRunnableDescribeComponentCmd(
 			Format:               f.format,
 			File:                 f.file,
 			Provenance:           f.provenance,
+			ProvenanceExplicit:   f.provenanceExplicit,
+			ErrorMode:            f.errorMode,
 			AuthManager:          authManager,
 		})
 	}
@@ -256,7 +305,12 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("use-mocks", false, "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
-	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
+	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Show where configuration values originated (enabled by default; disable with --provenance=false or describe.provenance in atmos.yaml)")
+	describeComponentErrorModeParser = newDescribeErrorModeParser()
+	describeComponentErrorModeParser.RegisterPersistentFlags(describeComponentCmd)
+	if err := describeComponentErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

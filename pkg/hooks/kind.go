@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"io"
 	"sort"
 	"sync"
 
@@ -57,6 +58,10 @@ type ExecContext struct {
 	// so the installed pinned versions take precedence over the operator's
 	// PATH. Empty when the component declares no hook dependencies.
 	ToolchainPATH string
+	// Stdout and Stderr receive subprocess output when a concurrent caller
+	// supplies serialized component writers. Nil uses the process streams.
+	Stdout io.Writer
+	Stderr io.Writer
 
 	// OutputFile is the temp file path the tool wrote structured output to.
 	// Populated by CommandEngine before calling ResultHandler.

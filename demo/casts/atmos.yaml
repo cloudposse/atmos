@@ -40,6 +40,11 @@ commands:
         path: "../../.context/cast-fixtures/backend-provisioning"
         reset: true
       - type: workdir
+        name: hooks-tfmigrate-fixture
+        source: "../../examples/hooks-tfmigrate"
+        path: "../../.context/cast-fixtures/hooks-tfmigrate"
+        reset: true
+      - type: workdir
         name: quick-start-simple-fixture
         source: "../../examples/quick-start-simple"
         path: "../../.context/cast-fixtures/quick-start-simple"
@@ -313,6 +318,11 @@ commands:
         name: scaffolds-fixture
         source: "../../examples/scaffolds"
         path: "../../.context/cast-fixtures/scaffolds"
+        reset: true
+      - type: workdir
+        name: scaffolding-matrix-fixture
+        source: "../../examples/scaffolding-matrix"
+        path: "../../.context/cast-fixtures/scaffolding-matrix"
         reset: true
       - type: workdir
         name: version-tracker-fixture

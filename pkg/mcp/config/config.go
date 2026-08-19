@@ -242,10 +242,15 @@ func ParseHeaderPairs(pairs []string) (map[string]string, error) {
 func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	defer perf.Track(atmosConfig, "mcpconfig.ResolveFile")()
 
-	override := ""
-	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
-		override = cfgFiles[0]
+	cfgFiles, _ := cmd.Flags().GetStringSlice("config")
+	override, err := pkgconfig.ResolveConfigOverride(cfgFiles)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation(err.Error()).
+			WithHint("Pass a single --config file, or edit the target file directly.").
+			Err()
 	}
+
 	file, err := pkgconfig.ResolveEditableConfigFile(atmosConfig, override)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).

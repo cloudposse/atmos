@@ -76,11 +76,16 @@ The command respects actionlint configuration at `.github/actionlint.yaml` or `.
 
 ## Flags
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--format` | `text` | Output format: `text`, `rich`, or `sarif`. `rich` writes Atmos source-context diagnostics to standard output and exits non-zero without an Atmos error box. |
-| `--workflow-path` | — | Directory containing workflow files to recursively validate. Cannot be combined with workflow-file arguments. |
-| `--exclude` | — | Repeatable repository-relative glob to omit workflow files from full or affected validation. |
+<dl>
+  <dt>`--format` (string, default `text`)</dt>
+  <dd>Output format: `text`, `rich`, or `sarif`. `rich` writes Atmos source-context diagnostics to standard output and exits non-zero without an Atmos error box.</dd>
+
+  <dt>`--workflow-path` (string) <em>(optional)</em></dt>
+  <dd>Directory containing workflow files to recursively validate. Cannot be combined with workflow-file arguments.</dd>
+
+  <dt>`--exclude` (string, repeatable) <em>(optional)</em></dt>
+  <dd>Repository-relative glob to omit workflow files from full or affected validation.</dd>
+</dl>
 
 ## Related
 

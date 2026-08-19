@@ -11,10 +11,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	listpkg "github.com/cloudposse/atmos/pkg/list"
@@ -45,6 +47,57 @@ func TestVendorPullCmd_ExecutorError(t *testing.T) {
 
 	err := vendorPullCmd.RunE(vendorPullCmd, []string{"unexpected-arg"})
 	assert.Error(t, err, "vendor pull command should return an error with unexpected arguments")
+}
+
+// newVendorPullCmdWithRealFlags builds a throwaway *cobra.Command carrying vendorPullCmd's REAL,
+// production flag registrations (via vendorPullParser, the same parser vendorPullCmd itself uses in
+// init()), plus the global flags internal/exec.ProcessCommandLineArgs reads directly off cmd.Flags()
+// (base-path, config, config-path, profile) -- see newVendorPullTestCmd's doc comment for why those
+// can't come from RootCmd in this test binary. Unlike newVendorPullTestCmd, this exercises the real
+// --component flag type as registered in cmd/vendor/vendor.go's init(), which is exactly what
+// TestVendorPullCmd_RepeatedComponentFlagErrors needs to prove.
+func newVendorPullCmdWithRealFlags(t *testing.T) *cobra.Command {
+	t.Helper()
+	c := &cobra.Command{Use: "pull", RunE: e.ExecuteVendorPullCmd}
+	vendorPullParser.RegisterFlags(c)
+	c.Flags().String("base-path", "", "")
+	c.Flags().StringSlice("config", nil, "")
+	c.Flags().StringSlice("config-path", nil, "")
+	c.Flags().StringSlice("profile", nil, "")
+	return c
+}
+
+// TestVendorPullCmd_RepeatedComponentFlagErrors is the direct regression test for the reported bug:
+// "atmos vendor pull -c vpc -c eks" silently kept only the LAST --component value (pflag's default
+// last-occurrence-wins behavior for a plain string flag), dropping vpc with no error or warning --
+// surprising given "vendor update --component" is a repeatable slice that accumulates instead.
+// --component must now reject more than one value the same way "vendor update --pull" delegating
+// into pull already does (see parseVendorComponentFlag/ErrSingleComponentRequired), rather than
+// silently discarding the user's earlier selection.
+func TestVendorPullCmd_RepeatedComponentFlagErrors(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	base := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	vpcSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(vpcSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	vpcDir := writeLocalComponentManifestFixture(t, base, "vpc", vpcSource)
+
+	eksSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(eksSource, "main.tf"), []byte("# eks\n"), 0o644))
+	writeLocalComponentManifestFixture(t, base, "eks", eksSource)
+
+	cmd := newVendorPullCmdWithRealFlags(t)
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("component", "eks"))
+
+	err := cmd.RunE(cmd, nil)
+
+	require.Error(t, err, "repeating --component must error, not silently keep only the last value")
+	assert.ErrorIs(t, err, e.ErrSingleComponentRequired)
+	assert.NoFileExists(t, filepath.Join(vpcDir, "main.tf"), "vpc must not have been silently dropped and left unpulled")
 }
 
 // TestVendorCommandProvider tests the VendorCommandProvider interface methods.
@@ -127,6 +180,25 @@ func resetCommandFlags(t *testing.T, cmd *cobra.Command) {
 
 	reset := func(flags *pflag.FlagSet) {
 		flags.VisitAll(func(f *pflag.Flag) {
+			// A pflag SliceValue (e.g. StringSlice, used by vendor update's --component) tracks
+			// its own private "has this flag ever been Set" bit, independent of pflag.Flag.Changed
+			// below -- once ANY test (or production code, e.g. update.go's own sliceValue.Replace
+			// call mid-RunE) sets it, every later Value.Set() on the SAME flag object APPENDS
+			// instead of replacing, for the lifetime of this test binary's shared, package-level
+			// command. Value.Replace() bypasses that private bit entirely (it always overwrites),
+			// so it's the only way to deterministically clear a slice flag back to empty between
+			// tests, regardless of what an earlier test (in any file, any run order) left behind.
+			//
+			// A slice flag registered with a []string{} default (e.g. "component") serializes
+			// f.DefValue as the literal string "[]". Falling through to the Set(f.DefValue) call
+			// below for a SliceValue would call Set("[]"), which pflag parses as a ONE-element
+			// slice containing the literal "[]" -- re-polluting the slice Replace(nil) just emptied.
+			// So a SliceValue is fully handled here and skips the shared Set(f.DefValue) path below.
+			if sliceValue, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sliceValue.Replace(nil)
+				f.Changed = false
+				return
+			}
 			_ = f.Value.Set(f.DefValue)
 			f.Changed = false
 		})
@@ -154,15 +226,14 @@ spec:
       targets: ["components/terraform/vpc"]
 `)
 
-	oldFileFlag := vendorFileFlag
-	vendorFileFlag = file
-	t.Cleanup(func() {
-		vendorFileFlag = oldFileFlag
-		data.Reset()
-	})
+	resetCommandFlags(t, vendorSetCmd)
+	resetCommandFlags(t, vendorGetCmd)
+	t.Cleanup(data.Reset)
+	require.NoError(t, vendorSetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorGetCmd.Flags().Set("file", file))
 
 	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}))
-	path, err := vendoring.ComponentVersionPath(file, "vpc")
+	path, _, err := vendoring.ComponentVersionPath(file, "vpc")
 	require.NoError(t, err)
 	got, err := atmosyaml.GetFile(file, path)
 	require.NoError(t, err)
@@ -172,6 +243,61 @@ spec:
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
 	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}))
+}
+
+// TestVendorGetSetCmd_ImportOnlyComponent is a regression test for a
+// field-test finding: `atmos vendor get`/`atmos vendor set` returned "component
+// not found" for a component declared only in an imported vendor manifest,
+// even though `atmos vendor config list` could see it -- because the alias
+// commands only ever resolved the component against the root file. The get
+// must now succeed, and the set must land in the imported file, not the root.
+func TestVendorGetSetCmd_ImportOnlyComponent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o755))
+	root := filepath.Join(dir, DefaultVendorManifest)
+	require.NoError(t, os.WriteFile(root, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - vendor/terraform.yaml
+  sources:
+    - component: root-comp
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v1.0.0
+`), 0o644))
+	imported := filepath.Join(dir, "vendor", "terraform.yaml")
+	require.NoError(t, os.WriteFile(imported, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+
+	resetCommandFlags(t, vendorGetCmd)
+	resetCommandFlags(t, vendorSetCmd)
+	require.NoError(t, vendorGetCmd.Flags().Set("file", root))
+	require.NoError(t, vendorSetCmd.Flags().Set("file", root))
+
+	stdout := captureVendorStdout(t)
+	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}), "get must resolve the imported component")
+	assert.Equal(t, "v0.1.0", strings.TrimSpace(stdout.String()),
+		"get must return the imported file's version, not the root file's spec.sources[0].version (v1.0.0)")
+
+	rootBefore, err := os.ReadFile(root)
+	require.NoError(t, err)
+
+	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}), "set must resolve the imported component")
+
+	got, err := atmosyaml.GetFile(imported, "spec.sources[0].version")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.0", got, "version updated in the imported file")
+
+	rootAfter, err := os.ReadFile(root)
+	require.NoError(t, err)
+	assert.Equal(t, string(rootBefore), string(rootAfter), "root manifest must be untouched")
 }
 
 // captureVendorStdout wires a data writer backed by a buffer so RunE calls
@@ -243,6 +369,19 @@ spec:
 	eksVersion, err := atmosyaml.GetFile(file, "spec.sources[0].version")
 	require.NoError(t, err)
 	assert.Equal(t, "v1.0.0", eksVersion)
+}
+
+// TestVendorGetSetCmd_FileFlagsIndependent proves vendor get/set's --file flags are backed by
+// independent per-command StandardParsers (vendorGetParser/vendorSetParser), not a shared
+// package-level var: setting one command's --file must not leak into the other's default.
+func TestVendorGetSetCmd_FileFlagsIndependent(t *testing.T) {
+	resetCommandFlags(t, vendorGetCmd)
+	resetCommandFlags(t, vendorSetCmd)
+
+	require.NoError(t, vendorGetCmd.Flags().Set("file", "get-only.yaml"))
+
+	assert.Equal(t, "get-only.yaml", vendorGetCmd.Flags().Lookup("file").Value.String())
+	assert.Equal(t, "", vendorSetCmd.Flags().Lookup("file").Value.String(), "set's --file must not pick up get's value")
 }
 
 func TestResolveVendorFileWithOverrideAndDefault(t *testing.T) {
@@ -388,11 +527,13 @@ spec:
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 }
 
-// TestVendorUpdateCommand_HonorsVendorBasePath reproduces the reported bug: "atmos --chdir=<dir>
-// vendor update --check" failed with "No vendor.yaml found in the current directory" whenever the
-// target directory's atmos.yaml configured vendor.base_path to something other than a literal
-// ./vendor.yaml (e.g. the common infra-live layout), because repo-wide vendor.yaml discovery only
-// ever checked the process cwd and ignored atmos.yaml entirely.
+// TestVendorUpdateCommand_HonorsVendorBasePath proves repo-wide vendor.yaml discovery honors
+// atmos.yaml's configured vendor.base_path instead of only ever checking the process cwd.
+//
+// Historical note: reproduces a reported bug where "atmos --chdir=<dir> vendor update --check"
+// failed with "No vendor.yaml found in the current directory" whenever the target directory's
+// atmos.yaml configured vendor.base_path to something other than a literal ./vendor.yaml (e.g. the
+// common infra-live layout).
 func TestVendorUpdateCommand_HonorsVendorBasePath(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir()) // simulates having --chdir'd into a repo with no ./vendor.yaml.
@@ -418,6 +559,104 @@ spec:
 
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil),
 		"vendor update --check must honor atmos.yaml's vendor.base_path instead of only checking cwd")
+}
+
+// TestVendorUpdateCommand_UnknownStackErrors proves --stack matching no components is a hard
+// error, not a silent fall-through to a repo-wide update -- the same "selector given but matched
+// nothing must never be indistinguishable from no selector at all" bug class fixed for
+// clean/verify/diff (see resolveVendorSelectorComponents' doc comment).
+func TestVendorUpdateCommand_UnknownStackErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	// A real (non-matching) stack file: an empty stacks dir makes FindAllStackConfigsInPathsForStack's
+	// glob match zero files, which pkg/config/utils.go treats as ErrFailedToFindImport rather than an
+	// empty result -- InitCliConfig(processStacks=true) would fail before ever reaching the
+	// --stack selector resolution this test actually targets.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform: {}\n",
+	), 0o644))
+	chdirTest(t, tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("stack", "does-not-exist"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorUpdateCommand_ComponentAndTagsMismatchErrors is the end-to-end regression test for
+// updater.UpdateSelectedComponents' tags-mismatch check: --component and --tags compose (both
+// apply against the same vendor.yaml source, via vendoring.MatchesComponentTags), so this is NOT
+// rejected up front -- but when the named component's declared tags don't include the requested
+// one, "atmos vendor update --component vpc --tags compute" must error explicitly instead of
+// silently succeeding with an empty report.
+func TestVendorUpdateCommand_ComponentAndTagsMismatchErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+	chdirTest(t, dir)
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("component", "vpc"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("tags", "compute"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorUpdateCommand_StackAndTagsMismatchErrors proves --stack and --tags compose instead of
+// being rejected: --tags applies to every stack-resolved component the same way it applies to a
+// --component-resolved one (via pkg/vendoring/update.go's sourceMatchesFilter, downstream of
+// updater.UpdateSelectedComponents, regardless of how the candidate list was selected). "dev"'s
+// only component, "vpc", is declared tagged networking, so a --tags=compute filter excludes it and
+// errors explicitly instead of silently succeeding with an empty report.
+func TestVendorUpdateCommand_StackAndTagsMismatchErrors(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("stack", "dev"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("tags", "compute"))
+
+	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
 // writeComponentManifestFixture writes a "vpc" component.yaml pinned at v0.1.0 under
@@ -502,6 +741,210 @@ func TestVendorDiffCommand_NeitherManifestExists(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
 }
 
+// TestVendorDiffCommand_NoSelectorGiven proves --component/--tags/--stack/--labels all being unset
+// is rejected up front (a selector is required for diff, unlike clean/verify which default to
+// "everything").
+func TestVendorDiffCommand_NoSelectorGiven(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorDiffCommand_ComponentAndTagsRejected proves --component and --tags are mutually
+// exclusive selectors.
+func TestVendorDiffCommand_ComponentAndTagsRejected(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	require.NoError(t, vendorDiffCmd.Flags().Set("component", "vpc"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestVendorDiffCommand_TagsSelectorBatchMode proves --tags resolving more than one component
+// diffs every one of them (batch mode) instead of stopping at the first failure: both "eks" and
+// "vpc" declare a non-Git oci:// source (an immediate, deterministic ErrVendorSourceNotGit with no
+// network access), and both names must appear in the joined error, proving diffManyComponents
+// actually attempted both rather than short-circuiting.
+func TestVendorDiffCommand_TagsSelectorBatchMode(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	chdirTest(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/eks"]
+`), 0o644))
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "eks")
+	assert.Contains(t, err.Error(), "vpc")
+}
+
+// TestVendorDiffCommand_StackSelectorBatchMode proves --stack resolving more than one component
+// diffs every one of them (batch mode), mirroring TestVendorDiffCommand_TagsSelectorBatchMode --
+// diff had zero --stack coverage at the RunE level before this test (only unit-level
+// ResolveVendorComponentSelector coverage existed).
+func TestVendorDiffCommand_StackSelectorBatchMode(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n    eks: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "dev"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "eks")
+	assert.Contains(t, err.Error(), "vpc")
+}
+
+// TestVendorDiffCommand_StackAndTagsCompose proves --stack and --tags compose instead of being
+// rejected as mutually exclusive selectors: --tags narrows "dev"'s stack-resolved {vpc, eks} down
+// to just "vpc" (declared, tagged networking), so only vpc is diffed -- not the batch-mode both-fail
+// error TestVendorDiffCommand_StackSelectorBatchMode proves for the untagged case.
+func TestVendorDiffCommand_StackAndTagsCompose(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n    eks: {}\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      tags: [networking]
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "dev"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("tags", "networking"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "mock-vpc", "only the tag-matched vpc must be diffed")
+	assert.NotContains(t, err.Error(), "mock-eks", "the stack-resolved but non-tag-matching eks must be excluded")
+}
+
+// TestVendorDiffCommand_LabelsSelector proves --labels (AND-matching stack metadata.labels)
+// resolves to just the matching component -- diff had zero --labels coverage at the RunE level
+// before this test.
+func TestVendorDiffCommand_LabelsSelector(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc:\n      metadata:\n        labels:\n          tier: \"1\"\n    eks:\n      metadata:\n        labels:\n          tier: \"2\"\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock-vpc:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+    - component: eks
+      source: oci://ghcr.io/cloudposse/mock-eks:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/eks"]
+`), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("labels", "tier=1"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+	assert.Contains(t, err.Error(), "mock-vpc", "only the tier=1-labeled vpc must be diffed")
+}
+
+// TestVendorDiffCommand_UnmatchedStackErrors proves --stack matching no components is a hard
+// error -- diff had this behavior confirmed only at the shared resolveVendorSelectorComponents
+// unit level, never through vendorDiffCmd.RunE itself, before this test.
+func TestVendorDiffCommand_UnmatchedStackErrors(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(
+		"base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(
+		"vars:\n  stage: dev\ncomponents:\n  terraform: {}\n",
+	), 0o644))
+	chdirTest(t, dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	require.NoError(t, vendorDiffCmd.Flags().Set("stack", "does-not-exist"))
+
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
 func TestVendorUpdateCommand_ComponentManifestFallback(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir())
@@ -524,9 +967,9 @@ func TestVendorUpdateCommand_NeitherManifestExists_ReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
 }
 
-// TestVendorUpdateCommand_ErrorsWhenNothingToUpdate is a regression test: a --component-less
-// "vendor update" in a repo with neither a vendor.yaml nor any component.yaml manifests anywhere
-// must still return a helpful error, rather than silently doing nothing.
+// TestVendorUpdateCommand_ErrorsWhenNothingToUpdate proves a --component-less "vendor update" in a
+// repo with neither a vendor.yaml nor any component.yaml manifests anywhere still returns a
+// helpful error, rather than silently doing nothing.
 func TestVendorUpdateCommand_ErrorsWhenNothingToUpdate(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir())
@@ -552,11 +995,11 @@ func TestVendorUpdateCommand_AutoSweepsComponentManifestsWithoutVendorYaml(t *te
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 }
 
-// TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough is a regression test for
-// runRepoWideUpdate's typeChanged branch: passing --type explicitly (even set to its own default
-// value, "terraform") must still thread updateType through to vendoring.Update's Type param,
-// distinguishing "the user asked for this type" from "no --type was given at all" (typeChanged
-// stays false and Type is left blank, letting Update infer per-source types on its own).
+// TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough proves passing --type explicitly (even set
+// to its own default value, "terraform") still threads updateType through to vendoring.Update's
+// Type param, distinguishing "the user asked for this type" from "no --type was given at all"
+// (typeChanged stays false and Type is left blank, letting Update infer per-source types on its
+// own) -- runRepoWideUpdate's typeChanged branch.
 func TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough(t *testing.T) {
 	resetCommandFlags(t, vendorUpdateCmd)
 	chdirTest(t, t.TempDir())
@@ -644,7 +1087,6 @@ func newVendorPullTestCmd() *cobra.Command {
 	c.Flags().StringP("component", "c", "", "")
 	c.Flags().StringP("type", "t", "terraform", "")
 	c.Flags().Bool("everything", false, "")
-	c.Flags().StringP("stack", "s", "", "")
 	c.Flags().String("tags", "", "")
 	c.Flags().Bool("dry-run", false, "")
 	c.Flags().String("base-path", "", "")
@@ -654,21 +1096,19 @@ func newVendorPullTestCmd() *cobra.Command {
 	return c
 }
 
-// TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents is a regression test for
-// the reported bug: a component.yaml-only repo (no vendor.yaml anywhere) running
-// "vendor update --pull" updated every component successfully, then the automatic follow-up pull
-// hard-failed with "the '--everything' flag is set, but vendor config file does not exist" -
-// because the old runVendorPull always set --everything=true for a component-less "--pull", and
-// --everything only knows how to enumerate a vendor.yaml's sources (internal/exec/vendor.go's
-// handleVendorConfig), which doesn't exist in this repo shape at all.
+// TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents proves that in a
+// component.yaml-only repo (no vendor.yaml anywhere), runVendorPull drives one "--component X" pull
+// per StatusUpdated result -- the same code path "vendor pull --component X" already uses
+// successfully against component.yaml sources -- so an unchanged source with no receipt gets
+// materialized just like an updated source, with no ErrVendorConfigNotExist (or any other error).
 //
-// The fixed runVendorPull now drives one "--component X" pull per StatusUpdated result instead -
-// the same code path "vendor pull --component X" already uses successfully against component.yaml
-// sources.
-// This proves that end to end: given a synthetic report with one updated and one untouched
-// component, only the updated component's source is actually copied to disk, and no
-// ErrVendorConfigNotExist (or any other error) is returned.
-func TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents(t *testing.T) {
+// Historical note: reproduces a reported bug where "vendor update --pull" updated every component
+// successfully, then the automatic follow-up pull hard-failed with "the '--everything' flag is
+// set, but vendor config file does not exist" -- the old runVendorPull always set
+// --everything=true for a component-less "--pull", and --everything only knows how to enumerate a
+// vendor.yaml's sources (internal/exec/vendor.go's handleVendorConfig), which doesn't exist in
+// this repo shape at all.
+func TestRunVendorPull_ComponentManifestOnlyRepo_ReconcilesUnmaterializedComponents(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot) // no vendor.yaml anywhere in this repo.
 
@@ -697,20 +1137,67 @@ func TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents(t *t
 	require.NoError(t, err, "a component.yaml-only repo-wide --pull must succeed, not fail with ErrVendorConfigNotExist")
 
 	assert.FileExists(t, filepath.Join(updatedDir, "main.tf"), "the updated component's source must have been pulled to disk")
-	assert.NoFileExists(t, filepath.Join(untouchedDir, "main.tf"), "the untouched component must not have been pulled")
+	assert.FileExists(t, filepath.Join(untouchedDir, "main.tf"), "an unmaterialized component must be reconciled even when its version is current")
 }
 
-// TestRunVendorPull_ClearsStackAndTagsBetweenIterations proves the per-component pull loop clears
-// "stack" and "tags" (left over from vendor update's own --stack/--tags flags, shared with the pull
-// path on the same cmd) before each "vendor pull --component X" call. Without this,
-// "vendor update --tags foo --pull" or "--stack bar --pull" would fail validateVendorFlags'
-// mutually-exclusive checks (component+stack, component+tags), even though the top-level update
-// already resolved exactly which components to pull. It also proves "stack" is cleared via
-// resetUnchangedFlag (marking Changed=false), not cmd.Flags().Set (which always marks Changed=true):
-// ExecuteVendorPullCommand reads flags.Changed("stack") - not its value - to decide whether to
-// process stacks at all, so a spuriously "changed" empty stack flag would force stack processing in
-// a repo with no stack configuration and fail for an unrelated reason.
-func TestRunVendorPull_ClearsStackAndTagsBetweenIterations(t *testing.T) {
+// TestRunVendorPull_RefreshLockAndLockEnforcementFlowToBatchedComponentPull proves vendor update's
+// own --refresh-lock/--lock-enforcement flags (added because the batched component.yaml pull path
+// previously always hardcoded RefreshLock: false, ignoring vendor update's flags entirely) actually
+// reach pullBatchedComponentManifests' install.InstallOptions, not just vendorPullParams: first, a
+// drifted component under --lock-enforcement strict with refreshLock left false is blocked
+// (ErrLockDriftBlocked, matching install.FilterPending's documented strict behavior); then the same
+// drifted component with refreshLock true succeeds and re-pulls the changed source.
+func TestRunVendorPull_RefreshLockAndLockEnforcementFlowToBatchedComponentPull(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	base := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v1\n"), 0o644))
+	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
+
+	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{
+			Component:     "vpc",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(componentDir, "component.yaml"),
+			ComponentType: "terraform",
+		},
+	}}
+
+	// Materialize cleanly first (no enforcement override needed: nothing has drifted yet).
+	require.NoError(t, runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{componentType: "terraform"}))
+	assert.FileExists(t, componentDir+"/main.tf")
+
+	// Drift the already-materialized target without touching the declared source/version.
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# manually edited\n"), 0o644))
+
+	err := runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{
+		componentType:   "terraform",
+		lockEnforcement: "strict",
+	})
+	require.Error(t, err, "strict enforcement must block a drifted batched pull when refreshLock is false")
+	assert.ErrorContains(t, err, "vendor lock drift blocked")
+
+	err = runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{
+		componentType:   "terraform",
+		lockEnforcement: "strict",
+		refreshLock:     true,
+	})
+	require.NoError(t, err, "refreshLock must bypass strict enforcement and re-pull the drifted component")
+	content, readErr := os.ReadFile(filepath.Join(componentDir, "main.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# v1\n", string(content), "refreshLock must re-fetch from the declared source, overwriting the manual edit")
+}
+
+// TestRunVendorPull_ClearsTagsBetweenIterations proves the per-component pull loop clears "tags"
+// (left over from vendor update's own --tags flag, shared with the pull path on the same cmd)
+// before each "vendor pull --component X" call. Without this, "vendor update --tags foo --pull"
+// would fail validateVendorFlags' component+tags mutual-exclusivity check, even though the
+// top-level update already resolved exactly which components to pull.
+func TestRunVendorPull_ClearsTagsBetweenIterations(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
 
@@ -724,33 +1211,28 @@ func TestRunVendorPull_ClearsStackAndTagsBetweenIterations(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
 	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
 
-	// Simulate "vendor update --tags foo --stack bar --pull": both flags are Changed on the shared
-	// cmd before the per-component pull loop runs.
+	// Simulate "vendor update --tags foo --pull": the flag is Changed on the shared cmd before the
+	// per-component pull loop runs.
 	cmd := newVendorPullTestCmd()
 	require.NoError(t, cmd.Flags().Set("tags", "foo"))
-	require.NoError(t, cmd.Flags().Set("stack", "bar"))
-	require.True(t, cmd.Flags().Changed("stack"))
 
 	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{Component: "vpc", Status: vendoring.StatusUpdated},
 	}}
 
 	err := runVendorPull(cmd, nil, report, vendorPullParams{componentType: "terraform"})
-	require.NoError(t, err, "stale --tags/--stack from vendor update must not fail the per-component pull")
+	require.NoError(t, err, "stale --tags from vendor update must not fail the per-component pull")
 
 	assert.FileExists(t, filepath.Join(componentDir, "main.tf"))
-	assert.False(t, cmd.Flags().Changed("stack"),
-		"'stack' must end up unchanged so a later flags.Changed(\"stack\") check doesn't force stack processing")
 	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
 }
 
-// TestRunVendorPull_SingleComponent_ClearsStackAndTags is
-// TestRunVendorPull_ClearsStackAndTagsBetweenIterations's counterpart for the single-component
-// "--component X --pull" path (p.component != ""): a regression test proving "vendor update
-// --component vpc --stack bar --tags foo --pull" doesn't fail validateVendorFlags'
-// component+stack/component+tags mutual-exclusivity checks, since --stack/--tags are vendor
-// update's own flags of the same name, shared with the pull path on the same cmd.
-func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
+// TestRunVendorPull_SingleComponent_ClearsTags is TestRunVendorPull_ClearsTagsBetweenIterations's
+// counterpart for the single-component "--component X --pull" path (p.component != ""): it proves
+// "vendor update --component vpc --tags foo --pull" doesn't fail validateVendorFlags'
+// component+tags mutual-exclusivity check, since --tags is vendor update's own flag of the same
+// name, shared with the pull path on the same cmd.
+func TestRunVendorPull_SingleComponent_ClearsTags(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
 
@@ -761,36 +1243,32 @@ func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
 	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
 
-	// Simulate "vendor update --component vpc --tags foo --stack bar --pull": all three flags are
-	// Changed on the shared cmd before runVendorPull's single-component path delegates to
-	// ExecuteVendorPullCmd.
+	// Simulate "vendor update --component vpc --tags foo --pull": both flags are Changed on the
+	// shared cmd before runVendorPull's single-component path delegates to ExecuteVendorPullCmd.
 	cmd := newVendorPullTestCmd()
 	require.NoError(t, cmd.Flags().Set("component", "vpc"))
 	require.NoError(t, cmd.Flags().Set("tags", "foo"))
-	require.NoError(t, cmd.Flags().Set("stack", "bar"))
-	require.True(t, cmd.Flags().Changed("stack"))
 
 	err := runVendorPull(cmd, nil, nil, vendorPullParams{component: "vpc", componentType: "terraform"})
-	require.NoError(t, err, "stale --tags/--stack from vendor update must not fail the single-component pull")
+	require.NoError(t, err, "stale --tags from vendor update must not fail the single-component pull")
 
 	assert.FileExists(t, filepath.Join(componentDir, "main.tf"))
-	assert.False(t, cmd.Flags().Changed("stack"),
-		"'stack' must end up unchanged so a later flags.Changed(\"stack\") check doesn't force stack processing")
 	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
 }
 
-// TestRunVendorPull_BatchesMultipleComponentManifestUpdates is a regression test for the reported
-// UX bug: "atmos vendor update --pull" against a component.yaml-only repo rendered one separate
-// "0/1" progress-bar-and-completion block per updated component instead of a single unified
-// "0/N" -> "N/N" run. Real SourceUpdateResult.File values (unlike the synthetic
+// TestRunVendorPull_BatchesMultipleComponentManifestUpdates proves that given three updated
+// components whose SourceUpdateResult.File values point at the real "component.yaml" manifest that
+// declared each source (the File basename partitionReportResults uses to route every
+// component.yaml-declared update into a single ExecuteComponentVendorPullBatch call), all three
+// land on disk from one batched call, without ever going through the per-component
+// pullUpdatedComponent/e.ExecuteVendorPullCmd fallback path. (Unlike the synthetic
 // TestRunVendorPull_ComponentManifestOnlyRepo_PullsOnlyUpdatedComponents/
 // TestRunVendorPull_ClearsStackAndTagsBetweenIterations reports above, which leave File empty and
-// so exercise only the pre-existing per-component fallback loop) point at the real
-// "component.yaml" manifest that declared the source, and that File basename is what
-// partitionUpdatedResults uses to route every component.yaml-declared update into a single
-// ExecuteComponentVendorPullBatch call. This test proves that: given three updated components,
-// all three land on disk from one batched call, without ever going through the noisy
-// per-component pullUpdatedComponent/e.ExecuteVendorPullCmd path.
+// so exercise only that fallback loop.)
+//
+// Historical note: reproduces a reported UX bug where "atmos vendor update --pull" against a
+// component.yaml-only repo rendered one separate "0/1" progress-bar-and-completion block per
+// updated component instead of a single unified "0/N" -> "N/N" run.
 func TestRunVendorPull_BatchesMultipleComponentManifestUpdates(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot) // no vendor.yaml anywhere in this repo.
@@ -876,14 +1354,16 @@ func TestRunVendorPull_MixedManifestAndVendorYamlUpdates(t *testing.T) {
 	assert.FileExists(t, filepath.Join(fallbackDir, "main.tf"), "the fallback component must have been pulled")
 }
 
-// TestRunVendorPull_BatchesByComponentType is a regression test for a reported bug: a repo-wide
-// "vendor update --pull" with no explicit --type sweeps every configured component type
-// (DiscoverAllComponentManifests), so a single batch of StatusUpdated results can mix
-// terraform and helmfile component.yaml updates. ExecuteComponentVendorPullBatch only accepts one
-// componentType per call (it resolves every entry's directory under that one type's base path),
-// so forwarding a mixed batch under a single type would resolve the non-matching type's components
-// under the wrong components/<type>/<name> path. PartitionUpdatedResults must group by
-// SourceUpdateResult.ComponentType so each type gets its own ExecuteComponentVendorPullBatch call.
+// TestRunVendorPull_BatchesByComponentType proves PartitionUpdatedResults groups by
+// SourceUpdateResult.ComponentType so each type gets its own ExecuteComponentVendorPullBatch call
+// -- required because that function only accepts one componentType per call (it resolves every
+// entry's directory under that one type's base path), so forwarding a mixed batch under a single
+// type would resolve the non-matching type's components under the wrong
+// components/<type>/<name> path.
+//
+// Historical note: reproduces a reported bug where a repo-wide "vendor update --pull" with no
+// explicit --type sweeps every configured component type (DiscoverAllComponentManifests), so a
+// single batch of StatusUpdated results could mix terraform and helmfile component.yaml updates.
 func TestRunVendorPull_BatchesByComponentType(t *testing.T) {
 	repoRoot := t.TempDir()
 	chdirTest(t, repoRoot)
@@ -927,6 +1407,43 @@ func TestRunVendorPull_BatchesByComponentType(t *testing.T) {
 	assert.FileExists(t, filepath.Join(helmfileDir, "helmfile.yaml"), "the helmfile component must have been pulled to its own directory, not under components/terraform")
 }
 
+// TestRunVendorPull_BatchedComponentManifests_HonorsBasePathFlag proves
+// pullBatchedComponentManifests threads --base-path into cfg.InitCliConfig instead of discarding it
+// via an empty schema.ConfigAndStacksInfo{} -- mirroring TestVendorDiffCommand_HonorsBasePathFlag's
+// proof for the selector-resolution path. The test's cwd has no components/terraform at all, so
+// the component can only resolve via --base-path pointing at root; before the fix, --base-path had
+// no effect on this batched path and the pull would look relative to cwd instead.
+func TestRunVendorPull_BatchedComponentManifests_HonorsBasePathFlag(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
+	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
+
+	elsewhere := t.TempDir()
+	chdirTest(t, elsewhere)
+
+	v := viper.GetViper()
+	v.Set("base-path", root)
+	t.Cleanup(func() { v.Set("base-path", "") })
+
+	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{
+			Component:     "vpc",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(componentDir, "component.yaml"),
+			ComponentType: "terraform",
+		},
+	}}
+
+	err := runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{componentType: "terraform"})
+	require.NoError(t, err, "the batched pull must resolve the component under --base-path, not cwd")
+
+	assert.FileExists(t, filepath.Join(componentDir, "main.tf"), "the component must have been pulled under --base-path's own components dir")
+}
+
 // TestResetUnchangedFlag covers resetUnchangedFlag's three branches directly: a flag that doesn't
 // exist on cmd (a no-op, not an error), a normal flag whose value and Changed bit both get cleared,
 // and a flag whose underlying Value.Set("") fails (surfaced, not swallowed).
@@ -941,15 +1458,15 @@ func TestResetUnchangedFlag(t *testing.T) {
 
 	t.Run("clears value and Changed", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "x"}
-		cmd.Flags().String("stack", "", "")
-		require.NoError(t, cmd.Flags().Set("stack", "bar"))
-		require.True(t, cmd.Flags().Changed("stack"))
+		cmd.Flags().String("tags", "", "")
+		require.NoError(t, cmd.Flags().Set("tags", "bar"))
+		require.True(t, cmd.Flags().Changed("tags"))
 
-		err := resetUnchangedFlag(cmd, "stack")
+		err := resetUnchangedFlag(cmd, "tags")
 
 		require.NoError(t, err)
-		assert.Equal(t, "", cmd.Flags().Lookup("stack").Value.String())
-		assert.False(t, cmd.Flags().Changed("stack"))
+		assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
+		assert.False(t, cmd.Flags().Changed("tags"))
 	})
 
 	t.Run("propagates the underlying flag's Set error", func(t *testing.T) {

@@ -38,20 +38,24 @@ const (
 // per component when the user has not passed --max-findings or
 // ATMOS_TERRAFORM_LINT_MAX_FINDINGS. Matches pkg/scanners/sarif's own
 // defaultMaxFindings.
-const defaultMaxFindings = 10
-
-// maxFindingsUnset is the sentinel flag default that signals "user did not pass
-// --max-findings and no env override applied," so resolveMaxFindings falls
-// through to defaultMaxFindings. A user-supplied 0 means "show every finding"
+//
+// It also doubles as the pflag-registered default and the "unset" sentinel
+// resolveMaxFindings checks for: a user-supplied 0 means "show every finding"
 // (matches cmd/aws/security's identical --max-findings convention) and must be
-// distinguishable from "not set at all," which a plain 0 default could not do.
-const maxFindingsUnset = -1
+// distinguishable from "not set at all," but an explicit override that happens
+// to equal defaultMaxFindings resolves to the same value as "unset" either way,
+// so no separate sentinel is needed here -- unlike cmd/aws/security, whose
+// three-level precedence (flag/env > atmos.yaml config > hardcoded default)
+// does need a value distinct from its own default to detect "fall through to
+// config." Reusing defaultMaxFindings this way also keeps --help's
+// auto-appended "(default N)" consistent with the description text below.
+const defaultMaxFindings = 10
 
 // sarifUnlimitedFindings is the sentinel pkg/scanners/sarif's RenderMarkdownOptions
 // recognizes as "no cap" (see its MaxFindings doc comment) — distinct from this
-// command's own maxFindingsUnset, since sarif's zero value already means "use its
-// own default" for every other (non-CLI) caller, like the checkov/trivy/kics hooks
-// that never set MaxFindings at all.
+// command's own "user passed 0" convention, since sarif's zero value already
+// means "use its own default" for every other (non-CLI) caller, like the
+// checkov/trivy/kics hooks that never set MaxFindings at all.
 const sarifUnlimitedFindings = -1
 
 var lintParser *flags.StandardParser
@@ -78,7 +82,7 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Lint affected Terraform components"),
 		flags.WithBoolFlag("all", "", false, "Lint all Terraform components (the default when no component is provided)"),
 		flags.WithStringFlag(errorModeFlagName, "", "", "How to handle recoverable errors while discovering lint targets (e.g. a Terraform backend not yet provisioned, or a component's identity failing to resolve): warn (degrade + summary, default), silent (degrade, no summary), or strict (fail immediately). Defaults to atmos.yaml's components.terraform.lint.error_mode, or warn"),
-		flags.WithIntFlag(maxFindingsFlagName, "", maxFindingsUnset, fmt.Sprintf("Maximum number of individual findings to show per component (0 = unlimited, default %d)", defaultMaxFindings)),
+		flags.WithIntFlag(maxFindingsFlagName, "", defaultMaxFindings, fmt.Sprintf("Maximum number of individual findings to show per component (0 = unlimited, default %d)", defaultMaxFindings)),
 		flags.WithStringFlag(outputFormatFlagName, "", outputFormatMarkdown, "Output format: markdown, rich"),
 		flags.WithEnvVars("affected", "ATMOS_TERRAFORM_LINT_AFFECTED"),
 		flags.WithEnvVars("all", "ATMOS_TERRAFORM_LINT_ALL"),
@@ -131,8 +135,8 @@ func runTerraformLint(cmd *cobra.Command, args []string) error {
 // convention (matching cmd/aws/security's --max-findings) needs its own distinct
 // sentinel to mean the same thing to the rendering layer.
 //
-// The flagValue argument is what Viper returned for the flag: maxFindingsUnset
-// (-1) when the user did not pass --max-findings and no env override applied, or
+// The flagValue argument is what Viper returned for the flag: defaultMaxFindings
+// when the user did not pass --max-findings and no env override applied, or
 // the user/env value otherwise.
 func resolveMaxFindings(cmd *cobra.Command, flagValue int) int {
 	resolved := defaultMaxFindings
@@ -140,10 +144,10 @@ func resolveMaxFindings(cmd *cobra.Command, flagValue int) int {
 	case cmd != nil && cmd.Flags().Changed(maxFindingsFlagName):
 		// User explicitly passed --max-findings on the CLI (any value, including 0).
 		resolved = flagValue
-	case flagValue != maxFindingsUnset:
+	case flagValue != defaultMaxFindings:
 		// User set ATMOS_TERRAFORM_LINT_MAX_FINDINGS (Viper picked it up via env
-		// binding). Treat any value != maxFindingsUnset as an explicit override,
-		// including 0.
+		// binding) to something other than the default. Treat it as an explicit
+		// override, including 0.
 		resolved = flagValue
 	}
 	if resolved == 0 {

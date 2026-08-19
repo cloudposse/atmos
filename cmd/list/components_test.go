@@ -364,6 +364,31 @@ func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
 		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
 		require.Error(t, err)
 	})
+
+	t.Run("tags/labels row filters are skipped with the closure preview", func(t *testing.T) {
+		// With IncludeDependencies set, extractComponentsViaScopedClosure has
+		// already used opts.Tags/LabelsRaw to seed the closure roots; re-applying
+		// them here as row filters would incorrectly prune closure members
+		// (dependencies/dependents) that don't themselves carry the seed tag.
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:                []string{"production"},
+			LabelsRaw:           "cost-center=platform",
+			IncludeDependencies: -1,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not tags/labels")
+		_, isAbstractFilter := result[0].(*filter.ColumnValueFilter)
+		assert.True(t, isAbstractFilter)
+	})
+
+	t.Run("tags/labels row filters are also skipped for IncludeDependents", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:              []string{"production"},
+			IncludeDependents: 2,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not the tags filter")
+	})
 }
 
 // TestGetComponentColumns tests column configuration logic.

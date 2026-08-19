@@ -432,6 +432,68 @@ func TestRunEditorConfigExcludesFromAtmosConfig(t *testing.T) {
 	require.NoError(t, runEditorConfig(command))
 }
 
+// TestRunEditorConfigForFilesMergesAtmosConfigExcludeWithSelectedFiles guards
+// against a regression where atmos.yaml's validate.editorconfig.exclude was
+// silently dropped whenever runEditorConfigForFiles was called with a
+// non-nil selectedFiles list and an excludes slice that didn't already
+// contain it -- exactly what cmd/validate_all.go's
+// buildEditorConfigValidationTask does for `atmos validate --affected`
+// (unlike the standalone `atmos validate editorconfig` command, which always
+// passes atmosConfig.Validate.EditorConfig.Exclude in explicitly). Without
+// the merge inside runEditorConfigForFiles, a file excluded by atmos.yaml
+// (here, a golden-snapshot-style path with deliberate trailing whitespace)
+// would still fail validation when passed as one of the caller's selected
+// affected files.
+func TestRunEditorConfigForFilesMergesAtmosConfigExcludeWithSelectedFiles(t *testing.T) {
+	originalAtmosConfig := atmosConfig
+	originalCurrentConfig := currentConfig
+	originalCLIConfig := cliConfig
+	originalPaths := configFilePaths
+	originalExclude := tmpExclude
+	originalInit := initEditorConfig
+	originalSARIF := editorConfigSARIF
+	originalRich := editorConfigRich
+	originalFormat := format
+	t.Cleanup(func() {
+		atmosConfig = originalAtmosConfig
+		currentConfig = originalCurrentConfig
+		cliConfig = originalCLIConfig
+		configFilePaths = originalPaths
+		tmpExclude = originalExclude
+		initEditorConfig = originalInit
+		editorConfigSARIF = originalSARIF
+		editorConfigRich = originalRich
+		format = originalFormat
+	})
+
+	project := t.TempDir()
+	t.Chdir(project)
+	require.NoError(t, os.WriteFile(".editorconfig", []byte("root = true\n[*]\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"), 0o600))
+	require.NoError(t, os.MkdirAll("tests/snapshots", 0o755))
+	goldenPath := filepath.Join("tests", "snapshots", "example.golden")
+	// Trailing whitespace: would fail validation unless atmos.yaml's exclude is honored.
+	require.NoError(t, os.WriteFile(goldenPath, []byte("captured output  \n"), 0o600))
+
+	atmosConfig = schema.AtmosConfiguration{
+		Validate: schema.Validate{
+			EditorConfig: schema.EditorConfig{Exclude: []string{"tests/snapshots/**"}},
+		},
+	}
+	cliConfig = config.Config{}
+	configFilePaths = nil
+	tmpExclude = ""
+	initEditorConfig = false
+
+	command := &cobra.Command{}
+	addPersistentFlags(command)
+	require.NoError(t, command.ParseFlags(nil))
+
+	// selectedFiles is non-nil (the --affected code path) and excludes is
+	// empty, mirroring buildEditorConfigValidationTask's call shape -- only
+	// the CLI-level --exclude flags, never atmosConfig.Validate.EditorConfig.Exclude.
+	require.NoError(t, runEditorConfigForFiles(command, []string{goldenPath}, nil))
+}
+
 func TestRequestedEditorConfigFormatPrecedence(t *testing.T) {
 	originalFormat := format
 	t.Cleanup(func() { format = originalFormat })

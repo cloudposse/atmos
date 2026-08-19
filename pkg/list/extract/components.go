@@ -239,6 +239,20 @@ func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
 	return result
 }
 
+// GetTagsFromMetadata extracts metadata.tags as a []string for callers
+// outside package extract (e.g. cmd/list sources, pkg/list/dependencies).
+// Returns an empty (non-nil) slice when absent or not a list.
+func GetTagsFromMetadata(metadata map[string]any) []string {
+	return getStringSliceFromMetadata(metadata, fieldTags)
+}
+
+// GetLabelsFromMetadata extracts metadata.labels as a map[string]string for
+// callers outside package extract. Returns an empty (non-nil) map when absent
+// or not an object.
+func GetLabelsFromMetadata(metadata map[string]any) map[string]string {
+	return getStringMapFromMetadata(metadata, fieldLabels)
+}
+
 // UniqueComponents extracts deduplicated components from all stacks.
 // Returns unique component names with aggregated metadata (stack count, types).
 // This is the original behavior of "list components" - showing unique component definitions.
