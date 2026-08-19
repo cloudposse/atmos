@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func enablePreconditionChecks(t *testing.T) {
+	t.Helper()
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "false")
+}
+
 // TestShouldCheckPreconditions tests the ShouldCheckPreconditions function.
 func TestShouldCheckPreconditions(t *testing.T) {
 	tests := []struct {
@@ -156,7 +161,7 @@ func TestRequireGitHubAccess_WithBypass(t *testing.T) {
 // TestPreconditionSkipping tests real skip scenarios - these will actually skip the subtest.
 func TestPreconditionSkipping(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	t.Run("EnvVar missing causes skip", func(t *testing.T) {
 		// Test with non-existent env var - this will skip the test
@@ -228,6 +233,8 @@ func TestRequireOCIAuthentication_WithAtmosToken(t *testing.T) {
 
 // TestRequireOCIAuthentication_WithoutToken tests RequireOCIAuthentication without token.
 func TestRequireOCIAuthentication_WithoutToken(t *testing.T) {
+	enablePreconditionChecks(t)
+
 	// Ensure no tokens are set
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("ATMOS_GITHUB_TOKEN", "")
@@ -270,7 +277,7 @@ func TestLogPreconditionOverride_Variations(t *testing.T) {
 // TestRequireAWSProfile_NonExistent tests RequireAWSProfile with non-existent profile (will skip).
 func TestRequireAWSProfile_NonExistent(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// This should skip the test
 	RequireAWSProfile(t, "definitely-non-existent-profile-xyz-12345")
@@ -282,7 +289,7 @@ func TestRequireAWSProfile_NonExistent(t *testing.T) {
 // TestRequireGitRepository_NotInRepo tests RequireGitRepository when not in a repo (will skip).
 func TestRequireGitRepository_NotInRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Change to temp directory that's not a git repo
 	tmpDir := t.TempDir()
@@ -298,7 +305,7 @@ func TestRequireGitRepository_NotInRepo(t *testing.T) {
 // TestRequireGitRepository_InRepo tests RequireGitRepository in actual repo.
 func TestRequireGitRepository_InRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// This test runs in the actual repo, so it should work
 	repo := RequireGitRepository(t)
@@ -313,7 +320,7 @@ func TestRequireGitRepository_InRepo(t *testing.T) {
 // TestRequireGitRemoteWithValidURL_WithRemote tests RequireGitRemoteWithValidURL when remote exists.
 func TestRequireGitRemoteWithValidURL_WithRemote(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// This should work in the actual repo
 	url := RequireGitRemoteWithValidURL(t)
@@ -338,7 +345,7 @@ func TestRequireGitHubAccess_NoToken(t *testing.T) {
 // TestRequireNetworkAccess_ValidURL tests RequireNetworkAccess with valid URL.
 func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Try with a commonly available URL
 	RequireNetworkAccess(t, "https://github.com")
@@ -349,7 +356,7 @@ func TestRequireNetworkAccess_ValidURL(t *testing.T) {
 // TestRequireNetworkAccess_InvalidURL tests RequireNetworkAccess with invalid URL (will skip).
 func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// This should skip
 	RequireNetworkAccess(t, "https://definitely-invalid-domain-xyz-12345.example.com")
@@ -361,7 +368,7 @@ func TestRequireNetworkAccess_InvalidURL(t *testing.T) {
 // TestRequireGitRemoteWithValidURL_InRealRepo tests RequireGitRemoteWithValidURL in a real git repo with remotes.
 func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Create a temporary git repo with a remote
 	tmpDir := t.TempDir()
@@ -387,7 +394,7 @@ func TestRequireGitRemoteWithValidURL_InRealRepo(t *testing.T) {
 // TestRequireGitRemoteWithValidURL_InvalidRemote tests RequireGitRemoteWithValidURL with invalid remote URL.
 func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Create a temporary git repo with invalid remote
 	tmpDir := t.TempDir()
@@ -417,7 +424,7 @@ func TestRequireGitRemoteWithValidURL_InvalidRemote(t *testing.T) {
 // TestRequireGitRemoteWithValidURL_NoRemotes tests RequireGitRemoteWithValidURL with no remotes.
 func TestRequireGitRemoteWithValidURL_NoRemotes(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Create a temporary git repo without remotes
 	tmpDir := t.TempDir()
@@ -482,7 +489,7 @@ func TestRequireGitCommitConfig_WithBypass(t *testing.T) {
 // TestRequireGitCommitConfig_WithConfig tests RequireGitCommitConfig with git config set.
 func TestRequireGitCommitConfig_WithConfig(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Check if git user.name exists
 	cmd := exec.Command("git", "config", "--get", "user.name")
@@ -508,7 +515,7 @@ func TestRequireGitCommitConfig_WithConfig(t *testing.T) {
 // TestRequireGitCommitConfig_MissingName tests RequireGitCommitConfig without user.name.
 func TestRequireGitCommitConfig_MissingName(t *testing.T) {
 	// Ensure precondition checks are enabled
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// This test creates a temp git config context which is complex
 	// Instead, we rely on the function skipping if config is missing
@@ -554,7 +561,7 @@ func TestSkipIfShort(t *testing.T) {
 // TestSkipOnDarwinARM64 tests the darwin/arm64 skip function.
 func TestSkipOnDarwinARM64(t *testing.T) {
 	// Enable precondition checks
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	// Call the function with a test reason
 	// It will only actually skip on darwin/arm64
