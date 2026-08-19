@@ -99,9 +99,19 @@ func TestHostDockerInternalResolves_BoundedByTimeout(t *testing.T) {
 	orig := lookupHost
 	defer func() { lookupHost = orig }()
 
+	// stubSafetyNet is a finite failure path independent of ctx cancellation --
+	// well above hostDockerInternalLookupTimeout, but still bounded -- so a
+	// regression that stops the production code from ever cancelling the
+	// context fails this test with a clear timing mismatch instead of hanging
+	// the suite indefinitely.
+	const stubSafetyNet = hostDockerInternalLookupTimeout * 10
 	lookupHost = func(ctx context.Context, _ string) ([]string, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(stubSafetyNet):
+			return nil, context.DeadlineExceeded
+		}
 	}
 
 	start := time.Now()
@@ -109,7 +119,11 @@ func TestHostDockerInternalResolves_BoundedByTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.False(t, got)
-	assert.Less(t, elapsed, 5*time.Second, "a slow/unresponsive resolver must not block past hostDockerInternalLookupTimeout")
+	// Tight bound against the actual configured constant (not the safety net
+	// above) -- this fails if the timeout stops being applied at all, since
+	// elapsed would then jump to stubSafetyNet instead.
+	assert.Less(t, elapsed, hostDockerInternalLookupTimeout+time.Second,
+		"resolver context must actually be bounded by hostDockerInternalLookupTimeout")
 }
 
 // stubLookupHost overrides lookupHost for the duration of a test.
