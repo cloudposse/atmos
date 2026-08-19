@@ -77,76 +77,11 @@
       ]
     },
     {
-      "anyOf": [
-        {
-          "additionalProperties": true,
-          "not": {
-            "required": [
-              "workflows"
-            ]
-          }
-        },
-        {
-          "required": [
-            "import"
-          ]
-        },
-        {
-          "required": [
-            "terraform"
-          ]
-        },
-        {
-          "required": [
-            "helmfile"
-          ]
-        },
-        {
-          "required": [
-            "kubernetes"
-          ]
-        },
-        {
-          "required": [
-            "helm"
-          ]
-        },
-        {
-          "required": [
-            "packer"
-          ]
-        },
-        {
-          "required": [
-            "vars"
-          ]
-        },
-        {
-          "required": [
-            "hooks"
-          ]
-        },
-        {
-          "required": [
-            "env"
-          ]
-        },
-        {
-          "required": [
-            "settings"
-          ]
-        },
-        {
-          "required": [
-            "components"
-          ]
-        },
-        {
-          "required": [
-            "overrides"
-          ]
-        }
-      ]
+      "not": {
+        "required": [
+          "workflows"
+        ]
+      }
     }
   ],
   "definitions": {
@@ -682,6 +617,12 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -785,9 +726,10 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "Container runtime provider: docker, podman, or empty for auto-detect.",
+          "description": "Container runtime provider: docker, podman, auto, or empty for auto-detect.",
           "enum": [
             "",
+            "auto",
             "docker",
             "podman"
           ]
@@ -1052,6 +994,12 @@
             },
             "source": {
               "$ref": "#/definitions/source"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1180,6 +1128,12 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
@@ -1412,6 +1366,9 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1484,6 +1441,9 @@
             },
             "source": {
               "$ref": "#/definitions/source"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1676,6 +1636,10 @@
             },
             "retry": {
               "$ref": "#/definitions/source_retry"
+            },
+            "ttl": {
+              "type": "string",
+              "description": "Cache time-to-live as a Go duration string (e.g., '24h'). Overrides the global default; a JIT-vendored source cache older than this is re-fetched."
             }
           },
           "required": [
@@ -2399,7 +2363,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -2427,7 +2397,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -2544,6 +2520,78 @@
                   "additionalProperties": true
                 }
               ]
+            },
+            "consul": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "cos": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "http": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "kubernetes": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "oss": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "pg": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -2577,14 +2625,26 @@
             "providers": {
               "$ref": "#/definitions/providers"
             },
-            "required_version": {
-              "$ref": "#/definitions/required_version"
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             },
             "required_providers": {
               "$ref": "#/definitions/required_providers"
             },
-            "retry": {
-              "$ref": "#/definitions/retry"
+            "required_version": {
+              "$ref": "#/definitions/required_version"
             }
           },
           "required": []
@@ -3200,10 +3260,10 @@
                 "mode": {
                   "type": "string",
                   "enum": [
+                    "",
                     "grouped",
                     "prefixed",
-                    "none",
-                    "raw"
+                    "none"
                   ]
                 },
                 "order": {
