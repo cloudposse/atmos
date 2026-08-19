@@ -45,10 +45,11 @@ Atmos also lets you cache imports to avoid unnecessary re-fetching.
 - A remote `import:` entry that fails to resolve now prints a warning by default. The warning names the
   import path and the underlying error. The command no longer continues silently with an empty or partial
   configuration.
-- Set `imports: { ttl: ... }` once in `atmos.yaml` to control caching for every remote import the same
-  way. A `git::` import with a subdirectory then reuses its clone across commands instead of re-cloning
-  every time. A plain remote URL then expires after `ttl` instead of being cached forever. This setting
-  reuses the same caching mechanism and cache directory as stack configuration imports.
+- Set `imports: { ttl: ... }` once in `atmos.yaml` to apply the same expiry policy to every remote import
+  form. A `git::` import with a subdirectory then reuses its clone across commands instead of re-cloning
+  every time. A plain remote URL, or a `git::` import without a subdirectory, then expires after `ttl`
+  instead of being cached forever. The two forms track freshness differently under the hood (a marker
+  file in the cloned directory for the first, a cache entry for the second), but `ttl` now governs both.
 
 ## How to Use It
 

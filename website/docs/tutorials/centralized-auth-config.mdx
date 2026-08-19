@@ -267,14 +267,14 @@ a one-line change in one file, not a wiki post and a round of developers hand-ed
 
 ## Troubleshooting
 
-**`atmos auth login` doesn't find the identity, with no error** — a failed import is silent by design: a
-typo'd `ref`, an unreachable repo, or a private repo Git can't authenticate to all produce an empty
-`auth:` section and exit `0`, not an error. Run `atmos auth list` first to confirm the import actually
-resolved anything. If it's empty, re-run with `ATMOS_LOGS_LEVEL=Debug` and look for a
-`failed to resolve import` line — that's the only place the real reason (bad ref, 403, DNS failure, etc.)
-shows up.
+**`atmos auth login` doesn't find the identity** — a failed import is non-fatal by design: a typo'd `ref`,
+an unreachable repo, or a private repo Git can't authenticate to all produce an empty `auth:` section and
+exit `0`, not an error. Run `atmos auth list` first to confirm the import actually resolved anything. If
+it's empty, look for a `WARN failed to resolve import` line in the command's output — Atmos logs it at
+the default log level, so it shows up without setting `ATMOS_LOGS_LEVEL`. That line names the real reason
+(bad ref, 403, DNS failure, etc.).
 
-**That debug line shows an authentication error** — confirm `gh auth status` shows an active session (or
+**That warning shows an authentication error** — confirm `gh auth status` shows an active session (or
 that `ATMOS_PRO_GITHUB_TOKEN`/`ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN` is set — see
 [step 3](#3-private-repo-access--no-token-setup-needed) for the full resolution order), and that the
 account has read access to the central config repo.
