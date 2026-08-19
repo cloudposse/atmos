@@ -14,6 +14,14 @@ inputs:
     description: 'Directory containing workflow files to scan'
     required: false
     default: '.github/workflows'
+  unverifiable-file:
+    description: >
+      JSON file listing owner/repo pairs this action cannot drift-check via
+      the GitHub API for a documented, maintainer-reviewed reason (see
+      unverifiable.json and the README). A resolution failure for a listed
+      repo is reported as a warning, not a CI failure.
+    required: false
+    default: '.github/actions/verify-sha-pinning/unverifiable.json'
 
 outputs:
   verified-count:
@@ -25,6 +33,9 @@ outputs:
   unpinned-count:
     description: 'Number of third-party action references that are not SHA-pinned at all'
     value: ${{ steps.verify.outputs.unpinned_count }}
+  unverifiable-count:
+    description: 'Number of resolution failures downgraded to a warning via unverifiable.json'
+    value: ${{ steps.verify.outputs.unverifiable_count }}
   status:
     description: 'Overall result: pass or fail'
     value: ${{ steps.verify.outputs.status }}
@@ -37,6 +48,7 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
+        UNVERIFIABLE_FILE: ${{ inputs.unverifiable-file }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -46,6 +58,20 @@ runs:
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
+
+          // Repos a maintainer has explicitly reviewed and confirmed cannot be
+          // drift-checked via the API (see unverifiable.json for the reason).
+          // This is the ONLY way a resolution failure is downgraded from a
+          // hard failure — never inferred from the error's status or text.
+          const unverifiableRepos = new Map();
+          try {
+            const entries = JSON.parse(fs.readFileSync(process.env.UNVERIFIABLE_FILE, 'utf8'));
+            for (const entry of entries) {
+              unverifiableRepos.set(entry.action, entry);
+            }
+          } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+          }
 
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -78,6 +104,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
+            core.setOutput('unverifiable_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -129,6 +156,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
+            core.setOutput('unverifiable_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -225,6 +253,7 @@ runs:
           let verified = 0;
           let failed = 0;
           let unpinned = 0;
+          let unverifiable = 0;
           const errors = [];
           const results = [];
 
@@ -295,6 +324,23 @@ runs:
               }
             } catch (err) {
               const detail = err.message;
+
+              // Only a maintainer-reviewed entry in unverifiable.json can downgrade
+              // a resolution failure to a warning — never an inference from the
+              // error's status code or message text. See that file for why.
+              const exception = unverifiableRepos.get(`${ref.owner}/${ref.repo}`);
+              if (exception) {
+                const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +
+                  `   Documented exception: ${exception.reason}`;
+                core.warning(msg);
+                unverifiable++;
+                results.push({
+                  action: label, file: ref.file, line: ref.line,
+                  status: 'unverifiable', detail: exception.reason,
+                });
+                continue;
+              }
+
               const msg = `❌ ${label} — ${detail} (${ref.file}:${ref.line})`;
               core.error(msg);
               errors.push(msg);
@@ -307,11 +353,12 @@ runs:
           }
 
           core.info(`\n${'─'.repeat(60)}`);
-          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Total: ${refs.length}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Unverifiable: ${unverifiable}  Total: ${refs.length}`);
 
           core.setOutput('verified_count', verified);
           core.setOutput('failed_count', failed);
           core.setOutput('unpinned_count', unpinned);
+          core.setOutput('unverifiable_count', unverifiable);
           core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
           core.setOutput('results_json', JSON.stringify(results));
 
@@ -370,6 +417,7 @@ runs:
           const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
           const total = results.length;
           const branchPinned = results.filter(r => r.status === 'pinned-branch').length;
+          const unverifiable = results.filter(r => r.status === 'unverifiable').length;
           const status = process.env.STATUS || 'pass';
 
           // Find existing comment
@@ -393,6 +441,9 @@ runs:
               }
               if (r.status === 'pinned-branch') {
                 return `| \`${r.action}\` | ${loc} | ℹ️ Pinned (branch) | ${r.detail || ''} |`;
+              }
+              if (r.status === 'unverifiable') {
+                return `| \`${r.action}\` | ${loc} | ⚠️ Unverifiable (documented) | ${r.detail || ''} |`;
               }
               if (r.status === 'unpinned') {
                 return `| \`${r.action}\` | ${loc} | ❌ Unpinned | ${r.detail || ''} |`;
