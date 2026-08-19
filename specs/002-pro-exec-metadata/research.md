@@ -464,8 +464,64 @@ all.
 
 ---
 
+## Decision 14: `Flags` source of truth and bare-token wire shape
+
+**Decision**: `captureExecMetadataSync` (`internal/exec/terraform.go`) MUST NOT source
+`Flags` from `info.AdditionalArgsAndFlags`. That field holds only pass-through args left
+over *after* Cobra has already parsed and consumed recognized atmos flags (per
+`cli_utils.go`, `info.AdditionalArgsAndFlags = args[componentArgIndex+1:]`) — `-s`/
+`--stack` is never in it, and `buildPlanSubcommandArgs` additionally strips
+`--upload-status` out of it before capture runs (`terraform_execute_helpers_args.go:36`).
+The correct source of truth is the invoking `*cobra.Command`'s own record of explicitly-set
+flags (`cmd.Flags().Visit`, `Changed == true`) — exactly the pattern the async path's
+`commandArgsAndFlags` (`pkg/proexec/async.go:109-126`) already uses, so both paths must
+converge on one shared helper. Additionally, `Flags` MUST serialize as bare tokens exactly
+as typed on the command line (`["-s", "plat-use2-dev", "--upload-status"]`) — a boolean/
+valueless flag like `--upload-status` appears alone with no synthesized value. This means
+`commandArgsAndFlags`'s current implementation, which appends `"--"+f.Name, f.Value.String()`
+unconditionally (producing `["--upload-status", "true"]` for a bool flag), is also wrong
+and must change to skip the value for bool-typed flags (`pflag.Flag.Value.Type() == "bool"`).
+
+**Rationale**: A production report (2026-08-19) showed an `atmos terraform plan cdn -s
+plat-use2-dev --upload-status` invocation's sync-path execution record with a completely
+empty `flags` column. Investigation (this session) traced it to the wrong data source, not
+a flag-stripping ordering bug — `info.AdditionalArgsAndFlags` was never capable of holding
+`-s` in the first place. A regression test
+(`internal/exec/terraform_exec_metadata_flags_test.go::TestCaptureExecMetadataSync_FlagsReflectRealInvocation`)
+reproduces this exact shape and fails on current HEAD. `/speckit-clarify` (2026-08-19) then
+resolved a second, adjacent ambiguity the fix surfaced: whether `--upload-status` itself
+belongs in the reported `Flags` (yes — no exclusions, matching FR-003b's own worked
+example) and what wire shape `Flags` should use (bare tokens as typed, not `--name value`
+pairs for every flag — see spec.md Session 2026-08-19).
+
+**Alternatives considered**:
+- Fix only the stripping-order bug (capture flags before `buildPlanSubcommandArgs` mutates
+  `info.AdditionalArgsAndFlags`) — rejected: this would still leave `-s`/`--stack` and every
+  other atmos-recognized flag permanently absent from `Flags`, since they were never in that
+  slice to begin with; it treats a symptom, not the actual wrong-data-source defect.
+  Superseded task: `tasks.md` T006/T009.
+  - Keep the async path's `--name value`-pair-for-every-flag serialization and change the
+    spec's worked example to match instead — rejected during `/speckit-clarify`: bare tokens
+    are what the user actually typed and what `uploadStatus`'s content-correlation guarantee
+    (FR-003a) implicitly assumes; pairs would silently diverge two "flags actually passed"
+    representations across the two upload mechanisms for the same invocation.
+
+**Open, not yet resolved by this decision**: A second production symptom — two `atexec_*`
+rows for what should be one invocation, with different `workflow_job` ids — was
+investigated this session but not conclusively root-caused. Client-side inspection of
+`pkg/proexec/classify.go`/`async.go` and `internal/exec/terraform.go:199-242` found the
+sync/async mutual-exclusion gate (`IsSyncCommand`) structurally sound for a plain
+`terraform plan`; the sample rows' shape is also consistent with one row predating the
+`2fe4fabe0` DTO-shape fix, though their timestamps (2026-08-19, ~14h after that commit
+landed) argue against a simple stale-build explanation. This needs a real end-to-end
+regression test (driving the actual `cmd.Execute()` top-level entrypoint against a fake Pro
+server) to settle one way or the other before further action — tracked as `tasks.md` T026,
+not yet implemented.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,
-2026-08-18) before planning began. No NEEDS CLARIFICATION markers remain in this plan or
-the spec.
+2026-08-18, 2026-08-19) before planning began. No NEEDS CLARIFICATION markers remain in
+this plan or the spec.

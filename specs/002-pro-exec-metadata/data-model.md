@@ -33,7 +33,7 @@ for `POST /v1/atmos/exec`.
 | `AtmosArch` | `string` | `runtime.GOARCH` |
 | `Command` | `string` | Subcommand path with the leading `atmos` root stripped, e.g. `"terraform plan"` (not `"atmos terraform plan"`) — FR-003b, 2026-08-18 (2nd) clarification |
 | `Args` | `[]string` | Positional arguments only, e.g. `["cdn"]` — previously always empty (`maskArgs(nil)` bug in `envelope.go:55`), now populated per FR-003b |
-| `Flags` | `[]string` | **New** — CLI flags actually passed, masked (e.g. `["-s", "plat-use2-dev", "--upload-status"]`); kept separate from `Args`, never combined — FR-003b |
+| `Flags` | `[]string` | **New** — every CLI flag actually passed, masked, no exclusions (`--upload-status` included), as bare tokens exactly as typed — e.g. `["-s", "plat-use2-dev", "--upload-status"]`, never `["--upload-status", "true"]` for a bool flag; kept separate from `Args`, never combined — FR-003b, 2026-08-19 clarification. MUST be sourced from the invoking command's own record of explicitly-set flags (e.g. Cobra's `cmd.Flags().Visit`), never from a pass-through/leftover-args collection that cannot contain atmos-recognized flags in the first place — see research.md Decision 14 |
 | `ExitCode` | `int` | |
 | `GitSHA` | `string` | |
 | `RepoURL`, `RepoName`, `RepoOwner`, `RepoHost` | `string` | From `git.GitRepoInterface.GetLocalRepoInfo()`, matching `InstanceStatusUploadRequest` |

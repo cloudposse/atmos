@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -196,7 +198,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
 
-	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, err)
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, invokingCommandFromOpts(opts...), err)
 
 	return err
 }
@@ -220,7 +222,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // non-internal function. Data is passed as nil for now; the base envelope
 // (US1/US2) still reports normally regardless of whether Native CI is
 // enabled.
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmdErr error) {
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, cmdErr error) {
 	commandPath := "atmos terraform " + subCommand
 	if !proexec.IsSyncCommand(commandPath) {
 		return
@@ -236,7 +238,15 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		args = []string{info.ComponentFromArg}
 	}
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, info.AdditionalArgsAndFlags, exitCode, nil, nil); syncErr != nil {
+	// Flags MUST be sourced from the invoking Cobra command's own record of
+	// explicitly-set flags, not info.AdditionalArgsAndFlags — that field is a
+	// pass-through-args collection that never contains atmos-recognized flags
+	// like -s/--stack and has --upload-status stripped out of it before this
+	// call runs, so it structurally cannot represent "the flags actually
+	// passed" (research.md Decision 14).
+	flags := proexec.FlagsFromCommand(cmd)
+
+	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, nil, nil); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

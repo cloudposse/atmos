@@ -117,12 +117,41 @@ func commandArgsAndFlags(cmd *cobra.Command) (command string, args []string, fla
 	}
 
 	args = cmd.Flags().Args()
-
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flags = append(flags, "--"+f.Name, f.Value.String())
-	})
+	flags = FlagsFromCommand(cmd)
 
 	return command, args, flags
+}
+
+// FlagsFromCommand derives the execution record's Flags field (FR-003b) from
+// a Cobra command: every flag actually passed (Changed == true), as bare
+// tokens exactly as typed on the command line — a bool-typed flag (e.g.
+// --upload-status) appears alone, with no synthesized value; a value-bearing
+// flag (e.g. -s/--stack) contributes its token and value as two separate
+// array entries. This is the single source of truth for both the async
+// (commandArgsAndFlags, above) and sync (internal/exec's
+// captureExecMetadataSync) delivery paths — they MUST NOT diverge (research.md
+// Decision 14).
+func FlagsFromCommand(cmd *cobra.Command) []string {
+	if cmd == nil {
+		return nil
+	}
+
+	var flags []string
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags = append(flags, flagAsTyped(f)...)
+	})
+	return flags
+}
+
+// flagAsTyped renders one Cobra flag as the bare token(s) it was passed on
+// the command line (FR-003b, 2026-08-19 clarification): a bool-typed flag
+// (e.g. --upload-status) appears alone, with no synthesized value; any other
+// flag contributes its token and value as two separate entries.
+func flagAsTyped(f *pflag.Flag) []string {
+	if f.Value.Type() == "bool" {
+		return []string{"--" + f.Name}
+	}
+	return []string{"--" + f.Name, f.Value.String()}
 }
 
 // uploadExecMetadata builds and sends a single execution record. Any failure

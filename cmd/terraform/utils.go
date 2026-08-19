@@ -1038,6 +1038,12 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return verifyErr
 	}
 
+	// WithInvokingCommand lets ExecuteTerraform's exec-metadata sync capture
+	// derive Flags from actualCmd's own record of explicitly-set flags
+	// (FR-003b), instead of a pass-through-args collection that cannot
+	// represent atmos-recognized flags like -s/--stack (research.md Decision 14).
+	shellOpts = append(shellOpts, e.WithInvokingCommand(actualCmd))
+
 	return executeSingleComponent(&info, shellOpts...)
 }
 

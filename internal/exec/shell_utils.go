@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
@@ -51,6 +52,32 @@ type shellCommandConfig struct {
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
 	processEnv []string
+	// invokingCmd is the Cobra command the user actually invoked (e.g. the
+	// terraform plan subcommand). Threaded through so ExecuteTerraform can
+	// report the real Flags actually passed (FR-003b) to the exec-metadata
+	// sync capture, instead of a pass-through-args collection that cannot
+	// contain atmos-recognized flags (research.md Decision 14).
+	invokingCmd *cobra.Command
+}
+
+// WithInvokingCommand provides the Cobra command the user actually invoked,
+// so ExecuteTerraform's exec-metadata sync capture can derive Flags from the
+// command's own record of explicitly-set flags (proexec.FlagsFromCommand)
+// rather than info.AdditionalArgsAndFlags.
+func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.invokingCmd = cmd
+	}
+}
+
+// invokingCommandFromOpts extracts the invoking *cobra.Command (if any) set
+// via WithInvokingCommand among opts.
+func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.invokingCmd
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.

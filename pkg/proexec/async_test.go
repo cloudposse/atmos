@@ -79,7 +79,24 @@ func TestCommandArgsAndFlags_StripsRootAndSeparatesFlags(t *testing.T) {
 
 	assert.Equal(t, "terraform plan", command)
 	assert.Equal(t, []string{"cdn"}, args)
-	assert.ElementsMatch(t, []string{"--stack", "plat-use2-dev", "--upload-status", "true"}, flags)
+	// Bare tokens as typed (FR-003b, 2026-08-19 clarification): a value-bearing
+	// flag contributes its token and value; a bool-typed flag (--upload-status)
+	// MUST appear alone, with no synthesized value appended.
+	assert.ElementsMatch(t, []string{"--stack", "plat-use2-dev", "--upload-status"}, flags)
+}
+
+// TestCommandArgsAndFlags_BoolFlagOnly guards specifically against the
+// synthesized-"true"-value regression: an invocation with only a bool flag
+// set (no value-bearing flags at all) must report exactly one token.
+func TestCommandArgsAndFlags_BoolFlagOnly(t *testing.T) {
+	plan := &cobra.Command{Use: "plan"}
+	plan.Flags().Bool("upload-status", false, "upload status")
+
+	require.NoError(t, plan.Flags().Parse([]string{"--upload-status"}))
+
+	_, _, flags := commandArgsAndFlags(plan)
+
+	assert.Equal(t, []string{"--upload-status"}, flags)
 }
 
 func TestCommandArgsAndFlags_NilCommand(t *testing.T) {

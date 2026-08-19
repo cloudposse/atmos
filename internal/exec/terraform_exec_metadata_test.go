@@ -52,7 +52,7 @@ func TestCaptureExecMetadataSync_NoOpOutsideCI(t *testing.T) {
 
 	for _, subCommand := range []string{"plan", "apply", "deploy", "validate", "output"} {
 		assert.NotPanics(t, func() {
-			captureExecMetadataSync(atmosConfig, subCommand, &schema.ConfigAndStacksInfo{}, nil)
+			captureExecMetadataSync(atmosConfig, subCommand, &schema.ConfigAndStacksInfo{}, nil, nil)
 		})
 	}
 }
@@ -70,24 +70,23 @@ func TestCaptureExecMetadataSync_DeployReportedAsDeploy(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	assert.NotPanics(t, func() {
-		captureExecMetadataSync(atmosConfig, "deploy", &schema.ConfigAndStacksInfo{}, nil)
+		captureExecMetadataSync(atmosConfig, "deploy", &schema.ConfigAndStacksInfo{}, nil, nil)
 	})
 }
 
 // TestCaptureExecMetadataSync_ComponentAndFlags verifies captureExecMetadataSync
-// accepts a populated ComponentFromArg/AdditionalArgsAndFlags without panicking
-// (FR-003b) — the field-level mapping (component -> Args, flags ->
-// Flags) itself is covered by pkg/proexec's buildRecord tests, which is
+// accepts a populated ComponentFromArg without panicking when no invoking
+// *cobra.Command is available (FR-003b) — the field-level mapping (component
+// -> Args) itself is covered by pkg/proexec's buildRecord tests, which is
 // where the actual DTO population happens.
 func TestCaptureExecMetadataSync_ComponentAndFlags(t *testing.T) {
 	t.Setenv("CI", "")
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:       "cdn",
-		AdditionalArgsAndFlags: []string{"-s", "plat-use2-dev", "--upload-status"},
+		ComponentFromArg: "cdn",
 	}
 	assert.NotPanics(t, func() {
-		captureExecMetadataSync(atmosConfig, "plan", info, nil)
+		captureExecMetadataSync(atmosConfig, "plan", info, nil, nil)
 	})
 }
