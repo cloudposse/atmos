@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -22,11 +23,16 @@ func TestReachableHostForPublishedPorts_HostNativeUsesLocalhost(t *testing.T) {
 func TestReachableHostForPublishedPorts_ContainerUsesDefaultGateway(t *testing.T) {
 	t.Setenv(envEmulatorEndpointHost, "")
 	restore := stubEndpointHostDetection(t, true, "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")
+	defer restore()
+	// Deterministic: this test asserts the gateway-guess tier specifically, so
+	// host.docker.internal must not resolve, regardless of the real test host's
+	// own DNS/hosts-file setup.
+	restoreLookup := stubLookupHost(t, nil, errors.New("no such host"))
+	defer restoreLookup()
 
 	got := reachableHostForPublishedPorts()
 
 	assert.Equal(t, "172.17.0.1", got)
-	restore()
 }
 
 func TestReachableHostForPublishedPorts_OverrideWins(t *testing.T) {
@@ -37,6 +43,59 @@ func TestReachableHostForPublishedPorts_OverrideWins(t *testing.T) {
 
 	assert.Equal(t, "host.docker.internal", got)
 	restore()
+}
+
+func TestReachableHostForPublishedPorts_ContainerPrefersResolvableHostDockerInternal(t *testing.T) {
+	t.Setenv(envEmulatorEndpointHost, "")
+	restore := stubEndpointHostDetection(t, true, "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")
+	defer restore()
+	restoreLookup := stubLookupHost(t, []string{"192.168.65.2"}, nil)
+	defer restoreLookup()
+
+	got := reachableHostForPublishedPorts()
+
+	assert.Equal(t, hostDockerInternal, got)
+}
+
+func TestReachableHostForPublishedPorts_ContainerFallsBackToGatewayWhenHostDockerInternalUnresolvable(t *testing.T) {
+	t.Setenv(envEmulatorEndpointHost, "")
+	restore := stubEndpointHostDetection(t, true, "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")
+	defer restore()
+	restoreLookup := stubLookupHost(t, nil, errors.New("no such host"))
+	defer restoreLookup()
+
+	got := reachableHostForPublishedPorts()
+
+	assert.Equal(t, "172.17.0.1", got, "must fall back to the gateway guess -- unchanged behavior on native Linux Docker hosts -- when host.docker.internal doesn't resolve")
+}
+
+func TestHostDockerInternalResolves(t *testing.T) {
+	t.Run("resolves", func(t *testing.T) {
+		restore := stubLookupHost(t, []string{"192.168.65.2"}, nil)
+		defer restore()
+		assert.True(t, hostDockerInternalResolves())
+	})
+
+	t.Run("lookup error", func(t *testing.T) {
+		restore := stubLookupHost(t, nil, errors.New("no such host"))
+		defer restore()
+		assert.False(t, hostDockerInternalResolves())
+	})
+
+	t.Run("no addresses", func(t *testing.T) {
+		restore := stubLookupHost(t, nil, nil)
+		defer restore()
+		assert.False(t, hostDockerInternalResolves())
+	})
+}
+
+// stubLookupHost overrides lookupHost for the duration of a test.
+func stubLookupHost(t *testing.T, addrs []string, err error) func() {
+	t.Helper()
+
+	orig := lookupHost
+	lookupHost = func(string) ([]string, error) { return addrs, err }
+	return func() { lookupHost = orig }
 }
 
 func TestParseLinuxDefaultGateway(t *testing.T) {
