@@ -139,8 +139,14 @@ func TestFindGlobalSetContext_CustomDelimiters(t *testing.T) {
 	entries, _, err := enumerateSecretScopes(secretScope{Stack: "dev"})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
-	assert.Equal(t, "op://shared/example-service-a/password", secrets.ExtractDeclarations(entries[0].Section)["SHARED_TOKEN"].Reference)
-	assert.Equal(t, "op://shared/example-service-b/password", secrets.ExtractDeclarations(entries[1].Section)["SHARED_TOKEN"].Reference)
+	references := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		references[entry.Component] = secrets.ExtractDeclarations(entry.Section)["SHARED_TOKEN"].Reference
+	}
+	require.Equal(t, map[string]string{
+		"example-service-a": "op://shared/example-service-a/password",
+		"example-service-b": "op://shared/example-service-b/password",
+	}, references)
 
 	_, _, err = findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
