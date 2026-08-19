@@ -51,7 +51,7 @@ func TestProvisionWorkdir_NoActivation(t *testing.T) {
 		"component": "test-component",
 	}
 
-	err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify no workdir path was set.
@@ -92,13 +92,13 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+	err = ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify workdir path was set with exact stack-component naming.
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok, "workdir path should be set")
-	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-test-component")
+	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath("test-component"))
 	assert.Equal(t, expectedWorkdir, workdirPath)
 
 	// Verify the workdir was created.
@@ -168,7 +168,7 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	// not the mocked FileSystem, so no WriteFile expectation needed.
 
 	ctx := context.Background()
-	err = service.Provision(ctx, atmosConfig, componentConfig)
+	err = service.Provision(ctx, atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	// Verify workdir path was set with stack-component naming.
@@ -245,7 +245,7 @@ func TestService_Provision_ErrorPaths(t *testing.T) {
 
 			tt.setupMocks(mockFS, mockHasher, expectedWorkdir, componentPath)
 
-			err := service.Provision(context.Background(), atmosConfig, componentConfig)
+			err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedError)
 		})
@@ -310,7 +310,7 @@ func TestService_Provision_EdgeCases(t *testing.T) {
 				BasePath: t.TempDir(),
 			}
 
-			err := ProvisionWorkdir(ctx, atmosConfig, tt.componentConfig, nil)
+			err := ProvisionWorkdir(ctx, atmosConfig, tt.componentConfig, nil, provisioner.OutputWriters{})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -367,7 +367,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil); err != nil {
+			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{}); err != nil {
 				errors <- fmt.Errorf("component %s: %w", component, err)
 				return
 			}
@@ -379,7 +379,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 				return
 			}
 
-			expectedName := "dev-" + component
+			expectedName := "dev-" + escapeComponentNameForPath(component)
 			if !strings.Contains(workdirPath, expectedName) {
 				errors <- fmt.Errorf("component %s: expected path to contain %s, got %s", component, expectedName, workdirPath)
 				return
@@ -399,7 +399,7 @@ func TestConcurrentProvisioning(t *testing.T) {
 
 	// Verify all workdirs were created independently.
 	for _, comp := range components {
-		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+comp)
+		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath(comp))
 		_, err := os.Stat(workdirPath)
 		assert.NoError(t, err, "workdir for %s should exist", comp)
 
@@ -474,7 +474,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 			},
 		}
 
-		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 		require.NoError(t, err, "provisioning should succeed for %s", instance.atmosComponent)
 
 		// Verify workdir path was set.
@@ -485,7 +485,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 		workdirPaths[instance.atmosComponent] = workdirPath
 
 		// Verify the workdir uses the atmos_component name (instance name), not the base component.
-		expectedName := "dev-" + instance.atmosComponent
+		expectedName := "dev-" + escapeComponentNameForPath(instance.atmosComponent)
 		assert.Contains(t, workdirPath, expectedName,
 			"workdir path should contain %s, got %s", expectedName, workdirPath)
 
@@ -510,7 +510,7 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 
 	// Verify all expected workdirs exist.
 	for _, instance := range componentInstances {
-		expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+instance.atmosComponent)
+		expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+escapeComponentNameForPath(instance.atmosComponent))
 		_, err := os.Stat(expectedWorkdir)
 		assert.NoError(t, err, "expected workdir should exist at %s", expectedWorkdir)
 
@@ -527,10 +527,12 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 func TestCleanWorkdir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Create a workdir structure using stack-component naming.
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-test-component")
-	err := os.MkdirAll(workdirPath, 0o755)
+	// Create a workdir structure at the path BuildPath actually derives for this
+	// (hyphenated) component/stack pair -- not a hand-rolled "stack-component" string,
+	// which would silently drift from BuildPath's real encoding again.
+	workdirPath, err := BuildPath(tempDir, "terraform", "test-component", "dev", nil)
 	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create a file in the workdir.
 	err = os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644)
@@ -541,12 +543,250 @@ func TestCleanWorkdir(t *testing.T) {
 	}
 
 	// Clean the workdir using component and stack.
-	err = CleanWorkdir(atmosConfig, "test-component", "dev")
+	err = CleanWorkdir(atmosConfig, "test-component", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify the workdir was removed.
 	_, err = os.Stat(workdirPath)
 	assert.True(t, os.IsNotExist(err), "workdir should be removed")
+}
+
+// TestCleanWorkdir_FindsProvisionedHyphenatedComponent is a regression test proving
+// CleanWorkdir can locate and remove a workdir that Service.Provision actually created for a
+// component whose name contains a literal hyphen. CleanWorkdir previously reimplemented the
+// stack-component naming formula directly (fmt.Sprintf("%s-%s", stack, component)) instead of
+// delegating to BuildPath, so once BuildPath started injectively encoding literal hyphens
+// (escaping "-" to "-h"), CleanWorkdir could no longer find what Provision had created for any
+// ordinarily-named (kebab-case) component -- only components with no "-" in their name at all
+// happened to still match.
+func TestCleanWorkdir_FindsProvisionedHyphenatedComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "my-hyphenated-component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"component":   "my-hyphenated-component",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	_, statErr := os.Stat(provisionedPath)
+	require.NoError(t, statErr, "provisioned workdir must exist before cleaning")
+
+	require.NoError(t, CleanWorkdir(atmosConfig, "my-hyphenated-component", "dev", componentConfig))
+
+	_, statErr = os.Stat(provisionedPath)
+	assert.True(t, os.IsNotExist(statErr), "CleanWorkdir must remove the workdir Provision actually created")
+}
+
+// TestServiceProvision_MigratesPreExistingLegacyWorkdir is a regression test for the
+// orphaned-workdir problem CodeRabbit flagged: BuildPath's hyphen/separator escaping (see
+// escapeComponentNameForPath) changed the on-disk path for any component whose name needs
+// escaping, so a workdir an earlier Atmos version created under the pre-escaping "%s-%s"
+// formula would otherwise become unreachable the first time it's provisioned again. Provision
+// must instead find and migrate (rename) that pre-existing legacy workdir onto the new encoded
+// path, not start fresh.
+//
+// The marker file uses the ".terraform.lock.hcl" suffix because syncLocalToWorkdir's SyncDir
+// step (which always runs immediately after migration, as part of the same Provision call)
+// deletes any workdir file not present in the source component directory except files
+// shouldSkipSyncFile protects -- provider lock files and, as of the fix below, local-backend
+// state (see TestServiceProvision_PreservesLocalBackendStateAcrossReprovision).
+func TestServiceProvision_MigratesPreExistingLegacyWorkdir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "my-hyphenated-component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// Simulate a workdir an earlier Atmos version created under the pre-escaping formula,
+	// containing a marker file standing in for a real per-instance provider lock file.
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", legacyWorkdirName("dev", "my-hyphenated-component"))
+	require.NoError(t, os.MkdirAll(legacyPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyPath, ".terraform.lock.hcl"), []byte("# pre-existing lock"), 0o644))
+	// Also seed metadata matching this identity: verifyLegacyWorkdirIdentity requires it to
+	// confirm the legacy directory actually belongs to this component/stack before migrating
+	// it (see TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity below
+	// for the case where identity can't be confirmed).
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "my-hyphenated-component",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "my-hyphenated-component",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	require.NotEqual(t, legacyPath, provisionedPath, "this test only proves something when the two formulas actually differ")
+
+	// The legacy directory is gone (renamed away, not left behind as an orphan)...
+	_, statErr := os.Stat(legacyPath)
+	assert.True(t, os.IsNotExist(statErr), "legacy workdir must be migrated away, not left behind")
+
+	// ...and its content survived the move rather than being recreated from scratch.
+	lockBytes, err := os.ReadFile(filepath.Join(provisionedPath, ".terraform.lock.hcl"))
+	require.NoError(t, err, "migrated workdir must retain the legacy workdir's contents")
+	assert.Equal(t, "# pre-existing lock", string(lockBytes))
+}
+
+// TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity is an
+// end-to-end regression test for the legacyWorkdirName collision: legacyWorkdirName's "%s-%s"
+// formula is plain concatenation, so stack "dev-a" + component "b" and stack "dev" + component
+// "a-b" both resolve to the identical legacy name "dev-a-b". Simulate a legacy workdir that was
+// actually provisioned for "dev-a" + "b" (its metadata records that identity and it holds real
+// Terraform state), then provision the OTHER identity ("dev" + "a-b") through the same
+// Provision entry point a real terraform run uses. Provision must fail rather than silently
+// rename the first identity's workdir -- and its state -- out from under it.
+func TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "a-b")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// The legacy name "dev-a-b" is shared by two distinct component/stack pairs: stack "dev-a"
+	// + component "b" (the identity actually recorded below, simulating a real prior
+	// provisioning) and stack "dev" + component "a-b" (the identity provisioned in this test).
+	const sharedLegacyName = "dev-a-b"
+	legacyPath := filepath.Join(tempDir, WorkdirPath, "terraform", sharedLegacyName)
+	require.NoError(t, os.MkdirAll(legacyPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyPath, "terraform.tfstate"), []byte(`{"serial":1}`), 0o644))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "a-b",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
+	require.Error(t, err, "Provision must refuse to migrate a legacy workdir belonging to a different identity")
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
+
+	// The other identity's workdir (and its state) must be untouched: still present at the
+	// legacy path, not moved or overwritten.
+	stateBytes, statErr := os.ReadFile(filepath.Join(legacyPath, "terraform.tfstate"))
+	require.NoError(t, statErr, "the other identity's legacy workdir must not be moved or removed")
+	assert.Equal(t, `{"serial":1}`, string(stateBytes))
+}
+
+// TestServiceProvision_PreservesLocalBackendStateAcrossReprovision is a regression test for
+// real, silent local Terraform state loss: every `terraform plan`/`apply`/`test` re-syncs the
+// workdir via Service.Provision, and syncLocalToWorkdir's SyncDir step deletes any workdir file
+// absent from the source component directory. The default workspace's local-backend state file
+// (terraform.tfstate) is never part of the source tree, so before shouldSkipSyncFile was
+// taught to protect it, a component using a local backend had its actual state deleted on the
+// very next re-provision after the apply that created it -- not a hypothetical, this is the
+// concrete "state keeps disappearing" symptom reported from dogfooding a local-backend
+// component through Atmos's workdir provisioner.
+func TestServiceProvision_PreservesLocalBackendStateAcrossReprovision(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "s3-bucket")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "s3-bucket",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// First provision (e.g. before `terraform init` for the initial apply).
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+
+	// Simulate `terraform apply` against a local backend: it writes real state directly into
+	// the workdir root, outside anything Service.Provision itself manages.
+	stateContent := `{"version":4,"serial":1,"resources":[{"type":"aws_s3_bucket"}]}`
+	require.NoError(t, os.WriteFile(filepath.Join(provisionedPath, "terraform.tfstate"), []byte(stateContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(provisionedPath, "terraform.tfstate.backup"), []byte(stateContent), 0o644))
+
+	// Re-provision, exactly as every subsequent `terraform plan`/`apply`/`test` does.
+	componentConfig = map[string]any{
+		"component":   "s3-bucket",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	gotState, err := os.ReadFile(filepath.Join(provisionedPath, "terraform.tfstate"))
+	require.NoError(t, err, "local-backend state must survive a re-provision, not be deleted as an orphaned file")
+	assert.Equal(t, stateContent, string(gotState))
+
+	_, err = os.Stat(filepath.Join(provisionedPath, "terraform.tfstate.backup"))
+	assert.NoError(t, err, "local-backend state backup must survive a re-provision")
 }
 
 // TestCleanAllWorkdirs tests the CleanAllWorkdirs function.
@@ -628,12 +868,12 @@ func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
 	// Must use atmos_component (s3-bucket-logs), NOT the base component (s3-bucket).
-	expectedSuffix := filepath.Join("terraform", "prod-s3-bucket-logs")
+	expectedSuffix := filepath.Join("terraform", "prod-"+escapeComponentNameForPath("s3-bucket-logs"))
 	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
 		"workdir path %s should end with %s", workdirPath, expectedSuffix)
 }
@@ -667,7 +907,7 @@ func TestAtmosComponentPriority_FallsBackToComponentKey(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
@@ -704,7 +944,7 @@ func TestAtmosComponentPriority_EmptyStringFallback(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath := componentConfig[WorkdirPathKey].(string)
@@ -753,7 +993,7 @@ func TestAtmosComponentPriority_NonStringFallback(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-lambda")
 }
@@ -811,7 +1051,7 @@ func TestConcurrentComponentInstances(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil); err != nil {
+			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil, provisioner.OutputWriters{}); err != nil {
 				errCh <- fmt.Errorf("instance %s: %w", instanceName, err)
 				return
 			}
@@ -823,8 +1063,9 @@ func TestConcurrentComponentInstances(t *testing.T) {
 			}
 
 			// Verify instance name is in path (not base component name).
-			if !strings.Contains(wdPath, "prod-"+instanceName) {
-				errCh <- fmt.Errorf("instance %s: expected path with prod-%s, got %s", instanceName, instanceName, wdPath)
+			expectedPrefix := "prod-" + escapeComponentNameForPath(instanceName)
+			if !strings.Contains(wdPath, expectedPrefix) {
+				errCh <- fmt.Errorf("instance %s: expected path with %s, got %s", instanceName, expectedPrefix, wdPath)
 				return
 			}
 
@@ -1036,14 +1277,14 @@ func TestProductionFlowWithComponentInfo(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok, "workdir path should be set")
 
 	// Verify workdir uses the instance name (atmos_component).
-	expectedSuffix := filepath.Join("terraform", "prod-elasticache-redis-cluster-1")
+	expectedSuffix := filepath.Join("terraform", "prod-"+escapeComponentNameForPath("elasticache-redis-cluster-1"))
 	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
 		"workdir path %s should end with %s", workdirPath, expectedSuffix)
 
@@ -1096,14 +1337,14 @@ func TestSourcePathUsesBaseComponentNotInstance(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "should succeed using base component path, not instance name path")
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok)
 
 	// Workdir should be named after the instance.
-	assert.Contains(t, workdirPath, "dev-rds-primary")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("rds-primary"))
 
 	// Content should come from the base component directory.
 	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))
@@ -1142,12 +1383,12 @@ func TestSourceComponentFallsBackToWorkdirComponent(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok)
-	assert.Contains(t, workdirPath, "dev-simple-vpc")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("simple-vpc"))
 }
 
 // TestSourceComponentFallsBackWhenNoComponentKeys verifies that when only atmos_component
@@ -1182,12 +1423,12 @@ func TestSourceComponentFallsBackWhenNoComponentKeys(t *testing.T) {
 		},
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	require.True(t, ok)
-	assert.Contains(t, workdirPath, "dev-standalone-lambda")
+	assert.Contains(t, workdirPath, "dev-"+escapeComponentNameForPath("standalone-lambda"))
 
 	// Verify content was copied from the atmos_component path.
 	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))

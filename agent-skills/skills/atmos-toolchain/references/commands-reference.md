@@ -34,6 +34,36 @@ atmos toolchain install jq                     # Bootstrap a repo-wide default t
 
 ---
 
+## atmos toolchain update
+
+Update one or more tools to their newest available version. If no tools are given, every tool in
+.tool-versions is updated.
+
+A tool pinned to `latest` is re-resolved to the newest version. A tool pinned to an exact version is
+replaced with the newest available version and reinstalled. Tools pinned to `pr:`/`sha:`/`ref:` are
+skipped — those pins are immutable by design; use `add` to change them explicitly.
+
+```shell
+atmos toolchain update [tool...] [flags]
+```
+
+### Flags
+
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--dry-run` | `ATMOS_TOOLCHAIN_UPDATE_DRY_RUN` | false | Report what would change without installing anything |
+| `--max-concurrency` | `ATMOS_TOOLCHAIN_MAX_CONCURRENCY` | 4 | Maximum number of tools to update concurrently |
+
+### Examples
+
+```shell
+atmos toolchain update                              # Update every tool in .tool-versions
+atmos toolchain update terraform                    # Update a single tool
+atmos toolchain update terraform kubectl --dry-run  # Preview updates without installing
+```
+
+---
+
 ## atmos toolchain uninstall
 
 Remove an installed tool.

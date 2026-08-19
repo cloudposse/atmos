@@ -136,6 +136,18 @@ func (mr *MockScaffoldUIMockRecorder) SetDryRun(dryRun any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDryRun", reflect.TypeOf((*MockScaffoldUI)(nil).SetDryRun), dryRun)
 }
 
+// SetMergeDriver mocks base method.
+func (m *MockScaffoldUI) SetMergeDriver(driver merge.Driver) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMergeDriver", driver)
+}
+
+// SetMergeDriver indicates an expected call of SetMergeDriver.
+func (mr *MockScaffoldUIMockRecorder) SetMergeDriver(driver any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMergeDriver", reflect.TypeOf((*MockScaffoldUI)(nil).SetMergeDriver), driver)
+}
+
 // SetSkipHooks mocks base method.
 func (m *MockScaffoldUI) SetSkipHooks(skip func(string) bool) {
 	m.ctrl.T.Helper()

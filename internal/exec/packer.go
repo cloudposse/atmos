@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -120,7 +121,7 @@ func ExecutePacker(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, &atmosConfig, info, cfg.PackerComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, &atmosConfig, info, cfg.PackerComponentType, componentPath,
 	)
 	if err != nil {
 		return err

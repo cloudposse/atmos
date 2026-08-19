@@ -309,7 +309,27 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() {
 		os.Stderr = oldStderr
+		_ = w.Close()
+		_ = r.Close()
 	})
+
+	// Drain the pipe concurrently. The rendered error message (markdown box,
+	// ANSI styling) can exceed the OS pipe's kernel buffer; writing to it then
+	// blocks until something reads. Reading only after the write returns (as
+	// this test used to) deadlocks whenever the message is large enough - seen
+	// in practice as an indefinite hang running this test's compiled binary
+	// directly on windows, where the rendered message happened to cross that
+	// threshold.
+	type pipeResult struct {
+		output string
+		err    error
+	}
+	resultCh := make(chan pipeResult, 1)
+	go func() {
+		var output bytes.Buffer
+		_, copyErr := io.Copy(&output, r)
+		resultCh <- pipeResult{output: output.String(), err: copyErr}
+	}()
 
 	assert.Panics(t, func() {
 		showArgCountErrorAndExit(deleteCmd, argErr)
@@ -317,13 +337,13 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	require.NoError(t, w.Close())
 	os.Stderr = oldStderr
 
-	var output bytes.Buffer
-	_, err := io.Copy(&output, r)
-	require.NoError(t, err)
+	result := <-resultCh
+	require.NoError(t, result.err)
+	require.NoError(t, r.Close())
 
 	// Strip ANSI since CI-enabled color rendering can wrap this message across
 	// separate escape-coded spans, splitting the plain substring below.
-	got := atmosansi.Strip(output.String())
+	got := atmosansi.Strip(result.output)
 	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
 	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
@@ -2783,4 +2803,37 @@ func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
 		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
 	})
+}
+
+// TestStepFreshnessName covers both branches of stepFreshnessName: a named step must return its
+// own name unchanged (so freshness state keys stay human-readable), while an unnamed step must
+// fall back to the same positional "step-%d" scheme customCommandConditionContext already uses,
+// so a step with no name: still gets a stable, unique freshness state key across runs.
+func TestStepFreshnessName(t *testing.T) {
+	tests := []struct {
+		name     string
+		stepName string
+		index    int
+		expected string
+	}{
+		{
+			name:     "named step returns its own name",
+			stepName: "build",
+			index:    3,
+			expected: "build",
+		},
+		{
+			name:     "unnamed step falls back to positional name",
+			stepName: "",
+			index:    2,
+			expected: "step-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stepFreshnessName(tt.stepName, tt.index)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

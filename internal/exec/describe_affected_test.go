@@ -1910,12 +1910,14 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 		t.Setenv("GITHUB_BASE_REF", "main")
-		// Force the GITHUB_BASE_REF fallback path deterministically. Without
-		// this, resolveMergeGroupBase reads the real ambient $GITHUB_EVENT_PATH
-		// when the test suite itself happens to run inside an actual
-		// merge_group-triggered CI job -- succeeding via event.merge_group.base_sha
-		// instead of the fallback this test means to exercise, leaving
-		// describe.Ref empty and failing the assertion below.
+		// Clear the ambient GITHUB_EVENT_PATH: real GitHub Actions runners set it
+		// to the actual triggering event's payload, which takes precedence over
+		// GITHUB_BASE_REF. Under an actual merge_group-triggered job (e.g. this
+		// test running in the merge queue), that payload carries a real
+		// merge_group.base_sha, so resolution short-circuits to describe.SHA and
+		// leaves describe.Ref empty -- failing this test's assertion even though
+		// production behavior is correct. Clearing it makes the "no payload"
+		// fallback path this test targets hermetic.
 		t.Setenv("GITHUB_EVENT_PATH", "")
 
 		flags := newDescribeAffectedFlagSet()

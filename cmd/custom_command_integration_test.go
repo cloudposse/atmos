@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -961,6 +962,165 @@ func TestCustomCommandIntegration_AtmosStepUsesCurrentExecutable(t *testing.T) {
 	assert.Equal(t, outputValue, string(output))
 }
 
+// cancellationOsExitPanic is the typed sentinel cancellationOsExitStub panics with, so its
+// recovery func can distinguish the expected OsExit interception from a genuine regression
+// panicking elsewhere in the same goroutine -- absorbing the latter would let the goroutine end
+// silently (never writing "completed") and make a cancellation test pass for the wrong reason.
+type cancellationOsExitPanic struct{}
+
+// cancellationOsExitStub stubs errUtils.OsExit with a panic-based interception (the same pattern
+// TestExecuteCustomCommandUnsupportedStepTypeExits uses) so a cancelled step's error -- which
+// ultimately reaches errUtils.CheckErrorPrintAndExit -- doesn't call the real os.Exit and tear down
+// the test binary. Returns a recover func to be deferred inside the goroutine running
+// customCmd.Run, which absorbs only the expected interception panic and re-panics anything else.
+func cancellationOsExitStub(t *testing.T) func() {
+	t.Helper()
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+	errUtils.OsExit = func(int) {
+		panic(cancellationOsExitPanic{})
+	}
+	return func() {
+		switch recovered := recover().(type) {
+		case nil, cancellationOsExitPanic:
+		default:
+			panic(recovered)
+		}
+	}
+}
+
+// TestCustomCommandIntegration_ShellStepCancelledByContext verifies that cancelling
+// cmd.Context() (e.g. Ctrl-C on the top-level Cobra invocation) stops an in-flight plain
+// (non-tty, non-interactive) "shell" step's subprocess instead of letting it run to completion.
+// This exercises executionCtx -> process.RunShellStep's plain() branch -> e.ExecuteShellWithWriters
+// -> u.ShellRunnerWithWriters: before ExecuteShellSpec gained a Context field, that chain always
+// fell back to context.Background(), so the helper subprocess below would keep running (and write
+// its "completed" marker) after cancellation instead of being killed mid-sleep.
+func TestCustomCommandIntegration_ShellStepCancelledByContext(t *testing.T) {
+	_ = NewTestKit(t)
+	recoverExit := cancellationOsExitStub(t)
+
+	tmpDir := t.TempDir()
+	startedPath := filepath.Join(tmpDir, "started")
+	completedPath := filepath.Join(tmpDir, "completed")
+
+	testCommand := schema.Command{
+		Name:        "test-shell-step-cancel",
+		Description: "Test shell step cancellation",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandSleepMarkerHelperCommand(t, startedPath, completedPath, 2*time.Second),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-shell-step-cancel")
+	require.NotNil(t, customCmd)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	customCmd.SetContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer recoverExit()
+		customCmd.Run(customCmd, []string{})
+	}()
+
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(startedPath)
+		return statErr == nil
+	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		t.Fatal("custom command did not return after context cancellation")
+	}
+
+	_, statErr := os.Stat(completedPath)
+	assert.True(t, os.IsNotExist(statErr), "shell step subprocess should have been cancelled before writing its completion marker")
+}
+
+// TestCustomCommandIntegration_AtmosStepCancelledByContext is
+// TestCustomCommandIntegration_ShellStepCancelledByContext's counterpart for "atmos" steps. It
+// exercises executionCtx -> e.ExecuteShellCommand's execOpts, which before the fix never included
+// e.WithProcessContext(executionCtx), so ExecuteShellCommand always fell back to
+// context.Background() and the subprocess below would run to completion regardless of
+// cancellation.
+func TestCustomCommandIntegration_AtmosStepCancelledByContext(t *testing.T) {
+	_ = NewTestKit(t)
+	recoverExit := cancellationOsExitStub(t)
+
+	tmpDir := t.TempDir()
+	startedPath := filepath.Join(tmpDir, "started")
+	completedPath := filepath.Join(tmpDir, "completed")
+
+	testCommand := schema.Command{
+		Name:        "test-atmos-step-cancel",
+		Description: "Test atmos step cancellation",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandAtmosSleepMarkerHelperArgs(startedPath, completedPath, 2*time.Second),
+				Type:    "atmos",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-atmos-step-cancel")
+	require.NotNil(t, customCmd)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	customCmd.SetContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer recoverExit()
+		customCmd.Run(customCmd, []string{})
+	}()
+
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(startedPath)
+		return statErr == nil
+	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		t.Fatal("custom command did not return after context cancellation")
+	}
+
+	_, statErr := os.Stat(completedPath)
+	assert.True(t, os.IsNotExist(statErr), "atmos step subprocess should have been cancelled before writing its completion marker")
+}
+
 func TestExecuteCustomCommandUnsupportedStepTypeExits(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -1048,6 +1208,21 @@ func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) 
 	assert.NoDirExists(t, installDir)
 }
 
+// quoteExecutablePath wraps an os.Executable() path in plain double quotes for embedding in a
+// shell command string. Deliberately NOT %q: %q applies Go-syntax escaping, doubling every
+// Windows path backslash (`\` -> `\\`). Steps nested in a `type: parallel`/`type: matrix` group
+// run through pkg/workflow/control_executor.go's controlShellInvocationForOS, which -- absent a
+// wired ShellRunner (see internal/exec/custom_command_control_adapter.go) -- shells out to the
+// REAL host shell (`cmd.exe /C` on Windows), not the in-process mvdan/sh interpreter used by
+// top-level shell steps. Native cmd.exe does not collapse a doubled backslash back to a single
+// one the way mvdan/sh's POSIX-correct double-quote parsing does, so %q corrupts the path there,
+// producing a Windows CI failure where cmd.exe reports the executable path as unrecognized.
+// Plain double quotes with no escaping are valid, unambiguous syntax in both dialects for a path
+// with no embedded quote characters.
+func quoteExecutablePath(path string) string {
+	return `"` + path + `"`
+}
+
 func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	t.Helper()
 
@@ -1055,7 +1230,7 @@ func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", quoteExecutablePath(exe), encodedPath, encodedValue)
 }
 
 func customCommandAtmosWriteHelperArgs(path, value string) string {
@@ -1070,7 +1245,7 @@ func customCommandRetryHelperCommand(t *testing.T, path string) string {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationRetryHelper -- %s", exe, encodedPath)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationRetryHelper -- %s", quoteExecutablePath(exe), encodedPath)
 }
 
 func customCommandAttemptHelperCommand(t *testing.T, path string) string {
@@ -1079,12 +1254,37 @@ func customCommandAttemptHelperCommand(t *testing.T, path string) string {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
-	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", quoteExecutablePath(exe), encodedPath)
 }
 
 func customCommandAtmosAttemptHelperArgs(path string) string {
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationAttemptHelper -- %s", encodedPath)
+}
+
+// customCommandSleepMarkerHelperCommand returns a "shell" step command invoking
+// TestCustomCommandIntegrationSleepMarkerHelper, which writes startedPath immediately, sleeps for
+// sleep, then writes completedPath -- used by cancellation tests to prove a step's subprocess was
+// killed (completedPath absent) rather than left to run to completion.
+func customCommandSleepMarkerHelperCommand(t *testing.T, startedPath, completedPath string, sleep time.Duration) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedStarted := base64.RawURLEncoding.EncodeToString([]byte(startedPath))
+	encodedCompleted := base64.RawURLEncoding.EncodeToString([]byte(completedPath))
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationSleepMarkerHelper -- %s %s %d",
+		quoteExecutablePath(exe), encodedStarted, encodedCompleted, sleep.Milliseconds())
+}
+
+// customCommandAtmosSleepMarkerHelperArgs is customCommandSleepMarkerHelperCommand's counterpart
+// for "atmos" steps, which resolve the executable themselves (see the customCommandAtmos* helpers
+// above for the same pattern).
+func customCommandAtmosSleepMarkerHelperArgs(startedPath, completedPath string, sleep time.Duration) string {
+	encodedStarted := base64.RawURLEncoding.EncodeToString([]byte(startedPath))
+	encodedCompleted := base64.RawURLEncoding.EncodeToString([]byte(completedPath))
+	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationSleepMarkerHelper -- %s %s %d",
+		encodedStarted, encodedCompleted, sleep.Milliseconds())
 }
 
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
@@ -1167,6 +1367,161 @@ func TestCustomCommandIntegrationAttemptHelper(t *testing.T) {
 		attempt = parsed + 1
 	}
 	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
+	os.Exit(0)
+}
+
+// TestCustomCommandIntegrationSleepMarkerHelper is the subprocess entrypoint for
+// customCommandSleepMarkerHelperCommand / customCommandAtmosSleepMarkerHelperArgs. It writes the
+// startedPath marker immediately (so a caller waiting on it knows the subprocess is actually
+// running, not just scheduled), sleeps, then writes the completedPath marker. Cancellation tests
+// assert completedPath was never written -- proof the subprocess was killed mid-sleep rather than
+// left to run to completion.
+func TestCustomCommandIntegrationSleepMarkerHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	startedBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	completedBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	sleepMillis, err := strconv.Atoi(args[2])
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(string(startedBytes), []byte("started"), 0o600))
+	time.Sleep(time.Duration(sleepMillis) * time.Millisecond)
+	require.NoError(t, os.WriteFile(string(completedBytes), []byte("completed"), 0o600))
+	os.Exit(0)
+}
+
+// customCommandAppendHelperCommand returns a command invoking TestCustomCommandIntegrationAppendHelper,
+// which appends value+"\n" to path (O_APPEND, unlike customCommandWriteHelperCommand's truncating
+// write) -- for tests asserting relative step ORDER by accumulating markers into one shared file.
+func customCommandAppendHelperCommand(t *testing.T, path, value string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationAppendHelper -- %s %s", quoteExecutablePath(exe), encodedPath, encodedValue)
+}
+
+func TestCustomCommandIntegrationAppendHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 2)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(string(pathBytes), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, writeErr := f.WriteString(string(valueBytes) + "\n")
+	closeErr := f.Close()
+	require.NoError(t, writeErr)
+	require.NoError(t, closeErr)
+	os.Exit(0)
+}
+
+// customCommandWriteAndExitHelperCommand returns a command invoking
+// TestCustomCommandIntegrationWriteAndExitHelper, which writes value to path and then exits with
+// exitCode -- for tests needing a step that both leaves evidence it ran AND fails, e.g. exercising
+// `continue:` forgiveness.
+func customCommandWriteAndExitHelperCommand(t *testing.T, path, value string, exitCode int) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationWriteAndExitHelper -- %s %s %d", quoteExecutablePath(exe), encodedPath, encodedValue, exitCode)
+}
+
+func TestCustomCommandIntegrationWriteAndExitHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	exitCode, err := strconv.Atoi(args[2])
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(exitCode)
+}
+
+// customCommandMatrixWriteHelperCommand returns a command whose `{{ .matrix.component }}`/
+// `{{ .matrix.stack }}` placeholders are left UNRESOLVED in the returned string -- the control-step
+// engine (pkg/workflow/control.go's resolveControlStep) renders them against each matrix row before
+// the command ever reaches the shell, so the subprocess only ever sees already-resolved plain-text
+// values. This is what TestCustomCommandIntegrationMatrixWriteHelper writes to path, proving
+// `.matrix.*` resolves inside a custom command's `type: matrix` step.
+func customCommandMatrixWriteHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("%s -test.run=TestCustomCommandIntegrationMatrixWriteHelper -- {{ .matrix.component }} {{ .matrix.stack }} %s", quoteExecutablePath(exe), encodedPath)
+}
+
+func TestCustomCommandIntegrationMatrixWriteHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 3)
+	component, stack, encodedPath := args[0], args[1], args[2]
+	pathBytes, err := base64.RawURLEncoding.DecodeString(encodedPath)
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(string(pathBytes), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, writeErr := fmt.Fprintf(f, "component=%s,stack=%s\n", component, stack)
+	closeErr := f.Close()
+	require.NoError(t, writeErr)
+	require.NoError(t, closeErr)
 	os.Exit(0)
 }
 

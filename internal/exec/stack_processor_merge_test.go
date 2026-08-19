@@ -318,7 +318,7 @@ func TestMergeComponentConfigurations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comp, err := mergeComponentConfigurations(tt.opts.AtmosConfig, &tt.opts, tt.result)
+			comp, _, err := mergeComponentConfigurations(tt.opts.AtmosConfig, &tt.opts, tt.result)
 
 			require.NoError(t, err)
 			require.NotNil(t, comp)
@@ -420,7 +420,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 
 	t.Run("absent-omits-section", func(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.PluginsSectionName]
 		assert.False(t, present, "plugins must be absent when neither base nor component set it")
@@ -430,7 +430,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.PluginsSectionName].([]any)
 		require.True(t, ok, "plugins must be present and a list")
@@ -443,7 +443,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.HelmComponentType, Component: "app", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.BaseComponentPlugins = []any{"diff@v3.9.4"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.PluginsSectionName].([]any)
 		require.True(t, ok)
@@ -456,7 +456,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentPlugins = []any{"diff@v3.8.0"}
 		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.PluginsSectionName].([]any)
 		require.Len(t, got, 2, "default replace strategy keeps the concrete component's list")
@@ -468,7 +468,7 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		opts := ComponentProcessorOptions{ComponentType: cfg.TerraformComponentType, Component: "vpc", AtmosConfig: atmosCfg}
 		res := minimalComponentResult()
 		res.ComponentPlugins = []any{"diff@v3.9.4"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		_, present := comp[cfg.PluginsSectionName]
 		assert.False(t, present, "terraform components must not emit a plugins section")
@@ -495,7 +495,7 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 		},
 	}
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 
 	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
@@ -524,7 +524,7 @@ func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *te
 	}
 	res := minimalComponentResult()
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 	assert.NotContains(t, comp, cfg.TestSectionName)
 }
@@ -551,7 +551,7 @@ func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
 		},
 	}
 
-	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 	require.NoError(t, err)
 
 	mocks, ok := comp[cfg.MocksSectionName].(map[string]any)
@@ -583,7 +583,7 @@ func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
 			GlobalKubernetesManifests: []any{"global.yaml"},
 			GlobalKubernetesRender:    map[string]any{"output": map[string]any{"split": true}},
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		assert.Equal(t, "kustomize", comp[cfg.ProviderSectionName])
 		assert.Equal(t, []any{"base"}, comp[cfg.PathsSectionName])
@@ -603,7 +603,7 @@ func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.ComponentProvider = "kubectl"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName], "component provider must override the global default")
 	})
@@ -626,7 +626,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentProvider = "kubectl"
 		res.ComponentProvider = "kustomize-component"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName],
 			"component provider must win over base and global")
@@ -641,7 +641,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentProvider = "kubectl"
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName],
 			"base provider must win over the global default when the component sets nothing")
@@ -660,7 +660,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentPaths = map[string]any{"component": "c.yaml"}
 		res.BaseComponentManifests = map[string]any{"base": "bm.yaml"}
 		res.ComponentManifests = map[string]any{"component": "cm.yaml"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		paths, ok := comp[cfg.PathsSectionName].(map[string]any)
@@ -686,7 +686,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRender = map[string]any{"engine": "base", "from_base": true}
 		res.ComponentRender = map[string]any{"engine": "component", "from_component": true}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		render, ok := comp[cfg.RenderSectionName].(map[string]any)
@@ -712,7 +712,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
 		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
 		res.ComponentProvision = map[string]any{"timeout": "5m"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
@@ -745,7 +745,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
 		res.ComponentValidate = false
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"an explicit component-instance validate:false must override a base-component validate:true")
@@ -759,7 +759,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"base-component validate:true must flow through when the component instance sets nothing")
@@ -772,7 +772,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			AtmosConfig:   atmosCfg,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		_, ok := comp[cfg.ValidateSectionName]
 		assert.False(t, ok, "validate must be absent (not defaulted to any value) when unset at every layer")
@@ -786,7 +786,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			GlobalKubernetesValidate: true,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"global validate:true must flow through when base and component set nothing")
@@ -800,7 +800,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 			GlobalKubernetesValidate: false,
 		}
 		res := minimalComponentResult()
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"global validate:false must flow through when base and component set nothing")
@@ -815,7 +815,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, true, comp[cfg.ValidateSectionName],
 			"base-component validate:true must override a global validate:false when the component sets nothing")
@@ -831,7 +831,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentValidate = true
 		res.ComponentValidate = false
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		assert.Equal(t, false, comp[cfg.ValidateSectionName],
 			"component validate:false must win over both global and base validate:true")
@@ -852,7 +852,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.RetrySectionName]
 		assert.False(t, present, "retry must be absent when neither base, component, nor overrides set it")
@@ -869,7 +869,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			"max_attempts": 5,
 			"conditions":   []any{"/Bad Gateway/"},
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got, ok := comp[cfg.RetrySectionName].(map[string]any)
 		require.True(t, ok, "retry section must be present and a map")
@@ -886,7 +886,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = map[string]any{"max_attempts": 3}
 		res.ComponentRetry = map[string]any{"max_attempts": 7}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		assert.EqualValues(t, 7, got["max_attempts"], "concrete component must override base scalar")
@@ -902,7 +902,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"max_attempts": 1, "backoff_strategy": "constant"}
 		res.ComponentRetry = map[string]any{"max_attempts": 2}
 		res.ComponentOverridesRetry = map[string]any{"max_attempts": 9, "backoff_strategy": "exponential"}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win")
@@ -922,7 +922,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
 		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
 		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		conds, ok := got["conditions"].([]any)
@@ -947,7 +947,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
 		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
 		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
-		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(appendCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		conds, ok := got["conditions"].([]any)
@@ -970,7 +970,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = baseRetry
 		res.ComponentRetry = compRetry
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		got["max_attempts"] = 999
@@ -991,7 +991,7 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentRetry = baseRetry
 		res.ComponentRetry = compRetry
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
 		// Pre-condition: merged result reflects the component-wins-over-base precedence.
@@ -1026,7 +1026,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"tools":   map[string]any{"tflint": "0.54.2"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1058,7 +1058,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"folders":    []any{"src/component"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1094,7 +1094,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"folders":    []any{"src/component"},
 		}
 
-		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(appendCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1128,7 +1128,7 @@ func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
 			"files": []any{"configs/component.json"},
 		}
 
-		comp, err := mergeComponentConfigurations(replaceCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(replaceCfg, &opts, res)
 		require.NoError(t, err)
 		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
 		require.True(t, ok, "dependencies section must be present and a map")
@@ -1159,7 +1159,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 		}
 		res := minimalComponentResult()
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1182,7 +1182,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"labels": map[string]any{"org": "platform-team"},
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1204,7 +1204,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"locked": true,
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1229,7 +1229,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"terraform_workspace_pattern": "component-pattern",
 		}
 
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1255,7 +1255,7 @@ func TestMergeComponentConfigurations_Metadata(t *testing.T) {
 			"labels": map[string]any{"org": "should-not-apply"},
 		}
 
-		comp, err := mergeComponentConfigurations(disabledCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(disabledCfg, &opts, res)
 		require.NoError(t, err)
 		metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 		require.True(t, ok, "metadata section must be present and a map")
@@ -1564,6 +1564,66 @@ func TestEffectiveAtmosConfig_InvalidStrategy(t *testing.T) {
 		"pkg/merge must reject the invalid strategy when a merge is attempted")
 }
 
+// TestMergeComponentConfigurations_InvalidListMergeStrategy verifies that
+// mergeComponentConfigurations surfaces a merge failure as a real error instead of silently
+// dropping the component (a misconfigured `settings.list_merge_strategy` at any inheritance level
+// must fail loudly, per effectiveAtmosConfig's contract of passing the value through unvalidated).
+func TestMergeComponentConfigurations_InvalidListMergeStrategy(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	atmosCfg.Settings.ListMergeStrategy = "not-a-real-strategy"
+
+	opts := ComponentProcessorOptions{
+		ComponentType:  cfg.TerraformComponentType,
+		Component:      "vpc",
+		GlobalVars:     map[string]any{"a": "1"},
+		GlobalSettings: map[string]any{},
+		GlobalEnv:      map[string]any{},
+		AtmosConfig:    atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.ComponentVars = map[string]any{"b": "2"}
+
+	comp, deferredContexts, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidListMergeStrategy)
+	assert.Nil(t, comp)
+	assert.Nil(t, deferredContexts)
+}
+
+// TestMergeComponentConfigurations_SpaceliftSettingsInvalidType verifies that an abstract
+// Terraform component whose settings.spacelift is not a map produces a clear
+// ErrInvalidSpaceLiftSettings error instead of panicking on the type assertion used to strip
+// workspace_enabled.
+func TestMergeComponentConfigurations_SpaceliftSettingsInvalidType(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType:           cfg.TerraformComponentType,
+		Component:               "abstract-vpc",
+		GlobalVars:              map[string]any{},
+		GlobalSettings:          map[string]any{},
+		GlobalEnv:               map[string]any{},
+		TerraformProviders:      map[string]any{},
+		GlobalAndTerraformHooks: map[string]any{},
+		AtmosConfig:             atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.ComponentSettings = map[string]any{
+		"spacelift": "not-a-map",
+	}
+	res.ComponentMetadata = map[string]any{
+		"type": cfg.AbstractSectionName,
+	}
+
+	comp, deferredContexts, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidSpaceLiftSettings)
+	assert.Nil(t, comp)
+	assert.Nil(t, deferredContexts)
+}
+
 // TestProcessAuthConfig verifies that processAuthConfig merges global and
 // component-level auth configurations, with the component-level settings
 // taking precedence over the global ones.
@@ -1710,7 +1770,7 @@ func TestProcessAuthConfig(t *testing.T) {
 				globalAuthConfig = map[string]any{}
 			}
 
-			result, err := processAuthConfig(atmosConfig, globalAuthConfig, tt.authConfig)
+			result, _, err := processAuthConfig(atmosConfig, globalAuthConfig, tt.authConfig)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1732,4 +1792,301 @@ func TestProcessAuthConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMergeComponentConfigurations_RequiredVersion verifies the required_version precedence
+// chain (lowest to highest): global command-line opts -> base component -> component -> overrides.
+func TestMergeComponentConfigurations_RequiredVersion(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-opts-value-used-when-nothing-else-set", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.TerraformComponentType,
+			Component:                "vpc",
+			AtmosConfig:              atmosCfg,
+			TerraformRequiredVersion: ">= 1.5.0",
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.5.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("base-component-overrides-global-opts", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.TerraformComponentType,
+			Component:                "vpc",
+			AtmosConfig:              atmosCfg,
+			TerraformRequiredVersion: ">= 1.5.0",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.6.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("component-overrides-base-component", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		res.ComponentRequiredVersion = ">= 1.7.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.7.0", comp[cfg.RequiredVersionSectionName])
+	})
+
+	t.Run("component-overrides-section-wins-over-everything", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRequiredVersion = ">= 1.6.0"
+		res.ComponentRequiredVersion = ">= 1.7.0"
+		res.ComponentOverridesRequiredVersion = ">= 1.8.0"
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, ">= 1.8.0", comp[cfg.RequiredVersionSectionName])
+	})
+}
+
+// TestMergeComponentConfigurations_Locals verifies that base-component and component-level
+// locals are deep-merged (component wins on conflicting keys), and that the locals section is
+// omitted entirely when neither layer provides any.
+func TestMergeComponentConfigurations_Locals(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("deep-merges-base-and-component-locals", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentLocals = map[string]any{"account_name": "core", "stage": "base"}
+		res.ComponentLocals = map[string]any{"stage": "prod"}
+
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		locals, ok := comp[cfg.LocalsSectionName].(map[string]any)
+		require.True(t, ok, "locals section must be present and a map")
+		assert.Equal(t, map[string]any{"account_name": "core", "stage": "prod"}, locals)
+	})
+
+	t.Run("only-base-component-locals-set", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentLocals = map[string]any{"account_name": "core"}
+
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		locals, ok := comp[cfg.LocalsSectionName].(map[string]any)
+		require.True(t, ok, "locals section must be present and a map")
+		assert.Equal(t, map[string]any{"account_name": "core"}, locals)
+	})
+
+	t.Run("no-locals-anywhere-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, hasLocals := comp[cfg.LocalsSectionName]
+		assert.False(t, hasLocals, "locals section must be omitted when neither layer provides any")
+	})
+}
+
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError verifies that the nil-processor
+// ApplyDeferredMerges write-back for auth (which places each deferred path's unresolved function
+// string back into the raw-merged result, see mergeComponentConfigurations' doc comment) surfaces
+// a real error rather than swallowing it: a deferred value recorded at a nested path
+// (auth.nested.field) whose parent segment is then overwritten by a higher-precedence, non-map
+// concrete value can no longer be navigated to, and SetValueAtPath must fail loudly.
+func TestMergeComponentConfigurations_AuthDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAuth: map[string]any{
+			"nested": map[string]any{
+				"field": "!template 'deferred-value'",
+			},
+		},
+	}
+	res := minimalComponentResult()
+	// Higher precedence than GlobalAuth: overrides "nested" with a scalar, so by the time the
+	// write-back tries to navigate auth.nested.field, auth.nested is no longer a map.
+	res.ComponentOverridesAuth = map[string]any{
+		"nested": "concrete-scalar",
+	}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_ProvidersDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific
+// providers section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_ProvidersDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		TerraformProviders: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesProviders = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_RequiredProvidersDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific
+// required_providers section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_RequiredProvidersDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		TerraformRequiredProviders: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesRequiredProviders = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_HooksDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the hooks-capable-component-type
+// hooks section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_HooksDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformHooks: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesHooks = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_GenerateDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the generate-capable-component-type
+// generate section's nil-processor ApplyDeferredMerges write-back.
+func TestMergeComponentConfigurations_GenerateDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformGenerate: map[string]any{
+			"nested": map[string]any{"field": "!template 'deferred-value'"},
+		},
+	}
+	res := minimalComponentResult()
+	res.ComponentOverridesGenerate = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_TestDeferredWriteBackError mirrors
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the Terraform-specific test
+// section's nil-processor ApplyDeferredMerges write-back. Unlike the sections above, test config
+// only has two merge layers (base component -> component), no global or overrides layer.
+func TestMergeComponentConfigurations_TestDeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		"nested": map[string]any{"field": "!template 'deferred-value'"},
+	}
+	res.ComponentTest = map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestProcessAuthConfig_DeferredWriteBackError verifies that processAuthConfig's own nil-processor
+// ApplyDeferredMerges write-back (the second, Terraform-specific auth-merge pass) surfaces a real
+// error rather than swallowing it, using the same nested-path-collides-with-a-scalar-override
+// technique as TestMergeComponentConfigurations_AuthDeferredWriteBackError.
+func TestProcessAuthConfig_DeferredWriteBackError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	globalAuthConfig := map[string]any{
+		"nested": map[string]any{"field": "!template 'deferred-value'"},
+	}
+	authConfig := map[string]any{"nested": "concrete-scalar"}
+
+	_, _, err := processAuthConfig(atmosCfg, globalAuthConfig, authConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+}
+
+// TestMergeComponentConfigurations_RemoteStateBackendError verifies that
+// processTerraformRemoteStateBackend's error (here: a remote state backend section whose
+// backend-type key holds a non-map value, from extractBackendTypeMap) propagates out of
+// mergeComponentConfigurations rather than being swallowed.
+func TestMergeComponentConfigurations_RemoteStateBackendError(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	opts := ComponentProcessorOptions{
+		ComponentType:     cfg.TerraformComponentType,
+		Component:         "vpc",
+		AtmosConfig:       atmosCfg,
+		GlobalBackendType: "s3",
+	}
+	res := minimalComponentResult()
+	res.BaseComponentBackendType = "s3"
+	res.BaseComponentRemoteStateBackendSection = map[string]any{
+		"s3": "not-a-map",
+	}
+
+	_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformRemoteStateBackend)
 }

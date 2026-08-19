@@ -127,7 +127,68 @@ Step predicates are:
 CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
 `step`, and `env`. For workflow and custom command steps, `status` is the
 current command status: `success` before any step fails and `failure` after an
-earlier step failed.
+earlier step failed. Also available: `os`/`arch`/`platform` (for example
+`when: "os == 'darwin'"`) and the freshness facts `checksum`, `timestamp`,
+`preconditions`, `sources`, `artifacts` — see [`inputs`](/workflows/steps/inputs),
+[`artifacts`](/workflows/steps/artifacts), and
+[`preconditions`](/workflows/steps/preconditions).
+
+## Continue on error
+
+Set `continue: always` on a step to forgive its own failure — later steps still
+run and the command's overall exit status is unaffected, the same semantics as
+GitHub Actions' `continue-on-error`. See [`continue`](/workflows/steps/continue)
+for the full field reference.
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: golangci-lint run ./...
+        continue: always
+      - type: atmos
+        command: terraform apply vpc -auto-approve
+```
+
+## Freshness inputs
+
+Set `inputs.sources`/`artifacts.paths` on a step to skip it when nothing has
+changed since it last ran successfully — without an explicit `when`, declaring
+`inputs`/`artifacts` implicitly means `when: checksum.changed`. See
+[`inputs`](/workflows/steps/inputs) and [`artifacts`](/workflows/steps/artifacts)
+for the full field reference.
+
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+        inputs:
+          sources: ["cmd/**/*.go", "go.sum"]
+        artifacts:
+          paths: ["bin/handler"]
+```
+
+Declare `preconditions.tools` instead when a step's freshness only depends on
+whether a tool is already on `PATH` — without an explicit `when`, declaring
+`preconditions` alone implicitly means `when: "!preconditions.success"` (run only
+when the tool is *not* already there). See
+[`preconditions`](/workflows/steps/preconditions) for the full field reference.
+
+```yaml
+commands:
+  - name: install-stringer
+    description: Install stringer if it isn't already on PATH
+    steps:
+      - type: shell
+        command: go install golang.org/x/tools/cmd/stringer@latest
+        preconditions:
+          tools: ["stringer"]
+```
 
 ## Step types
 

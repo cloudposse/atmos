@@ -45,21 +45,14 @@ func (h *WorkdirHandler) Validate(step *schema.WorkflowStep) error {
 func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.WorkdirHandler.Execute")()
 
-	targetPath, err := vars.Resolve(step.Path)
+	targetPath, err := h.ResolveInWorkingDirectory(step, vars, step.Path, "path")
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
+		return nil, err
 	}
 	if targetPath == "" {
 		return nil, errUtils.Build(ErrWorkdirPathRequired).
 			WithContext("step", step.Name).
 			Err()
-	}
-	if !filepath.IsAbs(targetPath) {
-		absPath, err := filepath.Abs(targetPath)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve absolute path %q: %w", step.Name, targetPath, err)
-		}
-		targetPath = absPath
 	}
 	targetPath = filepath.Clean(targetPath)
 
@@ -68,7 +61,16 @@ func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		return nil, err
 	}
 
-	if err := sourceprov.VendorSource(ctx, nil, sourceSpec, targetPath, sourceprov.WithReplaceTarget(step.Reset)); err != nil {
+	// Anchor a relative local-path source the same way path is anchored, so
+	// `source: ./foo` (or a bare relative source) under a hook's
+	// working_directory resolves consistently with `path` instead of
+	// silently falling back to the process cwd.
+	baseDir, err := h.resolveWorkingDirectory(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sourceprov.VendorSource(ctx, nil, sourceSpec, targetPath, sourceprov.WithReplaceTarget(step.Reset), sourceprov.WithBaseDir(baseDir)); err != nil {
 		if !step.Reset {
 			return nil, fmt.Errorf("step '%s': failed to provision source %q to %q; set reset: true to replace an existing target: %w", step.Name, sourceSpec.Uri, targetPath, err)
 		}

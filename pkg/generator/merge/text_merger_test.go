@@ -752,3 +752,119 @@ text`,
 		})
 	}
 }
+
+// TestTextMerger_TrailingNewlinePreservation asserts exact byte-for-byte
+// merge output, trailing-newline count included, split into merges with no
+// genuine ours/theirs divergence (result must equal the unchanged content
+// verbatim) and genuine template-only changes where ours never diverges from
+// base (result must equal theirs verbatim). See Merge's doc comment for why
+// each input gets one newline appended before diff3 runs.
+func TestTextMerger_TrailingNewlinePreservation(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		ours   string
+		theirs string
+		want   string
+	}{
+		{
+			name:   "identical base/ours/theirs",
+			base:   "line 1\nline 2\nline 3\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "theirs equals ours though base differs",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "unchanged, one trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\n",
+			want:   "line 1\nline 2\n",
+		},
+		{
+			name:   "unchanged, no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2",
+			want:   "line 1\nline 2",
+		},
+		{
+			name:   "unchanged, blank line at EOF (two trailing newlines)",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\n\n",
+			want:   "line 1\nline 2\n\n",
+		},
+		{
+			name:   "unchanged, two blank lines at EOF (three trailing newlines)",
+			base:   "line 1\nline 2\n\n\n",
+			ours:   "line 1\nline 2\n\n\n",
+			theirs: "line 1\nline 2\n\n\n",
+			want:   "line 1\nline 2\n\n\n",
+		},
+		{
+			name:   "unchanged, internal blank line, single trailing newline",
+			base:   "line 1\n\nline 2\n",
+			ours:   "line 1\n\nline 2\n",
+			theirs: "line 1\n\nline 2\n",
+			want:   "line 1\n\nline 2\n",
+		},
+		{
+			name:   "genuine change, theirs ends with blank line at EOF",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\nline 3\n\n",
+			want:   "line 1\nline 2\nline 3\n\n",
+		},
+		{
+			name:   "genuine change, theirs keeps single trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "genuine change, theirs has no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2\nline 3",
+			want:   "line 1\nline 2\nline 3",
+		},
+		{
+			name:   "genuine change, theirs adds trailing blank line (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1\n\n",
+			want:   "line 1\n\n",
+		},
+		{
+			name:   "genuine change, theirs removes trailing newline (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1",
+			want:   "line 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := NewTextMerger(50).Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if result.Content != tt.want {
+				t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, tt.want)
+			}
+			if result.HasConflicts {
+				t.Errorf("Unexpected conflicts: %d", result.ConflictCount)
+			}
+		})
+	}
+}

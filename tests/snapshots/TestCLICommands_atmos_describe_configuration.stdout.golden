@@ -124,6 +124,8 @@ packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-con
 ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
+vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
+workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []

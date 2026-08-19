@@ -28,12 +28,25 @@ type VendorSourceOption func(*vendorSourceOptions)
 
 type vendorSourceOptions struct {
 	replaceTarget bool
+	baseDir       string
 }
 
 // WithReplaceTarget controls whether VendorSource may replace an existing target directory.
 func WithReplaceTarget(replace bool) VendorSourceOption {
 	return func(opts *vendorSourceOptions) {
 		opts.replaceTarget = replace
+	}
+}
+
+// WithBaseDir anchors a relative local-path source against baseDir instead of
+// the process's current working directory. Callers that already resolve a
+// working directory for the target path (e.g. the workdir step, which
+// anchors `path` to `working_directory`) should pass the same directory here
+// so a relative `source` resolves consistently with `path` instead of
+// silently falling back to the process cwd.
+func WithBaseDir(baseDir string) VendorSourceOption {
+	return func(opts *vendorSourceOptions) {
+		opts.baseDir = baseDir
 	}
 }
 
@@ -79,7 +92,7 @@ func VendorSource(
 	// Normalize the URI for go-getter using the same logic as regular vendoring.
 	uri = vendor.NormalizeURI(uri)
 	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
-		absURI, err := filepath.Abs(uri)
+		absURI, err := resolveLocalSourcePath(uri, vendorOpts.baseDir)
 		if err != nil {
 			return errUtils.Build(errUtils.ErrSourceInvalidSpec).
 				WithCause(err).
@@ -436,6 +449,16 @@ func resolveSourceURI(sourceSpec *schema.VendorComponentSource) string {
 	}
 
 	return uri
+}
+
+// resolveLocalSourcePath anchors a relative local-path uri against baseDir when
+// set, otherwise against the process's current working directory (historical
+// behavior, matched by filepath.Abs).
+func resolveLocalSourcePath(uri, baseDir string) (string, error) {
+	if baseDir != "" {
+		return filepath.Join(baseDir, uri), nil
+	}
+	return filepath.Abs(uri)
 }
 
 // copyToTarget copies downloaded source to target directory using the shared vendor copy logic.

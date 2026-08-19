@@ -76,7 +76,7 @@ func TestMergeFiles_ReadFileError(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := mergeFiles(v, []string{cfg})
+	_, err := mergeFiles(v, []string{cfg})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrReadConfig)
 }

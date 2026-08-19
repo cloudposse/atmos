@@ -145,6 +145,16 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 		})
 	}
 
+	// dependencies.commands/dependencies.workflows entries accept a plain-string
+	// name shorthand, equivalent to {name: <value>} with no flags/args/file
+	// override (see schema.UnitDependencies.UnmarshalYAML).
+	if unitDeps, ok := root.Definitions["UnitDependencies"]; ok && unitDeps.Items != nil {
+		unitDeps.Items = anyOfWith(unitDeps.Items, &jsonschema.Schema{
+			Type:        "string",
+			Description: "Dependency name shorthand, equivalent to {name: <value>}.",
+		})
+	}
+
 	// Definition properties whose decode hooks or weakly-typed decoding (see
 	// schema.Task.UnmarshalYAML, commandEnvMapDecodeHook, Terminal.IsPagerEnabled)
 	// accept more shapes than the Go field declares.

@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -9,8 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestProvisionWithParams_NilParams(t *testing.T) {
@@ -142,9 +146,10 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 	// Clean up registry after test to ensure test isolation.
 	t.Cleanup(backend.ResetRegistryForTesting)
 
+	backendProvisionErr := errors.New("provisioning failed: bucket already exists in another account")
 	// Register a mock backend provisioner that fails.
 	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
-		return nil, errors.New("provisioning failed: bucket already exists in another account")
+		return nil, backendProvisionErr
 	}
 
 	// Temporarily register the mock provisioner.
@@ -177,8 +182,56 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 	err := ProvisionWithParams(params)
 	require.Error(t, err)
 	// The spinner passes through the original error from the backend provisioner.
+	assert.ErrorIs(t, err, backendProvisionErr)
 	assert.Contains(t, err.Error(), "provisioning failed")
 	assert.Contains(t, err.Error(), "bucket already exists in another account")
+}
+
+func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
+	t.Cleanup(backend.ResetRegistryForTesting)
+
+	backendProvisionErr := errors.New("bucket already exists")
+	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
+		return nil, backendProvisionErr
+	})
+
+	err := autoProvisionBackend(WithOutputSuppressed(t.Context()), &schema.AtmosConfiguration{}, map[string]any{
+		"backend_type": "s3",
+		"backend":      map[string]any{},
+		"provision": map[string]any{
+			"backend": map[string]any{"enabled": true},
+		},
+	}, nil, OutputWriters{}, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, backendProvisionErr)
+	assert.Contains(t, err.Error(), "failed to provision s3 backend")
+}
+
+func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
+	t.Cleanup(backend.ResetRegistryForTesting)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+
+	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
+		return &backend.ProvisionResult{Warnings: []string{"bucket policy is permissive"}}, nil
+	})
+	var output bytes.Buffer
+	ctx := WithOutputSuppressed(t.Context())
+
+	err = autoProvisionBackend(ctx, &schema.AtmosConfiguration{}, map[string]any{
+		"backend_type": "s3",
+		"backend":      map[string]any{},
+		"provision": map[string]any{
+			"backend": map[string]any{"enabled": true},
+		},
+	}, nil, OutputWriters{Stderr: &output}, nil)
+
+	require.NoError(t, err)
+	assert.Contains(t, atmosansi.Strip(output.String()), "Provisioned S3 backend")
+	assert.Contains(t, atmosansi.Strip(output.String()), "bucket policy is permissive")
 }
 
 func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {

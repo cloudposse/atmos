@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,6 +85,9 @@ func TestBuildConditionContext(t *testing.T) {
 			assert.Equal(t, tt.wantStack, ctx.Stack)
 			assert.Equal(t, tt.wantStep, ctx.Step)
 			assert.Equal(t, tt.wantEnv, ctx.Env)
+			assert.Equal(t, runtime.GOOS, ctx.OS, "OS must reflect the actual runtime GOOS, not a hardcoded/empty value")
+			assert.Equal(t, runtime.GOARCH, ctx.Arch, "Arch must reflect the actual runtime GOARCH")
+			assert.Equal(t, runtime.GOOS+"/"+runtime.GOARCH, ctx.Platform, "Platform must combine OS and Arch with a slash")
 		})
 	}
 }

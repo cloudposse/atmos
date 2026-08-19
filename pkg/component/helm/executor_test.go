@@ -17,10 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,11 +32,8 @@ data:
 `
 
 func TestRunOperationDispatchesWithSummaries(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-	t.Cleanup(data.Reset)
-
+	// The data writer is initialized once for the package in TestMain; do not reset it here, or
+	// later tests that emit an apply/delete status line would panic on an uninitialized writer.
 	originalRender := renderChartManifest
 	originalApply := applyHelmRelease
 	originalDelete := deleteHelmRelease
@@ -201,7 +196,12 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		return schema.AtmosConfiguration{}, nil
 	}
 
-	processStacksCalled := false
+	type processingFlags struct {
+		checkStack           bool
+		processTemplates     bool
+		processYamlFunctions bool
+	}
+	var calls []processingFlags
 	processStacks = func(
 		_ *schema.AtmosConfiguration,
 		info schema.ConfigAndStacksInfo,
@@ -209,10 +209,7 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		_ []string,
 		_ auth.AuthManager,
 	) (schema.ConfigAndStacksInfo, error) {
-		processStacksCalled = true
-		assert.True(t, checkStack)
-		assert.True(t, processTemplates)
-		assert.True(t, processYamlFunctions)
+		calls = append(calls, processingFlags{checkStack, processTemplates, processYamlFunctions})
 		info.ComponentIsEnabled = false
 		info.ComponentFromArg = "app"
 		return info, nil
@@ -231,7 +228,10 @@ func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
 		},
 	}, OperationApply)
 	require.NoError(t, err)
-	assert.True(t, processStacksCalled)
+	require.Equal(t, []processingFlags{
+		{checkStack: true, processTemplates: false, processYamlFunctions: false},
+		{checkStack: true, processTemplates: true, processYamlFunctions: true},
+	}, calls)
 }
 
 func TestExecutorHelpers(t *testing.T) {

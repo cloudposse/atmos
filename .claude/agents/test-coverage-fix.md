@@ -66,14 +66,14 @@ failure, whether in-scope or pre-existing:**
 1. Reproduce: `go test -run '^<TestName>$' <package> -v`.
 2. Confirm it fails and understand why.
 3. **Distinguish "the test's expectation is wrong" from "the code is wrong"** — this is as
-   serious as the anti-coverage-theater rule in Section B, not a footnote:
-   - If the *code* has a real bug, fix the code.
-   - If the *test* was asserting the wrong thing, fix the test to assert the **correct** intended
-     behavior — not merely whatever makes it pass — and say so explicitly in your summary. Never
-     weaken, loosen, or delete an assertion just to turn red green. That is gaming the signal, the
-     exact same failure mode as coverage theater, just inverted.
+    serious as the anti-coverage-theater rule in Section B, not a footnote:
+    - If the *code* has a real bug, fix the code.
+    - If the *test* was asserting the wrong thing, fix the test to assert the **correct** intended
+      behavior — not merely whatever makes it pass — and say so explicitly in your summary. Never
+      weaken, loosen, or delete an assertion just to turn red green. That is gaming the signal, the
+      exact same failure mode as coverage theater, just inverted.
 4. Re-run not just the one test but the full scoped package set you were given, to confirm the fix
-   didn't break a sibling test.
+    didn't break a sibling test.
 
 **Step 3 — one attempt per failing test per cycle, in-scope or pre-existing alike.** If it's still
 red after one fix attempt, stop. Report it for human attention (the calling skill will invoke
@@ -121,7 +121,7 @@ gaps skipped (file:lines, reason). The calling skill uses this to decide when to
 
 ## Guardrails (CLAUDE.md, mandatory)
 
-- `gofumpt`/`goimports` formatting. Preserve existing comments.
+- `gofumpt`/`gci` formatting. Preserve existing comments.
 - Use `cmd.NewTestKit(t)` for any `cmd` package tests; table-driven tests; `errors.Is()` for error
   checks; never platform-specific binaries in tests (`false`/`true`/`sh` don't exist on Windows).
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, or `go.sum`.

@@ -268,14 +268,16 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		err = AddToolToVersionsAsDefault(filePath, "terraform", "1.5.7")
 		require.NoError(t, err)
 
-		// Verify it's first
+		// asDefault mirrors asdf's own "set" convention (asdf's docs describe `asdf set
+		// <tool> <version>` as equivalent to `echo "<tool> <version>" > .tool-versions`):
+		// the whole line becomes exactly the new version, full stop. Callers (set,
+		// add --default, update) all document that replacing the default never leaves a
+		// stale extra version pinned.
 		toolVersions, err = LoadToolVersions(filePath)
 		require.NoError(t, err)
 		versions := toolVersions.Tools["terraform"]
-		require.NotEmpty(t, versions)
-		assert.Equal(t, "1.5.7", versions[0], "Default version should be first")
-		assert.Contains(t, versions, "1.5.5")
-		assert.Contains(t, versions, "1.5.6")
+		assert.Equal(t, []string{"1.5.7"}, versions,
+			"setting a new default fully replaces the line -- 1.5.5 and 1.5.6 must not survive as stale entries")
 	})
 
 	t.Run("Updates existing tool to default", func(t *testing.T) {
@@ -300,7 +302,8 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		toolVersions, err = LoadToolVersions(filePath)
 		require.NoError(t, err)
 		versions := toolVersions.Tools["terraform"]
-		assert.Equal(t, "1.5.6", versions[0], "1.5.6 should be first")
+		assert.Equal(t, []string{"1.5.6"}, versions,
+			"setting an already-pinned version as default still fully replaces the line, matching asdf's set semantics")
 	})
 
 	t.Run("Returns error for empty version", func(t *testing.T) {
@@ -310,6 +313,33 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		err := AddToolToVersionsAsDefault(filePath, "terraform", "")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrInvalidToolSpec)
+	})
+
+	// TestAddToolToVersionsAsDefault/Single-version_tool_ends_up_with_exactly_one_version
+	// reproduces the most common real-world case (a tool pinned to a single version, e.g. from
+	// `add`, then bumped via `set`, `add --default`, or `update`). set's and update's own docs
+	// promise a tool is never left pinned to two versions at once -- this is the simplest
+	// possible repro of that guarantee failing: the old default was silently kept as a stale
+	// second entry instead of being replaced.
+	t.Run("Single-version tool ends up with exactly one version", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+		AddVersionToTool(toolVersions, "jqlang/jq", "1.7.1", false)
+		err := SaveToolVersions(filePath, toolVersions)
+		require.NoError(t, err)
+
+		setupToolchainTestEnv(t, tempDir)
+
+		err = AddToolToVersionsAsDefault(filePath, "jqlang/jq", "1.8.2")
+		require.NoError(t, err)
+
+		toolVersions, err = LoadToolVersions(filePath)
+		require.NoError(t, err)
+		versions := toolVersions.Tools["jqlang/jq"]
+		assert.Equal(t, []string{"1.8.2"}, versions,
+			"a single-version tool must end up pinned to exactly the new version -- the old default must not survive as a stale second entry")
 	})
 }
 

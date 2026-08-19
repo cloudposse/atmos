@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -45,6 +46,8 @@ type componentExecContext struct {
 // OPA/JSON-schema validation, auth pre-hook, config file generation, and env assembly.
 // Extracting this reduces ExecuteTerraform's cyclomatic complexity by ~10 decision points.
 func prepareComponentExecution(
+	ctx context.Context,
+	writers provisioner.OutputWriters,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
@@ -53,7 +56,7 @@ func prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := resolveAndProvisionComponentPath(atmosConfig, info)
+	componentPath, err := resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +188,7 @@ func executeCommandPipeline(
 	logTerraformContext(info, execCtx.workingDir)
 	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
-	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
+	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath, opts...)
 	if err != nil {
 		return err
 	}
@@ -447,7 +450,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// implicit init so post-init provisioners can complete and persist provider
 	// locks for workdir and vendored components.
 	if err == nil && info.SubCommand == subcommandInit {
-		dispatchAfterInitFn(atmosConfig, info, componentPath)
+		dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
 	}
 
 	exitCode := resolveExitCode(err)

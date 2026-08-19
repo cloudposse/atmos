@@ -1891,7 +1891,7 @@ func TestParseViperProfilesFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseViperProfilesFromEnv(tt.profiles)
+			result := FixViperEnvStringSliceQuirk(tt.profiles)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

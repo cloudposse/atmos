@@ -13,6 +13,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
 // opIntegrationName/opIntegrationVersion identify Atmos to the 1Password SDK telemetry.
@@ -327,7 +328,7 @@ func opStringValue(value any) (string, error) {
 // renderReference renders the reference as a Go template (with sprig funcs and strict missing-key
 // handling, mirroring the SOPS provider) and normalizes it to a full `op://` reference.
 func (s *OnePasswordStore) renderReference(raw string, data map[string]any) (string, error) {
-	tmpl, err := template.New("op-reference").Funcs(sprig.FuncMap()).Option("missingkey=error").Parse(raw)
+	tmpl, err := template.New("op-reference").Funcs(sprig.FuncMap()).Funcs(templatefuncs.FuncMap()).Option("missingkey=error").Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid `reference` template %q: %w", store.ErrOnePasswordReferenceTemplate, raw, err)
 	}

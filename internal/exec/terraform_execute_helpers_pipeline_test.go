@@ -23,6 +23,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,7 +85,7 @@ func TestPrepareComponentExecution_NoComponentPath_ReturnsError(t *testing.T) {
 	// BasePath is empty → GetComponentPath returns an error.
 	info := schema.ConfigAndStacksInfo{}
 
-	_, err := prepareComponentExecution(&atmosConfig, &info, false)
+	_, err := prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, false)
 	// An empty BasePath causes checkTerraformConfig to return an error.
 	require.Error(t, err)
 }

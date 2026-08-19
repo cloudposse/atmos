@@ -1,0 +1,127 @@
+---
+slug: azure-backend-provisioning
+title: "Automatic Azure Backend Provisioning for Terraform State"
+authors: [aknysh]
+tags: [feature, dx]
+---
+
+Bootstrapping Terraform state on Azure has always meant a detour outside Terraform: before you
+can run a single `plan`, you have to hand-create a resource group, a storage account (with the
+right TLS, public-access, and auth settings), and a blob container — by portal, `az` script, or a
+one-off Terraform component you cold-start and then migrate. AWS users have had one-line automatic
+backend provisioning for a while. Azure users had a checklist. Not anymore.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos could already generate `backend.tf.json` for an `azurerm` backend and read its state
+in-process — but it couldn't *create* the backend. Turn on backend auto-provisioning against an
+`azurerm` backend and nothing happened; it silently skipped, because provisioning only knew how
+to make S3 buckets. So every new subscription hit the same chicken-and-egg: you need remote state
+to run Terraform, but you need something *other* than Terraform to create that remote state first.
+
+The workaround was a bespoke storage-account component that runs on local state, then migrates its
+own state into the account it just created. It works, but it's ceremony every team re-invents — and
+it's exactly the friction AWS users don't have.
+
+## The Fix
+
+Atmos now provisions `azurerm` backends automatically, the same way it does for S3. Point a
+component at an `azurerm` backend, enable provisioning, and Atmos creates what's missing — the
+resource group, the storage account, and the container — with secure defaults, before
+`terraform init` runs.
+
+Everything is created with opinionated, hardcoded best practices:
+
+- **TLS 1.2 minimum** and **HTTPS-only** traffic
+- **Public blob access blocked**; the state container is **private**
+- **Blob versioning enabled** — the direct analog of S3 versioning, so every state write is recoverable
+- **Soft delete** (blob + container) with 30-day retention as a safety net
+- **Entra ID hardening**: when your backend sets `use_azuread_auth: true`, the storage account is
+  created with shared-key access disabled — no account keys to leak
+
+And one thing Atmos deliberately does **not** create: a lock table. On Azure, state locking is
+built into Blob Storage — the `azurerm` backend takes an exclusive **blob lease** on the state
+blob during each operation, so concurrent runs are serialized with no extra resource. (On AWS that
+role is played by a DynamoDB table or native S3 lockfiles; on Azure there's simply nothing to
+provision.)
+
+## How to Use It
+
+Add `provision.backend.enabled: true` to a component that uses an `azurerm` backend:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      auth:
+        providers:
+          azure:
+            type: azure/interactive
+            identity: platform
+
+      backend_type: azurerm
+      backend:
+        resource_group_name: rg-tfstate-cus
+        storage_account_name: stexampletfstateplatformcus
+        container_name: tfstate
+        key: vpc.terraform.tfstate
+        use_azuread_auth: true
+
+      provision:
+        backend:
+          enabled: true
+```
+
+Then run Terraform as usual:
+
+```bash
+atmos terraform apply vpc -s platform-cus
+# Backend resource group, storage account, and container are created if missing, then init/apply proceed.
+```
+
+That's it. Atmos checks whether the backend is fully provisioned, creates only what's missing, and
+continues. It's idempotent — safe to leave enabled and safe to re-run.
+
+A few things worth knowing:
+
+- **You don't put `location` in the backend block.** It isn't a valid `azurerm` backend argument,
+  so Atmos takes the region from your active Azure identity — or, if the resource group already
+  exists, from the group itself. Pre-create the resource group and you don't need to configure a
+  location at all.
+- **Subscription** comes from `backend.subscription_id` if set, otherwise from your active Azure
+  identity.
+- **It composes with inheritance.** Enable provisioning once at the org or environment level and
+  override per component — on in dev/qa, off in prod where state storage is module-managed.
+
+### Managing the backend explicitly
+
+The same lifecycle commands that work for S3 now work for `azurerm`:
+
+```bash
+# Create the backend explicitly (e.g. in a CI bootstrap stage)
+atmos terraform backend create vpc -s platform-cus
+
+# Tear it down (deletes the storage account and all state in it — resource group is preserved)
+atmos terraform backend delete vpc -s platform-cus --force
+```
+
+Deletion always requires `--force`, and it removes the storage account (and therefore every state
+file in it, just as deleting an S3 bucket does), while leaving the resource group in place.
+
+## Not for Production As-Is
+
+Like the S3 provisioner, this is built for fast, secure bootstrapping — dev, test, CI, and
+cold-starts — not to replace a production-grade module. It doesn't set up customer-managed keys,
+private endpoints, network ACLs, geo/zone redundancy, or lifecycle policies. When you're ready to
+harden, import the resource group, storage account, and container into a managed module (such as
+`Azure/avm-res-storage-storageaccount`) and keep using the same backend — no state migration
+needed, because the account keeps its name and contents. You can even leave provisioning enabled;
+Atmos detects the resources exist and skips.
+
+## Get Involved
+
+Give it a try on your Azure subscriptions and let us know how it goes. Questions or ideas? Start a
+thread in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions), or open an issue
+in the [issue tracker](https://github.com/cloudposse/atmos/issues).
