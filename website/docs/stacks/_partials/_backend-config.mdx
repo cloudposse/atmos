@@ -315,9 +315,16 @@ For state stored behind a generic HTTP endpoint, such as [GitLab-managed Terrafo
 
 :::warning
 `backend.tf.json` is generated with credentials expanded in plain text — in the example
-above, the resolved `CI_JOB_TOKEN` value. Never commit this file, log its contents, or
-upload it as a CI artifact. It should be excluded via `.gitignore` (Atmos regenerates it
-on demand when `auto_generate_backend_file` is enabled).
+above, the resolved `CI_JOB_TOKEN` value. The same plaintext values also persist in
+`.terraform/terraform.tfstate` and in any saved plan file (see
+[Planfile Backend Limitations](/components/terraform/planfiles#backend-limitations)).
+Never commit these files, log their contents, or upload them as CI artifacts.
+
+Prefer the `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` environment variables and omit
+`username`/`password` from the backend configuration entirely — Terraform/OpenTofu reads
+them at runtime without persisting them to disk. `backend.tf.json` should still be
+excluded via `.gitignore` (Atmos regenerates it on demand when
+`auto_generate_backend_file` is enabled).
 :::
 
 ## Remote State Backend
