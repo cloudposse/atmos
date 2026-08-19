@@ -485,8 +485,10 @@ func mergeEnvSlices(base, overlay []string) []string {
 	if len(overlay) == 0 {
 		return append([]string{}, base...)
 	}
-	values := make(map[string]string, len(base)+len(overlay))
-	order := make([]string, 0, len(base)+len(overlay))
+	// Capacity hints use a single len() — CodeQL's allocation-size-overflow rule flags
+	// len(base)+len(overlay); both grow as needed for the overlay entries.
+	values := make(map[string]string, len(base))
+	order := make([]string, 0, len(base))
 	set := func(entry string) {
 		key, value, ok := strings.Cut(entry, "=")
 		if !ok {
