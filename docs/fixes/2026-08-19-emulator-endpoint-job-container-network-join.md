@@ -73,7 +73,7 @@ real CI job container that doesn't explicitly join a custom Docker network.
   the bug rather than passing vacuously.
 - `atmos lint --changed` -- 0 issues.
 - Manual reproduction: disposable copy of the affected application repository, run as a
-  socket-mounted `docker:cli` job container (`docker run --rm -v /var/run/docker.sock:... -v
+  socket-mounted `docker:cli` job container (`docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v
   "$APP_COPY:/workspace" -e CI=true docker:cli sh -c 'atmos terraform test app -s fixtures
   --ci'`) with a locally built `atmos` binary. Before the fix: `emulator aws is up at
   http://172.17.0.1:<port>` followed by `connection refused`. After the fix: `emulator aws is up
