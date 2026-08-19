@@ -13,6 +13,7 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1419,6 +1420,12 @@ func TestCLICommands(t *testing.T) {
 		t.Fatalf("Failed to load test suites: %v", err)
 	}
 
+	shard, shardCount := testShard(t)
+	var workdirShard map[string]int
+	if shardCount > 1 {
+		workdirShard = assignWorkdirsToShards(testSuite.Tests, shardCount)
+	}
+
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
 			logger.Warn("Skipping disabled test", "test", tc.Name)
@@ -1431,11 +1438,98 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
+		// Skip cases not assigned to this shard. Filtering happens outside t.Run so
+		// unselected cases don't show up as noise in per-shard CI logs/results.
+		if shardCount > 1 && workdirShard[tc.Workdir] != shard {
+			continue
+		}
+
 		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+// testShard reads ATMOS_TEST_SHARD (1-based) and ATMOS_TEST_SHARD_COUNT from the
+// environment so CI can split TestCLICommands' cases across parallel jobs. Both
+// unset (the local dev default) disables sharding: every case runs, unchanged
+// from historical behavior.
+func testShard(t *testing.T) (shard, shardCount int) {
+	t.Helper()
+
+	shardCountStr := os.Getenv("ATMOS_TEST_SHARD_COUNT")
+	if shardCountStr == "" {
+		return 0, 1
+	}
+
+	shardCount, err := strconv.Atoi(shardCountStr)
+	if err != nil || shardCount < 1 {
+		t.Fatalf("invalid ATMOS_TEST_SHARD_COUNT %q: must be a positive integer", shardCountStr)
+	}
+
+	shardStr := os.Getenv("ATMOS_TEST_SHARD")
+	shard, err = strconv.Atoi(shardStr)
+	if err != nil || shard < 1 || shard > shardCount {
+		t.Fatalf("invalid ATMOS_TEST_SHARD %q: must be an integer between 1 and ATMOS_TEST_SHARD_COUNT (%d)", shardStr, shardCount)
+	}
+
+	return shard, shardCount
+}
+
+// assignWorkdirsToShards deterministically assigns every distinct test-case
+// workdir to a 1-based shard index in [1, shardCount], and returns the
+// resulting workdir -> shard map.
+//
+// Sharding by workdir (rather than by individual test name) keeps every test
+// case for a given fixture directory in the same shard: several test-case
+// YAML files rely on cases within the same workdir running together, in their
+// original relative order, within one process - e.g.
+// tests/test-cases/auth-mock.yaml's "atmos auth login --identity mock-identity-2"
+// populates an in-memory (ATMOS_KEYRING_TYPE=memory) keyring that a later
+// "atmos auth list" case in the same file reads back. Splitting cases like
+// these across separate shard processes silently breaks that dependency -
+// sharding by name alone did exactly that and produced deterministic,
+// reproducible failures on whichever shard happened to land the dependent
+// case without its prerequisite.
+//
+// Grouping by workdir alone would badly imbalance shards (some fixtures have
+// far more cases than others), so this assigns workdirs to shards via a
+// longest-processing-time-first greedy bin-pack: workdirs are sorted by case
+// count descending (ties broken alphabetically for determinism), then each is
+// assigned to whichever shard currently holds the fewest cases. Every shard
+// process computes this independently from the same (deterministically
+// ordered) input, so they agree on the assignment without coordination.
+func assignWorkdirsToShards(tests []TestCase, shardCount int) map[string]int {
+	counts := make(map[string]int)
+	for i := range tests {
+		counts[tests[i].Workdir]++
+	}
+
+	workdirs := make([]string, 0, len(counts))
+	for wd := range counts {
+		workdirs = append(workdirs, wd)
+	}
+	sort.Slice(workdirs, func(i, j int) bool {
+		if counts[workdirs[i]] != counts[workdirs[j]] {
+			return counts[workdirs[i]] > counts[workdirs[j]]
+		}
+		return workdirs[i] < workdirs[j]
+	})
+
+	load := make([]int, shardCount+1) // 1-indexed; load[0] unused.
+	assignment := make(map[string]int, len(workdirs))
+	for _, wd := range workdirs {
+		best := 1
+		for s := 2; s <= shardCount; s++ {
+			if load[s] < load[best] {
+				best = s
+			}
+		}
+		assignment[wd] = best
+		load[best] += counts[wd]
+	}
+	return assignment
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
