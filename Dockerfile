@@ -47,6 +47,15 @@ RUN set -ex; \
     # Clean up the package lists to keep the image clean
     rm -rf /var/lib/apt/lists/*
 
+# Strip setuid/setgid bits from binaries Atmos never uses (user/password
+# management: su, passwd, chsh, chage, chfn, expiry, gpasswd, newgrp,
+# unix_chkpwd; filesystem: mount, umount) — all shipped by the base Debian
+# image, none installed or needed by Atmos itself. Doesn't change current
+# behavior (everything in this image already runs as root by default), but
+# removes a local privilege-escalation vector for anyone who runs this image,
+# or a derived image, as a non-root user.
+RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} \;
+
 # Install Atmos from the GitHub Release
 RUN case ${TARGETPLATFORM} in \
         "linux/amd64") OS=linux; ARCH=amd64 ;; \

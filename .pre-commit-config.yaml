@@ -96,3 +96,10 @@ repos:
         stages: [pre-commit]
         args: [--maxkb=500]
         exclude: ^(docs/demo.gif|website/)
+
+  # Local complement to the TruffleHog CI scan (.github/workflows/trufflehog.yml):
+  # catches secrets before they're committed, not just before they're pushed.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
