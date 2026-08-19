@@ -159,12 +159,12 @@ Many thanks to our outstanding contributors:
 For 🐛 bug reports & feature requests, please use the [issue tracker](https://github.com/cloudposse/atmos/issues).
 
 In general, PRs are welcome. We follow the typical "fork-and-pull" Git workflow.
-1. Review our [Code of Conduct](https://github.com/cloudposse/atmos/?tab=coc-ov-file#code-of-conduct) and [Contributor Guidelines](https://github.com/cloudposse/.github/blob/main/CONTRIBUTING.md).
-2. **Fork** the repo on GitHub
-3. **Clone** the project to your own machine
-4. **Commit** changes to your own branch
-5. **Push** your work back up to your fork
-6. Submit a **Pull Request** so that we can review your changes
+ 1. Review our [Code of Conduct](https://github.com/cloudposse/atmos/?tab=coc-ov-file#code-of-conduct) and [Contributor Guidelines](https://github.com/cloudposse/.github/blob/main/CONTRIBUTING.md).
+ 2. **Fork** the repo on GitHub
+ 3. **Clone** the project to your own machine
+ 4. **Commit** changes to your own branch
+ 5. **Push** your work back up to your fork
+ 6. Submit a **Pull Request** so that we can review your changes
 
 **NOTE:** Be sure to merge the latest changes from "upstream" before making a pull request!
 
