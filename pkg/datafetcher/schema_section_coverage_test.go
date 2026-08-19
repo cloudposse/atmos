@@ -111,14 +111,11 @@ var nonManifestSections = map[string]struct{}{
 	"chart_hooks":        {}, // Native Helm chart-hook policy.
 	"crds":               {}, // Native Helm CRD policy.
 	"workspace":          {}, // Terraform workspace (derived/metadata).
-	"required_version":   {}, // Introspected from Terraform, not authored.
-	"required_providers": {}, // Introspected from Terraform, not authored.
 	"inheritance":        {}, // Describe output.
 	"integrations":       {}, // atmos.yaml / describe output.
 	"github":             {}, // Sub-field of integrations.
 	"process_env":        {}, // Describe output (resolved process env).
 	"cli_args":           {}, // Describe output.
-	"retry":              {}, // Workflow/source retry sub-field, not a manifest section.
 	"tf_cli_vars":        {}, // Derived Terraform CLI vars.
 	"env_tf_cli_args":    {}, // Derived Terraform CLI env.
 	"env_tf_cli_vars":    {}, // Derived Terraform CLI env.
