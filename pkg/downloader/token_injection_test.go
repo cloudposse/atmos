@@ -1,11 +1,17 @@
 package downloader
 
 import (
+	"fmt"
 	"net/url"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
+	execpkg "github.com/cloudposse/atmos/pkg/exec"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -46,19 +52,22 @@ func TestResolveToken_GitHub(t *testing.T) {
 			expectedTokenSource: "GITHUB_TOKEN",
 		},
 		{
-			name:                "Returns empty when both tokens are empty",
+			name:                "Returns empty when both tokens and the CLI fallback are empty",
 			injectGithubToken:   true,
 			atmosGithubToken:    "",
 			githubToken:         "",
 			expectedToken:       "",
-			expectedTokenSource: "GITHUB_TOKEN",
+			expectedTokenSource: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear the live broker-set env so this test exercises struct-field precedence only.
+			// Clear the live broker-set env so this test exercises struct-field precedence only,
+			// and disable the gh-CLI fallback (tier 4) so this table only exercises the three
+			// settings-based tiers deterministically, regardless of the host's gh session.
 			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+			t.Setenv("ATMOS_GITHUB_CLI", "")
 			detector := &CustomGitDetector{
 				atmosConfig: &schema.AtmosConfiguration{
 					Settings: schema.AtmosSettings{
@@ -67,6 +76,100 @@ func TestResolveToken_GitHub(t *testing.T) {
 						GithubToken:       tt.githubToken,
 					},
 				},
+			}
+
+			token, tokenSource := detector.resolveToken(hostGitHub)
+			assert.Equal(t, tt.expectedToken, token)
+			assert.Equal(t, tt.expectedTokenSource, tokenSource)
+		})
+	}
+}
+
+// TestHelperProcess is not a real test. It is invoked as a subprocess by fakeCLICmd to
+// emulate the GitHub CLI: it prints HELPER_STDOUT and exits with HELPER_EXIT_CODE. Mirrors
+// pkg/github/token_test.go's helper of the same name (each package needs its own, since
+// os.Args[0] is that package's own test binary).
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	fmt.Fprint(os.Stdout, os.Getenv("HELPER_STDOUT"))
+	if os.Getenv("HELPER_EXIT_CODE") == "1" {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+// fakeCLICmd returns an *exec.Cmd that re-invokes this test binary as TestHelperProcess,
+// emulating a CLI that prints stdout and exits with the given code.
+func fakeCLICmd(stdout string, exitCode int) *exec.Cmd {
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess")
+	cmd.Env = append(
+		os.Environ(),
+		"GO_WANT_HELPER_PROCESS=1",
+		"HELPER_STDOUT="+stdout,
+		fmt.Sprintf("HELPER_EXIT_CODE=%d", exitCode),
+	)
+	return cmd
+}
+
+// TestResolveToken_GitHub_CLIFallback covers tier 4 of resolveToken's GitHub case: falling
+// back to `gh auth token` (via github.GetGitHubTokenFromCLI) when none of the three
+// settings-based tokens are set.
+func TestResolveToken_GitHub_CLIFallback(t *testing.T) {
+	newDetector := func() *CustomGitDetector {
+		return &CustomGitDetector{
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{InjectGithubToken: true},
+			},
+		}
+	}
+
+	tests := []struct {
+		name                string
+		atmosGithubCLI      string
+		explicitGithubToken string
+		expectCommanderCall bool
+		expectedToken       string
+		expectedTokenSource string
+	}{
+		{
+			name:                "falls back to gh auth token when all settings-based tokens are empty",
+			atmosGithubCLI:      "gh",
+			expectCommanderCall: true,
+			expectedToken:       "ghp_from_cli",
+			expectedTokenSource: "GH_CLI",
+		},
+		{
+			name:           "ATMOS_GITHUB_CLI empty disables the fallback without invoking the commander",
+			atmosGithubCLI: "",
+		},
+		{
+			name:                "an explicit GITHUB_TOKEN short-circuits the CLI fallback",
+			atmosGithubCLI:      "gh",
+			explicitGithubToken: "explicit-github-token",
+			expectedToken:       "explicit-github-token",
+			expectedTokenSource: "GITHUB_TOKEN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+			t.Setenv("ATMOS_GITHUB_CLI", tt.atmosGithubCLI)
+			ctrl := gomock.NewController(t)
+			// No EXPECT set when expectCommanderCall is false: any call to the commander fails the test.
+			mock := execpkg.NewMockCommandExecutor(ctrl)
+			if tt.expectCommanderCall {
+				mock.EXPECT().
+					CommandContext(gomock.Any(), "gh", "auth", "token").
+					Return(fakeCLICmd("ghp_from_cli\n", 0))
+			}
+			t.Cleanup(github.SetCommanderForTesting(mock))
+
+			detector := newDetector()
+			if tt.explicitGithubToken != "" {
+				detector.atmosConfig.Settings.GithubToken = tt.explicitGithubToken
 			}
 
 			token, tokenSource := detector.resolveToken(hostGitHub)
@@ -291,6 +394,10 @@ func TestInjectToken_WithToken(t *testing.T) {
 
 // TestInjectToken_NoToken tests injectToken when no token is available.
 func TestInjectToken_NoToken(t *testing.T) {
+	// Disable the gh-CLI fallback (tier 4) so "no token available" is deterministic
+	// regardless of whether the host running this test has an authenticated gh session.
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
 	parsedURL, err := url.Parse("https://github.com/user/repo.git")
 	assert.NoError(t, err)
 

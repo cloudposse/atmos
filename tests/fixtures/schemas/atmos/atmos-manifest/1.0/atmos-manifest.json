@@ -64,66 +64,11 @@
       ]
     },
     {
-      "anyOf": [
-        {
-          "additionalProperties": true,
-          "not": {
-            "required": [
-              "workflows"
-            ]
-          }
-        },
-        {
-          "required": [
-            "import"
-          ]
-        },
-        {
-          "required": [
-            "terraform"
-          ]
-        },
-        {
-          "required": [
-            "helmfile"
-          ]
-        },
-        {
-          "required": [
-            "packer"
-          ]
-        },
-        {
-          "required": [
-            "vars"
-          ]
-        },
-        {
-          "required": [
-            "hooks"
-          ]
-        },
-        {
-          "required": [
-            "env"
-          ]
-        },
-        {
-          "required": [
-            "settings"
-          ]
-        },
-        {
-          "required": [
-            "components"
-          ]
-        },
-        {
-          "required": [
-            "overrides"
-          ]
-        }
-      ]
+      "not": {
+        "required": [
+          "workflows"
+        ]
+      }
     }
   ],
   "definitions": {
@@ -650,6 +595,12 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1193,6 +1144,12 @@
             },
             "secrets": {
               "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1231,6 +1188,9 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1303,6 +1263,9 @@
             },
             "secrets": {
               "$ref": "#/definitions/component_secrets"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1556,7 +1519,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -1690,7 +1659,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -1807,6 +1782,78 @@
                   "additionalProperties": true
                 }
               ]
+            },
+            "consul": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "cos": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "http": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "kubernetes": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "oss": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "pg": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -1843,14 +1890,23 @@
             "generate": {
               "$ref": "#/definitions/generate"
             },
-            "required_version": {
-              "$ref": "#/definitions/required_version"
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             },
             "required_providers": {
               "$ref": "#/definitions/required_providers"
             },
-            "retry": {
-              "$ref": "#/definitions/retry"
+            "required_version": {
+              "$ref": "#/definitions/required_version"
             }
           },
           "required": []
@@ -2185,6 +2241,7 @@
                 "mode": {
                   "type": "string",
                   "enum": [
+                    "",
                     "grouped",
                     "prefixed",
                     "none"
@@ -2508,6 +2565,10 @@
             },
             "retry": {
               "$ref": "#/definitions/source_retry"
+            },
+            "ttl": {
+              "type": "string",
+              "description": "Cache time-to-live as a Go duration string (e.g., '24h'). Overrides the global default; a JIT-vendored source cache older than this is re-fetched."
             }
           },
           "required": [
