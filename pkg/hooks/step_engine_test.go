@@ -362,6 +362,32 @@ func TestStepFromHookWithVariablesPreservesGenericWithForStoreType(t *testing.T)
 	assert.Equal(t, "sha-test", ws.With["value"])
 }
 
+// TestPreserveGenericWith unit-tests the helper directly, covering both the
+// backfill path (StepFromHook/workflowStepFromHookPayload's normal decode
+// left With nil) and the leave-alone path (a step type -- e.g. a step with a
+// genuinely nested `with:` key of its own -- whose With the normal decode
+// already populated must not be clobbered by the hook payload).
+func TestPreserveGenericWith(t *testing.T) {
+	t.Run("backfills when With is nil and payload is a map", func(t *testing.T) {
+		ws := &schema.WorkflowStep{}
+		preserveGenericWith(ws, map[string]any{"key": "value"})
+		assert.Equal(t, map[string]any{"key": "value"}, ws.With)
+	})
+
+	t.Run("leaves an already-decoded With untouched", func(t *testing.T) {
+		existing := map[string]any{"already": "decoded"}
+		ws := &schema.WorkflowStep{With: existing}
+		preserveGenericWith(ws, map[string]any{"should": "not apply"})
+		assert.Equal(t, existing, ws.With)
+	})
+
+	t.Run("no-op when payload is not a map", func(t *testing.T) {
+		ws := &schema.WorkflowStep{}
+		preserveGenericWith(ws, "not-a-map")
+		assert.Nil(t, ws.With)
+	})
+}
+
 func TestVerifyStepHookType(t *testing.T) {
 	require.NoError(t, verifyStepHookType("announce", "log"))
 

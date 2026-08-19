@@ -33,14 +33,14 @@ documenting the same Windows-is-slower-at-caching behavior).
 
 | File                            | Change                                                                 |
 |-----------------------------------|-------------------------------------------------------------------------|
-| `.github/workflows/test.yml`     | `terraform-registry-cache` job `timeout-minutes` changed from a flat `20` to `${{ matrix.flavor.target == 'windows' && 30 || 20 }}`, matching the existing per-target timeout pattern used by the `Acceptance tests` step in the same file |
+| `.github/workflows/test.yml`     | `terraform-registry-cache` job's `timeout-minutes` changed from a flat 20 minutes to 30 minutes on Windows and 20 minutes on other targets, matching the existing per-target timeout pattern used by the `Acceptance tests` step in the same file |
 
 ## Validation
 
 - YAML parses (`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/test.yml'))"`).
-- Pushed to PR #2961; a new CI run was triggered and the `Terraform registry cache test (windows)`
-  check was being watched for a pass at the time this record was written — see the PR's check
-  history for the final outcome.
+- Pushed to PR #2961. The `Terraform registry cache test (windows)` check for this change is
+  **pending** at the time this record was written; this section has not yet been updated with a
+  pass/fail outcome.
 
 ## Follow-ups
 

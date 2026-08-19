@@ -27,7 +27,7 @@ Reported bug: a custom-command step shaped like
 
 failed immediately with:
 
-```
+```text
 invalid workflow control step: container `action: write` does not accept a `with:` block
 ```
 
