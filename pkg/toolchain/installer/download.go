@@ -147,7 +147,12 @@ func downloadToCacheWithProgress(url, cachePath string, progress func(downloaded
 	)
 	if err != nil {
 		if lastErr != nil && isRetryableDownloadError(lastErr) {
-			return "", buildDownloadRetryError(url, attempts, lastErr)
+			// Tag the final error as retryable (even though retries are now exhausted) so
+			// downloadAssetWithVersionFallback can still treat it as fallback-eligible: a
+			// wrong version-prefix URL sometimes surfaces as a transient 5xx/timeout instead
+			// of a clean 404 (observed under concurrent CI load), which would otherwise never
+			// reach the fallback path.
+			return "", errors.Join(errUtils.ErrDownloadRetryable, buildDownloadRetryError(url, attempts, lastErr))
 		}
 		return "", err
 	}
@@ -395,7 +400,8 @@ type downloadFallbackResult struct {
 	effectiveVersion string
 }
 
-// downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404.
+// downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if the
+// primary URL is not found or exhausts its retries.
 func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (downloadFallbackResult, error) {
 	defer perf.Track(nil, "Installer.downloadAssetWithVersionFallback")()
 
@@ -403,11 +409,19 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 	if err == nil {
 		return downloadFallbackResult{assetPath: assetPath, effectiveURL: assetURL, effectiveVersion: version}, nil
 	}
-	if !isHTTP404(err) {
+	if !isVersionFallbackEligible(err) {
 		return downloadFallbackResult{}, err
 	}
 
 	return i.tryFallbackVersion(tool, version, assetURL, err)
+}
+
+// isVersionFallbackEligible reports whether a primary-URL download failure is worth retrying with an
+// alternate version prefix. A clean 404 is the common case (wrong prefix, fast failure). A retry-exhausted
+// error is included too: a wrong-prefix URL can surface as a transient 5xx/timeout instead of a clean 404
+// under load, which would otherwise never reach the fallback path.
+func isVersionFallbackEligible(err error) bool {
+	return isHTTP404(err) || errors.Is(err, errUtils.ErrDownloadRetryable)
 }
 
 // tryFallbackVersion attempts download with an alternative version prefix.
@@ -439,7 +453,7 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 		return downloadFallbackResult{}, fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}
 
-	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	log.Debug("Primary asset URL failed, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err := i.downloadAsset(fallbackURL)
 	if err == nil {
 		return downloadFallbackResult{assetPath: assetPath, effectiveURL: fallbackURL, effectiveVersion: fallbackVersion}, nil
