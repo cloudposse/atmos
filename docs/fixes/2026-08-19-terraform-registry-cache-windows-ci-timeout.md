@@ -27,9 +27,11 @@ Tests (linux)`, `(macos)`, and `(windows)` also failing as a result. Reading the
 - The three `Acceptance Tests (*)` jobs each failed in 3-6s via their `needs` gate check
   ("`terraform-registry-cache result was 'cancelled'`"), purely as a downstream consequence.
 
-This wasn't caused by anything in this PR's diff (which only touches
-`pkg/ci/plugins/terraform/*` and a fix-log doc, no CI workflow files). Checking recent runs of
-this job on `main` confirmed it's a pre-existing, borderline-flaky timing issue: three recent
+The Terraform parser changes earlier in this PR (`pkg/ci/plugins/terraform/*`, see
+`docs/fixes/2026-08-19-ci-test-summary-fallback-recovers-error-detail.md`) did not cause this
+failure — they don't touch CI workflow files, and the actual test passed. This timeout follow-up
+itself does change `.github/workflows/test.yml` (see Changes below). Checking recent runs of this
+job on `main` confirmed it's a pre-existing, borderline-flaky timing issue: three recent
 successful Windows runs took 14m, 14m11s, and 18m38s end-to-end — already close to the 20-minute
 ceiling that was added the same day — and this run simply tipped over the edge.
 
@@ -44,11 +46,18 @@ ceiling that was added the same day — and this run simply tipped over the edge
 
 ## Validation
 
+This timeout follow-up itself only changes a workflow YAML file and this doc, so its validation is
+scoped accordingly:
+
 - `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/test.yml'))"` — valid YAML.
 - `atmos lint --changed` — 0 issues.
-- No Go code changed, so no `go build`/`go test` re-run needed for this change; verification is
-  the next CI run of PR #2959 actually completing `Terraform registry cache test (windows)` within
-  budget.
+- No Go code changed by this follow-up, so no `go build`/`go test` re-run was needed for it;
+  verification is the next CI run of PR #2959 actually completing `Terraform registry cache test
+  (windows)` within budget.
+
+The earlier Terraform parser changes in this PR (`pkg/ci/plugins/terraform/*`) have their own Go
+build/test/lint validation recorded in
+`docs/fixes/2026-08-19-ci-test-summary-fallback-recovers-error-detail.md`.
 
 ## Follow-ups
 
