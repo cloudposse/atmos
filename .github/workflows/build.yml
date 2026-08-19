@@ -182,6 +182,15 @@ jobs:
       - name: "Sign release assets with cosign"
         run: |
           for f in dist/*; do
+            # Skip files a *previous* run of this job already generated and
+            # uploaded to the release (re-downloaded above by `gh release
+            # download`). Signing them again is pointless, and for the SBOM
+            # specifically it's actively wrong: it gets overwritten by the
+            # "Generate source-tree SBOM" step below, so a signature made here
+            # would describe stale content by the time it's uploaded.
+            case "$f" in
+              *.sig|*.pem|*/atmos-sbom.spdx.json) continue ;;
+            esac
             echo "Signing $f"
             cosign sign-blob --yes "$f" --output-signature "${f}.sig" --output-certificate "${f}.pem"
           done

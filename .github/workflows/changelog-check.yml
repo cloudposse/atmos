@@ -5,8 +5,10 @@ on:
 
 permissions:
   contents: read
-  # Posts/updates a sticky PR comment when release documentation is missing.
-  pull-requests: write
+  # Posts/updates a sticky PR comment when release documentation is missing,
+  # via the issue-comments API (gh api .../issues/... and `gh pr comment`,
+  # which itself posts through the same endpoint) — issues: write alone
+  # covers it, pull-requests: write is not needed.
   issues: write
 
 jobs:

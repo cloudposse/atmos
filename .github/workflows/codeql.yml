@@ -116,6 +116,12 @@ jobs:
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        env:
+          # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
+          # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
+          # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
+          # saml2aws's U2F support), which needs libudev-dev and fails to load.
+          CGO_ENABLED: "0"
         with:
           go-version-file: go.mod
           output-format: sarif
@@ -127,6 +133,11 @@ jobs:
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   semgrep:
     name: Semgrep scan
@@ -162,6 +173,11 @@ jobs:
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   lint-golangci:
     name: "Lint (golangci)"
