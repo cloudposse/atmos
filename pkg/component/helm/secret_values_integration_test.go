@@ -141,10 +141,12 @@ func assertMaskedHelmSecretValues(t *testing.T, rendered string) {
 	t.Helper()
 
 	masker := iolib.GetContext().Masker()
+	maskingEnabled := masker.Enabled()
 	t.Cleanup(func() {
 		masker.Clear()
-		masker.SetEnabled(true)
+		masker.SetEnabled(maskingEnabled)
 	})
+	masker.SetEnabled(true)
 	masked := masker.Mask(rendered)
 	assert.NotContains(t, masked, "BEGIN PRIVATE KEY")
 	assert.NotContains(t, masked, "AAAA")
