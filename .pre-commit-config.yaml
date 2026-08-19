@@ -27,12 +27,13 @@ repos:
 
       # IMPORTANT: Do NOT build custom-gcl automatically in this hook!
       # Building during pre-commit can cause git corruption in worktrees.
-      # Users should run `make custom-gcl` once before committing.
-      # The run script will provide helpful error if binary is missing.
+      # Users should run `go tool mage lint:customGCL` once before committing.
+      # `go tool mage lint:precommit` only checks + fails fast if the binary
+      # is missing or stale; it must never trigger a build itself.
       - id: golangci-lint
         name: golangci-lint
         description: Run golangci-lint on modified Go files (requires pre-built custom-gcl binary)
-        entry: scripts/run-custom-golangci-lint.sh
+        entry: go tool mage lint:precommit
         language: system
         types: [go]
         pass_filenames: false
@@ -42,7 +43,7 @@ repos:
       - id: gomodcheck
         name: Check go.mod install compatibility
         description: Ensure go.mod doesn't have replace/exclude directives that break go install
-        entry: bash -c 'cd tools/gomodcheck && go run . ../../go.mod'
+        entry: go tool mage lint:goModCheck
         language: system
         files: ^go\.mod$
         pass_filenames: false

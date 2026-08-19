@@ -47,7 +47,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -60,7 +60,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -73,7 +73,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -239,8 +239,8 @@ jobs:
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
-          golangci-lint custom
+          # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
+          go tool mage lint:customGCL
 
           # Verify the custom binary was created
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }
@@ -296,7 +296,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
