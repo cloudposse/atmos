@@ -3,6 +3,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -30,14 +31,16 @@ type TerraformExecContext struct {
 }
 
 // ProvisionerFunc is a function that provisions infrastructure.
-// It receives the Atmos configuration, component configuration, auth context, and an
-// optional terraform execution context (nil unless the dispatching event provides one).
+// It receives the Atmos configuration, component configuration, auth context, component
+// output writers, and an optional terraform execution context (nil unless the dispatching
+// event provides one).
 // Returns an error if provisioning fails.
 type ProvisionerFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers OutputWriters,
 	execCtx *TerraformExecContext,
 ) error
 
@@ -61,6 +64,31 @@ var (
 	provisionersByEvent = make(map[HookEvent][]Provisioner)
 	registryMu          sync.RWMutex
 )
+
+type (
+	outputSuppressedContextKey struct{}
+)
+
+// OutputWriters routes in-process provisioner output through component-scoped streams.
+type OutputWriters struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// WithOutputSuppressed disables transient provisioner output for this context.
+func WithOutputSuppressed(ctx context.Context) context.Context {
+	defer perf.Track(nil, "provisioner.WithOutputSuppressed")()
+
+	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+}
+
+// OutputSuppressed reports whether transient provisioner output is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "provisioner.OutputSuppressed")()
+
+	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
+	return ok
+}
 
 // RegisterProvisioner registers a provisioner for a specific hook event.
 // Provisioners self-declare when they should run by specifying a hook event.
@@ -106,13 +134,13 @@ func GetProvisionersForEvent(event HookEvent) []Provisioner {
 //
 // The execCtx is optional: events that run a terraform subcommand (e.g. after.terraform.init)
 // pass a single *TerraformExecContext; before-events and callers without one pass nothing.
-// It is variadic so the many existing call sites that have no execution context need no change.
 func ExecuteProvisioners(
 	ctx context.Context,
 	event HookEvent,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers OutputWriters,
 	execCtx ...*TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.ExecuteProvisioners")()
@@ -139,7 +167,7 @@ func ExecuteProvisioners(
 				Err()
 		}
 
-		if err := p.Func(ctx, atmosConfig, componentConfig, authContext, ec); err != nil {
+		if err := p.Func(ctx, atmosConfig, componentConfig, authContext, writers, ec); err != nil {
 			return errUtils.Build(errUtils.ErrProvisionerFailed).
 				WithCause(err).
 				WithContext("provisioner_type", p.Type).

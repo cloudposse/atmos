@@ -53,15 +53,29 @@ type MergeResult struct {
 //   - theirs: The template's version (with template updates)
 //
 // Returns the merged content or an error if conflicts exceed threshold.
+//
+// The output also preserves each input's exact trailing-newline count; see
+// the newline-handling comment on the diff3.Merge call below for why.
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
 
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
+	//
+	// Each input gets one newline appended before diff3 ever sees it. diff3's
+	// line reader (bufio.Scanner) can't tell how many trailing newlines an
+	// input had — for N >= 1 trailing newlines, its join step always
+	// reconstructs exactly N-1 (it loses exactly one, regardless of how many
+	// there were; for N == 0 there's nothing to lose). Appending one newline
+	// here bumps every input's count to at least 1, so that guaranteed loss
+	// of exactly one newline cancels out and the original count survives
+	// (whichever side's content ends up dominating a given region carries
+	// its own newline count through unaffected, since the +1/-1 cancellation
+	// applies to each side independently).
 	mergeResult, err := diff3.Merge(
-		strings.NewReader(ours),
-		strings.NewReader(base),
-		strings.NewReader(theirs),
+		strings.NewReader(ours+newlineSeparator),
+		strings.NewReader(base+newlineSeparator),
+		strings.NewReader(theirs+newlineSeparator),
 		false, // Don't show base in conflict markers.
 		"Ours",
 		"Theirs",

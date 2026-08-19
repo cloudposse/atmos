@@ -2784,3 +2784,36 @@ func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
 		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
 	})
 }
+
+// TestStepFreshnessName covers both branches of stepFreshnessName: a named step must return its
+// own name unchanged (so freshness state keys stay human-readable), while an unnamed step must
+// fall back to the same positional "step-%d" scheme customCommandConditionContext already uses,
+// so a step with no name: still gets a stable, unique freshness state key across runs.
+func TestStepFreshnessName(t *testing.T) {
+	tests := []struct {
+		name     string
+		stepName string
+		index    int
+		expected string
+	}{
+		{
+			name:     "named step returns its own name",
+			stepName: "build",
+			index:    3,
+			expected: "build",
+		},
+		{
+			name:     "unnamed step falls back to positional name",
+			stepName: "",
+			index:    2,
+			expected: "step-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stepFreshnessName(tt.stepName, tt.index)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}

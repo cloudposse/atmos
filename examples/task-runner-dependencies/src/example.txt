@@ -1,0 +1,1 @@
+Example source file used to exercise checksum/timestamp freshness checking.

@@ -10,7 +10,9 @@ import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Read the version pinned for a component in your `vendor.yaml` manifest. The component
-is matched by name, so manifest ordering does not matter.
+is matched by name, so manifest ordering does not matter. The search covers `vendor.yaml`
+and every manifest it imports via `spec.imports`, so a component declared only in an
+imported file is found too.
 </Intro>
 
 :::info

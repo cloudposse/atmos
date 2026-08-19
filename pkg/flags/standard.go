@@ -853,20 +853,34 @@ func (p *StandardFlagParser) validateSingleFlag(flagName string, validValues []s
 		if v == "" {
 			return nil
 		}
-		if !p.isValueValid(v, validValues) {
-			return p.createValidationError(flagName, v, validValues)
+		if err := p.validateValueOrOverride(flagName, v, validValues); err != nil {
+			return err
 		}
 	case []string:
 		for _, item := range v {
 			if item == "" {
 				continue
 			}
-			if !p.isValueValid(item, validValues) {
-				return p.createValidationError(flagName, item, validValues)
+			if err := p.validateValueOrOverride(flagName, item, validValues); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+// validateValueOrOverride validates value against validValues via ValidateValue, substituting
+// this parser's custom per-flag message (p.validationMsgs) for the default one on failure.
+func (p *StandardFlagParser) validateValueOrOverride(flagName, value string, validValues []string) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.validateValueOrOverride")()
+
+	if err := ValidateValue(flagName, value, validValues, ValueKindFlag); err != nil {
+		if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
+			return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlagValue, msg)
+		}
+		return err
+	}
 	return nil
 }
 
@@ -900,30 +914,41 @@ func (p *StandardFlagParser) isFlagValueUserProvided(flagName string, combinedFl
 	return p.viper.IsSet(p.getViperKey(flagName))
 }
 
-// isValueValid checks if a value is in the list of valid values.
-func (p *StandardFlagParser) isValueValid(value string, validValues []string) bool {
-	defer perf.Track(nil, "flags.StandardFlagParser.isValueValid")()
+// ValueKind labels what name refers to in ValidateValue's error message -- a `--flag` or a
+// positional argument -- so an invalid `values:`-constrained argument is never misreported as an
+// invalid flag.
+type ValueKind int
 
+const (
+	// ValueKindFlag names a `--flag`.
+	ValueKindFlag ValueKind = iota
+	// ValueKindArgument names a positional argument.
+	ValueKindArgument
+)
+
+// ValidateValue checks that value is one of validValues, returning a descriptive error if not.
+// An empty value or an empty validValues list always passes -- callers decide separately
+// whether a missing/required value is itself an error. Shared by StandardFlagParser (built-in
+// commands' `valid_values:`) and custom commands' `values:` (pkg/flags/constrained.go), so both
+// surfaces report identical error text for an invalid choice, modulo kind's flag-vs-argument
+// wording.
+func ValidateValue(name, value string, validValues []string, kind ValueKind) error {
+	defer perf.Track(nil, "flags.ValidateValue")()
+
+	if value == "" || len(validValues) == 0 {
+		return nil
+	}
 	for _, validValue := range validValues {
 		if value == validValue {
-			return true
+			return nil
 		}
 	}
-	return false
-}
-
-// createValidationError creates an error for an invalid flag value.
-func (p *StandardFlagParser) createValidationError(flagName, value string, validValues []string) error {
-	defer perf.Track(nil, "flags.StandardFlagParser.createValidationError")()
-
-	// Check for custom error message.
-	if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
-		return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlagValue, msg)
+	if kind == ValueKindArgument {
+		return fmt.Errorf("%w: invalid value %q for argument %s (valid values: %s)",
+			errUtils.ErrInvalidFlagValue, value, name, strings.Join(validValues, ", "))
 	}
-
-	// Default error message.
 	return fmt.Errorf("%w: invalid value %q for flag --%s (valid values: %s)",
-		errUtils.ErrInvalidFlagValue, value, flagName, strings.Join(validValues, ", "))
+		errUtils.ErrInvalidFlagValue, value, name, strings.Join(validValues, ", "))
 }
 
 // getViperKey returns the Viper key for a flag name.

@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"runtime"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -47,5 +49,8 @@ func BuildConditionContext(workflow string, workflowDefinition *schema.WorkflowD
 		Workflow: workflow,
 		Step:     stepName,
 		Env:      env,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}
 }

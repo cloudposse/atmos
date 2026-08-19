@@ -273,7 +273,7 @@ func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedTok
 	var wg sync.WaitGroup
 	var mu sync.Mutex // Protects creds writes.
 
-	wg.Add(2) //nolint:mnd
+	wg.Add(3) //nolint:mnd
 
 	// Acquire Microsoft Graph API token (required for azuread provider).
 	go func() {
@@ -305,6 +305,22 @@ func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedTok
 		creds.KeyVaultExpiration = expiresOn.Format(time.RFC3339)
 		mu.Unlock()
 		log.Debug("Acquired KeyVault API token", "expiresOn", creds.KeyVaultExpiration)
+	}()
+
+	// Acquire an AKS-scoped token, for `atmos azure aks token` (optional).
+	go func() {
+		defer wg.Done()
+		aksResp, err := p.exchangeToken(ctx, federatedToken, azureCloud.AKSServerScopeFromContext(ctx))
+		if err != nil {
+			log.Debug("Failed to acquire AKS token (atmos azure aks token may not work)", "error", err)
+			return
+		}
+		expiresOn := time.Now().Add(time.Duration(aksResp.ExpiresIn) * time.Second)
+		mu.Lock()
+		creds.AKSToken = aksResp.AccessToken
+		creds.AKSTokenExpiration = expiresOn.Format(time.RFC3339)
+		mu.Unlock()
+		log.Debug("Acquired AKS token", "expiresOn", creds.AKSTokenExpiration)
 	}()
 
 	wg.Wait()
@@ -527,18 +543,18 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "azure.oidcProvider.PrepareEnvironment")()
 
-	// Use shared Azure environment preparation.
+	// Use shared Azure environment preparation in OIDC mode. It sets ARM_USE_OIDC (not
+	// ARM_USE_CLI) and exports the tenant — which OIDC (service-principal / federated) auth needs
+	// and which, unlike the CLI path, does not conflict with the azurerm backend's Azure CLI
+	// credential (no `az account get-access-token --subscription … --tenant …` shell-out).
 	result := azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
 		Environ:          environ,
 		SubscriptionID:   p.subscriptionID,
 		TenantID:         p.tenantID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,
+		UseOIDC:          true,
 	})
-
-	// Override ARM_USE_CLI to use OIDC instead.
-	delete(result, "ARM_USE_CLI")
-	result["ARM_USE_OIDC"] = "true"
 
 	// Set client ID for Terraform providers.
 	if p.clientID != "" {

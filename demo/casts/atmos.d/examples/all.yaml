@@ -172,6 +172,9 @@ commands:
         name: scaffolding-generate-example
         command: atmos casts generate examples scaffolding generate-example
       - type: shell
+        name: scaffolding-matrix-generate-example
+        command: atmos casts generate examples scaffolding-matrix generate-example
+      - type: shell
         name: scaffolds-aws-landing-zone-lifecycle
         command: atmos casts generate examples scaffolds aws-landing-zone-lifecycle
       - type: shell
@@ -354,6 +357,9 @@ commands:
       - type: shell
         name: scaffolding-generate-example
         command: atmos casts validate examples scaffolding generate-example
+      - type: shell
+        name: scaffolding-matrix-generate-example
+        command: atmos casts validate examples scaffolding-matrix generate-example
       - type: shell
         name: scaffolds-aws-landing-zone-lifecycle
         command: atmos casts validate examples scaffolds aws-landing-zone-lifecycle

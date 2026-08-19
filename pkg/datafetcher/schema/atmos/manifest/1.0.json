@@ -20,6 +20,9 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
+    "helm": {
+      "$ref": "#/definitions/helm"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -82,6 +85,45 @@
     }
   ],
   "definitions": {
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "condition_predicate": {
       "type": "string",
       "description": "Built-in condition predicate for step and hook execution.",
@@ -321,6 +363,9 @@
             },
             "kubernetes": {
               "$ref": "#/definitions/kubernetes_components"
+            },
+            "helm": {
+              "$ref": "#/definitions/helm_components"
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
@@ -1099,6 +1144,164 @@
         }
       ]
     },
+    "helm": {
+      "title": "helm",
+      "description": "Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object"
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
     "packer": {
       "title": "packer",
       "description": "Packer section",
@@ -1689,7 +1892,7 @@
     },
     "dependencies": {
       "title": "dependencies",
-      "description": "Dependencies section. Declares required tool versions (`tools`), component-to-component dependencies (`components`), and path-based dependencies (`files`, `folders`) used by `atmos describe affected`, `atmos describe dependents`, and CI/CD integrations.",
+      "description": "Dependencies section. Declares required tool versions (`tools`), component-to-component dependencies (`components`), path-based dependencies (`files`, `folders`), and named command/workflow dependencies (`commands`, `workflows`) used by `atmos describe affected`, `atmos describe dependents`, CI/CD integrations, and command/workflow orchestration.",
       "oneOf": [
         {
           "type": "string",
@@ -1710,11 +1913,66 @@
             },
             "folders": {
               "$ref": "#/definitions/dependencies_folders"
+            },
+            "commands": {
+              "$ref": "#/definitions/unit_dependencies",
+              "description": "Named custom commands that must complete before this command/workflow runs its own steps."
+            },
+            "workflows": {
+              "$ref": "#/definitions/unit_dependencies",
+              "description": "Named workflows that must complete before this command/workflow runs its own steps. A plain name resolves within the current workflow file; a structured entry with `file:` resolves cross-file."
             }
           },
           "required": []
         }
       ]
+    },
+    "unit_dependency": {
+      "title": "unit_dependency",
+      "description": "References a single named command or workflow that must complete before the declaring command/workflow runs its own steps.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the target command or workflow."
+        },
+        "file": {
+          "type": "string",
+          "description": "Workflow file to resolve name in, for a cross-file workflow reference. Only meaningful for workflows entries; ignored for commands (which resolve globally)."
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Parameterized flag overrides for this dependency invocation. Two entries referencing the same name with the same flags/args collapse into a single executed node (automatic dedup); different flags/args produce distinct nodes that both run."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Parameterized positional-argument overrides for this dependency invocation."
+        },
+        "fail": {
+          "type": "string",
+          "enum": ["wait_all", "fail_fast", "best_effort"],
+          "description": "Controls failure propagation for this dependency: wait_all (default), fail_fast, or best_effort."
+        }
+      },
+      "required": ["name"]
+    },
+    "unit_dependencies": {
+      "title": "unit_dependencies",
+      "description": "A list of named command/workflow dependencies. Each element may be a plain name string (the common case, equivalent to {name: <value>}) or a structured object for parameterized invocation or a cross-file workflow reference.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          { "$ref": "#/definitions/unit_dependency" }
+        ]
+      }
     },
     "dependencies_components": {
       "title": "dependencies_components",
@@ -2675,6 +2933,9 @@
             "stack": {
               "type": "string"
             },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
             "steps": {
               "oneOf": [
                 {
@@ -2692,9 +2953,6 @@
             "working_directory": {
               "type": "string",
               "description": "Working directory for the workflow."
-            },
-            "dependencies": {
-              "$ref": "#/definitions/dependencies"
             },
             "env": {
               "type": "object",
@@ -2960,6 +3218,53 @@
               "$ref": "#/definitions/step_condition"
             }
           ]
+        },
+        "continue": {
+          "description": "Condition that forgives this step's own failure so later steps still run and the overall status is unaffected (GitHub Actions' continue-on-error semantics). Evaluated after the step's own execution, against its own outcome, unlike 'when' which is evaluated before the step runs.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/step_condition"
+            }
+          ]
+        },
+        "inputs": {
+          "title": "inputs",
+          "description": "Freshness sources for this step. Declaring inputs/artifacts with no explicit 'when' implicitly means when: checksum.changed. A sibling of 'artifacts' and 'preconditions', not a container for them.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for files whose content determines checksum.changed / contributes to timestamp.changed."
+            }
+          }
+        },
+        "artifacts": {
+          "title": "artifacts",
+          "description": "This step's expected output files -- a sibling of 'inputs', not nested inside it. A missing path forces a rerun regardless of checksum.changed/timestamp.changed.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for this step's expected output files."
+            }
+          }
+        },
+        "preconditions": {
+          "title": "preconditions",
+          "description": "Tools that must already be on PATH for this step to be considered already satisfied. Declaring preconditions alone with no explicit 'when' implicitly means when: \"!preconditions.success\" (run only when not already satisfied).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tools": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Executable names resolved via exec.LookPath (no shell); preconditions.success is true iff every entry resolves."
+            }
+          }
         },
         "timeout": {
           "type": "string",
@@ -3971,6 +4276,10 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "require_identity": {
+              "type": "boolean",
+              "description": "Require an Atmos Auth identity for Helm operations that contact a Kubernetes cluster and reject ambient kubeconfig access."
+            },
             "realm": {
               "type": "string",
               "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."

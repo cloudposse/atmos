@@ -15,6 +15,7 @@ func TestPrepareEnvironment(t *testing.T) {
 		location         string
 		credentialsFile  string
 		accessToken      string
+		useOIDC          bool
 		expectedContains map[string]string
 		expectedMissing  []string
 	}{
@@ -34,11 +35,15 @@ func TestPrepareEnvironment(t *testing.T) {
 				"PATH":                  "/usr/bin",
 				"AZURE_SUBSCRIPTION_ID": "12345678-1234-1234-1234-123456789012",
 				"ARM_SUBSCRIPTION_ID":   "12345678-1234-1234-1234-123456789012",
-				"AZURE_TENANT_ID":       "87654321-4321-4321-4321-210987654321",
-				"ARM_TENANT_ID":         "87654321-4321-4321-4321-210987654321",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
+			},
+			// CLI auth must NOT export the tenant (it conflicts with the azurerm backend's
+			// Azure CLI credential); the tenant comes from the seeded MSAL session.
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -60,8 +65,6 @@ func TestPrepareEnvironment(t *testing.T) {
 				"HOME":                  "/home/user",
 				"AZURE_SUBSCRIPTION_ID": "12345678-1234-1234-1234-123456789012",
 				"ARM_SUBSCRIPTION_ID":   "12345678-1234-1234-1234-123456789012",
-				"AZURE_TENANT_ID":       "87654321-4321-4321-4321-210987654321",
-				"ARM_TENANT_ID":         "87654321-4321-4321-4321-210987654321",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
@@ -70,6 +73,8 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AZURE_CLIENT_CERTIFICATE_PATH",
 				"ARM_CLIENT_ID",
 				"ARM_CLIENT_SECRET",
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -92,8 +97,6 @@ func TestPrepareEnvironment(t *testing.T) {
 				"HOME":                           "/home/user",
 				"AZURE_SUBSCRIPTION_ID":          "12345678-1234-1234-1234-123456789012",
 				"ARM_SUBSCRIPTION_ID":            "12345678-1234-1234-1234-123456789012",
-				"AZURE_TENANT_ID":                "87654321-4321-4321-4321-210987654321",
-				"ARM_TENANT_ID":                  "87654321-4321-4321-4321-210987654321",
 				"AZURE_LOCATION":                 "westus",
 				"ARM_LOCATION":                   "westus",
 				"ARM_USE_CLI":                    "true",
@@ -104,7 +107,10 @@ func TestPrepareEnvironment(t *testing.T) {
 				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gcp/creds.json",
 				"GOOGLE_CLOUD_PROJECT":           "my-gcp-project",
 			},
-			expectedMissing: []string{},
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
+			},
 		},
 		{
 			name:            "with empty input environment",
@@ -117,11 +123,13 @@ func TestPrepareEnvironment(t *testing.T) {
 			expectedContains: map[string]string{
 				"AZURE_SUBSCRIPTION_ID": "12345678-1234-1234-1234-123456789012",
 				"ARM_SUBSCRIPTION_ID":   "12345678-1234-1234-1234-123456789012",
-				"AZURE_TENANT_ID":       "87654321-4321-4321-4321-210987654321",
-				"ARM_TENANT_ID":         "87654321-4321-4321-4321-210987654321",
 				"AZURE_LOCATION":        "northeurope",
 				"ARM_LOCATION":          "northeurope",
 				"ARM_USE_CLI":           "true",
+			},
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -138,13 +146,13 @@ func TestPrepareEnvironment(t *testing.T) {
 				"HOME":                  "/home/user",
 				"AZURE_SUBSCRIPTION_ID": "12345678-1234-1234-1234-123456789012",
 				"ARM_SUBSCRIPTION_ID":   "12345678-1234-1234-1234-123456789012",
-				"AZURE_TENANT_ID":       "87654321-4321-4321-4321-210987654321",
-				"ARM_TENANT_ID":         "87654321-4321-4321-4321-210987654321",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
 				"AZURE_LOCATION",
 				"ARM_LOCATION",
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -170,6 +178,24 @@ func TestPrepareEnvironment(t *testing.T) {
 				"ARM_TENANT_ID",
 			},
 		},
+		{
+			name:           "OIDC auth exports the tenant (service principal / federated needs it)",
+			inputEnv:       map[string]string{"HOME": "/home/user"},
+			subscriptionID: "12345678-1234-1234-1234-123456789012",
+			tenantID:       "87654321-4321-4321-4321-210987654321",
+			location:       "eastus",
+			useOIDC:        true,
+			expectedContains: map[string]string{
+				"AZURE_SUBSCRIPTION_ID": "12345678-1234-1234-1234-123456789012",
+				"ARM_SUBSCRIPTION_ID":   "12345678-1234-1234-1234-123456789012",
+				"AZURE_TENANT_ID":       "87654321-4321-4321-4321-210987654321",
+				"ARM_TENANT_ID":         "87654321-4321-4321-4321-210987654321",
+				"ARM_USE_OIDC":          "true",
+			},
+			expectedMissing: []string{
+				"ARM_USE_CLI",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -179,6 +205,7 @@ func TestPrepareEnvironment(t *testing.T) {
 				SubscriptionID: tt.subscriptionID,
 				TenantID:       tt.tenantID,
 				Location:       tt.location,
+				UseOIDC:        tt.useOIDC,
 			})
 
 			// Check that expected variables are present with correct values.
@@ -192,8 +219,12 @@ func TestPrepareEnvironment(t *testing.T) {
 				assert.False(t, exists, "Expected %s to be missing", key)
 			}
 
-			// Verify ARM_USE_CLI is always set to "true".
-			assert.Equal(t, "true", result["ARM_USE_CLI"], "ARM_USE_CLI should always be true")
+			// CLI auth sets ARM_USE_CLI=true; OIDC auth sets ARM_USE_OIDC=true instead.
+			if tt.useOIDC {
+				assert.Equal(t, "true", result["ARM_USE_OIDC"], "ARM_USE_OIDC should be true for OIDC auth")
+			} else {
+				assert.Equal(t, "true", result["ARM_USE_CLI"], "ARM_USE_CLI should be true for CLI auth")
+			}
 		})
 	}
 }

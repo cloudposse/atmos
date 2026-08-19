@@ -26,3 +26,107 @@ components:
           enabled: true
           timeout: 30
           retries: 3
+
+    # Abstract base component with a concrete (non-function) map, for the mirror-precedence case:
+    # a component layer overriding this with a !template value (the REVERSE of base-component
+    # above, where the function is the lower-precedence layer) — proves the deep-merge is
+    # symmetric regardless of which side is the function.
+    base-component-mirror:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        mirror_config:
+          enabled: true
+          base_only: "yes"
+
+    # Abstract base component demonstrating !labels/!tags fed by metadata.labels/metadata.tags.
+    # Regression fixture for https://github.com/cloudposse/atmos/issues/2888.
+    base-component-labels:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+        labels:
+          X: "1"
+          Y: "2"
+        tags:
+          - "X"
+          - "Y"
+      vars:
+        # YAML functions that a later layer will contribute a conflicting value for.
+        tags: !labels
+        tag_list: !tags
+
+    # Field-test fixture (2026-08-07): a deferred YAML function nested INSIDE a list item
+    # (as opposed to at a top-level vars key). WalkAndDeferYAMLFunctions only walks maps, not
+    # []interface{}, so a function nested inside a list element may get zero deferred-merge
+    # protection. Uses settings.list_merge_strategy: merge so list items combine by index.
+    base-component-list-nested:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      settings:
+        list_merge_strategy: merge
+      vars:
+        servers:
+          - name: "web"
+            stage: !env ATMOS_STAGE
+          - name: "db"
+            stage: "static"
+
+    # Field-test fixture (2026-08-07): a 3-layer precedence chain where the middle layer flips
+    # the type from map to scalar, and the top layer flips it back to map. Probes whether
+    # mergeDeferredMaps/mergeSlicesMergeStrategy returning on first type mismatch silently drops
+    # the highest-precedence (concrete, user-authored) layer.
+    base-component-typeflip:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        flip_config: !template '{{ dict "a" "1" "b" "2" | toJson }}'
+
+    base-component-typeflip-mixin:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        flip_config: "scalar-middle-layer"
+
+    # Field-test fixture (2026-08-07): a deferred function occupies the PARENT path in one layer
+    # while a DIFFERENT deferred function occupies a CHILD key of that same path in another
+    # layer. Probes claimed nondeterministic clobber from unordered pathKey map iteration in
+    # ApplyDeferredMerges combined with unconditional SetValueAtPath overwrite.
+    base-component-nested-collision:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        combo: !template '{{ dict "a" "1" "b" "2" | toJson }}'
+
+    # Field-test fixture (2026-08-07): !git.root is NOT in pkg/merge/merge_yaml_functions.go's
+    # postMergeFunctions list (only 11 specific functions are deferred/tracked; !git.*, !aws.*,
+    # !secret, !cel, !random, !version, !emulator are not). Probes whether the original #2888
+    # failure mode (function's contribution silently dropped instead of a clean type-conflict
+    # override) still reproduces for an excluded function whose path is overridden with a map.
+    base-component-untracked-func:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        git_info: !git.root
+
+    # Field-test fixture (2026-08-07): a deferred YAML function inside `backend`, a section that
+    # is NOT one of the 9 sections wired to resolveDeferredYamlFunctions. Backend bucket names
+    # computed from stage/region are a common real-world pattern. Probes whether the function
+    # placeholder ever gets resolved/deep-merged, or leaks through unresolved.
+    base-component-backend:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        region: "us-east-1"
+      backend_type: s3
+      backend:
+        s3:
+          bucket: !template '{{ printf "acme-%s-tfstate" .vars.region }}'
+          key: "base/terraform.tfstate"

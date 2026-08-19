@@ -31,6 +31,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -325,7 +326,7 @@ func ensureComponentSourceProvisioned(atmosConfig *schema.AtmosConfiguration, in
 
 	ctx, cancel := context.WithTimeout(context.Background(), componentSourceProvisionTimeout)
 	defer cancel()
-	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
+	if _, _, err := component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, fallbackPath); err != nil {
 		log.Debug("hook source provisioning failed; the Terraform command will report this authoritatively", "component", info.ComponentFromArg, "error", err)
 	}
 }

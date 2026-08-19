@@ -731,6 +731,55 @@ func TestCoerceFieldValueTypes_FixesSetFlagWhenCondition(t *testing.T) {
 	assert.Equal(t, []string{"vendor_source"}, missing)
 }
 
+// TestCoerceFieldValueTypes_MultiSelect verifies --set's raw comma-separated
+// string for a multiselect field is split into a []string of trimmed
+// options, so a matrix axis (or a when: membership check) sourced from it
+// sees a list, not an unsplit string -- the same class of fix as the
+// boolean case above, for a different field type.
+func TestCoerceFieldValueTypes_MultiSelect(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "environments", Type: "multiselect", Options: []string{"dev", "staging", "production"}},
+			},
+		},
+	}
+
+	values := map[string]interface{}{"environments": "dev, staging"}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{"dev", "staging"}, values["environments"])
+}
+
+// TestCoerceFieldValueTypes_MultiSelectEmpty verifies an empty --set value
+// becomes an empty, non-nil []string, distinct from the field never having
+// been set at all.
+func TestCoerceFieldValueTypes_MultiSelectEmpty(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{{Name: "environments", Type: "multiselect"}},
+		},
+	}
+
+	values := map[string]interface{}{"environments": ""}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{}, values["environments"])
+}
+
+// TestCoerceFieldValueTypes_MultiSelectAlreadyTyped verifies an
+// already-[]string value (e.g. from an interactive prompt) is left
+// untouched.
+func TestCoerceFieldValueTypes_MultiSelectAlreadyTyped(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{{Name: "environments", Type: "multiselect"}},
+		},
+	}
+
+	values := map[string]interface{}{"environments": []string{"dev"}}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{"dev"}, values["environments"])
+}
+
 // mustCondition parses a bare CEL when: expression for test fixtures.
 func mustCondition(t *testing.T, expr string) condition.Condition {
 	t.Helper()

@@ -20,6 +20,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -519,6 +520,117 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, "from-cache", value)
+}
+
+// TestExecutor_GetOutput_CacheHitIsVisible reproduces the dogfooding report:
+// a test.vars block with multiple !terraform.output lookups against the same
+// component logged a "Fetching ..." message only for the first (a cache
+// miss); every subsequent lookup for a different output key on the same
+// now-cached component+stack was invisible, since the cache-hit branch only
+// called log.Debug (invisible outside debug/trace logging), never the
+// visible outputLookupSucceeded/outputLookupFailed path a real fetch uses.
+// Every successful lookup -- cached or not -- must produce a visible
+// notification.
+func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	// Pre-populate the cache with two outputs for the same component+stack,
+	// mirroring a real fetch that caches every output at once. Neither
+	// lookup below triggers DescribeComponent -- both are cache hits.
+	stackSlug := stackComponentKey("fixtures", "vpc")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id":   "vpc-abc123",
+		"vpc_cidr": "10.0.0.0/16",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	value, exists, err := exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_id", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "vpc-abc123", value)
+
+	value, exists, err = exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_cidr", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "10.0.0.0/16", value)
+
+	// Strip ANSI before asserting: with color forced (e.g. CI's "CI" env var),
+	// the markdown renderer emits style resets around the literal underscore
+	// in "vpc_id"/"vpc_cidr", splitting the message across multiple escape
+	// sequences without dropping or reordering any visible characters.
+	rendered := ansi.Strip(uiOutput.String())
+	assert.Contains(t, rendered, "Fetching vpc_id output from vpc in fixtures",
+		"the first cache-hit lookup must be visible")
+	assert.Contains(t, rendered, "Fetching vpc_cidr output from vpc in fixtures",
+		"the second cache-hit lookup (a different output key on the same already-cached component) must also be visible")
+}
+
+// TestResolveOutputFromCache_MissReturnsNil verifies that resolveOutputFromCache
+// returns nil (not a zero-value *cachedOutputResult) for a stackSlug that was
+// never stored in the cache, so callers such as GetOutput correctly fall
+// through to a real fetch instead of mistaking a miss for a cache hit that
+// resolved to a nil value.
+func TestResolveOutputFromCache_MissReturnsNil(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	// A unique, never-populated stackSlug guarantees test isolation --
+	// nothing else in this package's test suite could have cached it.
+	stackSlug := stackComponentKey("never-cached-stack", "never-cached-component")
+	terraformOutputsCache.Delete(stackSlug) // defensive: ensure a clean slate.
+
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "never-cached-component", "never-cached-stack", "some_output")
+	assert.Nil(t, result, "a cache miss must return nil so the caller falls through to a real fetch")
+}
+
+// TestResolveOutputFromCache_GetOutputVariableErrorIsVisible verifies that when
+// a cache hit's stored outputs cannot be evaluated for the requested output key
+// (a malformed yq expression), resolveOutputFromCache returns a
+// *cachedOutputResult carrying the error AND surfaces the same visible
+// outputLookupFailed notification a real fetch failure would -- mirroring
+// TestExecutor_GetOutput_CacheHitIsVisible's success-path assertion but for the
+// failure branch.
+func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	stackSlug := stackComponentKey("malformed-yq-stack", "malformed-yq-component")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id": "vpc-abc123",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	// An unbalanced `[` is not a missing key -- it is a yq syntax error,
+	// which getOutputVariable/extractYqValue propagate as a real error
+	// rather than an "exists: false" result.
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
+	require.NotNil(t, result)
+	require.Error(t, result.err)
+	assert.Contains(t, result.err.Error(), "failed to evaluate YQ expression")
+
+	rendered := ansi.Strip(uiOutput.String())
+	assert.Contains(t, rendered, "Fetching vpc_id[ output from malformed-yq-component in malformed-yq-stack",
+		"a cache-hit lookup that fails to evaluate must still surface a visible failure notification")
 }
 
 func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
