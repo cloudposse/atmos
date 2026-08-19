@@ -48,7 +48,7 @@ Some upstream orgs block the GitHub API calls this action needs to resolve a tag
 
 ### Trust boundary
 
-On `pull_request` runs, the caller workflow (`.github/workflows/verify-sha-pinning.yml`) checks out the PR's **base** revision into a separate directory and invokes this action from there, rather than from the PR's own (merge-ref) checkout. Only the workflow files being scanned come from the PR head — this action's own verification logic and `allowlist.json` come from the base branch. This prevents a PR from tampering with its own drift check (e.g. adding a self-serving allowlist entry, or patching the verifier to always pass) in the same PR that tampers with a pinned SHA. One consequence: a PR that edits this action's own code or `allowlist.json` won't see those changes take effect on itself — only on runs after it merges. That's intentional, not a bug.
+This action's own code and `allowlist.json` are read from the PR's own head, the same way gitleaks/git-secrets read their allowlist config from the diff being scanned — an allowlist you can't extend from the PR that needs the extension isn't useful. Protection against a self-serving allowlist entry (or a patched verifier that always passes) comes from required review before merge, not from hiding the policy behind a base-branch checkout: `main` requires at least one approval, requires a code-owner review, and dismisses stale approvals whenever new commits are pushed, so a reviewer always sees the actual diff — including any change to this action or `allowlist.json` — before it can merge.
 
 ## Usage
 
