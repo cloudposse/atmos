@@ -182,6 +182,7 @@ export const roadmapConfig = {
         { label: 'AKS exec credential plugin (atmos azure aks token)', status: 'shipped', quarter: 'q3-2026', changelog: 'azure-aks-acr-authentication', docs: '/cli/commands/azure/azure-aks-token', description: 'AKS bearer token generation from Atmos-managed Azure credentials without shelling out to az or kubelogin. Automatically called by kubectl.', benefits: 'kubectl authentication is seamless. Tokens refresh automatically without manual intervention.' },
         { label: 'Automatic ACR authentication tied to identities', status: 'shipped', quarter: 'q3-2026', changelog: 'azure-aks-acr-authentication', docs: '/cli/commands/azure/acr-login', description: 'Native ACR login for container image operations without the Azure CLI, mirroring the existing ECR integration.', benefits: 'Docker push/pull to ACR works without az acr login or external credential helpers.', category: 'featured', priority: 'high' },
         { label: 'Azure interactive browser authentication (azure/interactive)', status: 'shipped', quarter: 'q3-2026', docs: '/cli/configuration/auth/providers', changelog: 'azure-interactive-auth', description: 'New azure/interactive provider performs the same browser-based authorization code + PKCE flow as az login, with silent re-login from the persisted MSAL cache and Azure CLI-compatible cache write-back.', benefits: 'One-command Azure login that works in tenants where Conditional Access blocks the device code flow. After atmos auth login, the az CLI works without ever running az login.' },
+        { label: 'GitHub CLI token fallback for private git:: imports', status: 'shipped', quarter: 'q3-2026', pr: 2923, changelog: 'remote-import-github-auth-and-caching', docs: '/cli/configuration/imports', description: 'Private git:: remote imports (config imports, vendoring, private Terraform modules) now fall back to a `gh auth token` CLI session, matching the fallback already used for HTTPS/API GitHub fetches. Failed imports also warn by default instead of resolving silently. The imports.ttl setting shared with stack-manifest imports now also governs root atmos.yaml imports uniformly: git:: imports with a subdirectory are cached and reused instead of always re-cloning, and plain remote URLs expire after ttl instead of being cached forever.', benefits: 'A developer authenticated only via `gh auth login` no longer needs a separate GITHUB_TOKEN just to pull a private central config repo, a broken import surfaces immediately instead of a mysteriously empty config, and one setting now controls caching for every remote import the same way.' },
       ],
       issues: [],
       prs: [
@@ -191,6 +192,7 @@ export const roadmapConfig = {
         { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
         { number: 2229, title: 'Isolated browser sessions for multi-account console access' },
+        { number: 2923, title: 'GitHub CLI token fallback and caching for remote imports' },
       ],
     },
     {
