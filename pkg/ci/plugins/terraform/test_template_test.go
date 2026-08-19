@@ -111,3 +111,69 @@ func TestTestTemplate_WithFailure(t *testing.T) {
 		assert.Contains(t, rendered, want)
 	}
 }
+
+// TestTestTemplate_SummaryFallback_AllPass covers the shape ParseTestOutput
+// produces when per-run lines weren't captured and it falls back to a single
+// synthesized row -- the table must still render, not just badges.
+func TestTestTemplate_SummaryFallback_AllPass(t *testing.T) {
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    &plugin.OutputResult{HasErrors: false},
+		},
+		TestResult: &plugin.TerraformTestOutputData{
+			Total: 2,
+			Pass:  2,
+			Runs: []plugin.TerraformTestRun{
+				{Name: "test summary (per-run detail unavailable): 2 passed, 0 failed", Status: "pass"},
+			},
+		},
+	}
+
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"Tests Passed for `app` in `local`",
+		"TESTS-2",
+		"PASSED-2",
+		"| Result | File | Run | Duration | Details |",
+		"| :white_check_mark: pass |  | `test summary (per-run detail unavailable): 2 passed, 0 failed` |  | |",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+	assert.NotContains(t, rendered, "Tests Failed")
+}
+
+// TestTestTemplate_SummaryFallback_WithFailure covers the failing counterpart
+// of the summary-only fallback.
+func TestTestTemplate_SummaryFallback_WithFailure(t *testing.T) {
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    &plugin.OutputResult{HasErrors: true},
+		},
+		TestResult: &plugin.TerraformTestOutputData{
+			Total: 3,
+			Pass:  1,
+			Fail:  2,
+			Runs: []plugin.TerraformTestRun{
+				{Name: "test summary (per-run detail unavailable): 1 passed, 2 failed", Status: "fail"},
+			},
+		},
+	}
+
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"Tests Failed for `app` in `local`",
+		"FAILED-2",
+		"| Result | File | Run | Duration | Details |",
+		"| :x: fail |  | `test summary (per-run detail unavailable): 1 passed, 2 failed` |  |  |",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+}
