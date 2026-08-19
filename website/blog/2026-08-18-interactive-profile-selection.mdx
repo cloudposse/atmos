@@ -1,0 +1,58 @@
+---
+slug: interactive-profile-selection
+title: "Pick configuration profiles interactively with a bare --profile"
+date: 2026-08-18T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Naming things from memory is one of the more tedious parts of a CLI workflow. You know you want
+to switch configuration contexts before running a command, but you don't always remember every
+profile name your team has defined, especially on a project you don't touch daily. Until now,
+`--profile` required you to type that name exactly, or go check `atmos profile list` first and
+copy it over.
+
+<!--truncate-->
+
+## The Problem
+
+`--profile` activates one or more named configuration overlays — dev settings, CI settings,
+security overrides, whatever a project defines. But the flag always required an explicit value.
+Typing `--profile` alone, expecting the CLI to prompt you the way `-i`/`--identity` already does
+when used bare, instead produced a raw usage error:
+
+```shell
+$ atmos auth login -i core-auto/terraform --profile
+Incorrect Usage
+Error: --profile flag needs an argument for command atmos auth login
+```
+
+## The Fix
+
+`--profile` with no value now opens an interactive multi-select listing every profile Atmos
+discovers across your configured profile locations. Nothing is checked by default — toggle the
+ones you want with space, confirm, and they activate left-to-right in the order shown, exactly as
+if you'd typed them explicitly.
+
+Any profile name you already typed alongside the bare flag starts pre-checked, so
+`--profile ci --profile` opens with `ci` already selected, ready to confirm or adjust. In a
+non-interactive context — CI, scripts, no TTY — bare `--profile` returns a clear error instead of
+hanging or guessing, so automation fails fast rather than silently.
+
+## How to Use It
+
+```shell
+# Interactively choose which profiles to activate
+atmos auth login -i core-auto/terraform --profile
+
+# Explicit values still work exactly as before
+atmos --profile developer terraform plan vpc -s prod
+atmos --profile ci,security terraform plan vpc -s prod
+```
+
+## Get Involved
+
+See the [Profiles](/cli/configuration/profiles#interactive-selection) docs for the full behavior,
+including profile discovery order and merge precedence. Have feedback on this feature? [Open an
+issue](https://github.com/cloudposse/atmos/issues) or join the conversation in the [Cloud Posse
+community Slack](https://cloudposse.com/slack).
