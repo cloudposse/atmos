@@ -20,12 +20,12 @@
 version: "2"
 run:
   tests: true
-  # magefiles/*.go carry `//go:build mage` so `go tool mage` (see CLAUDE.md's
-  # Compilation section) only compiles them under that tag. Without this,
-  # explicitly-scoped invocations (e.g. scripts/run-custom-golangci-lint.sh's
-  # staged-patch path, which lists ./magefiles by package path) fail
-  # typechecking with "build constraints exclude all Go files in .../magefiles"
-  # instead of linting the package.
+  # magefiles/*.go carry `//go:build mage` so `go tool mage` only compiles
+  # them under that tag. Without this, golangci-lint's default build set
+  # excludes them entirely (either silently skipping this repo's own build
+  # tooling, or, for invocations that explicitly scope to ./magefiles,
+  # failing typechecking with "build constraints exclude all Go files in
+  # .../magefiles" instead of linting the package).
   build-tags:
     - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
@@ -401,6 +401,19 @@ linters:
           - forbidigo
         path: ^cmd/terraform/planfile/
         text: "os\\.Getenv"
+      # Mage build tooling (magefiles/ — only compiled via the `mage` build
+      # tag, invoked through `go tool mage`). It's a standalone dev-tooling
+      # entrypoint outside the Atmos CLI/UI runtime and config pipeline, so
+      # the Atmos I/O-layer, env-binding, and perf.Track conventions (written
+      # for shipped product code) don't apply here.
+      - linters:
+          - forbidigo
+        path: ^magefiles/
+        text: "Atmos output helpers|direct `fmt\\.Print\\*` output|writing directly to `os\\.Stdout` or `os\\.Stderr`|viper\\.BindEnv"
+      - linters:
+          - lintroller
+        path: ^magefiles/
+        text: "perf\\.Track"
     paths:
       - experiments/.*
       - third_party$
