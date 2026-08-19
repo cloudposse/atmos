@@ -131,18 +131,23 @@ jobs:
           docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-  # Signs, SBOMs, and attests provenance for the release binaries + checksums
-  # file GoReleaser already published. Deliberately does this AFTER the release
-  # is already published (rather than adding signs:/sboms: blocks to
-  # .goreleaser.yml, which runs inside an external cloudposse/.github reusable
-  # workflow this repo doesn't control) so a failure here can never block or
-  # break the actual release cut — it only reads already-published assets.
+  # Rebuilds the release binaries from source at the published tag and
+  # replaces GoReleaser's already-published assets with natively signed/SBOM'd
+  # ones — see .goreleaser.yml's `signs:`/`sboms:` blocks. Deliberately runs a
+  # *real* `goreleaser release` again here (idempotent: .goreleaser.yml's
+  # release: block already has replace_existing_artifacts: true, mode:
+  # keep-existing, specifically to make repeated runs against the same tag
+  # safe) rather than downloading and re-signing already-published assets —
+  # signing what this job actually built, not what it fetched, closes a real
+  # TOCTOU gap: anything able to tamper with a just-published release asset in
+  # a download-then-sign window would get a valid-looking signature over
+  # tampered bytes. See docs/prd/native-goreleaser-release-pipeline.md.
   #
   # Gated the same as `docker` (any release event, not homebrew's
   # prerelease==false) so this is exercisable pre-merge: label a non-draft PR
   # `release/feature` to publish a real prerelease and fire this job.
   sign-and-attest-release:
-    name: "Sign, SBOM, and attest release artifacts"
+    name: "Rebuild, sign, SBOM, and attest release artifacts"
     runs-on: ubuntu-latest
     needs: release
     if: ${{ github.event_name == 'release' }}
@@ -160,53 +165,53 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: "Download release assets"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          mkdir -p dist
-          gh release download "$TAG" --dir dist --repo "${{ github.repository }}"
-          ls -la dist
+      - name: "Set up Go"
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
 
       - name: "Install cosign"
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      # Keyless OIDC signing of every downloaded asset (binaries + checksums
-      # file). Verifiable with:
-      #   cosign verify-blob <file> --signature <file>.sig --certificate <file>.pem \
-      #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
-      #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
-      - name: "Sign release assets with cosign"
-        run: |
-          for f in dist/*; do
-            # Skip files a *previous* run of this job already generated and
-            # uploaded to the release (re-downloaded above by `gh release
-            # download`). Signing them again is pointless, and for the SBOM
-            # specifically it's actively wrong: it gets overwritten by the
-            # "Generate source-tree SBOM" step below, so a signature made here
-            # would describe stale content by the time it's uploaded.
-            case "$f" in
-              *.sig|*.pem|*/atmos-sbom.spdx.json) continue ;;
-            esac
-            echo "Signing $f"
-            cosign sign-blob --yes "$f" --output-signature "${f}.sig" --output-certificate "${f}.pem"
-          done
+      # syft binary that .goreleaser.yml's sboms: block shells out to.
+      - name: "Install syft"
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
-      - name: "Generate source-tree SBOM"
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - name: "Run goreleaser release"
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          path: .
-          format: spdx-json
-          output-file: dist/atmos-sbom.spdx.json
+          distribution: goreleaser
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Real Sigstore-backed provenance for every downloaded release asset, tied
-      # to this repo/workflow run — verifiable via `gh attestation verify`. This
-      # is GitHub's documented "attest already-built artifacts in a downstream
-      # job" pattern, not textbook build-time SLSA L3, but it's what most
-      # consumers (and Iron Bank-style checks) actually verify.
+      # .goreleaser.yml's nfpms: block already built dist/*.deb, dist/*.rpm,
+      # dist/*.apk above and attached them to the GitHub Release directly.
+      # Pushing those same packages to Cloudsmith (currently done by an
+      # external pipeline this repo doesn't own — see
+      # docs/prd/native-goreleaser-release-pipeline.md) is intentionally left
+      # commented out: the real Cloudsmith org/repo/distro names and an API
+      # key secret are unknown from this repo today. Wire this up in a
+      # follow-up PR once those are confirmed — do not uncomment with the
+      # placeholder values below as-is.
+      #
+      # - name: "Push packages to Cloudsmith"
+      #   env:
+      #     CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+      #   run: |
+      #     pip install --user cloudsmith-cli
+      #     for f in dist/*.deb; do cloudsmith push deb <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/any-distro/any-version "$f"; done
+      #     for f in dist/*.rpm; do cloudsmith push rpm <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/any-distro/any-version "$f"; done
+      #     for f in dist/*.apk; do cloudsmith push alpine <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/alpine/edge "$f"; done
+
+      # Real Sigstore-backed provenance for every binary this job just built
+      # locally — no longer a re-fetch, so this is genuine build-time
+      # GitHub-native attestation stacked on top of cosign (a different
+      # verification mechanism/consumer than cosign, e.g. `gh attestation
+      # verify`), not a second re-fetch-and-sign layer.
       - name: "Attest build provenance"
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -222,19 +227,28 @@ jobs:
           fi
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
-      # Bind the SBOM to the checksums file — it already commits to every
-      # binary's exact digest, so it's a well-defined single-artifact anchor
-      # for a release that ships multiple platform binaries.
+      # Bind a source-tree SBOM to the checksums file — it already commits to
+      # every binary's exact digest, so it's a well-defined single-artifact
+      # anchor for a release that ships multiple platform binaries. Separate
+      # from .goreleaser.yml's per-archive sboms: block (bound to individual
+      # archives, uploaded to the release directly by GoReleaser itself).
+      - name: "Generate and attest source-tree SBOM"
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/atmos-sbom.spdx.json
+
       - name: "Attest SBOM"
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ steps.checksums.outputs.file }}
           sbom-path: dist/atmos-sbom.spdx.json
 
-      - name: "Upload signatures and SBOM to the release"
+      - name: "Upload source-tree SBOM to the release"
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "$TAG" dist/*.sig dist/*.pem dist/atmos-sbom.spdx.json \
+          gh release upload "$TAG" dist/atmos-sbom.spdx.json \
             --repo "${{ github.repository }}" --clobber
