@@ -772,6 +772,14 @@ func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
 	assert.NotNil(t, castFlag, "cast flag should be registered")
 	assert.Equal(t, cfg.CastFlagAutoValue, castFlag.GetNoOptDefVal(), "cast should have NoOptDefVal set")
 	assert.False(t, castFlag.GetNoOptDefValConsumesNextArg(), "cast must not consume the next positional arg")
+
+	// Verify profile flag (a StringSliceFlag) is registered with NoOptDefVal, mirroring identity.
+	profileFlag := registry.Get("profile")
+	require.NotNil(t, profileFlag, "profile flag should be registered")
+	_, isSlice := profileFlag.(*StringSliceFlag)
+	assert.True(t, isSlice, "profile should be a StringSliceFlag")
+	assert.Equal(t, cfg.ProfileFlagSelectValue, profileFlag.GetNoOptDefVal(), "profile should have NoOptDefVal set")
+	assert.True(t, profileFlag.GetNoOptDefValConsumesNextArg(), "profile must consume a following non-flag arg so space-separated syntax still works")
 }
 
 func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
@@ -826,6 +834,42 @@ func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
 			name:     "identity followed by another flag unchanged",
 			input:    []string{"auth", "login", "--identity", "--verbose"},
 			expected: []string{"auth", "login", "--identity", "--verbose"},
+		},
+		// --profile (StringSliceFlag with NoOptDefVal) regression cases.
+		// These guard the actual bug this feature fixes: before --profile had
+		// NoOptDefVal, "atmos auth login --profile" failed with "flag needs an
+		// argument". Once NoOptDefVal is set, space-separated explicit values
+		// become ambiguous to pflag unless this preprocessing step rewrites them
+		// to equals syntax first.
+		{
+			name:     "profile with space-separated single value",
+			input:    []string{"auth", "login", "--profile", "name1"},
+			expected: []string{"auth", "login", "--profile=name1"},
+		},
+		{
+			name:     "profile with equals syntax unchanged",
+			input:    []string{"auth", "login", "--profile=name1"},
+			expected: []string{"auth", "login", "--profile=name1"},
+		},
+		{
+			name:     "profile with comma-separated space-separated value",
+			input:    []string{"auth", "login", "--profile", "a,b"},
+			expected: []string{"auth", "login", "--profile=a,b"},
+		},
+		{
+			name:     "repeated profile flags with space-separated values",
+			input:    []string{"auth", "login", "--profile", "x", "--profile", "y"},
+			expected: []string{"auth", "login", "--profile=x", "--profile=y"},
+		},
+		{
+			name:     "bare profile at end unchanged (resolves via native NoOptDefVal)",
+			input:    []string{"auth", "login", "--profile"},
+			expected: []string{"auth", "login", "--profile"},
+		},
+		{
+			name:     "bare profile followed by another flag unchanged",
+			input:    []string{"auth", "login", "--profile", "--identity=x"},
+			expected: []string{"auth", "login", "--profile", "--identity=x"},
 		},
 	}
 

@@ -130,13 +130,16 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.
 
 	// Profiles - configuration profiles.
-	b.options = append(b.options, func(cfg *parserConfig) {
-		cfg.registry.Register(&StringSliceFlag{
+	// NoOptDefVal enables the pattern: --profile (interactive selection),
+	// --profile name (explicit), mirroring the --identity flag above.
+	b.options = append(b.options, func(c *parserConfig) {
+		c.registry.Register(&StringSliceFlag{
 			Name:        "profile",
 			Shorthand:   "",
 			Default:     defaults.Profile,
 			Description: "Activate configuration profiles (comma-separated or repeated flag)",
 			EnvVars:     []string{"ATMOS_PROFILE"},
+			NoOptDefVal: cfg.ProfileFlagSelectValue,
 		})
 	})
 }
