@@ -19,7 +19,15 @@
 
 version: "2"
 run:
-  tests: false
+  tests: true
+  # magefiles/*.go carry `//go:build mage` so `go tool mage` (see CLAUDE.md's
+  # Compilation section) only compiles them under that tag. Without this,
+  # explicitly-scoped invocations (e.g. scripts/run-custom-golangci-lint.sh's
+  # staged-patch path, which lists ./magefiles by package path) fail
+  # typechecking with "build constraints exclude all Go files in .../magefiles"
+  # instead of linting the package.
+  build-tags:
+    - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
   # worktree sessions (and pre-commit hooks racing manual runs) otherwise fail
   # with "parallel golangci-lint is running"; serializing makes the second

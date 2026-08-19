@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -437,22 +438,23 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
+	plainOutput := ansi.Strip(outputStr)
 	t.Logf("Install output:\n%s", outputStr)
 
 	// The command should fail.
 	require.Error(t, err, "toolchain install should fail for non-existent tool")
 
 	// Verify the error message indicates the tool was not found in the registry.
-	assert.Contains(t, outputStr, "not in registry",
+	assert.Contains(t, plainOutput, "not in registry",
 		"Error should indicate tool was not found in registry")
 
 	// Verify the error message mentions the tool name.
-	assert.Contains(t, outputStr, "replicatedhq/replicated",
+	assert.Contains(t, plainOutput, "replicatedhq/replicated",
 		"Error should mention the tool name")
 
 	// Verify helpful hints are provided.
 	assert.True(t,
-		strings.Contains(outputStr, "search") || strings.Contains(outputStr, "registry"),
+		strings.Contains(plainOutput, "search") || strings.Contains(plainOutput, "registry"),
 		"Error should suggest searching the registry or checking configuration")
 
 	t.Logf("✓ Non-existent tool error correctly shown for replicatedhq/replicated")
