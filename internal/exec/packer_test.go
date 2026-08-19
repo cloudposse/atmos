@@ -391,16 +391,16 @@ components:
 
 	t.Run("disabled component", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{
-			Stack:              "nonprod",
-			ComponentType:      "packer",
-			ComponentFromArg:   "aws/bastion",
-			SubCommand:         "validate",
-			ComponentIsEnabled: false,
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion-disabled",
+			SubCommand:       "validate",
 		}
 		packerFlags := PackerFlags{}
 
 		err := ExecutePacker(&info, &packerFlags)
-		assert.NoError(t, err) // Should return nil for disabled components
+		assert.NoError(t, err) // Should return nil for disabled components.
+		assert.False(t, info.ComponentIsEnabled, "fixture component should resolve as disabled")
 	})
 
 	t.Run("invalid subcommand", func(t *testing.T) {

@@ -20,9 +20,12 @@
 version: "2"
 run:
   tests: true
-  # Includes the magefiles/ Mage targets (excluded from a plain
-  # `go build ./...` by the `mage` build tag) so this repo's own build
-  # tooling gets linted too, instead of being permanently exempted.
+  # magefiles/*.go carry `//go:build mage` so `go tool mage` only compiles
+  # them under that tag. Without this, golangci-lint's default build set
+  # excludes them entirely (either silently skipping this repo's own build
+  # tooling, or, for invocations that explicitly scope to ./magefiles,
+  # failing typechecking with "build constraints exclude all Go files in
+  # .../magefiles" instead of linting the package).
   build-tags:
     - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
