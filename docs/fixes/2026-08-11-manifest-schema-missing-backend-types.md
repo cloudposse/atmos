@@ -149,9 +149,13 @@ again.
 - `go build ./...`, `go vet ./...` — pass.
 - `go test ./pkg/datafetcher/... ./pkg/validator/... ./internal/exec/... ./errors/...` — pass, including
   new tests: `TestManifestSchema_BackendTypeCoverage` (14 backend types × backend + remote_state_backend,
-  across 3 distinct schema copies — embedded, fixture, stack-config; the website copy is byte-identical to
-  the embedded one, so it's intentionally not duplicated in the test table — plus an enum-isolated negative
-  case and a separate key-rejection negative case),
+  across the 3 hand-maintained schema copies — embedded, fixture, stack-config — plus an enum-isolated
+  negative case and a separate key-rejection negative case). There is no fourth, website-side copy to
+  cover: `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` is not checked into the
+  repo (that directory is gitignored) and is instead generated at deploy/preview time by
+  `go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` (see
+  `.github/workflows/website-deploy-prod.yml` and `website-preview-build.yml`), rendering the same
+  embedded schema this fix edits — so it needs no separate test coverage or manual sync.
   `TestManifestSchema_OverridesFieldCoverage`, `TestManifestSchema_ComponentLevelRetry`,
   `TestManifestSchema_RequiredVersionAndProviders`, `TestManifestSchema_KubernetesComponentSecrets`,
   `TestManifestSchema_ContainerRuntimeProviderAuto`, `TestManifestSchema_SourceTTLField`,
@@ -188,14 +192,17 @@ again.
   reader in `internal/terraform_backend/`. Schema validation now accepts `backend_type: http`, but reading
   remote state from an `http` backend via the `!terraform.state` YAML function still requires that
   separate feature.
-- The three-way hand-maintained schema duplication remains a standing risk for this exact class of bug
-  recurring on the next new field/enum value. No generator unifies them today; the tests added here and the
-  pre-existing `TestManifestSchema_KubernetesComponentValidateField` are the only guardrails, plus the new
-  CLI-level fixture for the fields most likely to matter together in practice. Not opening a new issue for
-  this — it's a known, accepted structural tradeoff, not a gap introduced by this fix.
-- `stack-config/1.0.json` has no `component_secrets` definition wired anywhere (component-level `secrets:`
-  is unsupported there for every component type, not just kubernetes) and its `workflow_manifest` /
-  `workflow_step` definitions are far more restrictive than the embedded schema's (found during the field
-  test, Tier E in that report). Neither blocks default CLI validation (`stack-config.json` isn't the schema
-  `atmos describe stacks`/`validate stacks` enforce by default — mainly SchemaStore/IDE and docs), so left
-  as-is rather than expanding scope further in this pass.
+- **Deliberately left as-is, not deferred work:** the three-way hand-maintained schema duplication remains
+  a standing risk for this exact class of bug recurring on the next new field/enum value. No generator
+  unifies them today; the tests added here and the pre-existing
+  `TestManifestSchema_KubernetesComponentValidateField` are the only guardrails, plus the new CLI-level
+  fixture for the fields most likely to matter together in practice. This is a known, accepted structural
+  tradeoff that predates this fix and isn't introduced or worsened by it — a decision, not a TODO — so no
+  new issue is being opened for it here.
+- **Deliberately left as-is, not deferred work:** `stack-config/1.0.json` has no `component_secrets`
+  definition wired anywhere (component-level `secrets:` is unsupported there for every component type, not
+  just kubernetes) and its `workflow_manifest` / `workflow_step` definitions are far more restrictive than
+  the embedded schema's (found during the field test, Tier E in that report). Neither blocks default CLI
+  validation (`stack-config.json` isn't the schema `atmos describe stacks`/`validate stacks` enforce by
+  default — mainly SchemaStore/IDE and docs). This is a scope decision, not an unactioned gap: left as-is
+  rather than expanding scope further in this pass.
