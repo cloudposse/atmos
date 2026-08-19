@@ -28,6 +28,18 @@ import (
 // and builds inside a nested container and is comparatively slow. Run it at
 // minimum before merging any change to pkg/container's networking machinery,
 // and ideally in a dedicated CI job.
+//
+// The nested `docker run`/`sh`/`apk`/`go test` shell-out (and the raw `docker
+// network rm` cleanup in docker_test.go's network-alias integration test) are
+// a deliberate, approved exception, not an oversight: this package has no
+// Docker Go SDK dependency anywhere (production code shells out to the
+// docker/podman CLIs throughout, see DockerRuntime/PodmanRuntime), and
+// testcontainers-go's network.New() cannot create a fixed-name network at all
+// -- it always generates a random UUID name -- so it can't stand in for
+// EnsureNetwork/ConnectNetwork here without testing a different code path
+// than production actually uses. Do not replace this topology test with
+// mocks: the entire point is that ProcessRunsInContainer/currentHostname/
+// Inspect run for real, unstubbed, against a real nested container.
 func TestSiblingContainerNetworking_Docker(t *testing.T) {
 	if os.Getenv("ATMOS_TEST_SIBLING_CONTAINER") != "1" {
 		t.Skip("set ATMOS_TEST_SIBLING_CONTAINER=1 to run the nested job-container networking regression test")

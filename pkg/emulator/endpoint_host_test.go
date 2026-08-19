@@ -1,9 +1,11 @@
 package emulator
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -89,12 +91,33 @@ func TestHostDockerInternalResolves(t *testing.T) {
 	})
 }
 
+// TestHostDockerInternalResolves_BoundedByTimeout proves a slow or
+// unresponsive resolver can't delay endpoint construction indefinitely: the
+// lookup's context must actually be cancelled once hostDockerInternalLookupTimeout
+// elapses, not merely passed through unused.
+func TestHostDockerInternalResolves_BoundedByTimeout(t *testing.T) {
+	orig := lookupHost
+	defer func() { lookupHost = orig }()
+
+	lookupHost = func(ctx context.Context, _ string) ([]string, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	start := time.Now()
+	got := hostDockerInternalResolves()
+	elapsed := time.Since(start)
+
+	assert.False(t, got)
+	assert.Less(t, elapsed, 5*time.Second, "a slow/unresponsive resolver must not block past hostDockerInternalLookupTimeout")
+}
+
 // stubLookupHost overrides lookupHost for the duration of a test.
 func stubLookupHost(t *testing.T, addrs []string, err error) func() {
 	t.Helper()
 
 	orig := lookupHost
-	lookupHost = func(string) ([]string, error) { return addrs, err }
+	lookupHost = func(context.Context, string) ([]string, error) { return addrs, err }
 	return func() { lookupHost = orig }
 }
 

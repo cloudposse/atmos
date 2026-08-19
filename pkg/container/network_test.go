@@ -50,4 +50,14 @@ func TestNetworkConnectResult(t *testing.T) {
 		require.Error(t, got)
 		assert.Contains(t, got.Error(), "no such container")
 	})
+
+	t.Run("already-in-use output is a genuine failure, not idempotent success", func(t *testing.T) {
+		// A too-broad "already in" substring match would misreport this as
+		// success -- it must only match the specific "already exists"/"already
+		// connected" idempotent cases above, not any "already in ..." message.
+		err := errors.New("exit status 125")
+		got := networkConnectResult(err, "Error: port 8080 is already in use")
+		require.Error(t, got)
+		assert.Contains(t, got.Error(), "already in use")
+	})
 }

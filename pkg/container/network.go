@@ -59,7 +59,7 @@ func networkConnectResult(runErr error, output string) error {
 		return nil
 	}
 	lower := strings.ToLower(output)
-	if strings.Contains(lower, "already exists") || strings.Contains(lower, "already connected") || strings.Contains(lower, "already in") {
+	if strings.Contains(lower, "already exists") || strings.Contains(lower, "already connected") {
 		return nil
 	}
 	return fmt.Errorf("%w: connect network: %w: %s", errUtils.ErrContainerRuntimeOperation, runErr, strings.TrimSpace(output))

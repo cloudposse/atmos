@@ -1,10 +1,12 @@
 package emulator
 
 import (
+	"context"
 	"encoding/hex"
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -23,6 +25,11 @@ const (
 	// control after the fact for its own (already running) container -- hence
 	// resolving it defensively via lookupHost before trusting it.
 	hostDockerInternal = "host.docker.internal"
+	// Bounds hostDockerInternalResolves' DNS lookup so a slow or unreachable
+	// resolver can't delay emulator endpoint construction (Manager.Up/
+	// Manager.Resolve) -- this is a best-effort probe on the way to the
+	// gateway/localhost fallback, not a call worth blocking startup on.
+	hostDockerInternalLookupTimeout = 2 * time.Second
 )
 
 var (
@@ -30,7 +37,9 @@ var (
 	// Resolves a hostname; overridable in tests so hostDockerInternal's
 	// resolvable-vs-unresolvable branches are exercisable without depending on
 	// the test host's actual DNS/hosts-file setup.
-	lookupHost = net.LookupHost
+	lookupHost = func(ctx context.Context, host string) ([]string, error) {
+		return net.DefaultResolver.LookupHost(ctx, host)
+	}
 )
 
 // reachableHostForPublishedPorts returns the host an emulator's published ports
@@ -68,7 +77,9 @@ func reachableHostForPublishedPorts() string {
 func hostDockerInternalResolves() bool {
 	defer perf.Track(nil, "emulator.hostDockerInternalResolves")()
 
-	addrs, err := lookupHost(hostDockerInternal)
+	ctx, cancel := context.WithTimeout(context.Background(), hostDockerInternalLookupTimeout)
+	defer cancel()
+	addrs, err := lookupHost(ctx, hostDockerInternal)
 	return err == nil && len(addrs) > 0
 }
 
