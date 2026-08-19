@@ -104,10 +104,14 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
-          # Disable setup-go's module cache to avoid restoring or saving mutable
-          # cache entries from PR-controlled keys; make deps repopulates modules
-          # from checksummed sources instead.
-          cache: false
+          # GitHub Actions cache scoping already isolates this: a pull_request
+          # run gets read/write access only to its own branch's cache scope,
+          # gets read-only access to the default branch's cache, and cannot
+          # restore caches from sibling PRs or write into the default branch's
+          # scope at all (only push/workflow_dispatch/schedule etc. can). So
+          # there's no cross-PR or PR->main poisoning path here to guard
+          # against by disabling this.
+          cache: true
         id: go
 
       - name: Set up Atmos bootstrap
@@ -273,7 +277,7 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: true
         id: go
 
       - name: Get dependencies
@@ -397,10 +401,7 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
-          # Disable setup-go's module cache to avoid restoring or saving mutable
-          # cache entries from PR-controlled keys; make deps repopulates modules
-          # from checksummed sources instead.
-          cache: false
+          cache: true
         id: go
 
       - name: Get dependencies
@@ -495,7 +496,7 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: true
 
       - name: Run magefiles unit tests with coverage
         run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
@@ -570,7 +571,7 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: true
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
@@ -744,7 +745,7 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: true
 
       - name: Install OpenTofu with Atmos toolchain
         env:
@@ -947,7 +948,7 @@ jobs:
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          cache: false
+          cache: true
           go-version-file: "go.mod"
 
       - name: Download Go dependencies
