@@ -145,6 +145,47 @@ func TestRemoteImporter_GitSubdir_TTLCrossRunReuse(t *testing.T) {
 	assert.Equal(t, int32(1), c4.Load(), "expired clone should be refreshed")
 }
 
+// TestRemoteImporter_Resolve_HonorsConfigTTL verifies that the public Resolve method (used
+// by root atmos.yaml `import:` entries, unlike resolveNested which stack-manifest imports
+// use) now honors atmosConfig.Imports.TTL for cross-run reuse of the cloned source repo,
+// instead of always passing an empty ttl. Each importer has its own session, simulating
+// separate atmos invocations against the same on-disk cache dir.
+func TestRemoteImporter_Resolve_HonorsConfigTTL(t *testing.T) {
+	baseDir := t.TempDir()
+	const importURI = "git::https://example.com/acme/infrastructure.git//stacks/a.yaml?ref=main"
+
+	newResolveImporter := func(t *testing.T, ttl string, count *atomic.Int32) *RemoteImporter {
+		t.Helper()
+		testCache, err := cache.NewFileCache("test", cache.WithBaseDir(baseDir))
+		require.NoError(t, err)
+		importer, err := NewRemoteImporter(
+			&schema.AtmosConfiguration{Imports: schema.ImportsSettings{TTL: ttl}},
+			WithCache(testCache),
+			WithDownloader(newDirFetchMock(t, count)),
+		)
+		require.NoError(t, err)
+		return importer
+	}
+
+	// Run 1: cold cache, TTL configured -> fetch once.
+	var c1 atomic.Int32
+	_, err := newResolveImporter(t, "1h", &c1).Resolve(importURI)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), c1.Load(), "cold cache must fetch")
+
+	// Run 2: warm cache, fresh TTL -> Resolve should now reuse, not fetch.
+	var c2 atomic.Int32
+	_, err = newResolveImporter(t, "1h", &c2).Resolve(importURI)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), c2.Load(), "Resolve should honor atmosConfig.Imports.TTL and reuse the fresh clone")
+
+	// Run 3: no TTL configured (default/unset) -> unchanged behavior, always refresh.
+	var c3 atomic.Int32
+	_, err = newResolveImporter(t, "", &c3).Resolve(importURI)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), c3.Load(), "unset Imports.TTL must preserve the existing always-refresh behavior")
+}
+
 // backdateSourceMetadata rewrites the cached source freshness marker with an UpdatedAt
 // set `age` in the past, simulating an aged cross-run cache entry.
 func backdateSourceMetadata(t *testing.T, destDir string, age time.Duration) {

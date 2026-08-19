@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -947,6 +948,96 @@ func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T)
 			assert.Contains(t, err.Error(), component, "error must reference the component name")
 		})
 	}
+}
+
+// TestProcessTerraformBackend_TypeKeyMismatch guards against issue #2919's field-test finding:
+// backend_type not matching any key under backend: previously validated fine and silently
+// resolved to an empty backend config (e.g. backend_type: http with backend: {s3: {...}}), instead
+// of erroring. Reproduces both the mismatch case and the still-legitimate "backend not configured
+// at all" case (an empty backend section is not a mismatch -- it just means no defaults apply yet).
+func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "backend_type", "http"))
+		assert.True(t, errUtils.HasHint(err, "backend_type is"))
+	})
+
+	t.Run("no backend section configured at all is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+		assert.Empty(t, gotBackend)
+	})
+
+	t.Run("matching key across layers is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "test-bucket"},
+			},
+		}
+		_, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "test-bucket", gotBackend["bucket"])
+	})
+}
+
+// TestProcessTerraformRemoteStateBackend_TypeKeyMismatch mirrors
+// TestProcessTerraformBackend_TypeKeyMismatch for remote_state_backend_type /
+// remote_state_backend.
+func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+			globalRemoteStateBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformRemoteStateBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "remote_state_backend_type", "http"))
+	})
+
+	t.Run("no remote_state_backend section configured is not a mismatch", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+		}
+		gotType, _, err := processTerraformRemoteStateBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+	})
 }
 
 // TestShouldPreserveAuthoredKey covers the three decision paths of the
