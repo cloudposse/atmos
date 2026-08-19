@@ -1,6 +1,7 @@
 package output
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -83,6 +84,46 @@ func checkOutputsCache(stackSlug, component, stack string) map[string]any {
 		return cachedOutputs.(map[string]any)
 	}
 	return nil
+}
+
+// cachedOutputResult is the outcome of a cache-hit output resolution (see
+// resolveOutputFromCache). A nil *cachedOutputResult means the cache held no
+// entry for the requested stackSlug; callers must fall through to a real
+// fetch in that case.
+type cachedOutputResult struct {
+	value  any
+	exists bool
+	err    error
+}
+
+// resolveOutputFromCache resolves a single output from the cache, if present,
+// emitting the same visible success/failure notification (outputLookupSucceeded/
+// outputLookupFailed) a real fetch would via GetOutput/GetOutputWithOptions.
+//
+// Without this, a component's first output lookup (a cache miss, triggering a
+// real fetch) is visible, but every subsequent lookup for a DIFFERENT output
+// key on the SAME already-cached component+stack was silently invisible: the
+// cache is keyed per component+stack (all outputs cached together on first
+// fetch, by design, for performance), but only "Cache hit for terraform
+// output" was logged -- at Debug level only, so it never appeared outside
+// debug/trace logging. A test.vars block with nine !terraform.output lookups
+// across two components would then show only two "Fetching ..." messages.
+func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug, component, stack, output string) *cachedOutputResult {
+	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
+	if !found || cachedOutputs == nil {
+		return nil
+	}
+
+	log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+
+	value, exists, err := getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+	if err != nil {
+		outputLookupFailed(message)
+		return &cachedOutputResult{err: err}
+	}
+	outputLookupSucceeded(message)
+	return &cachedOutputResult{value: value, exists: exists}
 }
 
 // startSpinnerOrLog starts a spinner in normal mode or logs in debug mode.
