@@ -137,4 +137,24 @@ func TestUpdateCheckRun(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, provider.CheckRunStateInProgress, checkRun.Status)
 	})
+
+	t.Run("masks registered secrets in published fields", func(t *testing.T) {
+		atmosio.Reset()
+		t.Cleanup(atmosio.Reset)
+
+		secret := t.Name() + "-registered-value"
+		atmosio.RegisterSecret(secret)
+		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
+			Name:       "atmos/plan/test/service",
+			Status:     provider.CheckRunStateSuccess,
+			Conclusion: "success",
+			Title:      "credential: " + secret,
+			Summary:    "diff contains " + secret,
+		})
+		require.NoError(t, err)
+		assert.NotContains(t, checkRun.Title, secret)
+		assert.NotContains(t, checkRun.Summary, secret)
+		assert.Contains(t, checkRun.Title, atmosio.MaskReplacement)
+		assert.Contains(t, checkRun.Summary, atmosio.MaskReplacement)
+	})
 }
