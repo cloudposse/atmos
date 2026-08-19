@@ -32,3 +32,23 @@ func TestLintGoModCheckPropagatesRunError(t *testing.T) {
 	err := Lint{}.GoModCheck()
 	require.Error(t, err)
 }
+
+// TestLintGoModCheckSuccess covers the happy path (`return nil`): a real
+// `go run` of a trivial, dependency-free stand-in program under
+// tools/gomodcheck that exits 0. It verifies GoModCheck's own orchestration
+// (the toolDir and goModPath args it assembles) and that it returns nil on
+// success, without depending on the real gomodcheck tool's own validation
+// logic, which is unit-tested independently under tools/gomodcheck.
+func TestLintGoModCheckSuccess(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	toolDir := filepath.Join(root, "tools", "gomodcheck")
+	require.NoError(t, os.MkdirAll(toolDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(toolDir, "go.mod"),
+		[]byte("module github.com/cloudposse/atmos/tools/gomodcheck\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(toolDir, "main.go"),
+		[]byte("package main\n\nfunc main() {}\n"), 0o644))
+	t.Chdir(root)
+
+	require.NoError(t, Lint{}.GoModCheck())
+}

@@ -13,6 +13,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLintCustomGCLPropagatesRepoRootError covers the branch of CustomGCL
+// that's safe to unit test without a real tools/lintroller tree: repo-root
+// resolution failing before any staleness check or subprocess is spawned.
+func TestLintCustomGCLPropagatesRepoRootError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	err := Lint{}.CustomGCL()
+	require.ErrorIs(t, err, errMageRepoRootNotFound)
+}
+
+// TestLintCustomGCLPropagatesStaleCheckError covers the customGCLIsStale
+// error branch inside CustomGCL: the binary exists (so os.Stat succeeds) but
+// .custom-gcl.yml is missing, which customGCLIsStale always treats as a hard
+// error (unlike the binary-missing case, it never special-cases ENOENT here).
+func TestLintCustomGCLPropagatesStaleCheckError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	binPath := customGCLBinaryPath(root)
+	require.NoError(t, os.WriteFile(binPath, []byte("bin"), 0o755))
+	t.Chdir(root)
+
+	err := Lint{}.CustomGCL()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ".custom-gcl.yml")
+}
+
+// TestLintCustomGCLPropagatesGoVersionError covers the mageGoVersion error
+// branch inside CustomGCL: the binary is stale (missing), so the rebuild
+// path is taken, but `go env GOVERSION` fails because PATH has no `go`.
+func TestLintCustomGCLPropagatesGoVersionError(t *testing.T) {
+	root, _ := writeCustomGCLFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	t.Chdir(root)
+	t.Setenv("PATH", "")
+
+	err := Lint{}.CustomGCL()
+	require.Error(t, err)
+}
+
 func TestCustomGCLBinaryPath(t *testing.T) {
 	root := t.TempDir()
 	want := filepath.Join(root, "custom-gcl")
@@ -41,6 +79,20 @@ func TestCustomGCLIsStale(t *testing.T) {
 		got, err := customGCLIsStale(root, binPath)
 		require.NoError(t, err)
 		assert.True(t, got)
+	})
+
+	// binPath stat failing for a reason other than "not exist" (e.g. a path
+	// component that's a file, not a directory) must be returned as a hard
+	// error, not silently treated as "binary missing".
+	t.Run("binPath stat error other than not-exist", func(t *testing.T) {
+		root, _ := writeCustomGCLFixture(t)
+		blocker := filepath.Join(root, "blocker")
+		require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+		binPath := filepath.Join(blocker, "custom-gcl")
+
+		_, err := customGCLIsStale(root, binPath)
+		require.Error(t, err)
+		assert.False(t, os.IsNotExist(err))
 	})
 
 	t.Run("config missing", func(t *testing.T) {

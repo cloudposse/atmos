@@ -27,6 +27,21 @@ func TestLintPrecommitMissingBinary(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestLintPrecommitStaleCheckError covers the customGCLIsStale error branch
+// inside Precommit: the binary exists (os.Stat succeeds) but .custom-gcl.yml
+// is missing, which customGCLIsStale always treats as a hard error.
+func TestLintPrecommitStaleCheckError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	binPath := customGCLBinaryPath(root)
+	require.NoError(t, os.WriteFile(binPath, []byte("bin"), 0o755))
+	t.Chdir(root)
+
+	err := Lint{}.Precommit()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ".custom-gcl.yml")
+}
+
 func TestLintPrecommitHappyPath(t *testing.T) {
 	root := initGitRepoFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main"), 0o644))

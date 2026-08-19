@@ -106,6 +106,97 @@ func TestLintLintrollerPropagatesRepoRootError(t *testing.T) {
 	require.ErrorIs(t, err, errMageRepoRootNotFound)
 }
 
+// TestLintLintrollerPropagatesStaleCheckError covers both the
+// os.Stat-fails-for-a-reason-other-than-missing branch inside
+// lintrollerIsStale itself and Lintroller's propagation of that error: making
+// "tools" a regular file (not a directory) means os.Stat(binPath) fails with
+// "not a directory" (ENOTDIR), which os.IsNotExist does not recognize as
+// not-exist, so lintrollerIsStale must return it as a hard error rather than
+// treating it as "binary missing".
+func TestLintLintrollerPropagatesStaleCheckError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tools"), []byte("not a directory"), 0o644))
+	t.Chdir(root)
+
+	err := Lint{}.Lintroller()
+	require.Error(t, err)
+	assert.False(t, os.IsNotExist(err), "the underlying stat error must not be a not-exist error for this test to exercise the intended branch")
+}
+
+// lintrollerFixture builds a self-contained root tree with a nested
+// tools/lintroller Go module whose ./cmd/lintroller is a trivial program
+// (not the real lintroller analyzer). This exercises Lintroller's real build
+// orchestration (staleness -> `go build` -> chmod -> `go list` -> run)
+// against a fast, dependency-free stand-in, rather than the real lintroller
+// source, which is unit-tested independently under tools/lintroller.
+func lintrollerFixture(t *testing.T, withMain bool) (root string) {
+	t.Helper()
+	root = t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+	lintrollerDir := filepath.Join(root, "tools", "lintroller")
+	cmdDir := filepath.Join(lintrollerDir, "cmd", "lintroller")
+	require.NoError(t, os.MkdirAll(cmdDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lintrollerDir, "go.mod"),
+		[]byte("module github.com/cloudposse/atmos/tools/lintroller\n\ngo 1.26\n"), 0o644))
+	if withMain {
+		require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644))
+	}
+	return root
+}
+
+// TestLintLintrollerBuildsWhenStale exercises the real rebuild branch end to
+// end: no existing binary (stale), a real `go build` of a trivial stand-in
+// program, the chmod that follows it, and the subsequent `go list` + binary
+// run. This is the orchestration path CustomGCL/Precommit's tests fake via
+// PATH, but here `go build`/`go list` are real (fast, dependency-free)
+// invocations rather than faked, since faking them would hide whether the
+// build actually produces a working, executable binary.
+func TestLintLintrollerBuildsWhenStale(t *testing.T) {
+	root := lintrollerFixture(t, true)
+	t.Chdir(root)
+
+	require.NoError(t, Lint{}.Lintroller())
+
+	binPath := filepath.Join(root, "tools", "lintroller", lintrollerBinaryName())
+	info, err := os.Stat(binPath)
+	require.NoError(t, err, "expected go build to have produced the binary")
+	if runtime.GOOS != "windows" {
+		assert.NotZero(t, info.Mode().Perm()&0o100, "expected the binary to be chmod'd executable")
+	}
+}
+
+// TestLintLintrollerBuildFails covers the wrapped-error branch when `go
+// build` fails: an empty cmd/lintroller directory (no main.go) has nothing
+// for `go build ./cmd/lintroller` to compile.
+func TestLintLintrollerBuildFails(t *testing.T) {
+	root := lintrollerFixture(t, false)
+	t.Chdir(root)
+
+	err := Lint{}.Lintroller()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "build lintroller")
+}
+
+// TestLintLintrollerGoListError covers the `go list` error branch: the
+// binary is already up to date (so the build branch is skipped), but the
+// root go.mod is malformed beyond its first line, which mageRepoRoot never
+// inspects but `go list` must fully parse.
+func TestLintLintrollerGoListError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"),
+		[]byte(rootModuleDecl+"\n\nnot a valid go.mod directive\n"), 0o644))
+	lintrollerDir := filepath.Join(root, "tools", "lintroller")
+	require.NoError(t, os.MkdirAll(lintrollerDir, 0o755))
+	binPath := filepath.Join(lintrollerDir, lintrollerBinaryName())
+	require.NoError(t, os.WriteFile(binPath, []byte("stub"), 0o755))
+	t.Chdir(root)
+
+	err := Lint{}.Lintroller()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "go list")
+}
+
 // TestLintLintrollerHappyPathWhenNotStale exercises the full non-rebuild
 // path: an up-to-date lintroller binary, a faked `go list` (via PATH) whose
 // output is filtered by filterOutTestdata, and a faked lintroller binary

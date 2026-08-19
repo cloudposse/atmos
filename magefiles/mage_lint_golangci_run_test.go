@@ -282,4 +282,31 @@ func TestRunGolangciLintPrecommit(t *testing.T) {
 		err := runGolangciLintPrecommit(root, binPath)
 		require.Error(t, err)
 	})
+
+	// TestRunGolangciLintPrecommit/isolation env error propagates covers the
+	// setWorktreeIsolationEnv failure branch: root has a path component that's
+	// a file, not a directory, so MkdirAll(".golangci-tmp") under it fails
+	// before any subprocess is invoked.
+	t.Run("isolation env error propagates", func(t *testing.T) {
+		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
+		t.Setenv("GOLANGCI_LINT_CACHE", "")
+		blocker := t.TempDir()
+		filePath := filepath.Join(blocker, "not-a-dir")
+		require.NoError(t, os.WriteFile(filePath, []byte("x"), 0o644))
+
+		err := runGolangciLintPrecommit(filePath, "irrelevant-bin")
+		require.Error(t, err)
+	})
+
+	// TestRunGolangciLintPrecommit/staged patch error propagates covers the
+	// buildStagedPatchAndPackages failure branch reached via the non-git-repo
+	// path (no staged .go changes AND no merge in progress AND `git diff
+	// --cached --binary` itself fails because root isn't a git repo).
+	t.Run("staged patch error propagates", func(t *testing.T) {
+		root := t.TempDir()
+		t.Setenv("ATMOS_LINT_SHARED_CACHE", "1")
+
+		err := runGolangciLintPrecommit(root, "irrelevant-bin")
+		require.Error(t, err)
+	})
 }
