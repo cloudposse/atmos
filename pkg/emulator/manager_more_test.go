@@ -106,7 +106,7 @@ func TestManager_Up_CreatesAndStartsContainer(t *testing.T) {
 
 func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "true")
-	t.Setenv(envEmulatorUseCurrentContainerNetwork, "")
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "")
 	restore := stubEndpointHostDetection(t, true, "")
 	defer restore()
 
