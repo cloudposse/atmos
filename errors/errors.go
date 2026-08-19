@@ -546,6 +546,7 @@ var (
 
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
+	ErrBackendTypeMismatch                = errors.New("backend_type does not match any key configured under backend")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// Custom component errors.

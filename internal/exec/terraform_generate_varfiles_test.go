@@ -132,8 +132,9 @@ components:
     vpc:
       component: base-labels
       backend:
-        bucket: test-bucket
-        key: terraform.tfstate
+        s3:
+          bucket: test-bucket
+          key: terraform.tfstate
       backend_type: s3
       vars:
         name: test-vpc

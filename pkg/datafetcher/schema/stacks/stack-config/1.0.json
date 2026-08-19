@@ -60,81 +60,11 @@
       ]
     },
     {
-      "anyOf": [
-        {
-          "additionalProperties": true,
-          "not": {
-            "required": [
-              "workflows"
-            ]
-          }
-        },
-        {
-          "required": [
-            "import"
-          ]
-        },
-        {
-          "required": [
-            "terraform"
-          ]
-        },
-        {
-          "required": [
-            "helmfile"
-          ]
-        },
-        {
-          "required": [
-            "kubernetes"
-          ]
-        },
-        {
-          "required": [
-            "helm"
-          ]
-        },
-        {
-          "required": [
-            "packer"
-          ]
-        },
-        {
-          "required": [
-            "vars"
-          ]
-        },
-        {
-          "required": [
-            "hooks"
-          ]
-        },
-        {
-          "required": [
-            "env"
-          ]
-        },
-        {
-          "required": [
-            "settings"
-          ]
-        },
-        {
-          "required": [
-            "components"
-          ]
-        },
-        {
-          "required": [
-            "overrides"
-          ]
-        },
-        {
-          "required": [
-            "name"
-          ]
-        }
-      ]
+      "not": {
+        "required": [
+          "workflows"
+        ]
+      }
     }
   ],
   "definitions": {
@@ -617,6 +547,12 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -674,6 +610,12 @@
             },
             "plugins": {
               "$ref": "#/definitions/plugins"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -796,6 +738,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
@@ -984,6 +929,9 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1038,6 +986,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1573,7 +1524,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -1601,7 +1558,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -1718,6 +1681,78 @@
                   "additionalProperties": true
                 }
               ]
+            },
+            "consul": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "cos": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "http": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "kubernetes": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "oss": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "pg": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -1759,6 +1794,15 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
             }
           },
           "required": []
