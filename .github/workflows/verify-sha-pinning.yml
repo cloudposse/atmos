@@ -25,6 +25,27 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+
+      # On pull_request, the default checkout above is the PR merge ref, so a
+      # contributor could otherwise tamper with the verifier's own logic or
+      # unverifiable.json in the same PR that tampers with a pinned SHA. Load
+      # both from the base revision instead — untouchable by the PR itself —
+      # while still scanning the PR's actual (head) workflow files above.
+      - name: Checkout trusted base revision (verifier + exception policy)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: verify-sha-pinning-base
+          persist-credentials: false
+
       - uses: ./.github/actions/verify-sha-pinning
+        if: github.event_name != 'pull_request'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./verify-sha-pinning-base/.github/actions/verify-sha-pinning
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          unverifiable-file: verify-sha-pinning-base/.github/actions/verify-sha-pinning/unverifiable.json

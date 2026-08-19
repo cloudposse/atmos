@@ -44,7 +44,11 @@ Some upstream orgs block the GitHub API calls this action needs to resolve a tag
 ]
 ```
 
-**This is the only mechanism that downgrades a resolution failure to a warning.** The script never infers this from an HTTP status code or error message on its own — that would silently launder *any* 403 (including a real one) into a pass. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file.
+**This is the only mechanism that downgrades a resolution failure to a warning, and only for the specific access-block condition (an HTTP 403) the entry documents.** A listed repo's tag lookup can still fail hard: a 404 (deleted/renamed tag), a malformed API response, or an exhausted retry on a transient error is never downgraded, even for a listed repo — only a 403 is. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file, and every entry must have a non-empty `action`, `reason`, and at least one `references` entry — a malformed entry fails the whole check rather than silently suppressing a real failure.
+
+### Trust boundary
+
+On `pull_request` runs, the caller workflow (`.github/workflows/verify-sha-pinning.yml`) checks out the PR's **base** revision into a separate directory and invokes this action from there, rather than from the PR's own (merge-ref) checkout. Only the workflow files being scanned come from the PR head — this action's own verification logic and `unverifiable.json` come from the base branch. This prevents a PR from tampering with its own drift check (e.g. adding a self-serving exception, or patching the verifier to always pass) in the same PR that tampers with a pinned SHA. One consequence: a PR that edits this action's own code or `unverifiable.json` won't see those changes take effect on itself — only on runs after it merges. That's intentional, not a bug.
 
 ## Usage
 

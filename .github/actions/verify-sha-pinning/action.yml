@@ -59,6 +59,29 @@ runs:
           const tagShaCache = new Map();
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
 
+          // A non-empty string, trimmed.
+          function isNonEmptyString(value) {
+            return typeof value === 'string' && value.trim().length > 0;
+          }
+
+          // Reject anything that isn't a fully-specified, maintainer-reviewed
+          // exception. A malformed entry must never be able to silently
+          // suppress a real drift failure — fail loudly instead.
+          function validateUnverifiableEntry(entry, seen) {
+            if (!isNonEmptyString(entry?.action)) {
+              throw new Error(`Invalid unverifiable.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+            }
+            if (!isNonEmptyString(entry.reason)) {
+              throw new Error(`Invalid unverifiable.json entry for "${entry.action}": missing or empty "reason"`);
+            }
+            if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
+              throw new Error(`Invalid unverifiable.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+            }
+            if (seen.has(entry.action)) {
+              throw new Error(`Invalid unverifiable.json: duplicate entry for "${entry.action}"`);
+            }
+          }
+
           // Repos a maintainer has explicitly reviewed and confirmed cannot be
           // drift-checked via the API (see unverifiable.json for the reason).
           // This is the ONLY way a resolution failure is downgraded from a
@@ -67,10 +90,22 @@ runs:
           try {
             const entries = JSON.parse(fs.readFileSync(process.env.UNVERIFIABLE_FILE, 'utf8'));
             for (const entry of entries) {
+              validateUnverifiableEntry(entry, unverifiableRepos);
               unverifiableRepos.set(entry.action, entry);
             }
           } catch (err) {
             if (err.code !== 'ENOENT') throw err;
+          }
+
+          // The ONLY error condition unverifiable.json is allowed to downgrade:
+          // a clean HTTP 403 from the upstream API (e.g. an org-level IP
+          // allow-list), never a 404, a ref-shape bug, or an exhausted retry.
+          class AccessBlockedError extends Error {
+            constructor(message, cause) {
+              super(message, { cause });
+              this.name = 'AccessBlockedError';
+              this.status = 403;
+            }
           }
 
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -208,8 +243,15 @@ runs:
 
               throw new Error(`Unexpected ref object type: ${obj.type}`);
             } catch (err) {
+              if (err instanceof AccessBlockedError) throw err;
               if (err.status === 404) {
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
+              }
+              if (err.status === 403) {
+                throw new AccessBlockedError(
+                  `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
+                  err
+                );
               }
               throw err;
             }
@@ -325,11 +367,13 @@ runs:
             } catch (err) {
               const detail = err.message;
 
-              // Only a maintainer-reviewed entry in unverifiable.json can downgrade
-              // a resolution failure to a warning — never an inference from the
-              // error's status code or message text. See that file for why.
+              // Only a maintainer-reviewed entry in unverifiable.json AND the
+              // explicitly verified access-block condition (a 403 from the
+              // upstream API) can downgrade a resolution failure to a
+              // warning — never any other error type, and never an inference
+              // from the error's message text. See that file for why.
               const exception = unverifiableRepos.get(`${ref.owner}/${ref.repo}`);
-              if (exception) {
+              if (exception && err instanceof AccessBlockedError) {
                 const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +
                   `   Documented exception: ${exception.reason}`;
                 core.warning(msg);
@@ -431,10 +475,10 @@ runs:
           );
           const existing = comments.find(c => c.body?.includes(marker));
 
-          let body;
-          if (status === 'fail') {
-            // Build failure table
-            const rows = results.map(r => {
+          // Shared row renderer — used by both the failure table and the
+          // unverifiable-only warning table below, so the two stay in sync.
+          function renderRows(rs) {
+            return rs.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
@@ -450,7 +494,12 @@ runs:
               }
               return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
+          }
 
+          const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          let body;
+          if (status === 'fail') {
             body = `${marker}
           > [!WARNING]
           > #### SHA Pin Verification Failed
@@ -459,9 +508,9 @@ runs:
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${rows}
+          ${renderRows(results)}
 
-          See the [action run](${'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId}) for full details.`;
+          See the [action run](${runUrl}) for full details.`;
           } else if (total === 0) {
             // No third-party action references found — only update if there was a previous warning
             if (!existing) return;
@@ -470,6 +519,23 @@ runs:
           > #### SHA Pin Verification — No References Found
           >
           > No third-party action references detected in workflow files.`;
+          } else if (unverifiable > 0) {
+            // Status is 'pass' (no failed/unpinned), but at least one reference
+            // relies on a documented exception — that reliance must stay
+            // visible even though it doesn't block CI. Always post/update,
+            // regardless of whether a prior comment exists, so a resolved
+            // failure never silently flips to an unqualified "Passed ✅".
+            body = `${marker}
+          > [!WARNING]
+          > #### SHA Pin Verification Passed — with documented exceptions
+          >
+          > All **${total}** third-party action reference(s) are covered, but **${unverifiable}** rel${unverifiable === 1 ? 'ies' : 'y'} on a documented exception in \`unverifiable.json\` and could not be automatically drift-checked. This does not fail CI, but should be reviewed.
+
+          | Action | Location | Status | Details |
+          |--------|----------|--------|---------|
+          ${renderRows(results.filter(r => r.status === 'unverifiable'))}
+
+          See the [action run](${runUrl}) for full details.`;
           } else {
             // All passed — only post if updating a previous warning
             if (!existing) {

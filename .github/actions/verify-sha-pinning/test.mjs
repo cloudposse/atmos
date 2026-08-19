@@ -142,6 +142,34 @@ function formatForensics(r) {
   return `     ℹ️  Pinned SHA exists in repo but has no matching tags`;
 }
 
+// unverifiable.json entry validation — mirrors action.yml's
+// validateUnverifiableEntry (same deliberate-duplication convention as above).
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validateUnverifiableEntry(entry, seen) {
+  if (!isNonEmptyString(entry?.action)) {
+    throw new Error(`Invalid unverifiable.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+  }
+  if (!isNonEmptyString(entry.reason)) {
+    throw new Error(`Invalid unverifiable.json entry for "${entry.action}": missing or empty "reason"`);
+  }
+  if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
+    throw new Error(`Invalid unverifiable.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+  }
+  if (seen.has(entry.action)) {
+    throw new Error(`Invalid unverifiable.json: duplicate entry for "${entry.action}"`);
+  }
+}
+
+// Downgrade eligibility — mirrors action.yml's outer catch: only a listed
+// repo AND the explicitly verified access-block condition (HTTP 403) may
+// ever be downgraded from a hard failure to 'unverifiable'.
+function shouldDowngrade(err, hasException) {
+  return Boolean(hasException) && err?.status === 403;
+}
+
 // ── Test cases ──────────────────────────────────────────────────
 
 let passed = 0;
@@ -338,6 +366,65 @@ if (realUnpinned.length > 0) {
   for (const u of realUnpinned) console.log(`    - ${u}`);
 }
 assert(realUnpinned.length === 0, `No unpinned third-party action references remain (found ${realUnpinned.length})`);
+
+// Test 12: unverifiable.json — malformed entries are rejected
+console.log('\n🧪 Test 12: unverifiable.json — malformed entries are rejected');
+function throwsWith(fn, pattern) {
+  try {
+    fn();
+    return false;
+  } catch (err) {
+    return pattern.test(err.message);
+  }
+}
+assert(
+  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', references: ['https://example.com'] }, new Map()), /missing or empty "reason"/),
+  'Entry missing "reason" is rejected'
+);
+assert(
+  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'because' }, new Map()), /"references" must be/),
+  'Entry missing "references" is rejected'
+);
+assert(
+  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'because', references: [] }, new Map()), /"references" must be/),
+  'Entry with empty "references" array is rejected'
+);
+assert(
+  throwsWith(() => validateUnverifiableEntry({ reason: 'because', references: ['https://example.com'] }, new Map()), /missing or empty "action"/),
+  'Entry missing "action" is rejected'
+);
+
+// Test 13: unverifiable.json — duplicate action entries are rejected
+console.log('\n🧪 Test 13: unverifiable.json — duplicate action entries are rejected');
+const seenDup = new Map();
+const validEntry = { action: 'foo/bar', reason: 'because', references: ['https://example.com'] };
+validateUnverifiableEntry(validEntry, seenDup);
+seenDup.set(validEntry.action, validEntry);
+assert(
+  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'a different reason', references: ['https://example.com'] }, seenDup), /duplicate entry/),
+  'Duplicate "action" key is rejected'
+);
+
+// Test 14: exception downgrade — only a 403 (access-blocked) error is eligible
+console.log('\n🧪 Test 14: exception downgrade — only a 403 (access-blocked) error is eligible');
+assert(shouldDowngrade({ status: 403 }, true) === true, '403 + listed repo → downgrade eligible');
+assert(shouldDowngrade({ status: 404 }, true) === false, '404 (tag not found) + listed repo → NOT downgrade eligible, stays a failure');
+assert(shouldDowngrade(new Error('boom'), true) === false, 'status-less error + listed repo → NOT downgrade eligible');
+assert(shouldDowngrade({ status: 403 }, false) === false, '403 + unlisted repo → NOT downgrade eligible');
+
+// Test 15: regression — a listed repository with a nonexistent tag must not
+// be downgrade-eligible (only the documented 403 access-block condition is).
+console.log('\n🧪 Test 15: regression — listed repo with a nonexistent tag stays a failure');
+const bogusTagRes = await fetch('https://api.github.com/repos/aquasecurity/trivy-action/git/ref/tags/v0.0.0-does-not-exist', { headers });
+if (bogusTagRes.status === 403) {
+  console.log('  ⚠️  Skipped: this environment is itself IP-blocked by the aquasecurity org allow-list (403), so a missing tag can\'t be distinguished from the access-block here. Re-run from a non-blocked IP (e.g. not a GitHub-hosted Actions runner) to exercise this case.');
+} else {
+  assert(bogusTagRes.status !== 403, `Nonexistent-tag lookup returned ${bogusTagRes.status}, not 403`);
+  assert(
+    shouldDowngrade({ status: bogusTagRes.status }, true) === false,
+    'Nonexistent tag on a listed repo is not downgrade-eligible — would remain failed_count=1, status=fail'
+  );
+}
 
 // ── Summary ─────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
