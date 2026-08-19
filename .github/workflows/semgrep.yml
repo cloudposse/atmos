@@ -1,0 +1,47 @@
+name: Semgrep
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Weekly Wednesday 7am UTC — catch new rules landing in the registry.
+    - cron: "0 7 * * 3"
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Run via `docker run` rather than a job-level `container:` so Harden
+      # Runner (which needs to instrument the runner VM directly) still works —
+      # job-level containers run every step inside the container instead.
+      - name: Run Semgrep
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -w /src \
+            semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b \
+            semgrep scan --config=p/ci --sarif --output=semgrep.sarif --metrics=off
+
+      - name: Upload SARIF to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: semgrep.sarif

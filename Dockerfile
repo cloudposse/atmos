@@ -2,7 +2,7 @@
 # trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
 # Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
 # frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 # Define the arguments for the Atmos version and target platform.
 ARG TARGETPLATFORM

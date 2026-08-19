@@ -29,6 +29,11 @@ jobs:
     needs: release
     environment: release
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # mislav/bump-homebrew-formula-action is broken: GitHub now returns HTTP 303
       # instead of 302 for tarball redirects and the action only accepts 302.
       # See https://github.com/mislav/bump-homebrew-formula-action/issues/340
@@ -42,7 +47,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     if: ${{ github.event_name == 'release' }}
+    # Job-level permissions REPLACE (not extend) the workflow-level block above,
+    # so everything this job needs must be re-listed here: contents/packages for
+    # the checkout+push, id-token for cosign keyless signing, security-events for
+    # the Trivy SARIF upload, attestations for the SBOM attestation.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
+      attestations: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: "Checkout source code at current commit"
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -62,6 +82,7 @@ jobs:
           file: Dockerfile
           build-args: |
             ATMOS_VERSION=${{ github.event.release.tag_name }}
+          provenance: true
 
       - name: "Verify Image"
         env:
@@ -69,6 +90,70 @@ jobs:
           DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
           docker pull "$DOCKER_IMAGE:$DOCKER_TAG"
+
+      - name: "Install cosign"
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: "Resolve image digest"
+        id: digest
+        env:
+          BUILD_METADATA: ${{ steps.build.outputs.metadata }}
+        run: |
+          digest="$(echo "$BUILD_METADATA" | jq -r '.["containerimage.digest"]')"
+          if [ -z "$digest" ] || [ "$digest" = "null" ]; then
+            echo "Failed to resolve containerimage.digest from build metadata:" >&2
+            echo "$BUILD_METADATA" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # Keyless OIDC signing — no key material, no secrets. Verifiable with:
+      #   cosign verify <image>@<digest> \
+      #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
+      #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+      - name: "Sign image with cosign"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: cosign sign --yes "${DOCKER_IMAGE}@${DIGEST}"
+
+      - name: "Generate image SBOM"
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag }}
+          format: spdx-json
+          output-file: image-sbom.spdx.json
+
+      - name: "Attach SBOM to image"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: cosign attach sbom --sbom image-sbom.spdx.json "${DOCKER_IMAGE}@${DIGEST}"
+
+      - name: "Attest SBOM"
+        # actions/attest-sbom is deprecated in favor of actions/attest's native
+        # sbom-path input (which auto-detects the SPDX/CycloneDX predicate type).
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.build.outputs.image }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          sbom-path: image-sbom.spdx.json
+
+      # Non-blocking (exit-code: 0) for now — surface findings via the code-scanning
+      # tab first and triage before flipping this to a release-blocking gate.
+      - name: "Scan image with Trivy"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: "Upload Trivy scan results to code-scanning"
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: trivy-results.sarif
 
       - name: "Job Summary"
         env:
@@ -79,3 +164,102 @@ jobs:
           echo '```json' >> $GITHUB_STEP_SUMMARY
           docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Signs, SBOMs, and attests provenance for the release binaries + checksums
+  # file GoReleaser already published. Deliberately does this AFTER the release
+  # is already published (rather than adding signs:/sboms: blocks to
+  # .goreleaser.yml, which runs inside an external cloudposse/.github reusable
+  # workflow this repo doesn't control) so a failure here can never block or
+  # break the actual release cut — it only reads already-published assets.
+  #
+  # Gated the same as `docker` (any release event, not homebrew's
+  # prerelease==false) so this is exercisable pre-merge: label a non-draft PR
+  # `release/feature` to publish a real prerelease and fire this job.
+  sign-and-attest-release:
+    name: "Sign, SBOM, and attest release artifacts"
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ github.event_name == 'release' }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: "Checkout source at release tag"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: "Download release assets"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --dir dist --repo "${{ github.repository }}"
+          ls -la dist
+
+      - name: "Install cosign"
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless OIDC signing of every downloaded asset (binaries + checksums
+      # file). Verifiable with:
+      #   cosign verify-blob <file> --signature <file>.sig --certificate <file>.pem \
+      #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
+      #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+      - name: "Sign release assets with cosign"
+        run: |
+          for f in dist/*; do
+            echo "Signing $f"
+            cosign sign-blob --yes "$f" --output-signature "${f}.sig" --output-certificate "${f}.pem"
+          done
+
+      - name: "Generate source-tree SBOM"
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/atmos-sbom.spdx.json
+
+      # Real Sigstore-backed provenance for every downloaded release asset, tied
+      # to this repo/workflow run — verifiable via `gh attestation verify`. This
+      # is GitHub's documented "attest already-built artifacts in a downstream
+      # job" pattern, not textbook build-time SLSA L3, but it's what most
+      # consumers (and Iron Bank-style checks) actually verify.
+      - name: "Attest build provenance"
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: 'dist/*'
+
+      - name: "Resolve checksums file"
+        id: checksums
+        run: |
+          file="$(find dist -maxdepth 1 -name '*_SHA256SUMS' -print -quit)"
+          if [ -z "$file" ]; then
+            echo "No *_SHA256SUMS file found in dist/" >&2
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      # Bind the SBOM to the checksums file — it already commits to every
+      # binary's exact digest, so it's a well-defined single-artifact anchor
+      # for a release that ships multiple platform binaries.
+      - name: "Attest SBOM"
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.checksums.outputs.file }}
+          sbom-path: dist/atmos-sbom.spdx.json
+
+      - name: "Upload signatures and SBOM to the release"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" dist/*.sig dist/*.pem dist/atmos-sbom.spdx.json \
+            --repo "${{ github.repository }}" --clobber

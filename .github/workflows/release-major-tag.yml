@@ -17,5 +17,10 @@ jobs:
     if: ${{ ! github.event.release.prerelease }}
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Update major version tag
         uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # v2

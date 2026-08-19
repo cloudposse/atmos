@@ -80,6 +80,14 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
+      # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
+      # on the RunsOn self-hosted runner, which this action doesn't cover.
+      - name: Harden Runner
+        if: matrix.target != 'linux'
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
         if: matrix.target == 'linux'
 
@@ -168,6 +176,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out source with validation base history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -208,6 +221,11 @@ jobs:
     timeout-minutes: 20
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -326,6 +344,11 @@ jobs:
     timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -489,6 +512,11 @@ jobs:
       matrix:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check test matrix result
         run: |
           if [ "${{ needs.test.result }}" != "success" ]; then
@@ -513,6 +541,11 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -585,6 +618,11 @@ jobs:
       contents: read
       security-events: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -630,6 +668,10 @@ jobs:
 
     timeout-minutes: 30
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -689,6 +731,11 @@ jobs:
 
     timeout-minutes: 30
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -755,6 +802,11 @@ jobs:
 
     timeout-minutes: 60
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -868,6 +920,11 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check k3s matrix result
         run: |
           if [ "${{ needs.k3s.result }}" != "success" ]; then
@@ -898,6 +955,11 @@ jobs:
           - macos-15
     timeout-minutes: 20
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -983,6 +1045,11 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1090,6 +1157,11 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1125,6 +1197,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1180,6 +1257,11 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1223,6 +1305,11 @@ jobs:
 
     timeout-minutes: 15
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
