@@ -142,32 +142,32 @@ function formatForensics(r) {
   return `     ℹ️  Pinned SHA exists in repo but has no matching tags`;
 }
 
-// unverifiable.json entry validation — mirrors action.yml's
-// validateUnverifiableEntry (same deliberate-duplication convention as above).
+// allowlist.json entry validation — mirrors action.yml's
+// validateAllowlistEntry (same deliberate-duplication convention as above).
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function validateUnverifiableEntry(entry, seen) {
+function validateAllowlistEntry(entry, seen) {
   if (!isNonEmptyString(entry?.action)) {
-    throw new Error(`Invalid unverifiable.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+    throw new Error(`Invalid allowlist.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
   }
-  if (!isNonEmptyString(entry.reason)) {
-    throw new Error(`Invalid unverifiable.json entry for "${entry.action}": missing or empty "reason"`);
+  if (!isNonEmptyString(entry.description)) {
+    throw new Error(`Invalid allowlist.json entry for "${entry.action}": missing or empty "description"`);
   }
   if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
-    throw new Error(`Invalid unverifiable.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+    throw new Error(`Invalid allowlist.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
   }
   if (seen.has(entry.action)) {
-    throw new Error(`Invalid unverifiable.json: duplicate entry for "${entry.action}"`);
+    throw new Error(`Invalid allowlist.json: duplicate entry for "${entry.action}"`);
   }
 }
 
 // Downgrade eligibility — mirrors action.yml's outer catch: only a listed
 // repo AND the explicitly verified access-block condition (HTTP 403) may
-// ever be downgraded from a hard failure to 'unverifiable'.
-function shouldDowngrade(err, hasException) {
-  return Boolean(hasException) && err?.status === 403;
+// ever be downgraded from a hard failure to 'allowlisted'.
+function shouldDowngrade(err, hasAllowlistEntry) {
+  return Boolean(hasAllowlistEntry) && err?.status === 403;
 }
 
 // ── Test cases ──────────────────────────────────────────────────
@@ -367,8 +367,8 @@ if (realUnpinned.length > 0) {
 }
 assert(realUnpinned.length === 0, `No unpinned third-party action references remain (found ${realUnpinned.length})`);
 
-// Test 12: unverifiable.json — malformed entries are rejected
-console.log('\n🧪 Test 12: unverifiable.json — malformed entries are rejected');
+// Test 12: allowlist.json — malformed entries are rejected
+console.log('\n🧪 Test 12: allowlist.json — malformed entries are rejected');
 function throwsWith(fn, pattern) {
   try {
     fn();
@@ -378,30 +378,30 @@ function throwsWith(fn, pattern) {
   }
 }
 assert(
-  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', references: ['https://example.com'] }, new Map()), /missing or empty "reason"/),
-  'Entry missing "reason" is rejected'
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', references: ['https://example.com'] }, new Map()), /missing or empty "description"/),
+  'Entry missing "description" is rejected'
 );
 assert(
-  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'because' }, new Map()), /"references" must be/),
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'because' }, new Map()), /"references" must be/),
   'Entry missing "references" is rejected'
 );
 assert(
-  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'because', references: [] }, new Map()), /"references" must be/),
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'because', references: [] }, new Map()), /"references" must be/),
   'Entry with empty "references" array is rejected'
 );
 assert(
-  throwsWith(() => validateUnverifiableEntry({ reason: 'because', references: ['https://example.com'] }, new Map()), /missing or empty "action"/),
+  throwsWith(() => validateAllowlistEntry({ description: 'because', references: ['https://example.com'] }, new Map()), /missing or empty "action"/),
   'Entry missing "action" is rejected'
 );
 
-// Test 13: unverifiable.json — duplicate action entries are rejected
-console.log('\n🧪 Test 13: unverifiable.json — duplicate action entries are rejected');
+// Test 13: allowlist.json — duplicate action entries are rejected
+console.log('\n🧪 Test 13: allowlist.json — duplicate action entries are rejected');
 const seenDup = new Map();
-const validEntry = { action: 'foo/bar', reason: 'because', references: ['https://example.com'] };
-validateUnverifiableEntry(validEntry, seenDup);
+const validEntry = { action: 'foo/bar', description: 'because', references: ['https://example.com'] };
+validateAllowlistEntry(validEntry, seenDup);
 seenDup.set(validEntry.action, validEntry);
 assert(
-  throwsWith(() => validateUnverifiableEntry({ action: 'foo/bar', reason: 'a different reason', references: ['https://example.com'] }, seenDup), /duplicate entry/),
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'a different reason', references: ['https://example.com'] }, seenDup), /duplicate entry/),
   'Duplicate "action" key is rejected'
 );
 

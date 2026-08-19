@@ -28,27 +28,27 @@ uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4
 
 This satisfies the coverage check (a specific commit is nailed down — it can't be silently swapped by a force-push) but is intentionally excluded from drift-checking, since there's no tag to diff against. It's reported as an informational `pinned-branch` status, not a failure. Bumping a branch-pinned reference to a newer commit on that branch is a manual, deliberate action — there's no automated staleness check for it today.
 
-### Documented exceptions (`unverifiable.json`)
+### Allowlist (`allowlist.json`)
 
 Some upstream orgs block the GitHub API calls this action needs to resolve a tag — most commonly an org-level [IP allow list](https://docs.github.com/en/organizations/keeping-your-organization-secure/managing-security-settings-for-your-organization/restricting-network-traffic-to-your-organization) that hasn't been opened up for GitHub Actions runner IPs. That's an access failure, not a drift signal, but the two are indistinguishable to CI unless someone says so explicitly.
 
-`unverifiable.json` is that explicit, human-reviewed record. Each entry names an `owner/repo`, a `reason` a maintainer has personally verified (not inferred from whatever error text the API happened to return), and `references` to corroborating reports:
+`allowlist.json` is that explicit, human-reviewed record. Each entry names an `owner/repo`, a `description` a maintainer has personally verified (not inferred from whatever error text the API happened to return), and `references` to corroborating reports:
 
 ```json
 [
   {
     "action": "aquasecurity/trivy-action",
-    "reason": "...",
+    "description": "...",
     "references": ["https://github.com/aquasecurity/tfsec-action/issues/24"]
   }
 ]
 ```
 
-**This is the only mechanism that downgrades a resolution failure to a warning, and only for the specific access-block condition (an HTTP 403) the entry documents.** A listed repo's tag lookup can still fail hard: a 404 (deleted/renamed tag), a malformed API response, or an exhausted retry on a transient error is never downgraded, even for a listed repo — only a 403 is. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file, and every entry must have a non-empty `action`, `reason`, and at least one `references` entry — a malformed entry fails the whole check rather than silently suppressing a real failure.
+**This is the only mechanism that downgrades a resolution failure to a warning, and only for the specific access-block condition (an HTTP 403) the entry documents.** A listed repo's tag lookup can still fail hard: a 404 (deleted/renamed tag), a malformed API response, or an exhausted retry on a transient error is never downgraded, even for a listed repo — only a 403 is. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file, and every entry must have a non-empty `action`, `description`, and at least one `references` entry — a malformed entry fails the whole check rather than silently suppressing a real failure.
 
 ### Trust boundary
 
-On `pull_request` runs, the caller workflow (`.github/workflows/verify-sha-pinning.yml`) checks out the PR's **base** revision into a separate directory and invokes this action from there, rather than from the PR's own (merge-ref) checkout. Only the workflow files being scanned come from the PR head — this action's own verification logic and `unverifiable.json` come from the base branch. This prevents a PR from tampering with its own drift check (e.g. adding a self-serving exception, or patching the verifier to always pass) in the same PR that tampers with a pinned SHA. One consequence: a PR that edits this action's own code or `unverifiable.json` won't see those changes take effect on itself — only on runs after it merges. That's intentional, not a bug.
+On `pull_request` runs, the caller workflow (`.github/workflows/verify-sha-pinning.yml`) checks out the PR's **base** revision into a separate directory and invokes this action from there, rather than from the PR's own (merge-ref) checkout. Only the workflow files being scanned come from the PR head — this action's own verification logic and `allowlist.json` come from the base branch. This prevents a PR from tampering with its own drift check (e.g. adding a self-serving allowlist entry, or patching the verifier to always pass) in the same PR that tampers with a pinned SHA. One consequence: a PR that edits this action's own code or `allowlist.json` won't see those changes take effect on itself — only on runs after it merges. That's intentional, not a bug.
 
 ## Usage
 
@@ -72,7 +72,7 @@ steps:
 |-------|----------|---------|-------------|
 | `github-token` | Yes | — | GitHub token for API calls and PR comments |
 | `workflow-dir` | No | `.github/workflows` | Directory to scan |
-| `unverifiable-file` | No | `.github/actions/verify-sha-pinning/unverifiable.json` | Documented exceptions file (see above) |
+| `allowlist-file` | No | `.github/actions/verify-sha-pinning/allowlist.json` | Allowlist file (see above) |
 
 ## Outputs
 
@@ -81,7 +81,7 @@ steps:
 | `verified-count` | Number of tag-pinned actions verified against their upstream tag |
 | `failed-count` | Number of drift mismatches or resolution errors found |
 | `unpinned-count` | Number of third-party action references that are not SHA-pinned at all |
-| `unverifiable-count` | Number of resolution failures downgraded to a warning via `unverifiable.json` |
+| `allowlisted-count` | Number of resolution failures downgraded to a warning via `allowlist.json` |
 | `status` | `pass` or `fail` |
 
 ## PR Comments

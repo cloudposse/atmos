@@ -28,7 +28,7 @@ jobs:
 
       # On pull_request, the default checkout above is the PR merge ref, so a
       # contributor could otherwise tamper with the verifier's own logic or
-      # unverifiable.json in the same PR that tampers with a pinned SHA. Load
+      # allowlist.json in the same PR that tampers with a pinned SHA. Load
       # both from the base revision instead — untouchable by the PR itself —
       # while still scanning the PR's actual (head) workflow files above.
       - name: Checkout trusted base revision (verifier + exception policy)
@@ -48,4 +48,4 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          unverifiable-file: verify-sha-pinning-base/.github/actions/verify-sha-pinning/unverifiable.json
+          allowlist-file: verify-sha-pinning-base/.github/actions/verify-sha-pinning/allowlist.json

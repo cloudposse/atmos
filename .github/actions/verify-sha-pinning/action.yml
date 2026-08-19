@@ -14,14 +14,14 @@ inputs:
     description: 'Directory containing workflow files to scan'
     required: false
     default: '.github/workflows'
-  unverifiable-file:
+  allowlist-file:
     description: >
       JSON file listing owner/repo pairs this action cannot drift-check via
       the GitHub API for a documented, maintainer-reviewed reason (see
-      unverifiable.json and the README). A resolution failure for a listed
+      allowlist.json and the README). A resolution failure for a listed
       repo is reported as a warning, not a CI failure.
     required: false
-    default: '.github/actions/verify-sha-pinning/unverifiable.json'
+    default: '.github/actions/verify-sha-pinning/allowlist.json'
 
 outputs:
   verified-count:
@@ -33,9 +33,9 @@ outputs:
   unpinned-count:
     description: 'Number of third-party action references that are not SHA-pinned at all'
     value: ${{ steps.verify.outputs.unpinned_count }}
-  unverifiable-count:
-    description: 'Number of resolution failures downgraded to a warning via unverifiable.json'
-    value: ${{ steps.verify.outputs.unverifiable_count }}
+  allowlisted-count:
+    description: 'Number of resolution failures downgraded to a warning via allowlist.json'
+    value: ${{ steps.verify.outputs.allowlisted_count }}
   status:
     description: 'Overall result: pass or fail'
     value: ${{ steps.verify.outputs.status }}
@@ -48,7 +48,7 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
-        UNVERIFIABLE_FILE: ${{ inputs.unverifiable-file }}
+        ALLOWLIST_FILE: ${{ inputs.allowlist-file }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -65,39 +65,39 @@ runs:
           }
 
           // Reject anything that isn't a fully-specified, maintainer-reviewed
-          // exception. A malformed entry must never be able to silently
+          // allowlist entry. A malformed entry must never be able to silently
           // suppress a real drift failure — fail loudly instead.
-          function validateUnverifiableEntry(entry, seen) {
+          function validateAllowlistEntry(entry, seen) {
             if (!isNonEmptyString(entry?.action)) {
-              throw new Error(`Invalid unverifiable.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+              throw new Error(`Invalid allowlist.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
             }
-            if (!isNonEmptyString(entry.reason)) {
-              throw new Error(`Invalid unverifiable.json entry for "${entry.action}": missing or empty "reason"`);
+            if (!isNonEmptyString(entry.description)) {
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": missing or empty "description"`);
             }
             if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
-              throw new Error(`Invalid unverifiable.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
             }
             if (seen.has(entry.action)) {
-              throw new Error(`Invalid unverifiable.json: duplicate entry for "${entry.action}"`);
+              throw new Error(`Invalid allowlist.json: duplicate entry for "${entry.action}"`);
             }
           }
 
           // Repos a maintainer has explicitly reviewed and confirmed cannot be
-          // drift-checked via the API (see unverifiable.json for the reason).
+          // drift-checked via the API (see allowlist.json for the description).
           // This is the ONLY way a resolution failure is downgraded from a
           // hard failure — never inferred from the error's status or text.
-          const unverifiableRepos = new Map();
+          const allowlist = new Map();
           try {
-            const entries = JSON.parse(fs.readFileSync(process.env.UNVERIFIABLE_FILE, 'utf8'));
+            const entries = JSON.parse(fs.readFileSync(process.env.ALLOWLIST_FILE, 'utf8'));
             for (const entry of entries) {
-              validateUnverifiableEntry(entry, unverifiableRepos);
-              unverifiableRepos.set(entry.action, entry);
+              validateAllowlistEntry(entry, allowlist);
+              allowlist.set(entry.action, entry);
             }
           } catch (err) {
             if (err.code !== 'ENOENT') throw err;
           }
 
-          // The ONLY error condition unverifiable.json is allowed to downgrade:
+          // The ONLY error condition allowlist.json is allowed to downgrade:
           // a clean HTTP 403 from the upstream API (e.g. an org-level IP
           // allow-list), never a 404, a ref-shape bug, or an exhausted retry.
           class AccessBlockedError extends Error {
@@ -139,7 +139,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
-            core.setOutput('unverifiable_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -191,7 +191,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
-            core.setOutput('unverifiable_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -295,7 +295,7 @@ runs:
           let verified = 0;
           let failed = 0;
           let unpinned = 0;
-          let unverifiable = 0;
+          let allowlisted = 0;
           const errors = [];
           const results = [];
 
@@ -367,20 +367,20 @@ runs:
             } catch (err) {
               const detail = err.message;
 
-              // Only a maintainer-reviewed entry in unverifiable.json AND the
+              // Only a maintainer-reviewed entry in allowlist.json AND the
               // explicitly verified access-block condition (a 403 from the
               // upstream API) can downgrade a resolution failure to a
               // warning — never any other error type, and never an inference
               // from the error's message text. See that file for why.
-              const exception = unverifiableRepos.get(`${ref.owner}/${ref.repo}`);
-              if (exception && err instanceof AccessBlockedError) {
+              const entry = allowlist.get(`${ref.owner}/${ref.repo}`);
+              if (entry && err instanceof AccessBlockedError) {
                 const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +
-                  `   Documented exception: ${exception.reason}`;
+                  `   Allowlisted: ${entry.description}`;
                 core.warning(msg);
-                unverifiable++;
+                allowlisted++;
                 results.push({
                   action: label, file: ref.file, line: ref.line,
-                  status: 'unverifiable', detail: exception.reason,
+                  status: 'allowlisted', detail: entry.description,
                 });
                 continue;
               }
@@ -397,12 +397,12 @@ runs:
           }
 
           core.info(`\n${'─'.repeat(60)}`);
-          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Unverifiable: ${unverifiable}  Total: ${refs.length}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Allowlisted: ${allowlisted}  Total: ${refs.length}`);
 
           core.setOutput('verified_count', verified);
           core.setOutput('failed_count', failed);
           core.setOutput('unpinned_count', unpinned);
-          core.setOutput('unverifiable_count', unverifiable);
+          core.setOutput('allowlisted_count', allowlisted);
           core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
           core.setOutput('results_json', JSON.stringify(results));
 
@@ -461,7 +461,7 @@ runs:
           const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
           const total = results.length;
           const branchPinned = results.filter(r => r.status === 'pinned-branch').length;
-          const unverifiable = results.filter(r => r.status === 'unverifiable').length;
+          const allowlisted = results.filter(r => r.status === 'allowlisted').length;
           const status = process.env.STATUS || 'pass';
 
           // Find existing comment
@@ -476,7 +476,7 @@ runs:
           const existing = comments.find(c => c.body?.includes(marker));
 
           // Shared row renderer — used by both the failure table and the
-          // unverifiable-only warning table below, so the two stay in sync.
+          // allowlisted-only warning table below, so the two stay in sync.
           function renderRows(rs) {
             return rs.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
@@ -486,8 +486,8 @@ runs:
               if (r.status === 'pinned-branch') {
                 return `| \`${r.action}\` | ${loc} | ℹ️ Pinned (branch) | ${r.detail || ''} |`;
               }
-              if (r.status === 'unverifiable') {
-                return `| \`${r.action}\` | ${loc} | ⚠️ Unverifiable (documented) | ${r.detail || ''} |`;
+              if (r.status === 'allowlisted') {
+                return `| \`${r.action}\` | ${loc} | ⚠️ Allowlisted (documented) | ${r.detail || ''} |`;
               }
               if (r.status === 'unpinned') {
                 return `| \`${r.action}\` | ${loc} | ❌ Unpinned | ${r.detail || ''} |`;
@@ -519,9 +519,9 @@ runs:
           > #### SHA Pin Verification — No References Found
           >
           > No third-party action references detected in workflow files.`;
-          } else if (unverifiable > 0) {
+          } else if (allowlisted > 0) {
             // Status is 'pass' (no failed/unpinned), but at least one reference
-            // relies on a documented exception — that reliance must stay
+            // relies on a documented allowlist entry — that reliance must stay
             // visible even though it doesn't block CI. Always post/update,
             // regardless of whether a prior comment exists, so a resolved
             // failure never silently flips to an unqualified "Passed ✅".
@@ -529,11 +529,11 @@ runs:
           > [!WARNING]
           > #### SHA Pin Verification Passed — with documented exceptions
           >
-          > All **${total}** third-party action reference(s) are covered, but **${unverifiable}** rel${unverifiable === 1 ? 'ies' : 'y'} on a documented exception in \`unverifiable.json\` and could not be automatically drift-checked. This does not fail CI, but should be reviewed.
+          > All **${total}** third-party action reference(s) are covered, but **${allowlisted}** rel${allowlisted === 1 ? 'ies' : 'y'} on a documented allowlist entry in \`allowlist.json\` and could not be automatically drift-checked. This does not fail CI, but should be reviewed.
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${renderRows(results.filter(r => r.status === 'unverifiable'))}
+          ${renderRows(results.filter(r => r.status === 'allowlisted'))}
 
           See the [action run](${runUrl}) for full details.`;
           } else {
