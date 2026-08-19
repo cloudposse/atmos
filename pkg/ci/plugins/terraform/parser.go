@@ -100,6 +100,11 @@ var (
 	//   Failure! 2 passed, 1 failed.
 	// Used as a fallback when per-run lines were not captured.
 	testSummaryRe = regexp.MustCompile(`(?m)^(?:Success|Failure)!\s*(\d+)\s+passed,\s*(\d+)\s+failed`)
+
+	// Matches the file/line locator inside a terraform "Error:" diagnostic block, e.g.:
+	//   on tests/app.tftest.hcl line 30:
+	// Used to recover assertion location for the summary-line fallback.
+	errorLocationRe = regexp.MustCompile(`(?m)^\s*on\s+(\S+)\s+line\s+(\d+):`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -641,7 +646,7 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 			data.Fail = parseIntOrZero(match[2])
 			data.Total = data.Pass + data.Fail
 			if data.Total > 0 {
-				data.Runs = append(data.Runs, synthesizeFallbackRun(data.Pass, data.Fail))
+				data.Runs = append(data.Runs, synthesizeFallbackRun(data.Pass, data.Fail, output))
 			}
 		}
 	}
@@ -660,16 +665,29 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 
 // synthesizeFallbackRun builds a single aggregate run entry standing in for the
 // per-run detail ParseTestOutput could not capture, so the CI summary's results
-// table still renders one row instead of none.
-func synthesizeFallbackRun(pass, fail int) plugin.TerraformTestRun {
+// table still renders one row instead of none. If terraform's error diagnostic
+// blocks survived even though the per-run status lines did not, their
+// file/line/message are attached to the row so the summary still carries real
+// assertion detail instead of only the aggregate counts.
+func synthesizeFallbackRun(pass, fail int, output string) plugin.TerraformTestRun {
 	status := testStatusPass
 	if fail > 0 {
 		status = testStatusFail
 	}
-	return plugin.TerraformTestRun{
+	run := plugin.TerraformTestRun{
 		Name:   fmt.Sprintf("test summary (per-run detail unavailable): %d passed, %d failed", pass, fail),
 		Status: status,
 	}
+	if fail > 0 {
+		if blocks := ExtractErrorBlocks(output); len(blocks) > 0 {
+			run.Error = strings.Join(blocks, "\n\n")
+			if loc := errorLocationRe.FindStringSubmatch(blocks[0]); len(loc) == 3 {
+				run.File = loc[1]
+				run.Line = parseIntOrZero(loc[2])
+			}
+		}
+	}
+	return run
 }
 
 // isJSONStream reports whether output contains Terraform/OpenTofu `test -json`

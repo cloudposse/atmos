@@ -119,6 +119,38 @@ func TestParseTestOutput_FailureSummaryFallback(t *testing.T) {
 	assert.Equal(t, testStatusFail, data.Runs[0].Status)
 }
 
+func TestParseTestOutput_SummaryFallback_RecoversErrorDetail(t *testing.T) {
+	// Per-run "run ... pass/fail" lines were dropped, but the "Error:" diagnostic
+	// block terraform prints for the failing assertion survived. The synthesized
+	// fallback row should recover the file, line, and message from it instead of
+	// leaving the run with only aggregate counts.
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 30:
+  30:     condition = output.bucket_id == "atmos-demo-test"
+
+The S3 bucket was not created against the emulator
+╵
+
+Failure! 1 passed, 1 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	assert.True(t, result.HasErrors)
+	assert.Equal(t, 2, data.Total)
+	assert.Equal(t, 1, data.Pass)
+	assert.Equal(t, 1, data.Fail)
+
+	require.Len(t, data.Runs, 1)
+	run := data.Runs[0]
+	assert.Equal(t, testStatusFail, run.Status)
+	assert.Equal(t, "tests/app.tftest.hcl", run.File)
+	assert.Equal(t, 30, run.Line)
+	assert.Contains(t, run.Error, "Test assertion failed")
+	assert.Contains(t, run.Error, "The S3 bucket was not created against the emulator")
+}
+
 func TestParseTestOutput_SummaryFallback_ZeroTotal(t *testing.T) {
 	// No per-run lines and no summary match; nothing ran, so no row should be
 	// synthesized -- a phantom row would misrepresent an empty result as a test.

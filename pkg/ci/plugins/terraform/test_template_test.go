@@ -146,6 +146,101 @@ func TestTestTemplate_SummaryFallback_AllPass(t *testing.T) {
 	assert.NotContains(t, rendered, "Tests Failed")
 }
 
+// TestTestTemplate_SummaryFallback_LosesRunDetail documents the residual, irreducible
+// case: when NOTHING but the trailing summary line survived -- not even terraform's
+// "Error:" diagnostic block -- there is no assertion detail left in the captured text
+// to recover, so the rendered CI summary can only show aggregate counts and the repro
+// command. Contrast with TestTestTemplate_SummaryFallback_RecoversErrorDetail, where
+// the "Error:" block did survive and per-run detail is now recovered.
+func TestTestTemplate_SummaryFallback_LosesRunDetail(t *testing.T) {
+	// Only the trailing summary line survives -- simulates the per-run lines AND the
+	// "Error:" diagnostic block being dropped (e.g. output buffering), even though the
+	// run that failed had rich detail in reality (name
+	// "provisions_resources_against_emulator", file tests/app.tftest.hcl, line 30,
+	// assertion "The S3 bucket was not created...").
+	const bufferedOutput = "Failure! 1 passed, 1 failed.\n"
+
+	result := ParseTestOutput(bufferedOutput)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	// What the summary *does* show: aggregate counts and the repro command.
+	for _, want := range []string{
+		"FAILED-1",
+		"PASSED-1",
+		"atmos terraform test app -s local",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+
+	// What's missing: the specific run's name, file, line, and assertion message that
+	// a fully-detailed (JSON-parsed) run would have surfaced -- this is the reported gap.
+	for _, missing := range []string{
+		"provisions_resources_against_emulator",
+		"tests/app.tftest.hcl",
+		":30",
+		"The S3 bucket was not created",
+	} {
+		assert.NotContains(t, rendered, missing)
+	}
+
+	// Only the single synthesized aggregate row exists -- no per-run breakdown.
+	require.Len(t, data.Runs, 1)
+	assert.Contains(t, data.Runs[0].Name, "per-run detail unavailable")
+}
+
+// TestTestTemplate_SummaryFallback_RecoversErrorDetail is the fix for the gap
+// TestTestTemplate_SummaryFallback_LosesRunDetail reproduces: when the per-run
+// lines are dropped but terraform's "Error:" diagnostic block survived, the CI
+// summary now renders the recovered file, line, and assertion message instead of
+// only the generic "per-run detail unavailable" placeholder.
+func TestTestTemplate_SummaryFallback_RecoversErrorDetail(t *testing.T) {
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 30:
+  30:     condition = output.bucket_id == "atmos-demo-test"
+
+The S3 bucket was not created against the emulator
+╵
+
+Failure! 1 passed, 1 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"FAILED-1",
+		"PASSED-1",
+		"`tests/app.tftest.hcl:30`",
+		"Test assertion failed",
+		"The S3 bucket was not created against the emulator",
+		"atmos terraform test app -s local",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+}
+
 // TestTestTemplate_SummaryFallback_WithFailure covers the failing counterpart
 // of the summary-only fallback.
 func TestTestTemplate_SummaryFallback_WithFailure(t *testing.T) {
