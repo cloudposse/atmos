@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -256,10 +257,15 @@ func rejectUnknownFields(section map[string]any, path string, allowed ...string)
 	for _, key := range allowed {
 		accepted[key] = struct{}{}
 	}
+	var unknown []string
 	for key := range section {
 		if _, ok := accepted[key]; !ok {
-			return fmt.Errorf("%w: unknown field %s.%s", errUtils.ErrHelmLifecycleDecode, path, key)
+			unknown = append(unknown, key)
 		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return fmt.Errorf("%w: unknown field %s.%s", errUtils.ErrHelmLifecycleDecode, path, unknown[0])
 	}
 	return nil
 }
@@ -284,6 +290,13 @@ func exactInt(value any) (int, bool) {
 			return 0, false
 		}
 		return int(integer), true
+	case reflect.Float64:
+		number := reflected.Float()
+		if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number ||
+			number < float64(math.MinInt) || number >= -float64(math.MinInt) {
+			return 0, false
+		}
+		return int(number), true
 	default:
 		return 0, false
 	}

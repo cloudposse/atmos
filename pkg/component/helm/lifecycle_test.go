@@ -41,7 +41,7 @@ func TestResolveReleaseLifecycleOperationOverrides(t *testing.T) {
 				cfg.HelmWaitStrategySectionName: "watcher",
 				cfg.HelmWaitJobsSectionName:     true,
 			},
-			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 7},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: float64(7)},
 			cfg.HelmInstallSectionName: map[string]any{
 				cfg.HelmTimeoutSectionName:   "60m",
 				cfg.HelmCRDsSectionName:      "skip",
@@ -229,8 +229,11 @@ func TestExactInt(t *testing.T) {
 		{name: "nil", value: nil, ok: false},
 		{name: "signed", value: int8(-7), want: -7, ok: true},
 		{name: "unsigned", value: uint16(9), want: 9, ok: true},
+		{name: "integral float64", value: float64(7), want: 7, ok: true},
 		{name: "unsigned overflow", value: uint64(math.MaxInt) + 1, ok: false},
 		{name: "non integer", value: 1.5, ok: false},
+		{name: "not finite", value: math.Inf(1), ok: false},
+		{name: "float overflow", value: -float64(math.MinInt), ok: false},
 	}
 
 	for _, tt := range tests {
@@ -239,6 +242,14 @@ func TestExactInt(t *testing.T) {
 			assert.Equal(t, tt.ok, ok)
 			assert.Equal(t, tt.want, got)
 		})
+	}
+}
+
+func TestRejectUnknownFieldsIsDeterministic(t *testing.T) {
+	section := map[string]any{"zeta": true, "alpha": true}
+	for range 20 {
+		err := rejectUnknownFields(section, "release", "known")
+		require.ErrorContains(t, err, "unknown field release.alpha")
 	}
 }
 
