@@ -665,10 +665,15 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 
 // synthesizeFallbackRun builds a single aggregate run entry standing in for the
 // per-run detail ParseTestOutput could not capture, so the CI summary's results
-// table still renders one row instead of none. If terraform's error diagnostic
-// blocks survived even though the per-run status lines did not, their
-// file/line/message are attached to the row so the summary still carries real
-// assertion detail instead of only the aggregate counts.
+// table still renders one row instead of none. If exactly one terraform error
+// diagnostic block survived even though the per-run status lines did not, its
+// file/line are attached to the row so the summary still points at a location.
+// The block's raw message text is deliberately NOT copied into the row: it is
+// multi-line and can contain "|", which would break the markdown table cell,
+// and it is already rendered safely in the fenced code block ParseTestOutput
+// populates via result.Errors. With more than one block, attributing a single
+// location to the aggregate row would misrepresent which failure it belongs
+// to, so File/Line are left unset in that case.
 func synthesizeFallbackRun(pass, fail int, output string) plugin.TerraformTestRun {
 	status := testStatusPass
 	if fail > 0 {
@@ -679,8 +684,7 @@ func synthesizeFallbackRun(pass, fail int, output string) plugin.TerraformTestRu
 		Status: status,
 	}
 	if fail > 0 {
-		if blocks := ExtractErrorBlocks(output); len(blocks) > 0 {
-			run.Error = strings.Join(blocks, "\n\n")
+		if blocks := ExtractErrorBlocks(output); len(blocks) == 1 {
 			if loc := errorLocationRe.FindStringSubmatch(blocks[0]); len(loc) == 3 {
 				run.File = loc[1]
 				run.Line = parseIntOrZero(loc[2])

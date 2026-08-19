@@ -199,16 +199,33 @@ func TestTestTemplate_SummaryFallback_LosesRunDetail(t *testing.T) {
 	assert.Contains(t, data.Runs[0].Name, "per-run detail unavailable")
 }
 
+// tableRowLine returns the single results-table line containing marker, failing
+// the test if there isn't exactly one -- used to assert a row stayed a
+// well-formed single markdown line instead of leaking multi-line content.
+func tableRowLine(t *testing.T, rendered, marker string) string {
+	t.Helper()
+	var matches []string
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "|") && strings.Contains(line, marker) {
+			matches = append(matches, line)
+		}
+	}
+	require.Len(t, matches, 1, "expected exactly one table row line containing %q, got: %v", marker, matches)
+	return matches[0]
+}
+
 // TestTestTemplate_SummaryFallback_RecoversErrorDetail is the fix for the gap
 // TestTestTemplate_SummaryFallback_LosesRunDetail reproduces: when the per-run
-// lines are dropped but terraform's "Error:" diagnostic block survived, the CI
-// summary now renders the recovered file, line, and assertion message instead of
-// only the generic "per-run detail unavailable" placeholder.
+// lines are dropped but a single terraform "Error:" diagnostic block survived,
+// the CI summary recovers the file/line for the row -- but does NOT duplicate
+// the raw multi-line message into the table cell, since that would break the
+// markdown table (and the message is already rendered safely in the fenced
+// code block below via result.Errors).
 func TestTestTemplate_SummaryFallback_RecoversErrorDetail(t *testing.T) {
 	const output = `Error: Test assertion failed
 
   on tests/app.tftest.hcl line 30:
-  30:     condition = output.bucket_id == "atmos-demo-test"
+  30:     condition = output.bucket_id == "atmos-demo-test" || output.bucket_id == "fallback-id"
 
 The S3 bucket was not created against the emulator
 ╵
@@ -236,6 +253,68 @@ Failure! 1 passed, 1 failed.
 		"Test assertion failed",
 		"The S3 bucket was not created against the emulator",
 		"atmos terraform test app -s local",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+
+	// The results-table row must stay a single, well-formed markdown line --
+	// the raw diagnostic text (multi-line, with a literal "||" in the HCL
+	// condition) must never be spliced into it.
+	row := tableRowLine(t, rendered, ":x: fail")
+	assert.Equal(t, 6, strings.Count(row, "|"), "row must have exactly 5 columns, got: %q", row)
+	assert.NotContains(t, row, "||", "the HCL condition text must not leak into the table row")
+
+	// The full message appears exactly once -- in the fenced code block, not
+	// duplicated into the table row.
+	assert.Equal(t, 1, strings.Count(rendered, "Test assertion failed"))
+}
+
+// TestTestTemplate_SummaryFallback_MultipleErrorBlocks_NoLocationAttributed
+// covers two failing assertions in two different files: attributing the
+// aggregate row's File/Line to just the first block would misrepresent which
+// failure it belongs to, so neither is set -- both failures' full detail
+// remain available via the fenced code block below the table.
+func TestTestTemplate_SummaryFallback_MultipleErrorBlocks_NoLocationAttributed(t *testing.T) {
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 12:
+  12:     condition = output.first == "expected"
+
+first assertion message
+╵
+
+Error: Test assertion failed
+
+  on tests/extra.tftest.hcl line 44:
+  44:     condition = output.second == "expected"
+
+second assertion message
+╵
+
+Failure! 0 passed, 2 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	row := tableRowLine(t, rendered, ":x: fail")
+	assert.Equal(t, 6, strings.Count(row, "|"), "row must have exactly 5 columns, got: %q", row)
+	assert.NotContains(t, row, "tests/app.tftest.hcl")
+	assert.NotContains(t, row, "tests/extra.tftest.hcl")
+
+	for _, want := range []string{
+		"first assertion message",
+		"second assertion message",
 	} {
 		assert.Contains(t, rendered, want)
 	}

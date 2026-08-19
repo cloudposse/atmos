@@ -120,10 +120,13 @@ func TestParseTestOutput_FailureSummaryFallback(t *testing.T) {
 }
 
 func TestParseTestOutput_SummaryFallback_RecoversErrorDetail(t *testing.T) {
-	// Per-run "run ... pass/fail" lines were dropped, but the "Error:" diagnostic
-	// block terraform prints for the failing assertion survived. The synthesized
-	// fallback row should recover the file, line, and message from it instead of
-	// leaving the run with only aggregate counts.
+	// Per-run "run ... pass/fail" lines were dropped, but the single "Error:"
+	// diagnostic block terraform prints for the failing assertion survived. The
+	// synthesized fallback row should recover the file/line from it -- but NOT
+	// copy the raw multi-line message into the row itself, since that text is
+	// already rendered safely in the fenced result.Errors block and embedding it
+	// in a table cell would break the markdown table (multi-line content, and
+	// HCL conditions routinely contain "|").
 	const output = `Error: Test assertion failed
 
   on tests/app.tftest.hcl line 30:
@@ -147,8 +150,55 @@ Failure! 1 passed, 1 failed.
 	assert.Equal(t, testStatusFail, run.Status)
 	assert.Equal(t, "tests/app.tftest.hcl", run.File)
 	assert.Equal(t, 30, run.Line)
-	assert.Contains(t, run.Error, "Test assertion failed")
-	assert.Contains(t, run.Error, "The S3 bucket was not created against the emulator")
+	assert.Empty(t, run.Error, "the raw diagnostic block must not be duplicated into the row")
+
+	// The full message is still available -- just via the separate, safely
+	// fenced result.Errors block, not the row.
+	require.Len(t, result.Errors, 1)
+	assert.Contains(t, result.Errors[0], "The S3 bucket was not created against the emulator")
+}
+
+func TestParseTestOutput_SummaryFallback_MultipleErrorBlocks_NoLocationAttributed(t *testing.T) {
+	// Two distinct assertions failed in two different files. Attributing the
+	// aggregate row's File/Line to just the first block would misrepresent which
+	// failure it actually belongs to, so neither should be set when more than
+	// one error block is present.
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 12:
+  12:     condition = output.first == "expected"
+
+first assertion message
+╵
+
+Error: Test assertion failed
+
+  on tests/extra.tftest.hcl line 44:
+  44:     condition = output.second == "expected"
+
+second assertion message
+╵
+
+Failure! 0 passed, 2 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	assert.Equal(t, 2, data.Total)
+	assert.Equal(t, 0, data.Pass)
+	assert.Equal(t, 2, data.Fail)
+
+	require.Len(t, data.Runs, 1)
+	run := data.Runs[0]
+	assert.Equal(t, testStatusFail, run.Status)
+	assert.Empty(t, run.File)
+	assert.Zero(t, run.Line)
+	assert.Empty(t, run.Error)
+
+	// Both failures' full detail are still available via result.Errors.
+	require.Len(t, result.Errors, 2)
+	assert.Contains(t, result.Errors[0], "first assertion message")
+	assert.Contains(t, result.Errors[1], "second assertion message")
 }
 
 func TestParseTestOutput_SummaryFallback_ZeroTotal(t *testing.T) {
