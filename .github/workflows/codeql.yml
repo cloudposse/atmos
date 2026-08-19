@@ -122,6 +122,19 @@ jobs:
           # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
           # saml2aws's U2F support), which needs libudev-dev and fails to load.
           CGO_ENABLED: "0"
+          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
+          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
+          # Terraform/OpenTofu, ...) peaks high enough in memory to get
+          # OOM-killed by the standard 16GB runner (observed as an unexplained
+          # SIGTERM/exit 143 partway through, with no findings ever produced).
+          # A soft memory ceiling forces the Go runtime to GC earlier/more
+          # often instead of letting the heap grow unchecked, trading some run
+          # time for staying under the runner's memory limit. GOFLAGS=-p=1
+          # (serializing package builds) was tried first and rejected: it only
+          # marginally reduced peak memory (govulncheck's SSA construction
+          # parallelizes via goroutines internally, which -p doesn't govern)
+          # while nearly tripling run time.
+          GOMEMLIMIT: "12GiB"
         with:
           go-version-file: go.mod
           output-format: sarif
