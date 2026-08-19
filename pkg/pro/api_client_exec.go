@@ -5,15 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
+// uploadExecDataOperation names the UploadExecData operation for retry
+// logging and APIError reporting.
+const uploadExecDataOperation = "UploadExecData"
+
 // UploadExecMetadata uploads a single command-execution record to Atmos Pro.
 // The base envelope and resource-usage metrics are small and bounded, so
-// they are always sent in full. dto.Data may be arbitrarily large (e.g. the
+// they are always sent in full. Dto.Data may be arbitrarily large (e.g. the
 // per-resource change list for terraform plan/apply): UploadExecMetadata
 // marshals the whole record once and, when it is under the payload size
 // threshold, sends Data inline; when at/over the threshold, it first uploads
@@ -103,41 +108,13 @@ func (c *AtmosProAPIClient) UploadExecData(dto *dtos.ExecDataUploadRequest) (*dt
 	log.Debug("Uploading out-of-band command-execution data.", logKeyURL, url)
 
 	var respDTO dtos.ExecDataUploadResponse
-	err = doWithRetry("UploadExecData", func() error {
-		req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
-		if reqErr != nil {
-			return wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
-		}
-
-		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+	err = doWithRetry(uploadExecDataOperation, func() error {
+		parsed, doErr := c.doUploadExecDataRequest(url, data)
 		if doErr != nil {
-			return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
+			return doErr
 		}
-		defer resp.Body.Close()
-
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return wrapErr(errUtils.ErrFailedToReadResponseBody, readErr)
-		}
-
-		var parsed dtos.ExecDataUploadResponse
-		if unmarshalErr := json.Unmarshal(body, &parsed); unmarshalErr != nil {
-			if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-				return &APIError{StatusCode: resp.StatusCode, Operation: "UploadExecData", Err: unmarshalErr}
-			}
-			return nil
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-			respDTO = parsed
-			return nil
-		}
-
-		return &APIError{
-			StatusCode: resp.StatusCode,
-			Operation:  "UploadExecData",
-			Err:        buildProAPIError("UploadExecData", resp.StatusCode, parsed.AtmosApiResponse),
-		}
+		respDTO = *parsed
+		return nil
 	}, c, defaultRetryConfig())
 	if err != nil {
 		return nil, wrapErr(errUtils.ErrFailedToUploadExecData, err)
@@ -146,4 +123,44 @@ func (c *AtmosProAPIClient) UploadExecData(dto *dtos.ExecDataUploadRequest) (*dt
 	log.Debug("Uploaded out-of-band command-execution data.", logKeyURL, url)
 
 	return &respDTO, nil
+}
+
+// doUploadExecDataRequest performs a single UploadExecData attempt: send the
+// request, read the body, and classify the response. Split out of
+// UploadExecData to keep that function's cyclomatic complexity under the
+// linter's limit.
+func (c *AtmosProAPIClient) doUploadExecDataRequest(url string, data []byte) (*dtos.ExecDataUploadResponse, error) {
+	req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+	if reqErr != nil {
+		return nil, wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+	}
+
+	resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+	if doErr != nil {
+		return nil, wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, wrapErr(errUtils.ErrFailedToReadResponseBody, readErr)
+	}
+
+	var parsed dtos.ExecDataUploadResponse
+	if unmarshalErr := json.Unmarshal(body, &parsed); unmarshalErr != nil {
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			return nil, &APIError{StatusCode: resp.StatusCode, Operation: uploadExecDataOperation, Err: unmarshalErr}
+		}
+		return &parsed, nil
+	}
+
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
+		return &parsed, nil
+	}
+
+	return nil, &APIError{
+		StatusCode: resp.StatusCode,
+		Operation:  uploadExecDataOperation,
+		Err:        buildProAPIError(uploadExecDataOperation, resp.StatusCode, parsed.AtmosApiResponse),
+	}
 }

@@ -72,6 +72,8 @@ type shellCommandConfig struct {
 // command's own record of explicitly-set flags (proexec.FlagsFromCommand)
 // rather than info.AdditionalArgsAndFlags.
 func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithInvokingCommand")()
+
 	return func(c *shellCommandConfig) {
 		c.invokingCmd = cmd
 	}
@@ -89,11 +91,13 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 
 // WithExecMetadataParser provides a closure that, given the invoking
 // subcommand name, returns command-specific structured data (FR-006) for the
-// execution record — or nil if there is none to report. cmd/terraform
+// execution record — or nil if there is none to report. Cmd/terraform
 // supplies this closure so ExecuteTerraform's exec-metadata sync capture can
 // obtain parsed terraform plan/apply/deploy output without internal/exec
 // itself importing the CI plugin's parser (research.md Decision 18).
 func WithExecMetadataParser(fn func(subCommand string) any) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithExecMetadataParser")()
+
 	return func(c *shellCommandConfig) {
 		c.execMetadataParser = fn
 	}

@@ -37,7 +37,7 @@ func TestCaptureSync_NoOpOnGateClosed(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.Token = "test-token"
 
-	err := CaptureSync(atmosConfig, "describe affected", nil, nil, 0, nil)
+	err := CaptureSync(atmosConfig, &ExecRecordInput{Command: "describe affected"})
 	assert.NoError(t, err)
 }
 
@@ -52,7 +52,7 @@ func TestCaptureSync_WarnAndContinueOnFailure(t *testing.T) {
 	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = defaultSyncTimeoutSeconds
 
 	start := time.Now()
-	err := CaptureSync(atmosConfig, "terraform apply", nil, nil, 0, nil)
+	err := CaptureSync(atmosConfig, &ExecRecordInput{Command: "terraform apply"})
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err, "CaptureSync must warn-and-continue, never return the upload error")

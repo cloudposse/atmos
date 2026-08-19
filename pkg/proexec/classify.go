@@ -19,6 +19,6 @@ var syncAllowlist = map[string]bool{
 // IsSyncCommand reports whether commandPath (a full Cobra command path, e.g.
 // cmd.CommandPath() or "atmos "+"terraform "+subCommand) is on the
 // synchronous execution-record delivery allowlist (FR-007).
-func IsSyncCommand(commandPath string) bool {
+func IsSyncCommand(commandPath string) bool { //nolint:lintroller // Trivial map lookup, no I/O - perf tracking would only add noise.
 	return syncAllowlist[commandPath]
 }

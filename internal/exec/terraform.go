@@ -14,12 +14,11 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
+	// Import backend provisioner to register S3 provisioner.
+	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
-
-	// Import backend provisioner to register S3 provisioner.
-	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 )
 
 const (
@@ -198,7 +197,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
 
-	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, invokingCommandFromOpts(opts...), execMetadataParserFromOpts(opts...), err)
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
+		Cmd:    invokingCommandFromOpts(opts...),
+		Parser: execMetadataParserFromOpts(opts...),
+		Err:    err,
+	})
 
 	return err
 }
@@ -206,7 +209,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // captureExecMetadataSync reports an execution record to Atmos Pro for the
 // synchronous allowlist (terraform plan/apply/deploy), blocking briefly per
 // proexec.CaptureSync's own configurable timeout. No-op for every other
-// terraform subcommand. subCommand must be the subcommand the user actually
+// terraform subcommand. SubCommand must be the subcommand the user actually
 // invoked (captured before handleDeploySubcommand's in-place "deploy" ->
 // "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
 // misattributed to `apply`.
@@ -215,19 +218,29 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // cmd/terraform/utils.go's wirePerComponentHook for --affected/--all/query
 // runs) are skipped here: this function fires once per graph node, but
 // FR-006a requires exactly one execution record for the whole invocation.
-// cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
+// Cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
 // identity/outcome instead and fires a single aggregate CaptureSync call
 // after the graph run completes (research.md Decisions 11/17).
 //
-// structured plugin.TerraformOutputData enrichment described for User Story 3
+// Structured plugin.TerraformOutputData enrichment described for User Story 3
 // is obtained via parser, a closure supplied by cmd/terraform through
 // WithExecMetadataParser (research.md Decision 18) — internal/exec never
 // imports pkg/ci/plugins/terraform directly, since pkg/ci/internal/plugin is
 // only importable from within the pkg/ci tree and, independently,
 // pkg/ci/plugins/terraform itself imports internal/exec (a confirmed import
-// cycle). parser is nil for callers that don't wire one (e.g. tests), in
+// cycle). Parser is nil for callers that don't wire one (e.g. tests), in
 // which case data is reported as nil, same as before this data was wired.
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, parser func(subCommand string) any, cmdErr error) {
+// ExecMetadataSyncParams bundles the invoking Cobra command, the optional
+// structured-output parser, and the command's own error — the three values
+// captureExecMetadataSync needs beyond atmosConfig/subCommand/info, grouped
+// to stay under the linter's argument-count limit.
+type execMetadataSyncParams struct {
+	Cmd    *cobra.Command
+	Parser func(subCommand string) any
+	Err    error
+}
+
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, params execMetadataSyncParams) {
 	commandPath := "atmos terraform " + subCommand
 	if !proexec.IsSyncCommand(commandPath) {
 		return
@@ -239,7 +252,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 	}
 
 	exitCode := 0
-	if cmdErr != nil {
+	if params.Err != nil {
 		exitCode = 1
 	}
 
@@ -254,14 +267,15 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 	// like -s/--stack and has --upload-status stripped out of it before this
 	// call runs, so it structurally cannot represent "the flags actually
 	// passed" (research.md Decision 14).
-	flags := proexec.FlagsFromCommand(cmd)
+	flags := proexec.FlagsFromCommand(params.Cmd)
 
 	var data any
-	if parser != nil {
-		data = parser(subCommand)
+	if params.Parser != nil {
+		data = params.Parser(subCommand)
 	}
 
-	if syncErr := proexec.CaptureSync(atmosConfig, "terraform "+subCommand, args, flags, exitCode, data); syncErr != nil {
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

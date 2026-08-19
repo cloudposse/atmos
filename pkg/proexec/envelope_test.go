@@ -43,8 +43,8 @@ func (f *fakeGitRepo) GetCurrentCommitSHA() (string, error) {
 	return f.sha, nil
 }
 
-func testMetrics() process.ProcessMetrics {
-	return process.ProcessMetrics{
+func testMetrics() *process.ProcessMetrics {
+	return &process.ProcessMetrics{
 		WallTime:      100 * time.Millisecond,
 		UserCPUTime:   50 * time.Millisecond,
 		SystemCPUTime: 10 * time.Millisecond,
@@ -62,7 +62,7 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 		sha: "deadbeef",
 	}
 
-	req, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -89,9 +89,9 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 func TestBuildRecord_ExecutionIDIsFreshUUIDPerCall(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req1, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
+	req1, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
 	require.NoError(t, err)
-	req2, err := buildRecord("terraform plan", nil, nil, 0, testMetrics(), nil, repo)
+	req2, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, req1.ExecutionID)
@@ -112,12 +112,11 @@ func TestBuildRecord_ExecutionIDIsFreshUUIDPerCall(t *testing.T) {
 func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req, err := buildRecord(
-		"terraform plan",
-		[]string{"cdn"},
-		[]string{"-s", "plat-use2-dev", "--upload-status"},
-		0, testMetrics(), nil, repo,
-	)
+	req, err := buildRecord(&ExecRecordInput{
+		Command: "terraform plan",
+		Args:    []string{"cdn"},
+		Flags:   []string{"-s", "plat-use2-dev", "--upload-status"},
+	}, testMetrics(), repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -131,7 +130,7 @@ func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req, err := buildRecord("atmos list components", nil, nil, 0, testMetrics(), nil, repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos list components"}, testMetrics(), repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -151,7 +150,7 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), sample{Foo: "bar"}, repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: sample{Foo: "bar"}}, testMetrics(), repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -184,7 +183,7 @@ func TestBuildRecord_DataAsArrayWhenGiven(t *testing.T) {
 		{Action: "updated", Address: "aws_iam_role.example"},
 	}
 
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(), items, repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: items}, testMetrics(), repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 
@@ -203,8 +202,10 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	}
 
 	// A recognizable AWS access key pattern the Gitleaks-based masker detects.
-	req, err := buildRecord("atmos terraform plan", nil, nil, 0, testMetrics(),
-		sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"}, repo)
+	req, err := buildRecord(&ExecRecordInput{
+		Command: "atmos terraform plan",
+		Data:    sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"},
+	}, testMetrics(), repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 	// Masking is a no-op without an initialized masking context in this unit
@@ -221,7 +222,7 @@ func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
 		shaErr:  assertError("no sha"),
 	}
 
-	req, err := buildRecord("atmos version", nil, nil, 0, testMetrics(), nil, repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos version"}, testMetrics(), repo)
 	require.NoError(t, err)
 	assert.Equal(t, "", req.GitSHA)
 	assert.Equal(t, "", req.RepoURL)

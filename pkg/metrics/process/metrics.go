@@ -1,6 +1,10 @@
 package process
 
-import "time"
+import (
+	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 // ProcessMetrics captures how much time and system resources the atmos
 // process itself consumed. Fields not available on the current platform
@@ -31,6 +35,8 @@ type Snapshot struct {
 // lifetime. Both the async and synchronous exec-metadata capture paths diff
 // against the same baseline.
 func Baseline() Snapshot {
+	defer perf.Track(nil, "process.Baseline")()
+
 	return Snapshot{
 		takenAt: time.Now(),
 		usage:   captureRusage(),
@@ -38,8 +44,10 @@ func Baseline() Snapshot {
 }
 
 // Since computes the ProcessMetrics accumulated since the Snapshot was taken.
-func (s Snapshot) Since() ProcessMetrics {
-	m := diffRusage(s.usage)
+func (s *Snapshot) Since() ProcessMetrics {
+	defer perf.Track(nil, "process.Snapshot.Since")()
+
+	m := diffRusage(&s.usage)
 	m.WallTime = time.Since(s.takenAt)
 	return m
 }

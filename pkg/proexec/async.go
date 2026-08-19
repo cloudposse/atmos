@@ -10,6 +10,7 @@ import (
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -47,6 +48,8 @@ var currentAtmosConfig *schema.AtmosConfiguration
 // CaptureAsync. Must be called once during startup (cmd/root.go's Execute),
 // before any command runs.
 func SetAtmosConfig(atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "proexec.SetAtmosConfig")()
+
 	currentAtmosConfig = atmosConfig
 }
 
@@ -61,6 +64,8 @@ func SetAtmosConfig(atmosConfig *schema.AtmosConfiguration) {
 // delivery paths are mutually exclusive per invocation (FR-007) — a command
 // must never produce two execution records for the same run.
 func CaptureAsync(cmd *cobra.Command, err error) {
+	defer perf.Track(nil, "proexec.CaptureAsync")()
+
 	commandPath := ""
 	if cmd != nil {
 		commandPath = cmd.CommandPath()
@@ -92,7 +97,8 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
 	// so the command's process doesn't exit before the request completes,
 	// and so its outcome is always logged.
-	uploadErr := uploadExecMetadata(reportedCommand, args, flags, exitCode, nil, client, git.NewDefaultGitRepo())
+	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode}
+	uploadErr := uploadExecMetadata(in, client, git.NewDefaultGitRepo())
 	if uploadErr != nil {
 		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", false, "error", uploadErr)
 	} else {
@@ -132,6 +138,8 @@ func commandArgsAndFlags(cmd *cobra.Command) (command string, args []string, fla
 // captureExecMetadataSync) delivery paths — they MUST NOT diverge (research.md
 // Decision 14).
 func FlagsFromCommand(cmd *cobra.Command) []string {
+	defer perf.Track(nil, "proexec.FlagsFromCommand")()
+
 	if cmd == nil {
 		return nil
 	}
@@ -157,16 +165,9 @@ func flagAsTyped(f *pflag.Flag) []string {
 // uploadExecMetadata builds and sends a single execution record. Any failure
 // is returned to the caller to log — it never surfaces to the user or alters
 // the calling command's outcome.
-func uploadExecMetadata(
-	commandPath string,
-	args []string,
-	flags []string,
-	exitCode int,
-	data any,
-	client pro.AtmosProAPIClientInterface,
-	gitRepo git.GitRepoInterface,
-) error {
-	req, buildErr := buildRecord(commandPath, args, flags, exitCode, processBaseline.Since(), data, gitRepo)
+func uploadExecMetadata(in *ExecRecordInput, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	metrics := processBaseline.Since()
+	req, buildErr := buildRecord(in, &metrics, gitRepo)
 	if buildErr != nil {
 		return buildErr
 	}

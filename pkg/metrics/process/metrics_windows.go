@@ -34,7 +34,7 @@ func captureRusage() rusageSnapshot {
 }
 
 // diffRusage computes the ProcessMetrics delta since the baseline sample.
-func diffRusage(baseline rusageSnapshot) ProcessMetrics {
+func diffRusage(baseline *rusageSnapshot) ProcessMetrics {
 	now := captureRusage()
 
 	return ProcessMetrics{

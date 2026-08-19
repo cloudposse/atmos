@@ -369,30 +369,34 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		exitCode = 1
 	}
-	if syncErr := proexec.CaptureSync(a.CLIConfig, "describe affected", nil, nil, exitCode, nil); syncErr != nil {
+	in := &proexec.ExecRecordInput{Command: "describe affected", ExitCode: exitCode}
+	if syncErr := proexec.CaptureSync(a.CLIConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 
 	return err
 }
 
-// executeInner contains the original `describe affected` execution logic.
-func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
-	defer perf.Track(nil, "exec.Execute")()
+// affectedResolution bundles the raw result of a target-resolution strategy
+// (affected stacks plus the HEAD/BASE references and repo URL used to
+// compute them) into a single value so resolveAffectedStacks stays under the
+// linter's return-count limit.
+type affectedResolution struct {
+	Affected []schema.Affected
+	HeadHead *plumbing.Reference
+	BaseHead *plumbing.Reference
+	RepoURL  string
+}
 
-	var affected []schema.Affected
-	var headHead, baseHead *plumbing.Reference
-	var repoUrl string
-	var err error
-
-	// Built once and reused across every describe-stacks call this command makes (HEAD,
-	// BASE, and any dependents resolution) so the end-of-command summary reports one
-	// combined count instead of one per call site.
-	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
-
+// resolveAffectedStacks dispatches to the target-resolution strategy selected
+// by a's RepoPath/CloneTargetRef fields (explicit repo path, cloned target
+// ref, or checked-out target ref, in that priority order) and returns its
+// raw result. Split out of executeInner to keep that function's line count
+// under the linter's limit.
+func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) (affectedResolution, error) {
 	switch {
 	case a.RepoPath != "":
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRepoPath(
 			a.CLIConfig,
 			a.RepoPath,
 			a.IncludeSpaceliftAdminStacks,
@@ -405,9 +409,9 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
-		)
+		))
 	case a.CloneTargetRef:
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRefClone(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
@@ -423,9 +427,9 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
-		)
+		))
 	default:
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRefCheckout(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
@@ -440,11 +444,31 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
-		)
+		))
 	}
+}
+
+// toAffectedResolution adapts a target-resolution strategy's raw 5-value
+// return into an affectedResolution, so resolveAffectedStacks's per-case
+// return statements stay within the linter's return-count limit.
+func toAffectedResolution(affected []schema.Affected, headHead, baseHead *plumbing.Reference, repoURL string, err error) (affectedResolution, error) {
+	return affectedResolution{Affected: affected, HeadHead: headHead, BaseHead: baseHead, RepoURL: repoURL}, err
+}
+
+// executeInner contains the original `describe affected` execution logic.
+func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
+	defer perf.Track(nil, "exec.Execute")()
+
+	// Built once and reused across every describe-stacks call this command makes (HEAD,
+	// BASE, and any dependents resolution) so the end-of-command summary reports one
+	// combined count instead of one per call site.
+	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
+
+	resolution, err := d.resolveAffectedStacks(a, errOptions)
 	if err != nil {
 		return err
 	}
+	affected := resolution.Affected
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
@@ -460,7 +484,7 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 		affected = StripAffectedForUpload(affected)
 	}
 
-	if err := d.view(a, repoUrl, headHead, baseHead, affected); err != nil {
+	if err := d.view(a, resolution.RepoURL, resolution.HeadHead, resolution.BaseHead, affected); err != nil {
 		return err
 	}
 

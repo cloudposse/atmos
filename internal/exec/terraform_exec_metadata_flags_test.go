@@ -82,7 +82,7 @@ func TestCaptureExecMetadataSync_FlagsReflectRealInvocation(t *testing.T) {
 		AdditionalArgsAndFlags: []string{},
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, plan, nil, nil)
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Cmd: plan})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -135,7 +135,7 @@ func TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired(t *testing.T) {
 		NodeHooks:        fakeNodeHooks{},
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, plan, nil, nil)
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Cmd: plan})
 
 	assert.Equal(t, int32(0), requestCount.Load(),
 		"a multi-component graph node must not fire its own exec-metadata upload — the aggregate call after the whole run completes owns delivery")
@@ -173,7 +173,7 @@ func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t 
 		return map[string]any{"resource_counts": map[string]any{"create": 1}}
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, plan, parser, nil)
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Cmd: plan, Parser: parser})
 
 	assert.Equal(t, int32(1), calls.Load(), "parser must be called exactly once")
 	assert.Equal(t, "plan", gotSubCommand)
@@ -198,7 +198,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand(t *testing
 		return "should never be reached"
 	}
 
-	captureExecMetadataSync(atmosConfig, "validate", info, nil, parser, nil)
+	captureExecMetadataSync(atmosConfig, "validate", info, execMetadataSyncParams{Parser: parser})
 
 	assert.Equal(t, int32(0), calls.Load())
 }
@@ -219,7 +219,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T
 		return "should never be reached"
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, nil, parser, nil)
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser})
 
 	assert.Equal(t, int32(0), calls.Load())
 }

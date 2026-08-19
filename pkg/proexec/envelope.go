@@ -20,24 +20,28 @@ import (
 // Atmos Pro uploads (see internal/exec/pro.go: uploadStatus).
 const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 
+// ExecRecordInput bundles the per-invocation fields buildRecord and
+// uploadExecMetadata need beyond the process-wide metrics/gitRepo
+// dependencies — Command, Args, Flags, ExitCode, and Data — grouped to stay
+// under the linter's argument-count limit. Args MUST hold only positional
+// arguments and flags MUST hold only CLI flags — the two are kept in
+// separate fields, never combined (FR-003b).
+type ExecRecordInput struct {
+	Command  string
+	Args     []string
+	Flags    []string
+	ExitCode int
+	Data     any
+}
+
 // buildRecord assembles the base execution-record envelope (ExecutionID,
 // version, OS, arch, command path, ATMOS_PRO_RUN_ID, git info, resource-usage
-// metrics), and applies secret masking to Args, Flags, and data (FR-010).
-// args MUST hold only positional arguments and flags MUST hold only CLI
-// flags — the two are kept in separate fields, never combined (FR-003b). A
-// nil data argument produces a request with Data entirely absent from the
+// metrics), and applies secret masking to Args, Flags, and data (FR-010). A
+// nil in.Data produces a request with Data entirely absent from the
 // marshaled JSON. Payload-size handling (FR-011) is not performed here — an
 // oversized data value is uploaded out-of-band by pro.UploadExecMetadata,
 // never truncated or dropped.
-func buildRecord(
-	command string,
-	args []string,
-	flags []string,
-	exitCode int,
-	metrics process.ProcessMetrics,
-	data any,
-	gitRepo git.GitRepoInterface,
-) (*dtos.ExecUploadRequest, error) {
+func buildRecord(in *ExecRecordInput, metrics *process.ProcessMetrics, gitRepo git.GitRepoInterface) (*dtos.ExecUploadRequest, error) {
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
 		log.Debug("Failed to get local repo info for exec-metadata upload.", "error", err)
@@ -57,10 +61,10 @@ func buildRecord(
 	//nolint:forbidigo // Exception: Run ID is always from CI/CD environment, not config
 	atmosProRunID := os.Getenv(atmosProRunIDEnvVar)
 
-	maskedArgs := maskArgs(args)
-	maskedFlags := maskArgs(flags)
+	maskedArgs := maskArgs(in.Args)
+	maskedFlags := maskArgs(in.Flags)
 
-	dataRaw, err := maskedDataJSON(data)
+	dataRaw, err := maskedDataJSON(in.Data)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
 	}
@@ -71,10 +75,10 @@ func buildRecord(
 		AtmosVersion:  pkgversion.Version,
 		AtmosOS:       runtime.GOOS,
 		AtmosArch:     runtime.GOARCH,
-		Command:       command,
+		Command:       in.Command,
 		Args:          maskedArgs,
 		Flags:         maskedFlags,
-		ExitCode:      exitCode,
+		ExitCode:      in.ExitCode,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,
 		RepoName:      repoInfo.RepoName,
@@ -118,7 +122,7 @@ func maskedDataJSON(data any) (json.RawMessage, error) {
 }
 
 // toResourceUsageMetrics converts process.ProcessMetrics to the DTO shape.
-func toResourceUsageMetrics(m process.ProcessMetrics) dtos.ResourceUsageMetrics {
+func toResourceUsageMetrics(m *process.ProcessMetrics) dtos.ResourceUsageMetrics {
 	return dtos.ResourceUsageMetrics{
 		WallTimeMS:       m.WallTime.Milliseconds(),
 		UserCPUTimeMS:    m.UserCPUTime.Milliseconds(),

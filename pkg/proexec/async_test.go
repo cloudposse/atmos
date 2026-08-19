@@ -55,7 +55,7 @@ func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
 	client := &fakeUploadClient{}
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	err := uploadExecMetadata("version", nil, nil, 0, nil, client, repo)
+	err := uploadExecMetadata(&ExecRecordInput{Command: "version"}, client, repo)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), client.uploadCalls.Load())

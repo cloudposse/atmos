@@ -982,7 +982,7 @@ func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, a
 // captureMultiComponentExecMetadata reports exactly one execution record for
 // a whole multi-component graph run (FR-006a), once it has fully completed,
 // folding each node's accumulated identity/outcome (terraformNodeHooks.
-// recordExecResult) into the single aggregate record's Data field. No-op if
+// RecordExecResult) into the single aggregate record's Data field. No-op if
 // no NodeHooks were wired (e.g. the subcommand isn't in terraformHookEvents)
 // or if subCommand is not on the synchronous exec-metadata allowlist
 // (research.md Decisions 11/17) — matching internal/exec's per-node skip
@@ -1019,7 +1019,8 @@ func captureMultiComponentExecMetadata(info *schema.ConfigAndStacksInfo, subComm
 	data := hooks.results
 	hooks.mu.Unlock()
 
-	if syncErr := proexec.CaptureSync(&atmosConfig, "terraform "+subCommand, nil, flags, exitCode, data); syncErr != nil {
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Flags: flags, ExitCode: exitCode, Data: data}
+	if syncErr := proexec.CaptureSync(&atmosConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
 }

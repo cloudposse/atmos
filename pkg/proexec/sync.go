@@ -5,6 +5,7 @@ import (
 
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -22,9 +23,11 @@ const defaultSyncTimeoutSeconds = 10
 // warn-and-continue for all three initial synchronous commands
 // (data-model.md's Delivery Classification table): a warning is logged and
 // CaptureSync returns nil so a delivery outage never turns a successful
-// command into a failed CI run. args MUST hold only positional arguments and
-// flags MUST hold only CLI flags (FR-003b).
-func CaptureSync(atmosConfig *schema.AtmosConfiguration, cmdName string, args []string, flags []string, exitCode int, data any) error {
+// command into a failed CI run. In.Args MUST hold only positional arguments
+// and in.Flags MUST hold only CLI flags (FR-003b).
+func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) error {
+	defer perf.Track(atmosConfig, "proexec.CaptureSync")()
+
 	if !gateOpen(atmosConfig) {
 		return nil
 	}
@@ -36,10 +39,12 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, cmdName string, args []
 	}
 
 	timeout := syncTimeout(atmosConfig)
+	cmdName := in.Command
 
 	resultCh := make(chan error, 1)
 	go func() {
-		req, buildErr := buildRecord(cmdName, args, flags, exitCode, processBaseline.Since(), data, git.NewDefaultGitRepo())
+		metrics := processBaseline.Since()
+		req, buildErr := buildRecord(in, &metrics, git.NewDefaultGitRepo())
 		if buildErr != nil {
 			resultCh <- buildErr
 			return
