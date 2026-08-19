@@ -41,7 +41,7 @@ func TestResolveReleaseLifecycleOperationOverrides(t *testing.T) {
 				cfg.HelmWaitStrategySectionName: "watcher",
 				cfg.HelmWaitJobsSectionName:     true,
 			},
-			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 7},
 			cfg.HelmInstallSectionName: map[string]any{
 				cfg.HelmTimeoutSectionName:   "60m",
 				cfg.HelmCRDsSectionName:      "skip",
@@ -67,6 +67,7 @@ func TestResolveReleaseLifecycleOperationOverrides(t *testing.T) {
 	assert.Equal(t, failurePolicyUninstall, install.Policy.OnFailure)
 	assert.Equal(t, crdPolicySkip, install.Policy.CRDs)
 	assert.True(t, install.Policy.WaitForJobs)
+	assert.Equal(t, cfg.HelmDefaultMaxHistory, install.Policy.MaxHistory)
 
 	upgrade, err := resolveReleaseLifecycle(input, releaseOperationUpgrade, true)
 	require.NoError(t, err)
@@ -74,7 +75,7 @@ func TestResolveReleaseLifecycleOperationOverrides(t *testing.T) {
 	assert.Equal(t, "release.upgrade.timeout", upgrade.TimeoutField)
 	assert.Equal(t, failurePolicyRollback, upgrade.Policy.OnFailure)
 	assert.True(t, upgrade.Policy.CleanupOnFailure)
-	assert.Equal(t, 10, upgrade.Policy.MaxHistory)
+	assert.Equal(t, 7, upgrade.Policy.MaxHistory)
 
 	deleted, err := resolveReleaseLifecycle(input, releaseOperationDelete, true)
 	require.NoError(t, err)
@@ -82,6 +83,7 @@ func TestResolveReleaseLifecycleOperationOverrides(t *testing.T) {
 	assert.Equal(t, "release.delete.timeout", deleted.TimeoutField)
 	assert.False(t, deleted.Policy.ChartHooks)
 	assert.False(t, deleted.Policy.WaitForJobs)
+	assert.Equal(t, cfg.HelmDefaultMaxHistory, deleted.Policy.MaxHistory)
 	assert.Empty(t, deleted.Warnings)
 }
 
