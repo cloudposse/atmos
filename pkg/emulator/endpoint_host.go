@@ -1,7 +1,6 @@
 package emulator
 
 import (
-	"context"
 	"encoding/hex"
 	"net"
 	"os"
@@ -14,23 +13,24 @@ import (
 )
 
 const (
-	envEmulatorEndpointHost               = "ATMOS_EMULATOR_ENDPOINT_HOST"
-	envEmulatorUseCurrentContainerNetwork = "ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK"
-	linuxRouteGatewayBytes                = 4
+	envEmulatorEndpointHost = "ATMOS_EMULATOR_ENDPOINT_HOST"
+	linuxRouteGatewayBytes  = 4
 )
 
-var (
-	processRunsInContainer = defaultProcessRunsInContainer
-	readProcFile           = os.ReadFile
-)
+var readProcFile = os.ReadFile
 
+// reachableHostForPublishedPorts returns the host an emulator's published ports
+// are reachable at from outside its container -- unrelated to network
+// *attachment* (see container.AttachSharedNetwork/CurrentContainerNetwork for
+// that), this is purely about guessing a reachable address for reading a
+// published port from the caller's side.
 func reachableHostForPublishedPorts() string {
 	defer perf.Track(nil, "emulator.reachableHostForPublishedPorts")()
 
 	if host := strings.TrimSpace(envString(envEmulatorEndpointHost)); host != "" {
 		return host
 	}
-	if !processRunsInContainer() {
+	if !container.ProcessRunsInContainer() {
 		return "localhost"
 	}
 	if gateway := linuxDefaultGateway(); gateway != "" {
@@ -39,77 +39,11 @@ func reachableHostForPublishedPorts() string {
 	return "localhost"
 }
 
-func currentContainerNetwork(ctx context.Context, runtime container.Runtime) string {
-	defer perf.Track(nil, "emulator.currentContainerNetwork")()
-
-	if !useCurrentContainerNetwork() || runtime == nil {
-		return ""
-	}
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		return ""
-	}
-	info, err := runtime.Inspect(ctx, hostname)
-	if err != nil || info == nil {
-		return ""
-	}
-	return firstReachableNetwork(info.Networks)
-}
-
-func useCurrentContainerNetwork() bool {
-	defer perf.Track(nil, "emulator.useCurrentContainerNetwork")()
-
-	switch strings.ToLower(strings.TrimSpace(envString(envEmulatorUseCurrentContainerNetwork))) {
-	case "1", "true", "yes", "on":
-		return processRunsInContainer()
-	case "0", "false", "no", "off":
-		return false
-	}
-	return envString("GITHUB_ACTIONS") == "true" && processRunsInContainer()
-}
-
 func envString(name string) string {
 	defer perf.Track(nil, "emulator.envString")()
 
 	_ = viper.BindEnv(name, name)
 	return viper.GetString(name)
-}
-
-func firstReachableNetwork(networks []string) string {
-	defer perf.Track(nil, "emulator.firstReachableNetwork")()
-
-	for _, network := range networks {
-		switch network {
-		case "", "host", "none":
-			continue
-		default:
-			return network
-		}
-	}
-	return ""
-}
-
-func defaultProcessRunsInContainer() bool {
-	defer perf.Track(nil, "emulator.defaultProcessRunsInContainer")()
-
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
-		return true
-	}
-
-	data, err := readProcFile("/proc/1/cgroup")
-	if err != nil {
-		return false
-	}
-	cgroup := string(data)
-	for _, marker := range []string{"docker", "containerd", "kubepods", "libpod"} {
-		if strings.Contains(cgroup, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 func linuxDefaultGateway() string {
