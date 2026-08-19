@@ -1058,77 +1058,6 @@
         }
       ]
     },
-    "helm": {
-      "title": "helm",
-      "description": "Native Helm component type defaults",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "values": {
-              "type": "object"
-            },
-            "vars": {
-              "$ref": "#/definitions/vars"
-            },
-            "env": {
-              "$ref": "#/definitions/env"
-            },
-            "settings": {
-              "$ref": "#/definitions/settings"
-            },
-            "command": {
-              "$ref": "#/definitions/command"
-            },
-            "auth": {
-              "$ref": "#/definitions/component_auth"
-            },
-            "secrets": {
-              "$ref": "#/definitions/component_secrets"
-            },
-            "dependencies": {
-              "$ref": "#/definitions/dependencies"
-            },
-            "source": {
-              "$ref": "#/definitions/source"
-            },
-            "provision": {
-              "$ref": "#/definitions/provision"
-            },
-            "render": {
-              "$ref": "#/definitions/kubernetes_render"
-            },
-            "hooks": {
-              "$ref": "#/definitions/hooks"
-            },
-            "plugins": {
-              "$ref": "#/definitions/plugins"
-            },
-            "repositories": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/helm_repository"
-              }
-            },
-            "overrides": {
-              "$ref": "#/definitions/helm_overrides"
-            },
-            "generate": {
-              "$ref": "#/definitions/generate"
-            },
-            "release": {
-              "$ref": "#/definitions/helm_release_policy"
-            }
-          },
-          "required": []
-        }
-      ]
-    },
     "helm_wait_strategy": {
       "title": "helm_wait_strategy",
       "description": "Helm 4 release wait strategy",
@@ -1204,120 +1133,6 @@
         "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
         "delete": {"$ref": "#/definitions/helm_delete_policy"}
       }
-    },
-    "helm_components": {
-      "title": "helm_components",
-      "description": "Native Helm components section",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "patternProperties": {
-            "^[/a-zA-Z0-9-_{}. ]+$": {
-              "$ref": "#/definitions/helm_component_manifest"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
-    "helm_component_manifest": {
-      "title": "helm_component_manifest",
-      "description": "Native Helm component manifest",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "metadata": {
-              "$ref": "#/definitions/metadata"
-            },
-            "component": {
-              "$ref": "#/definitions/component"
-            },
-            "chart": {
-              "type": "string"
-            },
-            "version": {
-              "type": "string"
-            },
-            "repository": {
-              "type": "string"
-            },
-            "repositories": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/helm_repository"
-              }
-            },
-            "namespace": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "values": {
-              "type": "object"
-            },
-            "values_files": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "render": {
-              "$ref": "#/definitions/kubernetes_render"
-            },
-            "vars": {
-              "$ref": "#/definitions/vars"
-            },
-            "env": {
-              "$ref": "#/definitions/env"
-            },
-            "settings": {
-              "$ref": "#/definitions/settings"
-            },
-            "hooks": {
-              "$ref": "#/definitions/hooks"
-            },
-            "generate": {
-              "$ref": "#/definitions/generate"
-            },
-            "source": {
-              "$ref": "#/definitions/source"
-            },
-            "provision": {
-              "$ref": "#/definitions/provision"
-            },
-            "auth": {
-              "$ref": "#/definitions/component_auth"
-            },
-            "secrets": {
-              "$ref": "#/definitions/component_secrets"
-            },
-            "dependencies": {
-              "$ref": "#/definitions/dependencies"
-            },
-            "plugins": {
-              "$ref": "#/definitions/plugins"
-            },
-            "overrides": {
-              "$ref": "#/definitions/helm_overrides"
-            },
-            "release": {
-              "$ref": "#/definitions/helm_release_policy"
-            }
-          },
-          "required": []
-        }
-      ]
     },
     "kubernetes": {
       "title": "kubernetes",
@@ -1466,6 +1281,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "values": {
+              "type": "object"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1502,6 +1320,9 @@
             "auth": {
               "$ref": "#/definitions/component_auth"
             },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
@@ -1510,6 +1331,12 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []
@@ -1632,6 +1459,12 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []
