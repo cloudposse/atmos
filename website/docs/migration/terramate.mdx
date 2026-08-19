@@ -601,7 +601,7 @@ In Terraform, a **root module** is the top-level directory where you run `terraf
 
 ## Stack Naming for Migrations
 
-Every Atmos command requires a stack name—whether you're running `atmos terraform plan -s <stack>`, listing stacks with `atmos list stacks`, or referencing dependencies. You need to define how Atmos determines these names.
+Stack names identify stacks—used whenever a command targets one specific stack (`atmos terraform plan -s <stack>`) or a dependency references another stack. Commands that operate across all stacks, like `atmos list stacks` or `atmos terraform apply --affected`, don't require a single `-s` selector. You still need to define how Atmos determines these names for the commands that do.
 
 You have two options:
 

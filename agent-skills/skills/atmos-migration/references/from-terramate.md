@@ -2,8 +2,8 @@
 
 This reference is the agent's decision guide for users coming from a Terramate project (`.tm.hcl`
 files, `stack.tm.hcl`, `generate_hcl`). For the full user-facing prose tutorial, see
-[atmos.tools/migration](https://atmos.tools/migration) (no Terramate-specific tutorial exists yet;
-this reference is currently the primary source). This reference assumes Terraform/OpenTofu is the
+[Migrating from Terramate](https://atmos.tools/migration/terramate). This reference provides
+concise agent routing and decision guidance. This reference assumes Terraform/OpenTofu is the
 underlying IaC tool, as in the common Terramate quickstart shape.
 
 ## Recognizing a Terramate Project
