@@ -62,6 +62,8 @@ var excludedPackages = []string{
 	"/internal/gcp",    // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
 	"/pkg/keyring",     // Low-level keyring backends would create import cycle with pkg/perf (used by pkg/store).
 	"/pkg/github/oidc", // Stdlib-only OIDC leaf would create import cycle with pkg/perf (used by pkg/store).
+	"/internal/ci",     // Repository CI orchestration is build-time tooling, not production code.
+	"/magefiles",       // Mage targets are build-time entrypoints, not production code.
 }
 
 // Receiver types to exclude from perf.Track() checks.

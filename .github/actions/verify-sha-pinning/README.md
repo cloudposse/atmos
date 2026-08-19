@@ -23,7 +23,7 @@ Some upstream repos don't tag the thing being referenced (e.g. a reusable workfl
 
 ```yaml
 uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
-uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
+uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
 ```
 
 This satisfies the coverage check (a specific commit is nailed down — it can't be silently swapped by a force-push) but is intentionally excluded from drift-checking, since there's no tag to diff against. It's reported as an informational `pinned-branch` status, not a failure. Bumping a branch-pinned reference to a newer commit on that branch is a manual, deliberate action — there's no automated staleness check for it today.

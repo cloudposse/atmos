@@ -16,6 +16,12 @@
     "packer": {
       "$ref": "#/definitions/packer"
     },
+    "kubernetes": {
+      "$ref": "#/definitions/kubernetes"
+    },
+    "helm": {
+      "$ref": "#/definitions/helm"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -293,6 +299,12 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "kubernetes": {
+              "$ref": "#/definitions/kubernetes_components"
+            },
+            "helm": {
+              "$ref": "#/definitions/helm_components"
             }
           },
           "additionalProperties": {
@@ -589,6 +601,477 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "kubernetes": {
+      "title": "kubernetes",
+      "description": "Kubernetes component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes_provider": {
+      "title": "kubernetes_provider",
+      "description": "SDK-backed Kubernetes manifest provider",
+      "type": "string",
+      "enum": [
+        "kubectl",
+        "kustomize"
+      ]
+    },
+    "kubernetes_paths": {
+      "title": "kubernetes_paths",
+      "description": "Manifest files or directories relative to the Kubernetes component directory",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "kubernetes_manifest": {
+      "title": "kubernetes_manifest",
+      "description": "Kubernetes API object. Atmos validates only the structural fields it requires before passing the object to the Kubernetes API.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "apiVersion",
+        "kind"
+      ],
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "kubernetes_manifests": {
+      "title": "kubernetes_manifests",
+      "description": "Inline Kubernetes manifests rendered and deployed with the component",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/kubernetes_manifest"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "kubernetes_components": {
+      "title": "kubernetes_components",
+      "description": "Kubernetes components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/kubernetes_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "kubernetes_component_manifest": {
+      "title": "kubernetes_component_manifest",
+      "description": "Kubernetes component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "Enables structural validation of this component's manifests (default true). Set to false to opt out of both the implicit apply/deploy auto-gate and the explicit 'atmos kubernetes validate' command for this component; does not affect '--server' dry-run validation against a live cluster."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes_render": {
+      "title": "kubernetes_render",
+      "description": "Render output configuration for Kubernetes manifests",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "split": {
+                  "type": "boolean"
+                }
+              },
+              "required": []
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm": {
+      "title": "helm",
+      "description": "Native Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object"
+                }
+              ]
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             }
           },
           "required": []
@@ -1051,6 +1534,112 @@
       "title": "backend",
       "description": "Backend section",
       "$ref": "#/definitions/backend_manifest"
+    },
+    "required_version": {
+      "title": "required_version",
+      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
+      "type": "string"
+    },
+    "required_providers": {
+      "title": "required_providers",
+      "description": "Terraform required providers section for version pinning",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Provider source address (e.g., 'hashicorp/aws')"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider version constraint (e.g., '~> 5.0')"
+                },
+                "configuration_aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of provider configuration aliases"
+                }
+              },
+              "required": [
+                "source"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "retry": {
+      "title": "retry",
+      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fractional jitter applied to each delay (0-1)."
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
+        }
+      ]
     },
     "remote_state_backend_type": {
       "title": "remote_state_backend_type",
@@ -1908,111 +2497,6 @@
             }
           },
           "required": []
-        }
-      ]
-    },
-    "retry": {
-      "title": "retry",
-      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "max_attempts": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
-            },
-            "backoff_strategy": {
-              "type": "string",
-              "enum": [
-                "constant",
-                "linear",
-                "exponential"
-              ],
-              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
-            },
-            "initial_delay": {
-              "type": "string",
-              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
-            },
-            "max_delay": {
-              "type": "string",
-              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
-            },
-            "max_elapsed_time": {
-              "type": "string",
-              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
-            },
-            "multiplier": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
-            },
-            "random_jitter": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1,
-              "description": "Fractional jitter applied to each delay (0–1)."
-            },
-            "conditions": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
-            }
-          },
-          "required": []
-        }
-      ]
-    },
-    "required_version": {
-      "title": "required_version",
-      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
-      "type": "string"
-    },
-    "required_providers": {
-      "title": "required_providers",
-      "description": "Terraform required providers section for version pinning",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": true,
-          "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
-              "type": "object",
-              "properties": {
-                "source": {
-                  "type": "string",
-                  "description": "Provider source address (e.g., 'hashicorp/aws')"
-                },
-                "version": {
-                  "type": "string",
-                  "description": "Provider version constraint (e.g., '~> 5.0')"
-                },
-                "configuration_aliases": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "List of provider configuration aliases"
-                }
-              },
-              "required": [
-                "source"
-              ]
-            }
-          }
         }
       ]
     },

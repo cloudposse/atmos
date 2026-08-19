@@ -1044,6 +1044,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -1185,6 +1188,21 @@
             },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -1250,7 +1268,15 @@
               "type": "string"
             },
             "values": {
-              "type": "object"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object"
+                }
+              ]
             },
             "values_files": {
               "type": "array",
@@ -1296,6 +1322,9 @@
             },
             "plugins": {
               "$ref": "#/definitions/plugins"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
             }
           },
           "required": []
@@ -1673,111 +1702,6 @@
         }
       ]
     },
-    "retry": {
-      "title": "retry",
-      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "max_attempts": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
-            },
-            "backoff_strategy": {
-              "type": "string",
-              "enum": [
-                "constant",
-                "linear",
-                "exponential"
-              ],
-              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
-            },
-            "initial_delay": {
-              "type": "string",
-              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
-            },
-            "max_delay": {
-              "type": "string",
-              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
-            },
-            "max_elapsed_time": {
-              "type": "string",
-              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
-            },
-            "multiplier": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
-            },
-            "random_jitter": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1,
-              "description": "Fractional jitter applied to each delay (0–1)."
-            },
-            "conditions": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
-            }
-          },
-          "required": []
-        }
-      ]
-    },
-    "required_version": {
-      "title": "required_version",
-      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
-      "type": "string"
-    },
-    "required_providers": {
-      "title": "required_providers",
-      "description": "Terraform required providers section for version pinning",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "type": "object",
-          "additionalProperties": true,
-          "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
-              "type": "object",
-              "properties": {
-                "source": {
-                  "type": "string",
-                  "description": "Provider source address (e.g., 'hashicorp/aws')"
-                },
-                "version": {
-                  "type": "string",
-                  "description": "Provider version constraint (e.g., '~> 5.0')"
-                },
-                "configuration_aliases": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "List of provider configuration aliases"
-                }
-              },
-              "required": [
-                "source"
-              ]
-            }
-          }
-        }
-      ]
-    },
     "provision_workdir": {
       "title": "provision_workdir",
       "description": "Workdir provisioner configuration for isolated component execution directories",
@@ -1957,11 +1881,17 @@
         },
         "fail": {
           "type": "string",
-          "enum": ["wait_all", "fail_fast", "best_effort"],
+          "enum": [
+            "wait_all",
+            "fail_fast",
+            "best_effort"
+          ],
           "description": "Controls failure propagation for this dependency: wait_all (default), fail_fast, or best_effort."
         }
       },
-      "required": ["name"]
+      "required": [
+        "name"
+      ]
     },
     "unit_dependencies": {
       "title": "unit_dependencies",
@@ -1969,8 +1899,12 @@
       "type": "array",
       "items": {
         "oneOf": [
-          { "type": "string" },
-          { "$ref": "#/definitions/unit_dependency" }
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/definitions/unit_dependency"
+          }
         ]
       }
     },
@@ -2203,7 +2137,7 @@
     },
     "global_metadata": {
       "title": "metadata",
-      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence — component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
+      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence \u2014 component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
       "oneOf": [
         {
           "type": "string",
@@ -3235,7 +3169,9 @@
           "properties": {
             "sources": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Glob patterns for files whose content determines checksum.changed / contributes to timestamp.changed."
             }
           }
@@ -3248,7 +3184,9 @@
           "properties": {
             "paths": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Glob patterns for this step's expected output files."
             }
           }
@@ -3261,7 +3199,9 @@
           "properties": {
             "tools": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Executable names resolved via exec.LookPath (no shell); preconditions.success is true iff every entry resolves."
             }
           }
@@ -4558,6 +4498,112 @@
               "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
             }
           }
+        }
+      ]
+    },
+    "required_version": {
+      "title": "required_version",
+      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
+      "type": "string"
+    },
+    "required_providers": {
+      "title": "required_providers",
+      "description": "Terraform required providers section for version pinning",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Provider source address (e.g., 'hashicorp/aws')"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider version constraint (e.g., '~> 5.0')"
+                },
+                "configuration_aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of provider configuration aliases"
+                }
+              },
+              "required": [
+                "source"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "retry": {
+      "title": "retry",
+      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fractional jitter applied to each delay (0-1)."
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
         }
       ]
     }
