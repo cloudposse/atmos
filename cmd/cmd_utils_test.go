@@ -309,7 +309,27 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() {
 		os.Stderr = oldStderr
+		_ = w.Close()
+		_ = r.Close()
 	})
+
+	// Drain the pipe concurrently. The rendered error message (markdown box,
+	// ANSI styling) can exceed the OS pipe's kernel buffer; writing to it then
+	// blocks until something reads. Reading only after the write returns (as
+	// this test used to) deadlocks whenever the message is large enough - seen
+	// in practice as an indefinite hang running this test's compiled binary
+	// directly on windows, where the rendered message happened to cross that
+	// threshold.
+	type pipeResult struct {
+		output string
+		err    error
+	}
+	resultCh := make(chan pipeResult, 1)
+	go func() {
+		var output bytes.Buffer
+		_, copyErr := io.Copy(&output, r)
+		resultCh <- pipeResult{output: output.String(), err: copyErr}
+	}()
 
 	assert.Panics(t, func() {
 		showArgCountErrorAndExit(deleteCmd, argErr)
@@ -317,13 +337,13 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	require.NoError(t, w.Close())
 	os.Stderr = oldStderr
 
-	var output bytes.Buffer
-	_, err := io.Copy(&output, r)
-	require.NoError(t, err)
+	result := <-resultCh
+	require.NoError(t, result.err)
+	require.NoError(t, r.Close())
 
 	// Strip ANSI since CI-enabled color rendering can wrap this message across
 	// separate escape-coded spans, splitting the plain substring below.
-	got := atmosansi.Strip(output.String())
+	got := atmosansi.Strip(result.output)
 	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
 	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }

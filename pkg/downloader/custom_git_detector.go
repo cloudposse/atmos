@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -384,7 +385,16 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 		if d.atmosConfig.Settings.AtmosGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
 		}
-		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
+		if d.atmosConfig.Settings.GithubToken != "" {
+			return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
+		}
+		// Last resort: fall back to `gh auth token`, matching the fallback github.GetGitHubToken()
+		// already uses for plain HTTPS/API fetches, so a developer who's only run `gh auth login`
+		// doesn't need a separate token for private-repo git:: imports/vendoring/module fetches too.
+		if token := github.GetGitHubTokenFromCLI(); token != "" {
+			return token, "GH_CLI"
+		}
+		return "", ""
 	case hostBitbucket:
 		// Try ATMOS_BITBUCKET_TOKEN first, fall back to BITBUCKET_TOKEN
 		if d.atmosConfig.Settings.AtmosBitbucketToken != "" {

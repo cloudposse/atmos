@@ -1140,6 +1140,33 @@ func TestBuildBuildArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "buildx build with driver, cache, custom dockerfile/context, and tags together",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "docker/Dockerfile.prod",
+				Context:    "./app",
+				Tags:       []string{"myapp:latest", "myapp:v1.0"},
+				Driver:     &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+				Cache: &CacheConfig{
+					From: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache"},
+					},
+					To: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"},
+					},
+				},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "my-builder",
+				"--cache-from", "ref=registry.example.com/app:buildcache,type=registry",
+				"--cache-to", "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"-t", "myapp:latest",
+				"-t", "myapp:v1.0",
+				"-f", "docker/Dockerfile.prod", "./app",
+			},
+		},
+		{
 			name: "cache is ignored on plain docker build",
 			config: &BuildConfig{
 				Dockerfile: "Dockerfile",
@@ -1288,6 +1315,49 @@ func TestBuildStopArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := buildStopArgs(tt.containerID, tt.timeoutSecs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildNetworkConnectArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		network     string
+		containerID string
+		aliases     []string
+		expected    []string
+	}{
+		{
+			name:        "no aliases",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			expected:    []string{"network", "connect", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "single alias",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws"},
+			expected:    []string{"network", "connect", "--alias", "fixtures-aws", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "multiple aliases preserve order",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws", "fixtures-aws-alt"},
+			expected: []string{
+				"network", "connect",
+				"--alias", "fixtures-aws",
+				"--alias", "fixtures-aws-alt",
+				"atmos-fixtures", "abc123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildNetworkConnectArgs(tt.network, tt.containerID, tt.aliases)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
