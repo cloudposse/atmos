@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -111,11 +112,7 @@ func SaveLock(atmosConfig *schema.AtmosConfiguration, lock *LockFile) error {
 	if err := os.MkdirAll(filepath.Dir(lockPath), lockDirPerm); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(lock)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(lockPath, data, lockFilePerm) // #nosec G306 -- the lock file is a non-sensitive, committed project file.
+	return utils.WriteToFileAsYAML(lockPath, lock, lockFilePerm) // #nosec G306 -- the lock file is a non-sensitive, committed project file.
 }
 
 // ResolveLocked resolves a version name from the lock file.
