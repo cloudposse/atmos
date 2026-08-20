@@ -667,3 +667,69 @@ func TestDockerRuntime_Exec_Integration(t *testing.T) {
 	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts)
 	require.NoError(t, err, "Exec should succeed")
 }
+
+// TestDockerRuntime_SharedNetworkAliasReachable_Integration proves the
+// networking primitive every fix in this package's AttachSharedNetwork /
+// CurrentContainerNetwork machinery ultimately depends on: two sibling
+// containers on the same real, user-defined Docker network can resolve each
+// other by their registered alias and actually connect over TCP. Nothing in
+// the rest of the suite asserted this directly against a real daemon --
+// everything else mocks the runtime, which can't catch a Docker/host
+// networking assumption that turns out to be wrong (as the 172.17.0.1
+// bridge-gateway assumption was).
+func TestDockerRuntime_SharedNetworkAliasReachable_Integration(t *testing.T) {
+	runtime := NewDockerRuntime()
+	ctx := context.Background()
+
+	if err := runtime.Pull(ctx, "alpine:latest"); err != nil {
+		t.Skipf("Docker not available, skipping network alias test: %v", err)
+		return
+	}
+
+	const networkName = "atmos-test-alias-net"
+	require.NoError(t, runtime.EnsureNetwork(ctx, networkName))
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "network", "rm", networkName).Run() // Best-effort test cleanup.
+	})
+
+	// The "server" side: a container that just listens on a TCP port,
+	// registered under the alias its sibling will dial.
+	serverID, err := runtime.Create(ctx, &CreateConfig{
+		Name:    "atmos-test-alias-server",
+		Image:   "alpine:latest",
+		Command: []string{"nc", "-l", "-p", "8080"},
+		Networks: []NetworkAttachment{
+			{Name: networkName, Aliases: []string{"probe-server"}},
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = runtime.Remove(ctx, serverID, true) })
+	require.NoError(t, runtime.Start(ctx, serverID))
+
+	// The "client" side: a plain sibling container on the same network, with
+	// no special knowledge of the server beyond its alias -- exactly the
+	// relationship between a job container and an emulator container.
+	clientID, err := runtime.Create(ctx, &CreateConfig{
+		Name:            "atmos-test-alias-client",
+		Image:           "alpine:latest",
+		OverrideCommand: true, // sleep infinity.
+		Networks: []NetworkAttachment{
+			{Name: networkName, Aliases: []string{"probe-client"}},
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = runtime.Remove(ctx, clientID, true) })
+	require.NoError(t, runtime.Start(ctx, clientID))
+
+	// Retry briefly: the server's nc listener may not be bound the instant
+	// its container reports "started".
+	var lastErr error
+	for range 10 {
+		lastErr = runtime.Exec(ctx, clientID, []string{"nc", "-z", "-w", "2", "probe-server", "8080"}, &ExecOptions{})
+		if lastErr == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	assert.NoError(t, lastErr, "client container must reach the server container by its network alias")
+}

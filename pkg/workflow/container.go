@@ -485,8 +485,9 @@ func mergeEnvSlices(base, overlay []string) []string {
 	if len(overlay) == 0 {
 		return append([]string{}, base...)
 	}
-	// Capacity hints use a single len() — CodeQL's allocation-size-overflow rule flags
-	// len(base)+len(overlay); both grow as needed for the overlay entries.
+	// Size hints use only len(base) (the dominant source); overlay is typically much
+	// smaller and both grow as needed. Summing both lengths trips CodeQL's
+	// allocation-overflow query for no real benefit.
 	values := make(map[string]string, len(base))
 	order := make([]string, 0, len(base))
 	set := func(entry string) {

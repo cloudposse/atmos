@@ -15,10 +15,10 @@
 
 # Cloud Posse must review any changes to standard context definition,
 # but some changes can be rubber-stamped.
-**/*.tf       @cloudposse/engineering @cloudposse/approvers
-README.yaml   @cloudposse/engineering @cloudposse/approvers
-README.md     @cloudposse/engineering @cloudposse/approvers
-docs/*.md     @cloudposse/engineering @cloudposse/approvers
+**/*.tf       @cloudposse/engineering
+README.yaml   @cloudposse/engineering
+README.md     @cloudposse/engineering
+docs/*.md     @cloudposse/engineering
 
 # Cloud Posse Admins must review all changes to CODEOWNERS or the mergify configuration
 .github/mergify.yml @cloudposse/admins

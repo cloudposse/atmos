@@ -408,14 +408,16 @@ var (
 	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
 	// Profile errors.
-	ErrProfileNotFound         = errors.New("profile not found")
-	ErrProfileSyntax           = errors.New("profile syntax error")
-	ErrProfileDiscovery        = errors.New("failed to discover profiles")
-	ErrProfileLoad             = errors.New("failed to load profile")
-	ErrProfileMerge            = errors.New("failed to merge profile configuration")
-	ErrProfileDirNotExist      = errors.New("profile directory does not exist")
-	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
-	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
+	ErrProfileNotFound             = errors.New("profile not found")
+	ErrProfileSyntax               = errors.New("profile syntax error")
+	ErrProfileDiscovery            = errors.New("failed to discover profiles")
+	ErrProfileLoad                 = errors.New("failed to load profile")
+	ErrProfileMerge                = errors.New("failed to merge profile configuration")
+	ErrProfileDirNotExist          = errors.New("profile directory does not exist")
+	ErrProfileDirNotAccessible     = errors.New("profile directory not accessible")
+	ErrProfileInvalidMetadata      = errors.New("invalid profile metadata")
+	ErrProfileSelectionUnavailable = errors.New("interactive profile selection is not available in this context")
+	ErrProfileNameReserved         = errors.New("profile name is reserved")
 
 	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent         = errors.New("component is required")
@@ -544,6 +546,7 @@ var (
 
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
+	ErrBackendTypeMismatch                = errors.New("backend_type does not match any key configured under backend")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// Custom component errors.
@@ -807,6 +810,7 @@ var (
 	ErrArchiveStepInvalidSource      = errors.New("archive step source must be a string path")
 	ErrStoreStepInvalidAction        = errors.New("invalid action for store step")
 	ErrStoreStepWriteFailed          = errors.New("store step failed to write value")
+	ErrContainerStepResolveStack     = errors.New("failed to resolve stack for container step")
 	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
 	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
