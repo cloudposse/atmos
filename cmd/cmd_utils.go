@@ -1636,14 +1636,13 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// findTypedValue finds the value of an argument or flag with the specified semantic type.
-// For arguments, it checks the Type field.
-// For flags, it checks the SemanticType field.
-// Returns empty string if no matching typed argument/flag is found.
+// findTypedValue finds the value of an argument or flag whose EffectiveProvides matches
+// the given role ("component" or "stack").
+// Returns empty string if no matching argument/flag is found.
 func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsData map[string]any, semanticType string) string {
 	// Check arguments first.
 	for _, arg := range cmd.Arguments {
-		if arg.Type == semanticType {
+		if arg.EffectiveProvides() == semanticType {
 			if val, ok := argumentsData[arg.Name]; ok {
 				return val
 			}
@@ -1652,7 +1651,7 @@ func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsD
 
 	// Check flags.
 	for _, flag := range cmd.Flags {
-		if flag.SemanticType == semanticType {
+		if flag.EffectiveProvides() == semanticType {
 			if val, ok := flagsData[flag.Name]; ok {
 				if strVal, ok := val.(string); ok {
 					return strVal
@@ -2553,13 +2552,13 @@ func resolveCustomComponentConfig(
 ) (map[string]any, error) {
 	defer perf.Track(nil, "cmd.resolveCustomComponentConfig")()
 
-	// Find component name from argument/flag with type: component.
+	// Find component name from argument/flag with provides: component.
 	componentName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeComponent)
 	if componentName == "" {
 		return nil, errUtils.ErrComponentArgumentNotFound
 	}
 
-	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
+	// Find stack name from argument/flag with provides: stack.
 	stackName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeStack)
 	if stackName == "" {
 		return nil, errUtils.ErrStackArgumentNotFound

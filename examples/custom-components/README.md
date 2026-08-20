@@ -58,7 +58,7 @@ examples/custom-components/
 
 1. **Custom Command Definition** (`atmos.yaml`):
    - The `script` command defines a custom component type
-   - Arguments and flags with `type: component` and `semantic_type: stack` identify which values to use
+   - Arguments and flags with `provides: component` and `provides: stack` identify which values to use
    - The `component:` section specifies the component type name
 
 2. **Stack Configuration** (`stacks/`):
