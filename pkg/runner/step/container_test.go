@@ -197,6 +197,7 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 			Target:     "runtime",
 			NoCache:    true,
 			Pull:       true,
+			Load:       true,
 			Driver: &schema.ContainerDriverConfig{
 				Name:     "atmos-build",
 				Provider: "docker-container",
@@ -230,6 +231,7 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 	assert.Equal(t, "runtime", buildCfg.Target)
 	assert.True(t, buildCfg.NoCache)
 	assert.True(t, buildCfg.Pull)
+	assert.True(t, buildCfg.Load)
 	require.NotNil(t, buildCfg.Driver)
 	assert.Equal(t, "atmos-build", buildCfg.Driver.Name)
 	assert.Equal(t, "docker-container", buildCfg.Driver.Provider)
@@ -348,6 +350,25 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 		Build: &schema.ContainerBuildStep{
 			Provider: "docker",
 			Cache:    &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}},
+		},
+	}))
+	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "load-without-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Load:     true,
+		},
+	}))
+	assert.NoError(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "load-with-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Engine:   "buildx",
+			Load:     true,
 		},
 	}))
 }

@@ -130,6 +130,7 @@ type ContainerBuildStep struct {
 	Target           string                  `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target"`
 	NoCache          bool                    `yaml:"no_cache,omitempty" json:"no_cache,omitempty" mapstructure:"no_cache"`
 	Pull             bool                    `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Load             bool                    `yaml:"load,omitempty" json:"load,omitempty" mapstructure:"load"`
 	Bake             *ContainerBuildBakeStep `yaml:"bake,omitempty" json:"bake,omitempty" mapstructure:"bake"`
 	Driver           *ContainerDriverConfig  `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
 	Cache            *ContainerCacheConfig   `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`

@@ -71,6 +71,7 @@ steps:
       target: runtime           # target stage in a multi-stage build
       no_cache: false           # disable the build cache
       pull: true                # always pull newer base images
+      load: true                # load the built image into the local image store (buildx only)
       driver: docker-container  # Buildx builder driver (shorthand — see Driver below)
       cache:                    # Buildx cache import/export (see Cache below)
         from:
@@ -103,6 +104,9 @@ steps:
 
   <dt>`pull`</dt>
   <dd>Always attempt to pull newer base images when set to `true`.</dd>
+
+  <dt>`load`</dt>
+  <dd>Load the built image into the local image store when set to `true`. Requires `engine: buildx`. Needed when a Buildx driver other than the default (e.g. `docker-container`) builds to BuildKit's own cache instead of the local Docker image store — without it, a later `action: push` step won't find the image. Equivalent to `bake.load` but for the plain (non-bake) build path — no `docker-bake.hcl` file required.</dd>
 
   <dt>`engine`</dt>
   <dd>Build engine: `buildx` for Docker BuildKit, or omit for the default builder. Requires `provider: docker`.</dd>
@@ -225,7 +229,14 @@ with:
   <dd>List of overrides in `target.key=value` form.</dd>
 
   <dt>`vars`</dt>
-  <dd>Map of bake variables.</dd>
+  <dd>
+    Map of bake variables, passed to `docker buildx bake` as environment variables rather
+    than the `--var` CLI flag (a newer buildx feature not implemented by every buildx
+    release, e.g. the version Debian Trixie ships). Each entry must correspond to a
+    `variable "NAME" { default = ... }` block already declared in your bake file — Atmos
+    supplies values via the same mechanism buildx has always used to resolve HCL `variable`
+    blocks from the environment.
+  </dd>
 
   <dt>`load`</dt>
   <dd>Load the built image into the local image store.</dd>

@@ -22,8 +22,8 @@ func validateBuildAction(step *schema.WorkflowStep) error {
 	if !isValidContainerBuildEngine(build.Engine) {
 		return invalidContainerField(step, "build.engine", build.Engine, "Build engine must be `buildx` or empty for the runtime default")
 	}
-	if (build.Driver != nil || build.Cache != nil) && build.Engine != containerBuildEngineBuildx && build.Bake == nil {
-		return invalidContainerField(step, "build.engine", build.Engine, "Buildx driver and cache configuration require `engine: buildx`")
+	if (build.Driver != nil || build.Cache != nil || build.Load) && build.Engine != containerBuildEngineBuildx && build.Bake == nil {
+		return invalidContainerField(step, "build.engine", build.Engine, "Buildx driver, cache, and load configuration require `engine: buildx`")
 	}
 	if (build.Engine == containerBuildEngineBuildx || build.Bake != nil) && build.Provider != string(container.TypeDocker) {
 		return invalidContainerField(step, "build.provider", build.Provider, "Docker Buildx and Bake require `provider: docker` in V1; Podman uses the native `podman build` path")
@@ -139,6 +139,7 @@ func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Var
 		Target:     target,
 		NoCache:    build.NoCache,
 		Pull:       build.Pull,
+		Load:       build.Load,
 		Bake:       bake,
 		Driver:     driver,
 		Cache:      cache,
