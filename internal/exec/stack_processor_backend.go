@@ -22,6 +22,7 @@ const (
 type terraformBackendConfig struct {
 	atmosConfig                 *schema.AtmosConfiguration
 	component                   string
+	stackName                   string
 	baseComponentName           string
 	componentMetadata           map[string]any
 	globalBackendType           string
@@ -67,6 +68,7 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 		}
 	} else if err := checkTerraformBackendTypeMatch(
 		cfg.component,
+		cfg.stackName,
 		finalComponentBackendType,
 		finalComponentBackendSection,
 	); err != nil {
@@ -97,7 +99,14 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 // config. An empty backend_type is a separate, already-handled case (the
 // caller skips backend generation and logs a warning), not a mismatch.
 // Mirrors checkRemoteStateBackendTypeMatch.
-func checkTerraformBackendTypeMatch(component, backendType string, backendSection map[string]any) error {
+//
+// Component and stackName are included directly in the hint text (not just as
+// WithContext, which only renders with --verbose) because this check fires
+// during whole-repo stack processing: a single misconfigured component in an
+// unrelated stack blocks `describe stacks`/`terraform plan` etc. for every
+// other stack too, and the resolved type/keys alone give no way to find which
+// component is actually at fault out of a large repo.
+func checkTerraformBackendTypeMatch(component, stackName, backendType string, backendSection map[string]any) error {
 	if backendType == "" || len(backendSection) == 0 {
 		return nil
 	}
@@ -110,10 +119,11 @@ func checkTerraformBackendTypeMatch(component, backendType string, backendSectio
 
 	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
 		WithContext("component", component).
+		WithContext("stack", stackName).
 		WithContext("backend_type", backendType).
 		WithContext("backend_keys", strings.Join(configuredKeys, ", ")).
-		WithHintf("backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
-			backendType, strings.Join(configuredKeys, ", "), backendType).
+		WithHintf("component %q in stack %q: backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
+			component, stackName, backendType, strings.Join(configuredKeys, ", "), backendType).
 		Err()
 }
 
@@ -229,6 +239,7 @@ func shouldPreserveAuthoredKey(finalComponentBackend map[string]any, globalBacke
 type remoteStateBackendConfig struct {
 	atmosConfig                            *schema.AtmosConfiguration
 	component                              string
+	stackName                              string
 	finalComponentBackendType              string
 	finalComponentBackendSection           map[string]any
 	globalRemoteStateBackendType           string
@@ -332,6 +343,13 @@ func extractBackendTypeMap(section map[string]any, backendType, component string
 // {s3: {...}}) that would otherwise silently resolve to an empty remote-state
 // backend config. Mirrors the backend_type/backend check in
 // processTerraformBackend.
+//
+// Component and cfg.stackName are included directly in the hint text (not just as
+// WithContext, which only renders with --verbose) for the same reason as in
+// checkTerraformBackendTypeMatch: this fires during whole-repo stack processing,
+// so a mismatch anywhere blocks unrelated `describe stacks`/`terraform plan`
+// invocations too, and without naming the component/stack there is no way to
+// find which one is at fault.
 func checkRemoteStateBackendTypeMatch(cfg *remoteStateBackendConfig, finalComponentRemoteStateBackendType string) error {
 	configuredKeys := map[string]bool{}
 	for _, section := range []map[string]any{
@@ -355,10 +373,11 @@ func checkRemoteStateBackendTypeMatch(cfg *remoteStateBackendConfig, finalCompon
 
 	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
 		WithContext("component", cfg.component).
+		WithContext("stack", cfg.stackName).
 		WithContext("remote_state_backend_type", finalComponentRemoteStateBackendType).
 		WithContext("remote_state_backend_keys", strings.Join(keys, ", ")).
-		WithHintf("remote_state_backend_type is %q but remote_state_backend: only configures %s. Add a %q key under remote_state_backend:, or change remote_state_backend_type to match.",
-			finalComponentRemoteStateBackendType, strings.Join(keys, ", "), finalComponentRemoteStateBackendType).
+		WithHintf("component %q in stack %q: remote_state_backend_type is %q but remote_state_backend: only configures %s. Add a %q key under remote_state_backend:, or change remote_state_backend_type to match.",
+			cfg.component, cfg.stackName, finalComponentRemoteStateBackendType, strings.Join(keys, ", "), finalComponentRemoteStateBackendType).
 		Err()
 }
 
