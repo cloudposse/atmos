@@ -371,16 +371,20 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 			Load:     true,
 		},
 	}))
-	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+	err := handler.Validate(&schema.WorkflowStep{
 		Name:   "load-with-bake",
 		Type:   "container",
 		Action: "build",
 		Build: &schema.ContainerBuildStep{
 			Provider: "docker",
+			Engine:   "buildx",
 			Load:     true,
 			Bake:     &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"},
 		},
-	}))
+	})
+	require.Error(t, err)
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.Contains(t, formatted, "build.bake.load", "conflict error should direct users to build.bake.load")
 }
 
 // TestContainerHandlerValidateInvalidPullEchoesValue confirms that the default
