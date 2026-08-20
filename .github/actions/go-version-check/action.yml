@@ -31,9 +31,11 @@ runs:
     - name: Get base branch Go version
       id: base-version
       shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
       run: |
-        git fetch origin ${{ inputs.base-ref }}
-        BASE_VERSION=$(git show origin/${{ inputs.base-ref }}:go.mod | grep '^go ' | awk '{print $2}')
+        git fetch origin $BASE_REF
+        BASE_VERSION=$(git show origin/$BASE_REF:go.mod | grep '^go ' | awk '{print $2}')
         echo "version=$BASE_VERSION" >> $GITHUB_OUTPUT
         echo "Base branch Go version: $BASE_VERSION"
 

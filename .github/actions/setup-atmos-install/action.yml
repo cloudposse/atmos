@@ -41,9 +41,13 @@ runs:
     - name: Add install directory to PATH
       if: inputs.add-to-path == 'true'
       shell: bash
-      run: echo "${{ inputs.path }}" >> "$GITHUB_PATH"
+      env:
+        INSTALL_PATH: ${{ inputs.path }}
+      run: echo "$INSTALL_PATH" >> "$GITHUB_PATH"
 
     - name: Set execute permissions on atmos
       if: runner.os != 'Windows'
       shell: bash
-      run: chmod +x "${{ inputs.path }}/atmos"
+      env:
+        INSTALL_PATH: ${{ inputs.path }}
+      run: chmod +x "$INSTALL_PATH/atmos"
