@@ -572,6 +572,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			&terraformBackendConfig{
 				atmosConfig:                 atmosConfig,
 				component:                   opts.Component,
+				stackName:                   opts.StackName,
 				baseComponentName:           result.BaseComponentName,
 				componentMetadata:           finalComponentMetadata,
 				globalBackendType:           opts.GlobalBackendType,
@@ -591,6 +592,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			&remoteStateBackendConfig{
 				atmosConfig:                            atmosConfig,
 				component:                              opts.Component,
+				stackName:                              opts.StackName,
 				finalComponentBackendType:              finalComponentBackendType,
 				finalComponentBackendSection:           map[string]any{finalComponentBackendType: finalComponentBackend},
 				globalRemoteStateBackendType:           opts.GlobalRemoteStateBackendType,
