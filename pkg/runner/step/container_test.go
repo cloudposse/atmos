@@ -197,6 +197,7 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 			Target:     "runtime",
 			NoCache:    true,
 			Pull:       true,
+			Load:       true,
 			Driver: &schema.ContainerDriverConfig{
 				Name:     "atmos-build",
 				Provider: "docker-container",
@@ -230,6 +231,7 @@ func TestContainerHandlerActionBlocks(t *testing.T) {
 	assert.Equal(t, "runtime", buildCfg.Target)
 	assert.True(t, buildCfg.NoCache)
 	assert.True(t, buildCfg.Pull)
+	assert.True(t, buildCfg.Load)
 	require.NotNil(t, buildCfg.Driver)
 	assert.Equal(t, "atmos-build", buildCfg.Driver.Name)
 	assert.Equal(t, "docker-container", buildCfg.Driver.Provider)
@@ -350,6 +352,39 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 			Cache:    &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}},
 		},
 	}))
+	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "load-without-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Load:     true,
+		},
+	}))
+	assert.NoError(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "load-with-buildx",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Engine:   "buildx",
+			Load:     true,
+		},
+	}))
+	err := handler.Validate(&schema.WorkflowStep{
+		Name:   "load-with-bake",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Engine:   "buildx",
+			Load:     true,
+			Bake:     &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"},
+		},
+	})
+	require.Error(t, err)
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.Contains(t, formatted, "build.bake.load", "conflict error should direct users to build.bake.load")
 }
 
 // TestContainerHandlerValidateInvalidPullEchoesValue confirms that the default
