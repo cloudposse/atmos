@@ -191,6 +191,25 @@ func TestPlanDefaultsAndErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit empty files rule manages zero files", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		cfg.Version.Files = []schema.VersionFileRule{}
+		withDefault := &fakeManager{name: "with-default", defaults: []string{"*.txt"}}
+		Register(withDefault)
+
+		changes, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		if err != nil {
+			t.Fatalf("Plan returned error: %v", err)
+		}
+		if len(changes) != 0 {
+			t.Fatalf("Plan changes = %#v, want none", changes)
+		}
+		if len(withDefault.inputs) != 0 {
+			t.Fatalf("with-default calls = %d, want 0", len(withDefault.inputs))
+		}
+	})
+
 	t.Run("unknown manager", func(t *testing.T) {
 		resetRegistryForTest(t)
 		cfg := testConfig(t)

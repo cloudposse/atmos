@@ -198,9 +198,11 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 }
 
 // fileRules returns the configured version.files rules, or one default rule
-// per registered manager that declares default paths.
+// per registered manager that declares default paths. A nil Version.Files
+// means the key was omitted (fall back to manager defaults); a non-nil empty
+// slice means the user explicitly configured zero managed files.
 func fileRules(atmosConfig *schema.AtmosConfiguration) []schema.VersionFileRule {
-	if atmosConfig != nil && len(atmosConfig.Version.Files) > 0 {
+	if atmosConfig != nil && atmosConfig.Version.Files != nil {
 		return atmosConfig.Version.Files
 	}
 	var rules []schema.VersionFileRule
