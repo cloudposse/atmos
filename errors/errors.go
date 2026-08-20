@@ -132,6 +132,9 @@ var (
 	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
 	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
 	ErrVersionMarkerBadMatch         = errors.New("marker match expression must compile and contain one capture group")
+	ErrVersionJSONOptionsInvalid     = errors.New("json manager options are invalid")
+	ErrVersionJSONInvalidContent     = errors.New("json manager target file is not valid JSON")
+	ErrVersionJSONSetFailed          = errors.New("json manager failed to set value at path")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")

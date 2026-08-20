@@ -13663,7 +13663,7 @@
               "type": "null"
             }
           ],
-          "description": "Manager is the file manager name (github-actions, marker, template)."
+          "description": "Manager is the file manager name (github-actions, json, marker, template)."
         },
         "paths": {
           "anyOf": [
