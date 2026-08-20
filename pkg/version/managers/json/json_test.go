@@ -427,6 +427,24 @@ func TestJSONMidPathAppendSegmentRejected(t *testing.T) {
 	}
 }
 
+// TestJSONEscapedDotIsNotAppendPath guards against a regression where
+// isAppendPath split on every literal "." and misclassified an escaped dot
+// inside a key name as a segment boundary: `a\.-1` addresses the single key
+// "a.-1" (per gjson/sjson escaping rules), not a "-1" append segment nested
+// under "a", so it must be applied rather than rejected.
+func TestJSONEscapedDotIsNotAppendPath(t *testing.T) {
+	_, changes := planFixture(t, "plugin.json",
+		`{"a.-1": "1.0.0"}`,
+		setOptions(setEntry{Path: `a\.-1`, From: "opentofu"}))
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	result := gjson.GetBytes(changes[0].New, `a\.-1`)
+	if result.String() != "1.10.6" {
+		t.Fatalf("expected key %q to be updated, got:\n%s", `a.-1`, changes[0].New)
+	}
+}
+
 // TestJSONContainerPathRejected guards against a regression to the field-test
 // finding that a `path` pointing at an object or array silently replaces the
 // whole subtree with a scalar string, destroying its contents.

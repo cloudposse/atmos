@@ -146,12 +146,37 @@ func duplicatePath(entries []setEntry) string {
 // applied" by reading the target array -- so they are rejected outright
 // rather than silently growing the array on every apply.
 func isAppendPath(path string) bool {
-	for _, segment := range strings.Split(path, ".") {
+	for _, segment := range pathSegments(path) {
 		if segment == appendPathSegment {
 			return true
 		}
 	}
 	return false
+}
+
+// pathSegments splits a sjson/gjson dot path into its segments, honoring
+// backslash escapes: a\.b addresses the single key "a.b", not the two
+// segments "a" and "b", so an escaped dot must not split the path.
+func pathSegments(path string) []string {
+	var segments []string
+	var current strings.Builder
+	escaped := false
+	for _, r := range path {
+		switch {
+		case escaped:
+			current.WriteRune(r)
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case r == '.':
+			segments = append(segments, current.String())
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	segments = append(segments, current.String())
+	return segments
 }
 
 // isComplexPath reports whether path uses sjson/gjson's wildcard or query
