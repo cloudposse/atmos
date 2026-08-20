@@ -77,3 +77,80 @@ components:
 		})
 	}
 }
+
+// TestMergeConfig_VersionFilesImportPrecedence exercises version.files through
+// REAL import merging (an atmos.yaml importing an atmos.d/ fragment), unlike
+// the single-file test above. It pins down a field-test finding: an imported
+// fragment can only supply version.files when the main file leaves the key
+// unset; it can never override or clear a value the main file already
+// declares, including with an explicit `files: []`. This is Atmos's general,
+// documented import precedence (see website/docs/cli/configuration/imports.mdx,
+// "Merge Order": "Settings in the main atmos.yaml (highest priority)"), not
+// something specific to version.files -- this test exists so a future change
+// to that general precedence rule doesn't silently break the version.files
+// "explicit files: [] suppresses default-path fallback" behavior alongside it.
+func TestMergeConfig_VersionFilesImportPrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		mainVersion   string
+		importVersion string
+		assertFiles   func(t *testing.T, files []schema.VersionFileRule)
+	}{
+		{
+			name:        "main omits the key: import's explicit empty list is picked up",
+			mainVersion: ``,
+			importVersion: `
+version:
+  files: []
+`,
+			assertFiles: func(t *testing.T, files []schema.VersionFileRule) {
+				t.Helper()
+				assert.NotNil(t, files, "the import's files: [] should be picked up when the main file doesn't mention version.files")
+				assert.Empty(t, files)
+			},
+		},
+		{
+			name: "main sets a real list: import's empty list does NOT override it",
+			mainVersion: `
+version:
+  files:
+    - manager: marker
+      paths: [Dockerfile]
+`,
+			importVersion: `
+version:
+  files: []
+`,
+			assertFiles: func(t *testing.T, files []schema.VersionFileRule) {
+				t.Helper()
+				require.Len(t, files, 1, "the main file's own version.files must win over an import's files: []")
+				assert.Equal(t, "marker", files[0].Manager)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			importDir := filepath.Join(tempDir, "atmos.d")
+			require.NoError(t, os.Mkdir(importDir, 0o755))
+			createConfigFile(t, importDir, "version.yaml", tt.importVersion)
+
+			mainContent := `
+base_path: "."
+import:
+  - "./atmos.d/version.yaml"
+` + tt.mainVersion
+			createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+			require.NoError(t, mergeConfig(v, tempDir, CliConfigFileName, true))
+
+			var atmosConfig schema.AtmosConfiguration
+			require.NoError(t, v.Unmarshal(&atmosConfig, atmosDecodeHook()))
+
+			tt.assertFiles(t, atmosConfig.Version.Files)
+		})
+	}
+}

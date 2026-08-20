@@ -43,7 +43,9 @@ version:
 ```
 </File>
 
-When `version.files` is empty, managers with default paths run over those defaults.
+When `version.files` is empty, managers with default paths run over those defaults. An explicit `files: []` is different from omitting the key: it means "manage zero files," and suppresses the default-path fallback.
+
+`version.files`, like every other `atmos.yaml` setting, follows [Atmos's standard import precedence](/cli/configuration/imports#merge-order): the main `atmos.yaml`'s own value always wins over an [`import:`](/cli/configuration/imports) fragment or `atmos.d/` file that also sets `version.files`, including `files: []`. An imported fragment can only supply `version.files` when the main file doesn't mention the key at all — it can never override or clear a list the main file already declares.
 
 ## Managers
 
@@ -214,7 +216,15 @@ version:
   </TabItem>
 </Tabs>
 
-`path` follows sjson/gjson dot syntax: dots nest into objects, a bare number indexes into an array, and a literal dot inside a key name is escaped as `\.`. A `path` segment that doesn't exist yet in the file is created rather than rejected, so double-check `path` for typos — a misspelled path silently adds a new field instead of updating the intended one.
+`path` follows sjson/gjson dot syntax: dots nest into objects, a bare number indexes into an array, and a literal dot inside a key name is escaped as `\.`. `path` is always a YAML string — quote numeric segments (`path: "0"`), or the value decodes as a YAML integer and fails validation.
+
+A simple `path` (no wildcards) that doesn't exist yet in the file is created rather than rejected, so double-check `path` for typos — a misspelled path silently adds a new field instead of updating the intended one. Wildcard/query paths (`items.#.version`, `*`, `?`, `@`) update every matching location when the path resolves against the current document, but error instead of silently doing nothing when it resolves to nothing — for example, an empty array or a missing parent key.
+
+A few configurations are rejected outright rather than risking silent data loss:
+
+- **Array-append paths** (a trailing `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
+- **A `path` whose current value is an object or array** — writing a scalar there would silently discard the whole subtree. Target the specific field inside it instead (`engines.node`, not `engines`).
+- **Two `set` entries targeting the same `path`** — the second write would otherwise silently discard the first.
 
 ## Updating GitHub Action Workflows
 

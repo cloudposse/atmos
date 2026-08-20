@@ -5,7 +5,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/cockroachdb/errors"
 
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
@@ -327,5 +330,185 @@ func TestJSONBadGlobPatternErrors(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected an error for a malformed glob pattern")
+	}
+}
+
+// TestJSONAppendPathRejected guards against a regression to the field-test
+// finding that "-1" (sjson's array-append marker) grows the target array by
+// one element on every single apply, forever: there is no way to tell
+// "already applied" from "not yet applied" by reading an appended array back,
+// so the path is rejected outright instead of silently corrupting the file.
+func TestJSONAppendPathRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.json")
+	original := `{"versions": ["1.0.0"]}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"data.json"},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "versions.-1", From: "opentofu"}),
+	})
+	if err == nil {
+		t.Fatal("expected an error for an array-append path")
+	}
+	content, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("reading fixture: %v", readErr)
+	}
+	if string(content) != original {
+		t.Fatalf("expected the file to remain untouched, got:\n%s", content)
+	}
+}
+
+// TestJSONContainerPathRejected guards against a regression to the field-test
+// finding that a `path` pointing at an object or array silently replaces the
+// whole subtree with a scalar string, destroying its contents.
+func TestJSONContainerPathRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package.json")
+	original := `{"engines": {"node": "18.0.0", "npm": "9.0.0"}}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"package.json"},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "engines", From: "opentofu"}),
+	})
+	if err == nil {
+		t.Fatal("expected an error for a path targeting a container value")
+	}
+	content, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("reading fixture: %v", readErr)
+	}
+	if string(content) != original {
+		t.Fatalf("expected the file to remain untouched, got:\n%s", content)
+	}
+}
+
+// TestJSONComplexPathUpdatesAllMatches documents a working, previously
+// undocumented capability: a wildcard/query path updates every matching
+// element, and is idempotent on a second run.
+func TestJSONComplexPathUpdatesAllMatches(t *testing.T) {
+	path, changes := planFixture(t, "data.json",
+		`{"items": [{"name": "a", "version": "1.0.0"}, {"name": "b", "version": "1.0.0"}]}`,
+		setOptions(setEntry{Path: "items.#.version", From: "opentofu"}))
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if bytes.Count(changes[0].New, []byte(`"version": "1.10.6"`)) != 2 {
+		t.Fatalf("expected both array elements updated, got:\n%s", changes[0].New)
+	}
+
+	if err := managers.Apply([]managers.PlannedChange{{Manager: Name, FileChange: changes[0]}}); err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	var m Manager
+	again, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     filepath.Dir(path),
+		Paths:   []string{filepath.Base(path)},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "items.#.version", From: "opentofu"}),
+	})
+	if err != nil {
+		t.Fatalf("second Plan returned error: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("expected idempotent apply, got %d changes", len(again))
+	}
+}
+
+// TestJSONComplexPathNotFoundErrors guards against a regression to the
+// field-test finding that a wildcard/query path which doesn't currently
+// resolve to anything (empty array, or a missing parent key) silently
+// produces zero changes and zero errors, giving no signal the configured
+// field was never written.
+func TestJSONComplexPathNotFoundErrors(t *testing.T) {
+	tests := map[string]string{
+		"empty array":    `{"items": []}`,
+		"missing parent": `{"unrelated": "value"}`,
+	}
+	for name, content := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "data.json")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+			var m Manager
+			_, err := m.Plan(context.Background(), &managers.Input{
+				Dir:     dir,
+				Paths:   []string{"data.json"},
+				Refs:    testRefs,
+				Options: setOptions(setEntry{Path: "items.#.version", From: "opentofu"}),
+			})
+			if err == nil {
+				t.Fatal("expected an error for a complex path that matches nothing")
+			}
+		})
+	}
+}
+
+// TestJSONDuplicatePathRejected guards against a regression to the field-test
+// finding that two set entries targeting the identical path silently
+// last-wins, discarding the first write with no error or warning.
+func TestJSONDuplicatePathRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.json")
+	if err := os.WriteFile(path, []byte(`{"version": "1.0.0"}`), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:   dir,
+		Paths: []string{"data.json"},
+		Refs:  testRefs,
+		Options: setOptions(
+			setEntry{Path: "version", From: "opentofu"},
+			setEntry{Path: "version", From: "cli"},
+		),
+	})
+	if err == nil {
+		t.Fatal("expected an error for duplicate set entries targeting the same path")
+	}
+}
+
+// TestJSONNumericPathHintsAtQuoting guards against a regression to the
+// field-test finding that an unquoted numeric YAML path value (parsed as an
+// int, not a string) fails with a confusing mapstructure error that doesn't
+// explain the fix; the wrapped error must carry a hint about quoting.
+func TestJSONNumericPathHintsAtQuoting(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "data.json"), []byte(`["1.0.0","2.0.0"]`), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:   dir,
+		Paths: []string{"data.json"},
+		Refs:  testRefs,
+		// Simulates an unquoted `path: 0` in YAML, which decodes as an int.
+		Options: map[string]any{"set": []map[string]any{{"path": 0, "from": "opentofu"}}},
+	})
+	if err == nil {
+		t.Fatal("expected an error for a non-string path value")
+	}
+	hints := errors.GetAllHints(err)
+	found := false
+	for _, hint := range hints {
+		if strings.Contains(hint, "Quote numeric path segments") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected error to hint at quoting the path, got hints %v for error: %v", hints, err)
 	}
 }
