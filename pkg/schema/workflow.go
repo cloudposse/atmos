@@ -637,7 +637,7 @@ func decodeStepWith(node *yaml.Node, stepType, action string, t *stepPolyTargets
 	if node == nil {
 		return nil
 	}
-	if strings.TrimSpace(stepType) == "container" || strings.TrimSpace(action) != "" {
+	if strings.TrimSpace(stepType) == containerStepType {
 		return decodeContainerWith(node, action, t.container)
 	}
 	if t.generic == nil {
