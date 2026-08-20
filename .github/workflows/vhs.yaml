@@ -9,6 +9,11 @@ env:
   LANG: "en_US.UTF-8"
   ATMOS_LOGS_LEVEL: "Info"
 
+# Least-privilege default; every job below declares its own narrower
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   prepare:
     runs-on: ubuntu-latest

@@ -6,12 +6,11 @@ on:
 
   workflow_dispatch:
 
+# Least-privilege default; every job below declares its own job-level
+# permissions that override this baseline (job-level permissions REPLACE,
+# not extend, this block).
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}
@@ -19,6 +18,14 @@ concurrency:
 
 jobs:
   release:
+    # Matches exactly what shared-release-branches.yml itself requests
+    # (id-token/contents/pull-requests) — a reusable workflow's effective
+    # permissions are the caller job's grant intersected with what the
+    # callee declares, so granting more here wouldn't reach it anyway.
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
     secrets: inherit
 
@@ -28,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     environment: release
+    # Authenticates via secrets.GH_BOT_TOKEN, not GITHUB_TOKEN — no elevated
+    # GITHUB_TOKEN scope needed.
+    permissions:
+      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0

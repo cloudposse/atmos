@@ -19,6 +19,11 @@ env:
   # `go mod download` fall back to direct module fetches.
   GOPROXY: "https://proxy.golang.org|direct"
 
+# Least-privilege default; every job below declares its own narrower
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze

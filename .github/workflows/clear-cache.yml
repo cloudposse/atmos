@@ -6,6 +6,11 @@ on:
     types:
       - closed
 
+# Least-privilege default; the cleanup job below declares its own
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest

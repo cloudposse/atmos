@@ -7,6 +7,11 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+# Least-privilege default; the label job below declares its own
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   label:
     runs-on: ubuntu-latest
