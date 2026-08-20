@@ -35,6 +35,7 @@ func TestCredentialFreeSkip(t *testing.T) {
 		strings.TrimPrefix(u.AtmosYamlFuncStoreGet, "!"),
 		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
 		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncExec, "!"),
 	}
 	require.ElementsMatch(t, want, got, "credentialFreeSkip must skip every credentialed read function")
 
@@ -47,4 +48,6 @@ func TestCredentialFreeSkip(t *testing.T) {
 	// The two functions that triggered the IMDS-fallback regression must be present.
 	assert.Contains(t, got, "terraform.state")
 	assert.Contains(t, got, "terraform.output")
+	// The function that enables arbitrary command execution must be skipped.
+	assert.Contains(t, got, "exec")
 }
