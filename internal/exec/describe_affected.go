@@ -61,6 +61,7 @@ type DescribeAffectedCmdArgs struct {
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
+	Cmd                         *cobra.Command   // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -175,6 +176,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 	result := DescribeAffectedCmdArgs{
 		CLIConfig: &atmosConfig,
+		Cmd:       cmd,
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
@@ -369,7 +371,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		exitCode = 1
 	}
-	in := &proexec.ExecRecordInput{Command: "describe affected", ExitCode: exitCode}
+	// Flags MUST be sourced from the invoking Cobra command's own record of
+	// explicitly-set flags, matching internal/exec/terraform.go's
+	// captureExecMetadataSync (research.md Decision 14).
+	flags := proexec.FlagsFromCommand(a.Cmd)
+
+	in := &proexec.ExecRecordInput{Command: "describe affected", Flags: flags, ExitCode: exitCode}
 	if syncErr := proexec.CaptureSync(a.CLIConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
