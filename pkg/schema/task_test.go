@@ -1162,7 +1162,7 @@ func TestDecodeTaskFromMap_InvalidStepsMap(t *testing.T) {
 // and the ErrWorkflowControlStepInvalid sentinel.
 func TestDecodeTaskFromMap_InvalidWithBlock(t *testing.T) {
 	m := map[string]any{
-		"type":   TaskTypeShell,
+		"type":   containerStepType,
 		"action": "not-a-real-action",
 		"with": map[string]any{
 			"context": "app",
@@ -1367,6 +1367,77 @@ func TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *tes
 		"a type: container step's with: block must decode identically for workflow files and custom commands")
 	assert.Nil(t, workflowStep.With, "with: must not also leak into the generic With map for a container step")
 	assert.Nil(t, commandStep.With, "with: must not also leak into the generic With map for a container step")
+}
+
+// storeStepWithBlockYAML is a single `type: store, action: write` step with
+// a full `with:` block, in the exact shape documented for custom commands
+// (see https://github.com/cloudposse/atmos/issues -- store step misdecoded
+// as a container step).
+const storeStepWithBlockYAML = `
+- name: write-image-metadata
+  type: store
+  action: write
+  with:
+    store: image-metadata
+    key: image-dev
+    value: "some-value"
+    stack: dev
+    component: app
+`
+
+// TestStoreStepWithBlock_WorkflowAndCustomCommandDecodeIdentically confirms a
+// `type: store` step's `with:` block decodes into the generic With map --
+// not the container action decoder -- for both the workflow-file path
+// (yaml.Unmarshal -> Task.UnmarshalYAML) and the custom-command/Viper path
+// (mapstructure -> TasksDecodeHook -> decodeTaskFromMap). Before the fix,
+// decodeStepWith routed any step with a non-empty `action:` (regardless of
+// `type:`) into decodeContainerWith, which rejected `action: write` with
+// "container `action: write` does not accept a `with:` block".
+func TestStoreStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(storeStepWithBlockYAML), &fromYAML))
+	require.Len(t, fromYAML, 1)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(storeStepWithBlockYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 1)
+
+	workflowStep := fromYAML[0]
+	commandStep := fromMapstructure[0]
+
+	require.NotNil(t, workflowStep.With, "workflow-file path must decode with: into the generic With map")
+	require.NotNil(t, commandStep.With, "custom-command path must decode with: into the generic With map")
+
+	expected := map[string]any{
+		"store":     "image-metadata",
+		"key":       "image-dev",
+		"value":     "some-value",
+		"stack":     "dev",
+		"component": "app",
+	}
+	assert.Equal(t, expected, workflowStep.With)
+	assert.Equal(t, expected, commandStep.With)
+	assert.Nil(t, workflowStep.Build)
+	assert.Nil(t, commandStep.Build)
 }
 
 // containerStepWithUnknownFieldYAML is the same shape as
