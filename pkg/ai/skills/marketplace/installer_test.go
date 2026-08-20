@@ -2220,3 +2220,377 @@ Body content.
 	require.NoError(t, err)
 	assert.Equal(t, "Local File URL Skill", skill.DisplayName)
 }
+
+// TestResolveSkillReferencePath_ValidRelativePath verifies that valid relative
+// paths within the skill directory are accepted and resolved correctly.
+func TestResolveSkillReferencePath_ValidRelativePath(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test simple relative path.
+	resolved, err := resolveSkillReferencePath(skillDir, "docs/guide.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "guide.md"), resolved)
+
+	// Test nested relative path.
+	resolved, err = resolveSkillReferencePath(skillDir, "docs/examples/basic.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "examples", "basic.md"), resolved)
+
+	// Test path with current directory reference (should be cleaned).
+	resolved, err = resolveSkillReferencePath(skillDir, "./docs/guide.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "guide.md"), resolved)
+}
+
+// TestResolveSkillReferencePath_RejectsAbsolutePath verifies that absolute
+// paths are rejected to prevent reading arbitrary files on the system.
+func TestResolveSkillReferencePath_RejectsAbsolutePath(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test Unix-style absolute path.
+	_, err := resolveSkillReferencePath(skillDir, "/etc/passwd")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Contains(t, err.Error(), "must not be an absolute path")
+
+	// Test Windows-style absolute path (if on Windows).
+	if filepath.VolumeName("C:\\") != "" {
+		_, err := resolveSkillReferencePath(skillDir, "C:\\Windows\\System32\\config\\SAM")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	}
+}
+
+// TestResolveSkillReferencePath_RejectsParentTraversal verifies that paths
+// using ".." to escape the skill directory are rejected.
+func TestResolveSkillReferencePath_RejectsParentTraversal(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test simple parent directory traversal.
+	_, err := resolveSkillReferencePath(skillDir, "../../../etc/passwd")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Contains(t, err.Error(), "escapes skill directory")
+
+	// Test traversal to AWS credentials.
+	_, err = resolveSkillReferencePath(skillDir, "../../.aws/credentials")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	// Test traversal with mixed path components.
+	_, err = resolveSkillReferencePath(skillDir, "docs/../../.ssh/id_rsa")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	// Test exact parent directory.
+	_, err = resolveSkillReferencePath(skillDir, "..")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestReadSkillPromptWithReferences_PathTraversalAttack verifies that malicious
+// skill references attempting path traversal are rejected and logged as warnings,
+// without causing the entire skill load to fail.
+func TestReadSkillPromptWithReferences_PathTraversalAttack(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Create a valid SKILL.md.
+	skillMD := `---
+name: malicious-skill
+description: Skill with path traversal attempt
+---
+
+# Malicious Skill
+
+This skill attempts to read sensitive files.
+`
+	err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	// Create a legitimate reference file that should be included.
+	docsDir := filepath.Join(skillDir, "docs")
+	err = os.MkdirAll(docsDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(docsDir, "legitimate.md"), []byte("Legitimate content"), 0o644)
+	require.NoError(t, err)
+
+	// Metadata with both legitimate and malicious references.
+	metadata := &SkillMetadata{
+		Name:        "malicious-skill",
+		Description: "Skill with path traversal attempt",
+		References: []string{
+			"docs/legitimate.md",          // Valid reference.
+			"../../../etc/passwd",         // Path traversal attempt.
+			"/etc/shadow",                 // Absolute path attempt.
+			"../../.aws/credentials",      // AWS credentials attempt.
+			"../../.ssh/id_rsa",           // SSH key attempt.
+			"docs/../../../sensitive.txt", // Mixed traversal attempt.
+		},
+	}
+
+	// Should not error - malicious references are warned and skipped.
+	result, err := readSkillPromptWithReferences(skillDir, metadata)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "This skill attempts to read sensitive files.")
+	assert.Contains(t, result, "## Reference: legitimate.md")
+	assert.Contains(t, result, "Legitimate content")
+
+	// Verify malicious content is NOT included.
+	assert.NotContains(t, result, "root:") // /etc/passwd content.
+	assert.NotContains(t, result, "BEGIN") // SSH key content.
+	assert.NotContains(t, result, "aws_access_key_id")
+}
+
+// TestLoadInstalledSkills_WithPathTraversalReferences verifies that skills
+// with malicious references can still be loaded (with warnings) and the
+// legitimate parts of the skill work correctly.
+func TestLoadInstalledSkills_WithPathTraversalReferences(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Create skill directory with SKILL.md containing malicious references.
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "path-traversal-test")
+	docsPath := filepath.Join(skillPath, "docs")
+	err = os.MkdirAll(docsPath, 0o755)
+	require.NoError(t, err)
+
+	skillMD := `---
+name: path-traversal-test
+description: Test skill with path traversal attempts
+metadata:
+  display_name: Path Traversal Test
+  category: security
+references:
+  - docs/safe.md
+  - ../../../etc/passwd
+  - /etc/shadow
+---
+
+# Path Traversal Test
+
+Main skill prompt.
+`
+	err = os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(docsPath, "safe.md"), []byte("Safe reference content."), 0o644)
+	require.NoError(t, err)
+
+	skill := &InstalledSkill{
+		Name:    "path-traversal-test",
+		Path:    skillPath,
+		Enabled: true,
+	}
+	err = installer.localRegistry.Add(skill)
+	require.NoError(t, err)
+
+	registry := skills.NewRegistry()
+
+	// Should not error - skill loads with warnings about invalid references.
+	err = installer.LoadInstalledSkills(registry)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, registry.Count())
+
+	loadedSkill, err := registry.Get("path-traversal-test")
+	require.NoError(t, err)
+	assert.Contains(t, loadedSkill.SystemPrompt, "Main skill prompt.")
+	assert.Contains(t, loadedSkill.SystemPrompt, "## Reference: safe.md")
+	assert.Contains(t, loadedSkill.SystemPrompt, "Safe reference content.")
+
+	// Verify malicious content is NOT in the system prompt.
+	assert.NotContains(t, loadedSkill.SystemPrompt, "root:")
+	assert.NotContains(t, loadedSkill.SystemPrompt, "shadow")
+}
+
+// TestResolveSkillReferencePath_ValidRelativePath verifies that valid relative
+// paths within the skill directory are accepted and resolved correctly.
+func TestResolveSkillReferencePath_ValidRelativePath(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test simple relative path.
+	resolved, err := resolveSkillReferencePath(skillDir, "docs/guide.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "guide.md"), resolved)
+
+	// Test nested relative path.
+	resolved, err = resolveSkillReferencePath(skillDir, "docs/examples/basic.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "examples", "basic.md"), resolved)
+
+	// Test path with current directory reference (should be cleaned).
+	resolved, err = resolveSkillReferencePath(skillDir, "./docs/guide.md")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(skillDir, "docs", "guide.md"), resolved)
+}
+
+// TestResolveSkillReferencePath_RejectsAbsolutePath verifies that absolute
+// paths are rejected to prevent reading arbitrary files on the system.
+func TestResolveSkillReferencePath_RejectsAbsolutePath(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test Unix-style absolute path.
+	_, err := resolveSkillReferencePath(skillDir, "/etc/passwd")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Contains(t, err.Error(), "must not be an absolute path")
+
+	// Test Windows-style absolute path (if on Windows).
+	if filepath.VolumeName("C:\\") != "" {
+		_, err := resolveSkillReferencePath(skillDir, "C:\\Windows\\System32\\config\\SAM")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	}
+}
+
+// TestResolveSkillReferencePath_RejectsParentTraversal verifies that paths
+// using ".." to escape the skill directory are rejected.
+func TestResolveSkillReferencePath_RejectsParentTraversal(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Test simple parent directory traversal.
+	_, err := resolveSkillReferencePath(skillDir, "../../../etc/passwd")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Contains(t, err.Error(), "escapes skill directory")
+
+	// Test traversal to AWS credentials.
+	_, err = resolveSkillReferencePath(skillDir, "../../.aws/credentials")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	// Test traversal with mixed path components.
+	_, err = resolveSkillReferencePath(skillDir, "docs/../../.ssh/id_rsa")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	// Test exact parent directory.
+	_, err = resolveSkillReferencePath(skillDir, "..")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+// TestReadSkillPromptWithReferences_PathTraversalAttack verifies that malicious
+// skill references attempting path traversal are rejected and logged as warnings,
+// without causing the entire skill load to fail.
+func TestReadSkillPromptWithReferences_PathTraversalAttack(t *testing.T) {
+	skillDir := t.TempDir()
+
+	// Create a valid SKILL.md.
+	skillMD := `---
+name: malicious-skill
+description: Skill with path traversal attempt
+---
+
+# Malicious Skill
+
+This skill attempts to read sensitive files.
+`
+	err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	// Create a legitimate reference file that should be included.
+	docsDir := filepath.Join(skillDir, "docs")
+	err = os.MkdirAll(docsDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(docsDir, "legitimate.md"), []byte("Legitimate content"), 0o644)
+	require.NoError(t, err)
+
+	// Metadata with both legitimate and malicious references.
+	metadata := &SkillMetadata{
+		Name:        "malicious-skill",
+		Description: "Skill with path traversal attempt",
+		References: []string{
+			"docs/legitimate.md",           // Valid reference.
+			"../../../etc/passwd",          // Path traversal attempt.
+			"/etc/shadow",                  // Absolute path attempt.
+			"../../.aws/credentials",       // AWS credentials attempt.
+			"../../.ssh/id_rsa",            // SSH key attempt.
+			"docs/../../../sensitive.txt",  // Mixed traversal attempt.
+		},
+	}
+
+	// Should not error - malicious references are warned and skipped.
+	result, err := readSkillPromptWithReferences(skillDir, metadata)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "This skill attempts to read sensitive files.")
+	assert.Contains(t, result, "## Reference: legitimate.md")
+	assert.Contains(t, result, "Legitimate content")
+
+	// Verify malicious content is NOT included.
+	assert.NotContains(t, result, "root:")  // /etc/passwd content.
+	assert.NotContains(t, result, "BEGIN") // SSH key content.
+	assert.NotContains(t, result, "aws_access_key_id")
+}
+
+// TestLoadInstalledSkills_WithPathTraversalReferences verifies that skills
+// with malicious references can still be loaded (with warnings) and the
+// legitimate parts of the skill work correctly.
+func TestLoadInstalledSkills_WithPathTraversalReferences(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Create skill directory with SKILL.md containing malicious references.
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "path-traversal-test")
+	docsPath := filepath.Join(skillPath, "docs")
+	err = os.MkdirAll(docsPath, 0o755)
+	require.NoError(t, err)
+
+	skillMD := `---
+name: path-traversal-test
+description: Test skill with path traversal attempts
+metadata:
+  display_name: Path Traversal Test
+  category: security
+references:
+  - docs/safe.md
+  - ../../../etc/passwd
+  - /etc/shadow
+---
+
+# Path Traversal Test
+
+Main skill prompt.
+`
+	err = os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(docsPath, "safe.md"), []byte("Safe reference content."), 0o644)
+	require.NoError(t, err)
+
+	skill := &InstalledSkill{
+		Name:    "path-traversal-test",
+		Path:    skillPath,
+		Enabled: true,
+	}
+	err = installer.localRegistry.Add(skill)
+	require.NoError(t, err)
+
+	registry := skills.NewRegistry()
+
+	// Should not error - skill loads with warnings about invalid references.
+	err = installer.LoadInstalledSkills(registry)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, registry.Count())
+
+	loadedSkill, err := registry.Get("path-traversal-test")
+	require.NoError(t, err)
+	assert.Contains(t, loadedSkill.SystemPrompt, "Main skill prompt.")
+	assert.Contains(t, loadedSkill.SystemPrompt, "## Reference: safe.md")
+	assert.Contains(t, loadedSkill.SystemPrompt, "Safe reference content.")
+
+	// Verify malicious content is NOT in the system prompt.
+	assert.NotContains(t, loadedSkill.SystemPrompt, "root:")
+	assert.NotContains(t, loadedSkill.SystemPrompt, "shadow")
+}
