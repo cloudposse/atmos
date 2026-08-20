@@ -101,10 +101,15 @@ func HasExplicitNetworkOverride(runArgs []string) bool {
 // emulators in the same stack) can resolve it by name. Prefers Atmos's own
 // current container network when detected (see CurrentContainerNetwork), so a
 // job container that starts a sibling container can still reach it; otherwise
-// idempotently ensures the dedicated per-stack network. It is a no-op when the
-// runtime doesn't implement NetworkEnsurer (e.g. a test mock) or network
-// creation fails -- single-container use still works over the default bridge,
-// only cross-container name resolution is lost.
+// idempotently ensures the dedicated per-stack network and, when Atmos is
+// itself containerized, also joins Atmos's own current container to that same
+// dedicated network (see joinCurrentContainerToNetwork) -- so a job container
+// that couldn't reuse its own network (e.g. it's only on Docker's default
+// "bridge") still ends up able to reach the container it's starting by DNS
+// alias, rather than only the new container being reachable. It is a no-op
+// when the runtime doesn't implement NetworkEnsurer (e.g. a test mock) or
+// network creation fails -- single-container use still works over the default
+// bridge, only cross-container name resolution is lost.
 func AttachSharedNetwork(ctx context.Context, runtime Runtime, networks *[]NetworkAttachment, stack, name string) {
 	defer perf.Track(nil, "container.AttachSharedNetwork")()
 
@@ -131,4 +136,35 @@ func AttachSharedNetwork(ctx context.Context, runtime Runtime, networks *[]Netwo
 		Name:    network,
 		Aliases: []string{alias},
 	})
+	joinCurrentContainerToNetwork(ctx, runtime, network)
+}
+
+// joinCurrentContainerToNetwork best-effort attaches Atmos's own running
+// container to network, so a containerized Atmos whose current network isn't
+// reusable for DNS-alias resolution (e.g. it's only on Docker's default
+// "bridge") can still reach containers it starts on the dedicated per-stack
+// network -- once attached, this container's own future CurrentContainerNetwork
+// calls (from this or any later Atmos process in the same container) will find
+// this network too and take the reuse path directly. No-op when Atmos isn't
+// (and hasn't opted into acting as if it were) containerized, the current
+// container can't be identified, or the runtime doesn't support connecting an
+// existing container to a network.
+func joinCurrentContainerToNetwork(ctx context.Context, runtime Runtime, network string) {
+	defer perf.Track(nil, "container.joinCurrentContainerToNetwork")()
+
+	if !PreferCurrentContainerNetwork() {
+		return
+	}
+	connector, ok := runtime.(NetworkConnector)
+	if !ok {
+		return
+	}
+	hostname, err := currentHostname()
+	if err != nil || hostname == "" {
+		return
+	}
+	if err := connector.ConnectNetwork(ctx, network, hostname, nil); err != nil {
+		log.Debug("could not join current container to shared stack network; falling back to published-port reachability",
+			"network", network, "error", err)
+	}
 }

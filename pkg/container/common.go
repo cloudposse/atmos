@@ -433,6 +433,20 @@ func buildStopArgs(containerID string, timeoutSecs int) []string {
 	return []string{"stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID}
 }
 
+// buildNetworkConnectArgs builds the arguments for a `network connect` operation,
+// attaching containerID to network with each alias registered as a DNS name on
+// it. This function is shared between Docker and Podman runtimes to avoid
+// duplication. Extracted to allow testing the argument building logic without
+// executing commands.
+func buildNetworkConnectArgs(network, containerID string, aliases []string) []string {
+	args := []string{"network", "connect"}
+	for _, alias := range aliases {
+		args = append(args, "--alias", alias)
+	}
+	args = append(args, network, containerID)
+	return args
+}
+
 // buildLogsArgs builds the arguments for a container logs operation.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the argument building logic without executing commands.
