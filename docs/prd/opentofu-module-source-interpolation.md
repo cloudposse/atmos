@@ -245,10 +245,13 @@ internal/exec/opentofu_module_source_interpolation_test.go  # Integration tests
 internal/exec/utils.go                        # ProcessStacks() integration
 ```
 
-**Core Detection Logic:**
+**Core Detection Logic (historical — see the [2026-08-10](#update-2026-08-10-generalized-to-terraform-115-2913)
+and [2026-08-20](#update-2026-08-20-guard-against-swallowing-unrelated-errors) updates below for the
+current implementation; `IsOpenTofu()`'s signature, `isKnownOpenTofuFeature`, and the
+`validation_skipped_opentofu` flag shown here have all since been renamed/superseded):**
 
 ```go
-// internal/exec/terraform_detection.go
+// internal/exec/terraform_detection.go (as originally implemented; see updates below)
 
 func IsOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
   command := atmosConfig.Components.Terraform.Command
@@ -293,10 +296,10 @@ func isKnownOpenTofuFeature(err error) bool {
 }
 ```
 
-**Integration in ProcessStacks():**
+**Integration in ProcessStacks() (historical — superseded; see updates below):**
 
 ```go
-// internal/exec/utils.go:650-661
+// internal/exec/utils.go:650-661 (as originally implemented; see updates below)
 
 if !isNotExist && !isNotExistString {
   // Check if this is an OpenTofu-specific feature
@@ -584,8 +587,10 @@ Users simply need to upgrade to the version with auto-detection support. No conf
   `gohcl.DecodeExpression(attr.Expr, nil, &source)` (a `nil` `hcl.EvalContext`). Any variable reference in that
   position produces this diagnostic identically, regardless of which tool/version is actually configured, and
   regardless of whether that tool/version would accept the expression.
-- **Fix:** decoupled the skip from `IsOpenTofu()` tool detection entirely. It now applies unconditionally whenever the
-  diagnostic text matches, for both `terraform` and `tofu` configured commands.
+- **Fix:** decoupled the skip from `IsOpenTofu()` tool detection entirely. At this point it applied whenever the
+  diagnostic text matched, for both `terraform` and `tofu` configured commands. (This matching was later tightened
+  further — see the [2026-08-20 update](#update-2026-08-20-guard-against-swallowing-unrelated-errors) below;
+  "matches whenever the text matches" is no longer a complete description of the current behavior.)
   - Renamed `isKnownOpenTofuFeature` → `isKnownModuleSourceInterpolationDiagnostic` (`internal/exec/terraform_detection.go`).
   - Renamed the `component_info` flag `validation_skipped_opentofu` → `validation_skipped_module_source_interpolation`
     (`internal/exec/utils.go`).
@@ -602,3 +607,34 @@ Users simply need to upgrade to the version with auto-detection support. No conf
   `TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource` in `pkg/sbom/terraform_test.go` to guard this.
 - **New fixture/tests:** `tests/fixtures/scenarios/terraform-module-source-interpolation/`,
   `internal/exec/terraform_module_source_interpolation_test.go`.
+
+## Update (2026-08-20): Guard against swallowing unrelated errors
+
+- A follow-up field-test pass on the 2026-08-10 fix found that `terraform-config-inspect`'s
+  `Diagnostics.Error()` only renders the **first** diagnostic's Summary/Detail — any others
+  collapse to `"(and N other messages)"` with no text. Matching that collapsed string meant that if
+  the known-safe module-source diagnostic happened to sort first, the whole diagnostics set —
+  including any other, genuinely unrelated HCL error in the same file — was silently discarded
+  instead of failing.
+- **Fix:** `internal/exec/terraform_detection.go` now exposes
+  `allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool`, which groups
+  error-severity diagnostics by source position (`file:line`) and requires every position group to
+  contain at least one diagnostic matching the known pattern. This tolerates
+  `terraform-config-inspect`'s own companion diagnostic at the same position as the module-source
+  one (e.g. `"Unsuitable value: value must be known"`, a side effect of the same nil-`hcl.EvalContext`
+  decode failure) while still treating a genuine error at a *different* position as unsafe to skip.
+  `internal/exec/utils.go`'s `processStacks()` now calls this instead of the old
+  `isKnownModuleSourceInterpolationDiagnostic(diagErr)` single-string check.
+- Full record, including validation performed:
+  [docs/fixes/2026-08-10-module-source-interpolation-diagnostic-swallow.md](../fixes/2026-08-10-module-source-interpolation-diagnostic-swallow.md).
+- **Known, intentionally untracked limitation (not fixed here):** the match is still text-based
+  (`"Variables not allowed"`), not scoped to confirming the diagnostic's position actually falls
+  within a `module` block's `source`/`version` attribute. `terraform-config-inspect` uses the same
+  `gohcl.DecodeExpression(attr.Expr, nil, ...)` pattern for several other attributes that were never
+  a real supported variable-interpolation feature (e.g. `output.description`, `variable.sensitive`,
+  `provider.alias`) — a variable reference there produces the identical diagnostic and is still
+  silently accepted today, confirmed against a real Terraform 1.15.6 binary to be genuinely invalid
+  HCL. A correct fix would re-parse the failing file with `hclsyntax` and scope the skip to
+  diagnostics whose range falls within a module's `source`/`version` attribute specifically. Flagged
+  independently by both the field-test pass and CodeRabbit PR review; recorded here rather than
+  fixed, per explicit project-owner direction not to open a tracking issue for it.

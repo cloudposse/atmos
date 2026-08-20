@@ -10,7 +10,7 @@ syntax under Terraform 1.15+ (released April 2026), analogous to OpenTofu 1.8+'s
 the same pattern. Commands that resolve the component (`atmos describe component`, `atmos terraform
 plan`, etc.) failed before any Terraform/OpenTofu binary was ever invoked, with:
 
-```
+```text
 failed to load terraform component
 The Terraform component '<name>' contains invalid HCL code at <path>:<line>.
 Variables not allowed: Variables may not be used here.
@@ -99,4 +99,14 @@ reads Terraform module data. Confirmed it does not — see Changes below.
 
 ## Follow-ups
 
-None.
+Two known limitations were found in later review/field-test passes on this same validation-skip
+mechanism, both recorded in sibling fix-log entries rather than duplicated here:
+
+- A genuine, unrelated HCL error co-occurring in the same file as the known-safe diagnostic could
+  be silently discarded instead of failing — fixed in
+  [2026-08-10-module-source-interpolation-diagnostic-swallow.md](2026-08-10-module-source-interpolation-diagnostic-swallow.md).
+  That same entry's own Follow-ups section documents the remaining, intentionally untracked gap:
+  the match is still text-based (`"Variables not allowed"`), not scoped to confirming the
+  diagnostic actually points at a `module` block's `source`/`version` attribute, so a variable
+  reference in an unrelated attribute (e.g. `output.description = var.x`, genuinely invalid HCL)
+  can still be silently accepted today.

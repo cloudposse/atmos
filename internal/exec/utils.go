@@ -1204,7 +1204,7 @@ func processStacks(
 					}
 
 					// Skip validation for known module-source-interpolation diagnostics.
-					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic: " + errMsg)
+					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
 					componentInfo["validation_skipped_module_source_interpolation"] = true
 				} else {

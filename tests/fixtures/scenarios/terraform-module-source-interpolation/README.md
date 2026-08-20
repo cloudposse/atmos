@@ -30,7 +30,7 @@ Atmos already tolerated this exact diagnostic for OpenTofu 1.8+ (see
 command was detected as OpenTofu. Since this fixture uses plain `terraform` (no `command:` override
 in `atmos.yaml`), it previously failed with:
 
-```
+```text
 failed to load terraform component
 The Terraform component 'test-component' contains invalid HCL code at .../main.tf:14.
 Variables not allowed: Variables may not be used here.
