@@ -371,6 +371,16 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 			Load:     true,
 		},
 	}))
+	assert.Error(t, handler.Validate(&schema.WorkflowStep{
+		Name:   "load-with-bake",
+		Type:   "container",
+		Action: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: "docker",
+			Load:     true,
+			Bake:     &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"},
+		},
+	}))
 }
 
 // TestContainerHandlerValidateInvalidPullEchoesValue confirms that the default
