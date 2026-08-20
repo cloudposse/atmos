@@ -1320,6 +1320,49 @@ func TestBuildStopArgs(t *testing.T) {
 	}
 }
 
+func TestBuildNetworkConnectArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		network     string
+		containerID string
+		aliases     []string
+		expected    []string
+	}{
+		{
+			name:        "no aliases",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			expected:    []string{"network", "connect", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "single alias",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws"},
+			expected:    []string{"network", "connect", "--alias", "fixtures-aws", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "multiple aliases preserve order",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws", "fixtures-aws-alt"},
+			expected: []string{
+				"network", "connect",
+				"--alias", "fixtures-aws",
+				"--alias", "fixtures-aws-alt",
+				"atmos-fixtures", "abc123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildNetworkConnectArgs(tt.network, tt.containerID, tt.aliases)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestBuildLogsArgs(t *testing.T) {
 	tests := []struct {
 		name        string
