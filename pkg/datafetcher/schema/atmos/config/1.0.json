@@ -13395,7 +13395,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Files declares which project files the file managers maintain. When\nempty, managers with default paths (github-actions, template) run over\nthose defaults."
+          "description": "Files declares which project files the file managers maintain. When\nomitted, managers with default paths (github-actions, template) run over\nthose defaults. An explicit empty list (files: []) manages zero files."
         }
       },
       "type": "object",

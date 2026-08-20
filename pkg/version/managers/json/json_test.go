@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/tidwall/gjson"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
 )
@@ -386,6 +387,36 @@ func TestJSONAppendPathRejected(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected an error for an array-append path")
+	}
+	content, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("reading fixture: %v", readErr)
+	}
+	if string(content) != original {
+		t.Fatalf("expected the file to remain untouched, got:\n%s", content)
+	}
+}
+
+// TestJSONMidPathAppendSegmentRejected guards against a regression where
+// isAppendPath only checked the trailing segment: a mid-path "-1" (e.g.
+// items.-1.version) appends a new array element just as unsafely as a
+// standalone or trailing one, so it must be rejected too.
+func TestJSONMidPathAppendSegmentRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.json")
+	original := `{"items": [{"version": "1.0.0"}]}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"data.json"},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "items.-1.version", From: "opentofu"}),
+	})
+	if !errors.Is(err, errUtils.ErrVersionJSONAppendPathUnsupported) {
+		t.Fatalf("expected ErrVersionJSONAppendPathUnsupported, got: %v", err)
 	}
 	content, readErr := os.ReadFile(path)
 	if readErr != nil {

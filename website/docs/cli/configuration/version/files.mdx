@@ -222,7 +222,7 @@ A simple `path` (no wildcards) that doesn't exist yet in the file is created rat
 
 A few configurations are rejected outright rather than risking silent data loss:
 
-- **Array-append paths** (a trailing `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
+- **Array-append paths** (any `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
 - **A `path` whose current value is an object or array** — writing a scalar there would silently discard the whole subtree. Target the specific field inside it instead (`engines.node`, not `engines`).
 - **Two `set` entries targeting the same `path`** — the second write would otherwise silently discard the first.
 

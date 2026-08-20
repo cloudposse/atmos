@@ -139,13 +139,19 @@ func duplicatePath(entries []setEntry) string {
 	return ""
 }
 
-// isAppendPath reports whether path targets sjson's array-append marker
-// (a trailing/standalone "-1" segment). Append writes can never be applied
+// isAppendPath reports whether path targets sjson's array-append marker (a
+// "-1" segment anywhere in the path -- standalone, leading, trailing, or
+// mid-path, e.g. items.-1.version). Append writes can never be applied
 // idempotently -- there is no way to tell "already applied" from "not yet
 // applied" by reading the target array -- so they are rejected outright
 // rather than silently growing the array on every apply.
 func isAppendPath(path string) bool {
-	return path == appendPathSegment || strings.HasSuffix(path, "."+appendPathSegment)
+	for _, segment := range strings.Split(path, ".") {
+		if segment == appendPathSegment {
+			return true
+		}
+	}
+	return false
 }
 
 // isComplexPath reports whether path uses sjson/gjson's wildcard or query
