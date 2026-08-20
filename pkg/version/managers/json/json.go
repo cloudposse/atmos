@@ -83,13 +83,13 @@ func (Manager) Plan(ctx context.Context, in *managers.Input) ([]managers.FileCha
 	}
 	files, err := managers.ExpandPaths(in.Dir, in.Paths)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrVersionJSONExpandPathsFailed, in.Dir, err)
 	}
 	var changes []managers.FileChange
 	for _, file := range files {
 		content, err := os.ReadFile(file)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrVersionJSONReadFailed, file, err)
 		}
 		if !gjson.ValidBytes(content) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrVersionJSONInvalidContent, file)
@@ -189,7 +189,7 @@ func applySet(content []byte, entry setEntry, value string) ([]byte, error) {
 	if err := checkSetEntry(entry, &existing, value); err != nil {
 		return nil, err
 	}
-	if !isComplexPath(entry.Path) && existing.Exists() && existing.String() == value {
+	if !isComplexPath(entry.Path) && existing.Type == gjson.String && existing.String() == value {
 		return content, nil
 	}
 	updated, err := sjson.SetBytes(content, entry.Path, value)

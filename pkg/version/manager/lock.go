@@ -112,7 +112,10 @@ func SaveLock(atmosConfig *schema.AtmosConfiguration, lock *LockFile) error {
 	if err := os.MkdirAll(filepath.Dir(lockPath), lockDirPerm); err != nil {
 		return err
 	}
-	return utils.WriteToFileAsYAML(lockPath, lock, lockFilePerm) // #nosec G306 -- the lock file is a non-sensitive, committed project file.
+	if err := utils.WriteToFileAsYAML(lockPath, lock, lockFilePerm); err != nil { // #nosec G306 -- the lock file is a non-sensitive, committed project file.
+		return fmt.Errorf("%w: %s: %w", ErrLockWriteFailed, lockPath, err)
+	}
+	return nil
 }
 
 // ResolveLocked resolves a version name from the lock file.

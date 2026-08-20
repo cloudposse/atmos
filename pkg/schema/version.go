@@ -152,7 +152,7 @@ type Version struct {
 	Tracks       map[string]VersionTrack `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
 
 	// Files declares which project files the file managers maintain. When
-	// empty, managers with default paths (github-actions, template) run over
-	// those defaults.
+	// omitted, managers with default paths (github-actions, template) run over
+	// those defaults. An explicit empty list (files: []) manages zero files.
 	Files []VersionFileRule `yaml:"files,omitempty" mapstructure:"files" json:"files,omitempty"`
 }

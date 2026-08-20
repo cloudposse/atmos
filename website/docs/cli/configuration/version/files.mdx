@@ -43,7 +43,7 @@ version:
 ```
 </File>
 
-When `version.files` is empty, managers with default paths run over those defaults. An explicit `files: []` is different from omitting the key: it means "manage zero files," and suppresses the default-path fallback.
+When `version.files` is omitted, managers with default paths run over those defaults. An explicit `files: []` is different from omitting the key: it means "manage zero files," and suppresses the default-path fallback.
 
 `version.files`, like every other `atmos.yaml` setting, follows [Atmos's standard import precedence](/cli/configuration/imports#merge-order): the main `atmos.yaml`'s own value always wins over an [`import:`](/cli/configuration/imports) fragment or `atmos.d/` file that also sets `version.files`, including `files: []`. An imported fragment can only supply `version.files` when the main file doesn't mention the key at all — it can never override or clear a list the main file already declares.
 

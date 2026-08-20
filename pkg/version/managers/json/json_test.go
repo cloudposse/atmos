@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/tidwall/gjson"
 
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
@@ -95,6 +96,37 @@ func TestJSONNoOpWhenValueMatches(t *testing.T) {
 		setOptions(setEntry{Path: "version", From: "opentofu"}))
 	if len(changes) != 0 {
 		t.Fatalf("expected no changes, got %d", len(changes))
+	}
+}
+
+// TestJSONNumberIsRewrittenToString guards against a regression where a
+// numeric JSON value (e.g. `"version": 1`) was wrongly treated as already
+// matching a locked string value with the same text: gjson.Result.String()
+// renders "1" for both the JSON number 1 and the JSON string "1", but
+// sjson.SetBytes always writes a Go string as a JSON string, so the field
+// must be rewritten to {"version": "1"} rather than left as a number.
+func TestJSONNumberIsRewrittenToString(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plugin.json")
+	if err := os.WriteFile(path, []byte(`{"version": 1}`), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	changes, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"plugin.json"},
+		Refs:    map[string]manager.VersionRef{"tool": {Version: "1"}},
+		Options: setOptions(setEntry{Path: "version", From: "tool"}),
+	})
+	if err != nil {
+		t.Fatalf("Plan returned error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	result := gjson.GetBytes(changes[0].New, "version")
+	if result.Type != gjson.String || result.String() != "1" {
+		t.Fatalf("expected version to become the JSON string \"1\", got type=%v raw=%s", result.Type, result.Raw)
 	}
 }
 

@@ -139,6 +139,9 @@ var (
 	ErrVersionJSONPathTypeMismatch      = errors.New("json manager refused to overwrite a container (object or array) with a scalar value")
 	ErrVersionJSONPathNotFound          = errors.New("json manager path did not match anything in the target file")
 	ErrVersionJSONDuplicatePath         = errors.New("json manager has more than one set entry targeting the same path")
+	ErrVersionJSONExpandPathsFailed     = errors.New("json manager failed to expand configured paths")
+	ErrVersionJSONReadFailed            = errors.New("json manager failed to read target file")
+	ErrVersionLockWriteFailed           = errors.New("failed to write version lock file")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
