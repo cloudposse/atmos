@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -174,6 +175,85 @@ func TestTestKit_OsArgsRestoration(t *testing.T) {
 
 	// Verify os.Args was restored after subtest.
 	assert.Equal(t, initialArgs, os.Args, "os.Args should be restored after subtest")
+}
+
+// rootCmdCommandNames returns the Name() of every command currently registered on RootCmd.
+func rootCmdCommandNames(tb testing.TB) []string {
+	tb.Helper()
+	names := make([]string, 0, len(RootCmd.Commands()))
+	for _, c := range RootCmd.Commands() {
+		names = append(names, c.Name())
+	}
+	return names
+}
+
+// TestTestKit_RootCmdCommandsRestoration verifies that a command registered on RootCmd during a
+// test (e.g. by processCustomCommands) is removed again once the test's cleanup runs, while
+// commands that were already on RootCmd before the test remain untouched.
+func TestTestKit_RootCmdCommandsRestoration(t *testing.T) {
+	tests := []struct {
+		name        string
+		addCommands []string
+	}{
+		{name: "single command added", addCommands: []string{"testkit-added-one"}},
+		{name: "multiple commands added", addCommands: []string{"testkit-added-two", "testkit-added-three"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalNames := rootCmdCommandNames(t)
+
+			t.Run("adds commands", func(t *testing.T) {
+				tk := NewTestKit(t)
+
+				for _, name := range tt.addCommands {
+					RootCmd.AddCommand(&cobra.Command{Use: name})
+				}
+
+				// Sanity check: the added commands are actually present mid-test.
+				midTestNames := rootCmdCommandNames(tk)
+				for _, name := range tt.addCommands {
+					assert.Contains(tk, midTestNames, name, "added command should be present mid-test")
+				}
+				// Cleanup happens automatically when this subtest ends.
+			})
+
+			// After cleanup, added commands must be gone and originals must remain.
+			restoredNames := rootCmdCommandNames(t)
+			for _, name := range tt.addCommands {
+				assert.NotContains(t, restoredNames, name, "command added during the test should be removed by restore")
+			}
+			assert.ElementsMatch(t, originalNames, restoredNames, "original commands should be unchanged after restore")
+		})
+	}
+}
+
+// TestTestKit_RootCmdCommandRemovalRestoration verifies that a command present in a test's
+// RootCmd snapshot is re-added if that test (or a nested one) removes it via
+// RootCmd.RemoveCommand. The restoreRootCmdCommands helper previously only removed commands
+// *added* after the snapshot; a snapshot command removed mid-test stayed gone for every later
+// test.
+func TestTestKit_RootCmdCommandRemovalRestoration(t *testing.T) {
+	tk := NewTestKit(t) // Outer snapshot includes the command registered below.
+
+	original := &cobra.Command{Use: "testkit-removal-target"}
+	RootCmd.AddCommand(original)
+	require.Contains(tk, rootCmdCommandNames(tk), "testkit-removal-target")
+
+	t.Run("nested test removes an original command", func(t *testing.T) {
+		innerTk := NewTestKit(t) // Inner snapshot also includes "testkit-removal-target".
+
+		RootCmd.RemoveCommand(original)
+
+		assert.NotContains(innerTk, rootCmdCommandNames(innerTk), "testkit-removal-target",
+			"command should be removed mid-test")
+		// Cleanup happens automatically when this subtest ends.
+	})
+
+	// The nested test's cleanup must restore the command it removed (present in its own
+	// snapshot), not leave it gone for the rest of the outer test.
+	assert.Contains(t, rootCmdCommandNames(t), "testkit-removal-target",
+		"a command removed inside a nested NewTestKit test must be restored by that test's cleanup")
 }
 
 // Note: Viper restoration tests were removed because viper.Set(key, nil) breaks BindPFlag connections.

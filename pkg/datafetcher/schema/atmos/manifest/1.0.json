@@ -20,6 +20,9 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
+    "helm": {
+      "$ref": "#/definitions/helm"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -74,74 +77,53 @@
       ]
     },
     {
-      "anyOf": [
-        {
-          "additionalProperties": true,
-          "not": {
-            "required": [
-              "workflows"
-            ]
-          }
-        },
-        {
-          "required": [
-            "import"
-          ]
-        },
-        {
-          "required": [
-            "terraform"
-          ]
-        },
-        {
-          "required": [
-            "helmfile"
-          ]
-        },
-        {
-          "required": [
-            "kubernetes"
-          ]
-        },
-        {
-          "required": [
-            "packer"
-          ]
-        },
-        {
-          "required": [
-            "vars"
-          ]
-        },
-        {
-          "required": [
-            "hooks"
-          ]
-        },
-        {
-          "required": [
-            "env"
-          ]
-        },
-        {
-          "required": [
-            "settings"
-          ]
-        },
-        {
-          "required": [
-            "components"
-          ]
-        },
-        {
-          "required": [
-            "overrides"
-          ]
-        }
-      ]
+      "not": {
+        "required": [
+          "workflows"
+        ]
+      }
     }
   ],
   "definitions": {
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "condition_predicate": {
       "type": "string",
       "description": "Built-in condition predicate for step and hook execution.",
@@ -382,6 +364,9 @@
             "kubernetes": {
               "$ref": "#/definitions/kubernetes_components"
             },
+            "helm": {
+              "$ref": "#/definitions/helm_components"
+            },
             "packer": {
               "$ref": "#/definitions/packer_components"
             },
@@ -457,6 +442,15 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -570,6 +564,15 @@
             },
             "source": {
               "$ref": "#/definitions/source"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -614,6 +617,12 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -717,9 +726,10 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "Container runtime provider: docker, podman, or empty for auto-detect.",
+          "description": "Container runtime provider: docker, podman, auto, or empty for auto-detect.",
           "enum": [
             "",
+            "auto",
             "docker",
             "podman"
           ]
@@ -984,6 +994,12 @@
             },
             "source": {
               "$ref": "#/definitions/source"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1028,6 +1044,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -1110,12 +1129,202 @@
             "auth": {
               "$ref": "#/definitions/component_auth"
             },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
+            },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
             "validate": {
               "type": "boolean",
               "description": "Enables structural validation of this component's manifests (default true). Set to false to opt out of both the implicit apply/deploy auto-gate and the explicit 'atmos kubernetes validate' command for this component; does not affect '--server' dry-run validation against a live cluster."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm": {
+      "title": "helm",
+      "description": "Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object"
+                }
+              ]
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
             }
           },
           "required": []
@@ -1157,6 +1366,9 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1229,6 +1441,9 @@
             },
             "source": {
               "$ref": "#/definitions/source"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -1421,6 +1636,10 @@
             },
             "retry": {
               "$ref": "#/definitions/source_retry"
+            },
+            "ttl": {
+              "type": "string",
+              "description": "Cache time-to-live as a Go duration string (e.g., '24h'). Overrides the global default; a JIT-vendored source cache older than this is re-fetched."
             }
           },
           "required": [
@@ -1662,11 +1881,17 @@
         },
         "fail": {
           "type": "string",
-          "enum": ["wait_all", "fail_fast", "best_effort"],
+          "enum": [
+            "wait_all",
+            "fail_fast",
+            "best_effort"
+          ],
           "description": "Controls failure propagation for this dependency: wait_all (default), fail_fast, or best_effort."
         }
       },
-      "required": ["name"]
+      "required": [
+        "name"
+      ]
     },
     "unit_dependencies": {
       "title": "unit_dependencies",
@@ -1674,8 +1899,12 @@
       "type": "array",
       "items": {
         "oneOf": [
-          { "type": "string" },
-          { "$ref": "#/definitions/unit_dependency" }
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/definitions/unit_dependency"
+          }
         ]
       }
     },
@@ -1908,7 +2137,7 @@
     },
     "global_metadata": {
       "title": "metadata",
-      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence — component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
+      "description": "Stack-wide default metadata, deep-merged into every component's metadata (lowest precedence \u2014 component-local metadata: and its metadata.inherits chain both override this). Only fields that make sense stack-wide are allowed.",
       "oneOf": [
         {
           "type": "string",
@@ -2134,7 +2363,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -2162,7 +2397,13 @@
             "static",
             "azurerm",
             "gcs",
-            "cloud"
+            "cloud",
+            "consul",
+            "cos",
+            "http",
+            "kubernetes",
+            "oss",
+            "pg"
           ]
         }
       ]
@@ -2279,6 +2520,78 @@
                   "additionalProperties": true
                 }
               ]
+            },
+            "consul": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "cos": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "http": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "kubernetes": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "oss": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "pg": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -2311,6 +2624,27 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
             }
           },
           "required": []
@@ -2835,7 +3169,9 @@
           "properties": {
             "sources": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Glob patterns for files whose content determines checksum.changed / contributes to timestamp.changed."
             }
           }
@@ -2848,7 +3184,9 @@
           "properties": {
             "paths": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Glob patterns for this step's expected output files."
             }
           }
@@ -2861,7 +3199,9 @@
           "properties": {
             "tools": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Executable names resolved via exec.LookPath (no shell); preconditions.success is true iff every entry resolves."
             }
           }
@@ -2920,10 +3260,10 @@
                 "mode": {
                   "type": "string",
                   "enum": [
+                    "",
                     "grouped",
                     "prefixed",
-                    "none",
-                    "raw"
+                    "none"
                   ]
                 },
                 "order": {
@@ -3876,6 +4216,10 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "require_identity": {
+              "type": "boolean",
+              "description": "Require an Atmos Auth identity for Helm operations that contact a Kubernetes cluster and reject ambient kubeconfig access."
+            },
             "realm": {
               "type": "string",
               "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
@@ -4154,6 +4498,112 @@
               "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
             }
           }
+        }
+      ]
+    },
+    "required_version": {
+      "title": "required_version",
+      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
+      "type": "string"
+    },
+    "required_providers": {
+      "title": "required_providers",
+      "description": "Terraform required providers section for version pinning",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Provider source address (e.g., 'hashicorp/aws')"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider version constraint (e.g., '~> 5.0')"
+                },
+                "configuration_aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of provider configuration aliases"
+                }
+              },
+              "required": [
+                "source"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "retry": {
+      "title": "retry",
+      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fractional jitter applied to each delay (0-1)."
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
         }
       ]
     }

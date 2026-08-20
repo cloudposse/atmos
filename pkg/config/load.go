@@ -359,6 +359,63 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 	return getProfilesFromFallbacks()
 }
 
+// resolveProfileSelectionSentinel checks profiles for the bare `--profile` interactive-selection
+// sentinel (ProfileFlagSelectValue) and, if present, resolves it via the registered
+// ProfileSelector (see profile_selector.go). Returns profiles unchanged (nil error) when the
+// sentinel is not present, so this is safe to call unconditionally on any non-empty profile list.
+//
+// Any explicit profile names given alongside the bare flag (e.g. `--profile foo --profile`) are
+// passed to the selector as "preselected" so the picker starts with them pre-checked instead of
+// nothing checked -- the user typed them explicitly, so they shouldn't have to re-pick them. The
+// user's final choice in the form (including deliberately unchecking one) is still what's returned.
+//
+// On success, the resolved profile list is also written back to the global Viper singleton
+// (the same instance getProfilesFromFlagsOrEnv reads from) so any other same-process reader of
+// the raw --profile flag/env within this process -- e.g. a later InitCliConfig call passing an
+// empty schema.ConfigAndStacksInfo{}, or flags.ParseGlobalFlags/BuildConfigAndStacksInfo -- sees
+// the resolved names instead of the sentinel.
+func resolveProfileSelectionSentinel(tempConfig *schema.AtmosConfiguration, profiles []string) ([]string, error) {
+	defer perf.Track(tempConfig, "config.resolveProfileSelectionSentinel")()
+
+	if !slices.Contains(profiles, ProfileFlagSelectValue) {
+		return profiles, nil
+	}
+
+	if profileSelector == nil {
+		return nil, errUtils.Build(errUtils.ErrProfileSelectionUnavailable).
+			WithExplanation("The --profile flag was used without a value, which requests interactive profile selection").
+			WithExplanation("No interactive profile picker is registered in this process").
+			WithHint("Specify --profile=<name> explicitly instead of using the bare flag").
+			WithHint("Run `atmos profile list` to see all available profiles").
+			WithExitCode(2).
+			Err()
+	}
+
+	preselected := make([]string, 0, len(profiles))
+	for _, p := range profiles {
+		if p != ProfileFlagSelectValue {
+			preselected = append(preselected, p)
+		}
+	}
+
+	resolved, err := profileSelector(tempConfig, preselected)
+	if err != nil {
+		// Propagate as-is: this may be errUtils.ErrUserAborted (user cancelled the picker),
+		// errUtils.ErrInteractiveModeNotAvailable (no TTY/CI), errUtils.ErrNoOptionsAvailable
+		// (no profiles discovered), or a discovery error -- all are already well-formed,
+		// user-facing errors from the selector implementation.
+		return nil, err
+	}
+
+	// Write back to the global Viper singleton so other same-process readers of the raw
+	// --profile flag/env see the resolved names, not the sentinel, on subsequent reads.
+	viper.GetViper().Set(profileKey, resolved)
+
+	log.Debug("Interactive profile selection resolved", "preselected", preselected, "resolved", resolved)
+
+	return resolved, nil
+}
+
 // LoadConfig loads the Atmos configuration from multiple sources in order of precedence:
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
@@ -513,14 +570,28 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// rather than always the first one (cloudposse/atmos#2867).
 		tempConfig.ProfilesBasePathConfigDir = atmosConfig.ProfilesBasePathConfigDir
 
-		// Load each profile in order (left-to-right precedence).
-		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+		// Resolve the bare `--profile` interactive-selection sentinel, if present.
+		// This runs regardless of whether ProfilesFromArg came from the fallback above or
+		// was already populated by the caller (e.g. internal/exec.ProcessCommandLineArgs,
+		// cmd/describe_component.go's buildConfigAndStacksInfoFromFlags, or
+		// flags.BuildConfigAndStacksInfo), since those callers read the raw --profile flag
+		// directly and may hand LoadConfig a ProfilesFromArg that still contains the sentinel.
+		resolvedProfiles, err := resolveProfileSelectionSentinel(&tempConfig, configAndStacksInfo.ProfilesFromArg)
+		if err != nil {
 			return atmosConfig, err
 		}
+		configAndStacksInfo.ProfilesFromArg = resolvedProfiles
 
-		log.Debug("Profiles loaded successfully",
-			"profiles", configAndStacksInfo.ProfilesFromArg,
-			"count", len(configAndStacksInfo.ProfilesFromArg))
+		if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+			// Load each profile in order (left-to-right precedence).
+			if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+				return atmosConfig, err
+			}
+
+			log.Debug("Profiles loaded successfully",
+				"profiles", configAndStacksInfo.ProfilesFromArg,
+				"count", len(configAndStacksInfo.ProfilesFromArg))
+		}
 	}
 
 	// Apply the edition pin (if any) as a rollback overlay on the defaults layer.

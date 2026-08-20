@@ -158,6 +158,36 @@ func TestConditionUnmarshalYAML(t *testing.T) {
 			ctx:  Context{Status: PredicateSuccess, Answers: nil},
 			want: true,
 		},
+		{
+			name: "cel matrix map lookup",
+			yaml: "when: \"matrix.region == 'us-east-1'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Matrix: map[string]string{"region": "us-east-1", "environment": "dev"}},
+			want: true,
+		},
+		{
+			name: "cel matrix map lookup false",
+			yaml: "when: \"matrix.region == 'us-east-1'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Matrix: map[string]string{"region": "us-west-2"}},
+			want: false,
+		},
+		{
+			name: "cel matrix combined with answers",
+			yaml: "when: \"matrix.region in answers.regions_by_env[matrix.environment]\"\n",
+			ctx: Context{
+				Status: PredicateSuccess,
+				Answers: map[string]any{
+					"regions_by_env": map[string]any{"dev": []string{"us-east-1"}},
+				},
+				Matrix: map[string]string{"environment": "dev", "region": "us-east-1"},
+			},
+			want: true,
+		},
+		{
+			name: "cel matrix nil map defaults to empty",
+			yaml: "when: \"size(matrix) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Matrix: nil},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
