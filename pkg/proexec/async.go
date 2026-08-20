@@ -53,6 +53,27 @@ func SetAtmosConfig(atmosConfig *schema.AtmosConfiguration) {
 	currentAtmosConfig = atmosConfig
 }
 
+// pendingAsyncData is a caller-supplied structured Data payload for the next
+// CaptureAsync call, read and cleared by CaptureAsync itself. It exists
+// because CaptureAsync is hooked at a call site with only (cmd, err)
+// available (mirroring telemetry.CaptureCmd's signature), so a command with
+// its own structured Data (e.g. list instances, research.md Decision 23) has
+// no other way to attach it — unlike the synchronous path's caller-supplied
+// parser closure (WithExecMetadataParser, Decision 18).
+//
+//nolint:gochecknoglobals // Set immediately before the one CaptureAsync call it targets; read-and-cleared, never leaks across invocations.
+var pendingAsyncData any
+
+// SetPendingAsyncData registers a structured Data payload for the very next
+// CaptureAsync call. CaptureAsync reads and clears it immediately, so it
+// must be called only immediately before the command's own CaptureAsync
+// invocation — never left set across invocations.
+func SetPendingAsyncData(data any) {
+	defer perf.Track(nil, "proexec.SetPendingAsyncData")()
+
+	pendingAsyncData = data
+}
+
 // CaptureAsync fires a best-effort, non-blocking execution-record upload for
 // the just-completed command. It re-checks the CI+Pro gate itself (callers
 // don't need to duplicate that check), never alters err or the caller's exit
@@ -94,10 +115,16 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 
 	reportedCommand, args, flags := commandArgsAndFlags(cmd)
 
+	// Read and clear the pending structured-data hand-off (if any) so it
+	// applies to this one call only and never leaks into the next
+	// invocation's CaptureAsync call (research.md Decision 23).
+	data := pendingAsyncData
+	pendingAsyncData = nil
+
 	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
 	// so the command's process doesn't exit before the request completes,
 	// and so its outcome is always logged.
-	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode}
+	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
 	uploadErr := uploadExecMetadata(in, client, git.NewDefaultGitRepo())
 	if uploadErr != nil {
 		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", false, "error", uploadErr)

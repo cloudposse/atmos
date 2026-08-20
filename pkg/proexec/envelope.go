@@ -12,6 +12,7 @@ import (
 	io "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
@@ -89,6 +90,24 @@ func buildRecord(in *ExecRecordInput, metrics *process.ProcessMetrics, gitRepo g
 	}
 
 	return req, nil
+}
+
+// VersionedData wraps payload under key, alongside a top-level "version"
+// field, for the command-specific structured Data shapes that are a single
+// key wrapping one payload (describe affected's {stacks}, list instances'
+// {instances}). Every shape defined by this feature carries its own
+// "version" — a plain integer starting at 1, incremented independently per
+// shape — so Atmos Pro can validate/parse each command's structured data
+// according to its declared shape version (FR-005a, research.md Decision
+// 24). TerraformExecData's multi-key shape does not use this helper — it
+// adds "version" directly to its own map literal instead.
+func VersionedData(version int, key string, payload any) map[string]any {
+	defer perf.Track(nil, "proexec.VersionedData")()
+
+	return map[string]any{
+		"version": version,
+		key:       payload,
+	}
 }
 
 // maskArgs runs the existing secret-masking path over each argument.

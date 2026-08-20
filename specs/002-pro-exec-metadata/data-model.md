@@ -85,10 +85,24 @@ chunkable) — as of research.md Decision 16, both are folded into the single `D
   `UpdatedResources`, `ReplacedResources`, `DeletedResources`, `MovedResources`,
   `ImportedResources` — `action` is the source field name (`"created"`/`"updated"`/
   `"replaced"`/`"deleted"`/`"moved"`/`"imported"`), `address` is the resource address string.
+- Top-level status portion (research.md Decision 20): `has_changes` (bool), `has_errors`
+  (bool), `errors` (array of string) — decoded from `citerraform.ParseOutput`'s top-level
+  `OutputResult.HasChanges`/`HasErrors`/`Errors` fields, which the parser already computes
+  correctly but which the pre-Decision-20 mirror struct silently discarded (it only decoded
+  the nested `Data` field).
+- Top-level identity portion, single-component invocations only (research.md Decision 21):
+  `component` (string), `stack` (string) — sourced from `cmd/terraform`'s already-resolved
+  call-site data (the positional component argument, the parsed `--stack` value), not from a
+  second parse of the captured output. Omitted (not empty-string) when unknown.
+- Top-level `version` (research.md Decision 24): `1` (plain integer) — added directly to
+  `buildTerraformExecData`'s own map literal, not via the shared `proexec.VersionedData`
+  helper (that helper only fits the two single-key-wrapped shapes below).
 
-Both portions are nested together in the single `Data` value (e.g.
-`{"resource_counts": {...}, "outputs": {...}, "warnings": [...], "changes": [{"action":
-"created", "address": "aws_vpc.this"}, ...]}`), not split into two top-level fields.
+All portions are nested together in the single `Data` value (e.g.
+`{"version": 1, "resource_counts": {...}, "outputs": {...}, "warnings": [...], "changes":
+[{"action": "created", "address": "aws_vpc.this"}, ...], "has_changes": true, "has_errors":
+false, "errors": [], "component": "vpc", "stack": "plat-use2-dev"}`), not split into multiple
+top-level `Data`-sibling fields.
 
 **Population (research.md Decision 17/18)**: For a multi-component `--affected`/`--all`/query
 run, `cmd/terraform/utils.go`'s `terraformNodeHooks` populates this per-node, folding each
@@ -98,8 +112,50 @@ into the aggregate record — implemented (Decision 17). For a single-component 
 via a caller-supplied parser closure threaded in from `cmd/terraform/plan.go`/`apply.go`/
 `deploy.go` (`WithExecMetadataParser`, a new `ShellCommandOption`) — `internal/exec` never
 imports the CI plugin's parser directly, since doing so would reintroduce a confirmed import
-cycle (`pkg/ci/plugins/terraform` → `internal/exec`); planned this session (Decision 18),
-not yet implemented — see tasks.md's Phase 5 status.
+cycle (`pkg/ci/plugins/terraform` → `internal/exec`); implemented (Decision 18).
+
+**`Outputs` masking (research.md Decision 19, FR-010a)**: Each entry in `Outputs` is
+`{value, type, sensitive}`. Before `buildTerraformExecData` returns, a `maskSensitiveOutputs`
+pass replaces `value` with `pkg/io.MaskReplacement` (`"<MASKED>"`) for any entry where
+`sensitive` is `true` (or which fails to decode — treated as sensitive by default), leaving
+`type`/`sensitive` and all non-sensitive entries' `value` untouched. This is independent of,
+and runs strictly before, `pkg/proexec/envelope.go`'s existing Gitleaks-pattern masking pass
+over the whole marshaled `Data` blob — both layers always execute; the Terraform-`sensitive`
+layer exists because a sensitive-flagged value need not match any Gitleaks-recognizable
+secret pattern. The multi-component aggregation path does not currently surface `Outputs` per
+node at all (only `{action, address}` resource changes), so this masking pass applies only to
+the single-component `buildTerraformExecData` path today; any future addition of per-node
+outputs to the multi-component shape MUST reuse `maskSensitiveOutputs` rather than
+duplicating the rule.
+
+### AffectedStacksExecData (`Data` shape for `describe affected`, research.md Decision 22)
+
+`Data = proexec.VersionedData(1, "stacks", affected)`, i.e. `{"version": 1, "stacks":
+[schema.Affected, ...]}`. `affected` is the exact `[]schema.Affected` slice `describe
+affected` already computes for every invocation (rendering, and — when `--upload` fires —
+`UploadAffectedStacksRequest.Stacks`) — `executeInner` now returns it (previously discarded
+after use) so `Execute` can attach it without a second resolution pass. Each `schema.Affected`
+entry carries its own identity (`component`, `component_type`, `stack`, etc.), the reason it
+is affected, its dependents, and its settings — the same fields already sent to
+`POST /api/v1/affected-stacks`. Fields already present in the execution record's base envelope
+(`repo_url`/`repo_name`/`repo_owner`/`repo_host`, `git_sha`) are NOT duplicated here — this
+shape carries only `version` and `stacks`. Unlike `list instances` (below), `Data` is attached
+regardless of whether `--upload` was passed, since `affected` is always computed.
+
+### InstancesExecData (`Data` shape for `atmos list instances`, research.md Decision 23)
+
+`Data = proexec.VersionedData(1, "instances", req.Instances)`, i.e. `{"version": 1,
+"instances": [dtos.UploadInstance, ...]}` — present **only** when the invocation's `--upload`
+flag was passed (the `[]UploadInstance` list is not built otherwise, and this shape MUST NOT
+force that computation just to populate `Data`). Each `UploadInstance` entry carries
+`component`, `stack`, `component_type`, and `settings` — the same fields already sent to
+`POST /api/v1/instances`. Populated via a new `proexec.SetPendingAsyncData` hand-off (since
+`list instances` is not sync-allowlisted — FR-007 — and the generic async hook,
+`cmd/root.go`'s `proexec.CaptureAsync`, has no command-specific knowledge of its own): called
+inside `ExecuteListInstancesCmd`'s existing `--upload` branch, immediately after
+`req.Instances` is built; read and cleared by `CaptureAsync` when it assembles that
+invocation's `ExecRecordInput`, so a value never leaks into a later invocation within the same
+process.
 
 ### ExecUploadResponse
 
@@ -116,8 +172,9 @@ not yet implemented — see tasks.md's Phase 5 status.
 | `terraform plan` | Sync | Warn-and-continue (does not fail the plan) | `TerraformOutputData` |
 | `terraform apply` | Sync | Warn-and-continue (does not fail the apply) | `TerraformOutputData` |
 | `terraform deploy` | Sync | Warn-and-continue (does not fail the deploy) | `TerraformOutputData` |
-| `describe affected` | Sync | Warn-and-continue | `nil` |
-| All other commands | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `nil` |
+| `describe affected` | Sync | Warn-and-continue | `AffectedStacksExecData` — unconditional (research.md Decision 22) |
+| `atmos list instances` (`--upload` passed) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `InstancesExecData` — via `SetPendingAsyncData` (research.md Decision 23) |
+| All other commands (incl. `list instances` without `--upload`) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `nil` |
 
 The specific fail-vs-warn choice per synchronous command (FR-008) defaults to
 **warn-and-continue** for all four sync commands — a delivery outage must never turn
@@ -157,6 +214,8 @@ multi-component `Data` is large enough to exceed the 4 MB threshold.
 | Async flush ceiling | `CaptureAsync` MUST bound its wait — across both the `/exec/data` upload (if required) and the main `/exec` call combined — to a fixed 2 seconds, not configurable (FR-011a); if the sequence can't complete in time, the record is dropped silently (FR-009a) |
 | Correlation ID | `AtmosProRunID` MUST be sourced identically to `internal/exec/pro.go: uploadStatus` (`os.Getenv("ATMOS_PRO_RUN_ID")`) for consistency across both upload paths |
 | ExecutionID | MUST be a fresh UUID v4 (`uuid.New().String()`) generated once per invocation inside `buildRecord`; MUST be reused (not regenerated) across `doWithRetry` retry attempts for the same invocation's request(s); MUST be sent as `execution_id` on `ExecDataUploadRequest` when that upload is required, so Atmos Pro can associate the blob with the corresponding `ExecutionRecord` |
+| `Data.version` | Every structured `Data` shape MUST include its own top-level `version` field (plain integer, starting at `1`, independent per shape — FR-005a, research.md Decision 24). The outer `ExecutionRecord`/`ExecDataUploadRequest` envelope is NOT versioned |
+| Pending async data | `proexec.SetPendingAsyncData` MUST be cleared by `CaptureAsync` on read (`data := pendingAsyncData; pendingAsyncData = nil`), never left for the caller to clear — a value set by one invocation MUST NOT leak into a later invocation's `ExecRecordInput.Data` within the same process (research.md Decision 23) |
 
 ---
 

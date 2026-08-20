@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -408,17 +409,35 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 						"invol_ctx_switches": matchers.Like(5),
 					},
 					"data": body{
+						"version": 1,
 						"resource_counts": body{
 							"create":  matchers.Like(2),
 							"change":  matchers.Like(1),
 							"replace": matchers.Like(0),
 							"destroy": matchers.Like(0),
 						},
+						"outputs": body{
+							"bucket_arn": body{
+								"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
+								"type":      matchers.Like("string"),
+								"sensitive": matchers.Like(false),
+							},
+							"secret_key": body{
+								"value":     iolib.MaskReplacement,
+								"type":      matchers.Like("string"),
+								"sensitive": matchers.Like(true),
+							},
+						},
 						"warnings": matchers.EachLike("deprecated argument used", 1),
 						"changes": matchers.EachLike(body{
 							"action":  matchers.Like("created"),
 							"address": matchers.Like("aws_s3_bucket.example"),
 						}, 1),
+						"has_changes": matchers.Like(true),
+						"has_errors":  matchers.Like(false),
+						"errors":      []interface{}{},
+						"component":   matchers.Like("vpc"),
+						"stack":       matchers.Like("plat-use2-dev"),
 					},
 				})
 		}).
@@ -430,16 +449,26 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 		ExecuteTest(t, func(config consumer.MockServerConfig) error {
 			client := newPactClient(config)
 			data, err := json.Marshal(map[string]any{
+				"version": 1,
 				"resource_counts": map[string]any{
 					"create":  2,
 					"change":  1,
 					"replace": 0,
 					"destroy": 0,
 				},
+				"outputs": map[string]any{
+					"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
+					"secret_key": map[string]any{"value": iolib.MaskReplacement, "type": "string", "sensitive": true},
+				},
 				"warnings": []string{"deprecated argument used"},
 				"changes": []map[string]any{
 					{"action": "created", "address": "aws_s3_bucket.example"},
 				},
+				"has_changes": true,
+				"has_errors":  false,
+				"errors":      []string{},
+				"component":   "vpc",
+				"stack":       "plat-use2-dev",
 			})
 			if err != nil {
 				return err
@@ -569,10 +598,14 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 				JSONBody(body{
 					"execution_id": matchers.Like(executionID),
 					"data": body{
+						"version": 1,
 						"changes": matchers.EachLike(body{
 							"action":  matchers.Like("created"),
 							"address": matchers.Like("aws_s3_bucket.example"),
 						}, 1),
+						"has_changes": matchers.Like(true),
+						"has_errors":  matchers.Like(false),
+						"errors":      []interface{}{},
 					},
 				})
 		}).
@@ -621,9 +654,13 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 			client.MaxPayloadBytes = 1 // Forces the out-of-band path regardless of envelope size.
 
 			data, err := json.Marshal(map[string]any{
+				"version": 1,
 				"changes": []map[string]any{
 					{"action": "created", "address": "aws_s3_bucket.example"},
 				},
+				"has_changes": true,
+				"has_errors":  false,
+				"errors":      []string{},
 			})
 			if err != nil {
 				return err
@@ -634,6 +671,386 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 				Command:     "atmos terraform plan",
 				Args:        []string{},
 				Flags:       []string{},
+				ExitCode:    0,
+				Data:        data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_DescribeAffected verifies the consumer
+// contract for POST /api/v1/atmos/exec carrying `describe affected`'s
+// structured Data shape (`{version, stacks}` — FR-006b, research.md Decision
+// 22, contracts/interactions.md interaction 12), inline mode.
+func TestPact_UploadExecMetadata_DescribeAffected(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload describe-affected execution metadata with inline data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like("e6e4b5e3-4567-4d4e-bf4a-4567890abcde"),
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("describe affected"),
+					"args":             []interface{}{},
+					"flags":            []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(900),
+						"user_cpu_time_ms":   matchers.Like(400),
+						"system_cpu_time_ms": matchers.Like(80),
+					},
+					"data": body{
+						"version": 1,
+						"stacks": matchers.EachLike(body{
+							"component":              matchers.Like("vpc"),
+							"stack":                  matchers.Like("plat-use2-dev"),
+							"component_type":         matchers.Like("terraform"),
+							"component_path":         matchers.Like(""),
+							"stack_slug":             matchers.Like(""),
+							"affected":               matchers.Like("component"),
+							"affected_all":           nil,
+							"dependents":             []interface{}{},
+							"included_in_dependents": matchers.Like(false),
+							"settings":               nil,
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"stacks": []schema.Affected{
+					{Component: "vpc", ComponentType: "terraform", Stack: "plat-use2-dev", Affected: "component", Dependents: []schema.Dependent{}},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "e6e4b5e3-4567-4d4e-bf4a-4567890abcde",
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "describe affected",
+				Args:          []string{},
+				Flags:         []string{},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      900,
+					UserCPUTimeMS:   400,
+					SystemCPUTimeMS: 80,
+				},
+				Data: data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_DescribeAffected_BlobURL verifies the
+// consumer contract for the out-of-band delivery path carrying
+// `describe affected`'s structured Data shape (contracts/interactions.md
+// interactions 13/14), constructed directly rather than routed through the
+// real size-threshold decision code (research.md Decision 25).
+func TestPact_UploadExecMetadata_DescribeAffected_BlobURL(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	const executionID = "f7f5c6f4-5678-4e5f-cf5b-567890abcdef"
+	const blobURL = "https://blob.vercel-storage.com/atmos-exec/f7f5c6f4/data.json"
+
+	mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload describe-affected out-of-band command-execution structured data").
+		WithRequest("POST", "/api/v1/atmos/exec/data", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id": matchers.Like(executionID),
+					"data": body{
+						"version": 1,
+						"stacks": matchers.EachLike(body{
+							"component":              matchers.Like("vpc"),
+							"stack":                  matchers.Like("plat-use2-dev"),
+							"component_type":         matchers.Like("terraform"),
+							"component_path":         matchers.Like(""),
+							"stack_slug":             matchers.Like(""),
+							"affected":               matchers.Like("component"),
+							"affected_all":           nil,
+							"dependents":             []interface{}{},
+							"included_in_dependents": matchers.Like(false),
+							"settings":               nil,
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+				"url":     matchers.Like(blobURL),
+			})
+		})
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload describe-affected execution metadata with out-of-band data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like(executionID),
+					"atmos_pro_run_id": matchers.Like(""),
+					"atmos_version":    matchers.Like(""),
+					"atmos_os":         matchers.Like(""),
+					"atmos_arch":       matchers.Like(""),
+					"command":          matchers.Like("describe affected"),
+					"args":             []interface{}{},
+					"flags":            []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like(""),
+					"repo_url":         matchers.Like(""),
+					"repo_name":        matchers.Like(""),
+					"repo_owner":       matchers.Like(""),
+					"repo_host":        matchers.Like(""),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(0),
+						"user_cpu_time_ms":   matchers.Like(0),
+						"system_cpu_time_ms": matchers.Like(0),
+					},
+					"data": matchers.Like(blobURL),
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{"success": matchers.Like(true)})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			client.MaxPayloadBytes = 1 // Forces the out-of-band path regardless of envelope size.
+
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"stacks": []schema.Affected{
+					{Component: "vpc", ComponentType: "terraform", Stack: "plat-use2-dev", Affected: "component", Dependents: []schema.Dependent{}},
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID: executionID,
+				Command:     "describe affected",
+				Args:        []string{},
+				Flags:       []string{},
+				ExitCode:    0,
+				Data:        data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_ListInstances verifies the consumer contract
+// for POST /api/v1/atmos/exec carrying `list instances`' structured Data
+// shape (`{version, instances}` — FR-006c, research.md Decision 23,
+// contracts/interactions.md interaction 15), inline mode. This shape is only
+// ever present when `--upload` was passed for the invocation.
+func TestPact_UploadExecMetadata_ListInstances(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload list-instances execution metadata with inline data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like("a8a6d7a5-6789-4f6a-df6c-67890abcdef0"),
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("list instances"),
+					"args":             []interface{}{},
+					"flags":            matchers.EachLike("--upload", 1),
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(600),
+						"user_cpu_time_ms":   matchers.Like(250),
+						"system_cpu_time_ms": matchers.Like(50),
+					},
+					"data": body{
+						"version": 1,
+						"instances": matchers.EachLike(body{
+							"component":      matchers.Like("vpc"),
+							"stack":          matchers.Like("plat-use2-dev"),
+							"component_type": matchers.Like("terraform"),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"instances": []dtos.UploadInstance{
+					{Component: "vpc", Stack: "plat-use2-dev", ComponentType: "terraform"},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "a8a6d7a5-6789-4f6a-df6c-67890abcdef0",
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "list instances",
+				Args:          []string{},
+				Flags:         []string{"--upload"},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      600,
+					UserCPUTimeMS:   250,
+					SystemCPUTimeMS: 50,
+				},
+				Data: data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_ListInstances_BlobURL verifies the consumer
+// contract for the out-of-band delivery path carrying `list instances`'
+// structured Data shape (contracts/interactions.md interaction 15's
+// blob-URL sub-case, paired with its own UploadExecData interaction),
+// constructed directly rather than routed through the real size-threshold
+// decision code (research.md Decision 25).
+func TestPact_UploadExecMetadata_ListInstances_BlobURL(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	const executionID = "b9b7e8b6-789a-4a7b-ea7d-7890abcdef01"
+	const blobURL = "https://blob.vercel-storage.com/atmos-exec/b9b7e8b6/data.json"
+
+	mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload list-instances out-of-band command-execution structured data").
+		WithRequest("POST", "/api/v1/atmos/exec/data", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id": matchers.Like(executionID),
+					"data": body{
+						"version": 1,
+						"instances": matchers.EachLike(body{
+							"component":      matchers.Like("vpc"),
+							"stack":          matchers.Like("plat-use2-dev"),
+							"component_type": matchers.Like("terraform"),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+				"url":     matchers.Like(blobURL),
+			})
+		})
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload list-instances execution metadata with out-of-band data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like(executionID),
+					"atmos_pro_run_id": matchers.Like(""),
+					"atmos_version":    matchers.Like(""),
+					"atmos_os":         matchers.Like(""),
+					"atmos_arch":       matchers.Like(""),
+					"command":          matchers.Like("list instances"),
+					"args":             []interface{}{},
+					"flags":            matchers.EachLike("--upload", 1),
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like(""),
+					"repo_url":         matchers.Like(""),
+					"repo_name":        matchers.Like(""),
+					"repo_owner":       matchers.Like(""),
+					"repo_host":        matchers.Like(""),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(0),
+						"user_cpu_time_ms":   matchers.Like(0),
+						"system_cpu_time_ms": matchers.Like(0),
+					},
+					"data": matchers.Like(blobURL),
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{"success": matchers.Like(true)})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			client.MaxPayloadBytes = 1 // Forces the out-of-band path regardless of envelope size.
+
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"instances": []dtos.UploadInstance{
+					{Component: "vpc", Stack: "plat-use2-dev", ComponentType: "terraform"},
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID: executionID,
+				Command:     "list instances",
+				Args:        []string{},
+				Flags:       []string{"--upload"},
 				ExitCode:    0,
 				Data:        data,
 			})

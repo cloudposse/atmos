@@ -745,8 +745,338 @@ have one true without the other.
 
 ---
 
+## Decision 19: Dual independent output masking — Terraform `sensitive` flag, then Gitleaks
+
+**Decision**: `cmd/terraform/utils.go` gains a new pure helper,
+`maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any`, called from
+`buildTerraformExecData` in place of the current `"outputs": data.Outputs` pass-through. For
+each entry, it decodes the `json.RawMessage` into the existing `{Value, Type, Sensitive}`
+shape (mirroring `plugin.TerraformOutput`'s fields, same as the rest of
+`terraformOutputDataMirror`'s decoding), and returns a `map[string]any` where a `Sensitive:
+true` entry's `Value` is replaced with `pkg/io.MaskReplacement` (`"<MASKED>"`) and every other
+field/entry passes through unchanged. This is layer 1. Layer 2 — `pkg/proexec/envelope.go`'s
+already-shipped `maskedDataJSON`, which runs Gitleaks-pattern masking (`io.MaskString`) over
+the whole marshaled `Data` blob — is untouched and continues to run afterward, unconditionally,
+over the already-layer-1-masked structure. Both layers always execute; neither is
+conditional on the other having (or not having) already redacted the same value.
+
+**Rationale**: The 2026-08-20 `/speckit-clarify` session confirmed a real gap: layer 2's
+Gitleaks-style masking is pattern-based (it matches known secret *shapes* — API keys, tokens,
+credentials), while Terraform's own `sensitive` output flag is a *metadata* marker with no
+required relationship to content shape — an output can be marked sensitive (e.g. an internal
+database ID, a customer name) without its value ever matching a Gitleaks pattern, and would
+therefore ship in plaintext under layer 2 alone. Reading the actual current implementation
+(`cmd/terraform/utils.go:697`, `"outputs": data.Outputs`) confirmed this is not hypothetical:
+today, `Sensitive: true` outputs are forwarded completely unmasked into the structured `Data`
+payload; only the outer Gitleaks pass has any chance of catching them, and only if the value
+happens to match a pattern. This is the exact scenario the PR referenced in the clarify
+session's context (`extractOutputValues`, "Sensitive outputs are replaced with `<MASKED>` to
+prevent secret leakage") was pointing at.
+
+The referenced PR's own `extractOutputValues` flattens each output down to a bare
+`map[string]any{key: value_or_MASKED}`, discarding `type`/`sensitive` from the wire payload
+entirely. This plan deliberately does **not** copy that flattening: `contracts/
+interactions.md` already documents (and the shipped Pact contract already encodes) the
+per-output shape as `{value, type, sensitive}` — an object, not a bare scalar — and Atmos Pro
+may already rely on being able to tell "this value is a masked placeholder because `sensitive`
+is true" apart from "this value is genuinely the literal string `<MASKED>`" via the
+still-present `sensitive` field. Changing the wire shape now would be a breaking contract
+change with no functional benefit over keeping the field and only substituting its `value`.
+Reusing `pkg/io.MaskReplacement` (rather than a locally-defined `"<MASKED>"` string literal,
+which is what the referenced PR uses) keeps both masking layers visibly producing the same
+placeholder if they ever redact the same value, and keeps the literal defined in exactly one
+place (`pkg/io/masker.go`) — consistent with the existing `settings.terminal.mask.replacement`
+override already respected by `pkg/io`'s general masking path (`newMasker`), though this
+narrow helper does not currently thread that override through (see Alternatives).
+
+**Fail-safe default for malformed entries**: if a given output's `json.RawMessage` fails to
+decode into the expected shape, `maskSensitiveOutputs` treats it as sensitive (masks it)
+rather than forwarding the raw, undecoded bytes — consistent with FR-010's existing
+"exclude/mask on doubt" posture; an undecodable entry is exactly the kind of ambiguous case
+that policy already covers.
+
+**Alternatives considered**:
+- Flatten `outputs` to match the referenced PR's `map[string]any{key: value}` shape exactly —
+  rejected: breaking change to an already-shipped, already-contracted wire shape for no
+  functional gain (see Rationale above).
+- Rely on layer 2 (Gitleaks) alone, treating the referenced PR's `extractOutputValues` pattern
+  as unnecessary since "the existing masking already covers secrets" — rejected: this is
+  precisely the assumption the 2026-08-20 clarification session tested and rejected (`answer:
+  "Both, applied independently"`); Gitleaks masking is pattern-based and provably does not
+  cover a sensitive-flagged value with no recognizable secret shape.
+- Thread `Settings.Terminal.Mask.Replacement` (the user-configurable override already
+  respected by `pkg/io`'s general masker) into `maskSensitiveOutputs` instead of using the
+  `MaskReplacement` constant directly — deferred, not rejected outright: doing so would
+  require plumbing `*schema.AtmosConfiguration` into `buildTerraformExecData`, which currently
+  takes only `(subCommand, output string)` and is called from a closure
+  (`terraformExecMetadataParserFunc`) with no config in scope at that point in the call chain.
+  Out of scope for this narrow fix; the constant default is correct today since FR-010a's own
+  clarification only specifies "a fixed placeholder," not a configurable one, and threading
+  config through is a larger, separate change if ever needed.
+
+---
+
+## Decision 20: `has_changes`/`has_errors`/`errors` — decode the discarded top-level `OutputResult` fields
+
+**Decision**: `terraformOutputResultMirror` (`cmd/terraform/utils.go`) is extended with three
+new fields — `HasChanges bool`, `HasErrors bool`, `Errors []string` — decoded via the same
+JSON round-trip already used for `Data`, since `citerraform.ParseOutput`'s actual return type
+(`plugin.OutputResult`) already carries all three at the top level (alongside `Data any`).
+`parseTerraformOutputMirror` returns the fuller struct; `buildTerraformExecData` surfaces
+`has_changes`/`has_errors`/`errors` as new top-level keys in its returned map, alongside the
+existing `resource_counts`/`outputs`/`warnings`/`changes`.
+
+**Rationale**: FR-006 already required "warnings/errors" in the structured payload before
+this session — the 2026-08-20 clarification confirmed the gap was real, not just missing
+spec text: `terraformOutputResultMirror`'s JSON tags (`json:"Data"` only) mean
+`json.Unmarshal` silently drops `HasChanges`/`HasErrors`/`Errors` from the marshaled
+`OutputResult`, even though the parser itself already computes them correctly (per
+`pkg/ci/plugins/terraform/parser.go`'s `result.HasErrors`/`result.Errors` assignments,
+confirmed present for both the plan and apply/deploy parse paths). This is a pure decode-gap
+fix — no new parsing logic, no new call to the CI plugin parser (already called once per
+invocation, per Decision 18's "at most once" constraint, which this delta does not relax).
+
+**Alternatives considered**:
+- Compute `has_changes`/`has_errors` on the Atmos side by inspecting `changes`/`warnings`
+  after the fact (e.g. `has_changes = len(changes) > 0`) instead of decoding the parser's own
+  flags — rejected: `HasErrors`/`Errors` are not fully derivable this way (e.g. a
+  `terraform plan` that errors before producing any resource-change data would show
+  `len(changes) == 0` either way, indistinguishable from "no changes" without the parser's own
+  error signal); reusing the parser's already-correct computation is strictly more accurate
+  and avoids a second, potentially-drifting derivation of the same fact.
+
+## Decision 21: `component`/`stack` — threaded from `cmd/terraform`'s already-resolved call-site data
+
+**Decision**: `buildTerraformExecData` gains two new string parameters, `component` and
+`stack`, threaded through `terraformExecMetadataParserFunc` and `terraformCaptureShellOpts`
+from `cmd/terraform/plan.go`/`apply.go`/`deploy.go`'s `RunE`, where `args[0]` (the positional
+component identifier) and the already-parsed `--stack`/`-s` flag value are already available
+before `terraformCaptureShellOpts` is called. When non-empty, `buildTerraformExecData` adds
+`component`/`stack` as new top-level keys in its returned map; when either is empty (should
+not occur on the single-component-only path this delta covers), the corresponding key is
+omitted entirely rather than emitted as an empty string.
+
+**Rationale**: Today a single-component invocation's structured `Data` carries no identity of
+its own — a consumer must infer `component`/`stack` from the base envelope's `Args[0]`/the
+`--stack` value buried in `Flags` (itself only reliable since the FR-003b fix landed). Adding
+first-class `component`/`stack` fields directly to the structured payload removes that
+inference requirement entirely and mirrors what the multi-component aggregation path already
+does per-node (`execNodeResult.Component`/`.Stack`, `cmd/terraform/utils.go:535-536`) — this
+delta brings the single-component path to parity with an identity pattern the multi-component
+path already established, rather than inventing a new one.
+
+Sourcing `component`/`stack` from `cmd/terraform`'s call site (not `internal/exec`'s later-
+resolved `schema.ConfigAndStacksInfo`) was the only option considered that doesn't reopen
+Decision 18's import-cycle problem: `internal/exec` still never imports the CI plugin parser
+or gains new coupling to `cmd/terraform`'s internals — it only receives already-computed
+strings via the existing closure mechanism, exactly as `subCommand` already is.
+
+**Alternatives considered**:
+- Resolve `component`/`stack` inside `internal/exec/terraform.go`'s `captureExecMetadataSync`
+  from `info.Component`/`info.Stack` (the `schema.ConfigAndStacksInfo` already available
+  there) and pass them into the parser closure as arguments, rather than threading them from
+  `cmd/terraform` — rejected: `info.Component`/`info.Stack` are shaped by `internal/exec`'s
+  own field naming/lifecycle, and passing that context into a `cmd/terraform`-defined closure
+  argument would create an implicit, easy-to-break coupling between the two packages' data
+  models where a plain, pre-resolved string pair (matching `subCommand`'s existing style) is
+  simpler and requires no shared type.
+- Emit `component`/`stack` as empty strings rather than omitting the keys when unknown —
+  rejected: an empty string is ambiguous with "the component/stack genuinely has an empty
+  name" (impossible in practice, but inconsistent with this feature's existing `omitempty`
+  convention for "field legitimately absent," e.g. `ResourceUsageMetrics`'s platform-specific
+  fields); omission is the clearer signal.
+
+---
+
+## Decision 22: `describe affected` structured data — return the already-computed `[]schema.Affected`, don't recompute
+
+**Decision**: `internal/exec/describe_affected.go`'s `executeInner(a *DescribeAffectedCmdArgs)
+error` becomes `executeInner(a *DescribeAffectedCmdArgs) ([]schema.Affected, error)`, returning
+the same `affected []schema.Affected` slice it already computes internally for every
+invocation (rendering, and — inside the existing `if args.Upload` branch — the
+`UploadAffectedStacksRequest.Stacks` field, `describe_affected.go:595-602`). `Execute`
+(`describe_affected.go:364-385`), which currently hardcodes `Data` to nothing on its
+`ExecRecordInput` (its own doc comment: "Data is passed as nil — describe affected has no
+defined structured-data extension"), captures this new return value and passes
+`Data: proexec.VersionedData(1, "stacks", affected)` instead.
+
+**Rationale**: FR-006b (2026-08-20 clarification) requires `describe affected`'s structured
+data to reuse the same per-stack data already sent to `POST /api/v1/affected-stacks` — and
+reading the actual code confirms `affected` is already computed unconditionally (it's the
+list the command renders to the user), not only when `--upload` fires. Returning it from
+`executeInner` costs nothing beyond widening one function's return type; the only alternative
+that would avoid a signature change (recomputing `affected` a second time inside `Execute`)
+was rejected outright as both wasteful and risky — a second resolution pass could theoretically
+produce a different answer under non-deterministic conditions (e.g. a concurrent git state
+change between calls), silently making the execution record's `Data` disagree with what was
+actually shown to the user or uploaded to `/affected-stacks`.
+
+**No `--upload` gating**: unlike `list instances` (Decision 23), `describe affected`'s `Data`
+is attached regardless of whether `--upload` was passed, because the underlying list is always
+computed — there is no "extra cost avoided by gating" the way there is for `list instances`'
+`[]UploadInstance` list, which genuinely is not built unless `--upload` triggers it. This
+asymmetry between the two commands is intentional and follows directly from each command's own
+existing compute-cost profile, not an inconsistency introduced by this feature.
+
+**Alternatives considered**:
+- Store `affected` on the `describeAffectedExec` receiver (`d.lastAffected` or similar, mirroring
+  `cmd/terraform/plan.go`'s package-level `capturedPlanOutput` pattern) instead of widening
+  `executeInner`'s return signature — rejected: a receiver/package-level field introduces
+  cross-call mutable state for a value that has an obvious, direct call-path relationship
+  (`executeInner` computes it, `Execute` calls `executeInner` once and immediately needs the
+  result) — a return value is strictly simpler and requires no "reset before next test" concern,
+  unlike the package-level globals this feature already carries for other reasons (`async.go`'s
+  `currentAtmosConfig`, `plan.go`'s `capturedPlanOutput`), which exist only because their
+  producer and consumer are NOT in a direct call relationship.
+- Gate `describe affected`'s `Data` on `--upload`, mirroring `list instances` — rejected: would
+  needlessly withhold data from Atmos Pro that costs nothing extra to include, and FR-006b's
+  own wording ("reusing the same per-stack data already reported...") doesn't condition it on
+  `--upload` the way FR-006c explicitly does for `list instances`.
+
+## Decision 23: `list instances` structured data — `SetPendingAsyncData`, a minimal hand-off to the generic async hook
+
+**Decision**: `pkg/proexec/async.go` gains a new unexported package-level var,
+`pendingAsyncData any`, plus an exported setter, `SetPendingAsyncData(data any)`, mirroring the
+file's existing `SetAtmosConfig(atmosConfig *schema.AtmosConfiguration)` /
+`currentAtmosConfig` pair exactly (same file, same "hook called at a `(cmd, err)`-only call
+site needs data only available earlier, in a different package" rationale).
+`CaptureAsync(cmd, err)` (`async.go:63`), when building its `ExecRecordInput`, reads
+`pendingAsyncData` and immediately clears it (`data := pendingAsyncData; pendingAsyncData =
+nil`) rather than leaving it for a caller to clear — so a value set by one invocation can never
+leak into a later one within the same process. `pkg/list/list_instances.go`'s
+`ExecuteListInstancesCmd`, inside its existing `if opts.Upload { ... }` branch (confirmed via
+`list_instances.go`'s `--upload` gating around line 774+, `InstancesUploadRequest`/`req.Instances`
+construction around line 544), calls
+`proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))` once the
+list is already built for `UploadInstances` — never outside that branch, so a plain
+`atmos list instances` (no `--upload`) triggers zero extra computation.
+
+**Rationale**: `list instances` has no exec-metadata wiring at all today (confirmed: no
+`proexec` import in `pkg/list/list_instances.go`) — it relies entirely on the generic async
+default path, `cmd/root.go`'s `proexec.CaptureAsync(cmd, err)`, which is deliberately
+command-agnostic (it only ever sees a `*cobra.Command` and an `error`, per
+`commandArgsAndFlags`) and so always builds `Data: nil`. FR-006c requires `list instances` to
+attach its own `Data`, gated on `--upload` — but there is no existing mechanism for a
+non-sync-allowlisted command to hand data to that generic hook. `SetPendingAsyncData` is the
+smallest addition that closes this gap: it reuses an already-proven pattern in the exact same
+file (`currentAtmosConfig`) rather than introducing a new one (e.g. a `context.Context` value
+threaded through Cobra's command tree, or a `cmd.Annotations` string-only side-channel that
+can't hold a typed `any` payload cleanly).
+
+**Alternatives considered**:
+- Have `list_instances.go` call a `proexec` capture function directly, bypassing the generic
+  `CaptureAsync(cmd, err)` hook entirely for this command (the same shape as `describe
+  affected`'s direct `CaptureSync` call) — rejected: `list instances` is NOT on the synchronous
+  allowlist (FR-007) and must still go through the async 2-second bounded-flush timing rule
+  (FR-009) that `CaptureAsync` already implements; duplicating that timing logic at a second
+  call site (or extracting it into a shared helper just for two callers) is more machinery than
+  a single package-level hand-off, and risks the two async call sites' timing behavior drifting
+  apart the same way `IsSyncCommand` was introduced (Decision 10) specifically to prevent for
+  sync/async classification.
+- A `context.Context` value passed from `list_instances.go` down to `cmd/root.go`'s
+  `CaptureAsync` call — rejected: `CaptureAsync(cmd, err)`'s signature only has the `*cobra
+  .Command`, not a request-scoped `context.Context`; wiring one through would touch more of the
+  call chain than the package-level var, and CLAUDE.md's Context Usage rules reserve
+  `context.Context` for cancellation/deadlines/request-scoped tracing IDs, not for passing this
+  kind of producer-to-consumer payload (that's what the Options-pattern/DI guidance is for,
+  and neither fits a `(cmd, err)`-shaped hook cleanly — a plain setter does).
+- Read `req.Instances` back out of `cmd`'s flags/state inside `CaptureAsync` itself (parsing
+  `--upload`'s effect after the fact) — rejected: `CaptureAsync` has no access to the
+  already-built `[]UploadInstance` list (it isn't stored anywhere reachable from `cmd`), and
+  reconstructing it a second time would duplicate `list_instances.go`'s own list-building logic
+  for no benefit over the producer just handing over what it already built.
+
+## Decision 24: `version` field — `VersionedData` helper for the two matching shapes, direct literal for the one that doesn't
+
+**Decision**: `pkg/proexec` gains `VersionedData(version int, key string, payload any)
+map[string]any`, returning `map[string]any{"version": version, key: payload}`. `describe
+affected` (Decision 22) and `list instances` (Decision 23) both use it —
+`VersionedData(1, "stacks", affected)` and `VersionedData(1, "instances", req.Instances)`
+respectively — since both shapes are genuinely identical in structure: one `version` field
+plus exactly one array wrapped under one key. `cmd/terraform/utils.go`'s
+`buildTerraformExecData` does **not** use `VersionedData`: its shape has multiple top-level
+keys (`resource_counts`, `outputs`, `warnings`, `changes`, `has_changes`, `has_errors`,
+`errors`, and conditionally `component`/`stack` — research.md Decisions 19-21), not one
+wrapped payload, so it simply adds `"version": 1` as one more key in its own existing
+`map[string]any{...}` literal.
+
+**Rationale**: FR-005a requires every one of the three structured-`Data` shapes to carry its
+own `version` field, starting at `1`, independent per shape. Three hand-written
+`map[string]any{"version": 1, ...}` literals would work, but two of the three
+(`describe affected`, `list instances`) are byte-for-byte the same shape modulo the wrapped
+key name — exactly the kind of duplication the constitution's "three similar lines is
+acceptable; a premature abstraction is not" guidance is calibrated against, tipping toward "one
+small helper" once there are two *genuinely identical* call sites, not merely superficially
+similar ones. Forcing `TerraformExecData`'s structurally different shape through the same
+helper (e.g. by giving `VersionedData` a variadic/merge-style signature so it could inject
+`version` into an arbitrary pre-built map) was considered and rejected — see Alternatives.
+
+**Alternatives considered**:
+- A more general `VersionedData(version int, extra map[string]any) map[string]any` that merges
+  `version` into an arbitrary pre-built map, usable by all three call sites uniformly —
+  rejected: `buildTerraformExecData` already assembles its full map in one literal; forcing it
+  to build the map first, then call a merge function, adds a layer of indirection for zero
+  benefit over adding one more key to the literal directly, and a merge-style signature is
+  strictly more general (and more error-prone — e.g. a case-sensitive key collision) than this
+  feature actually needs for its one non-conforming caller.
+- Three independent literals, no shared helper at all — rejected only for the two genuinely
+  identical call sites (`describe affected`/`list instances`); accepted for
+  `buildTerraformExecData`, where it's the correct choice (see Decision text above) rather than
+  a rejected alternative.
+- Naming the field `schema_version` or `data_version` instead of `version` — rejected: the
+  2026-08-20 clarification's own answer used the bare term `version`, and no other field in any
+  of this feature's shapes uses a compound `_version` suffix that would create a naming
+  precedent to follow instead.
+
+## Decision 25: Pact coverage — 6 interactions (3 shapes × 2 delivery modes), constructed directly
+
+**Decision**: The Pact consumer suite (`pkg/pro/consumer_pact_test.go`) gains dedicated
+inline-mode and blob-URL-mode interaction pairs for each of the two new structured-`Data`
+shapes (`describe affected`'s `{version, stacks}`, `list instances`' `{version, instances}`),
+alongside the existing terraform pair (interactions 9/10) and the shared `/exec/data` blob
+interaction (11) — six interactions total covering `Data` delivery, up from the existing
+three. Each new pair is constructed directly: one interaction with `data` inline (a small,
+representative `stacks`/`instances` array), one with `data` as a URL string paired with its own
+`/exec/data` blob-upload interaction reusing the same request/response shape as interaction 11
+— neither pair is produced by lowering `Settings.Pro.MaxPayloadBytes` and routing a fixture
+through the real size-threshold decision code (`pkg/proexec`'s inline-vs-blob-URL check);
+that logic continues to be covered by non-Pact unit tests (`pkg/proexec/*_test.go`), per the
+2026-08-20 clarification's explicit answer.
+
+**Rationale**: FR-013/the Assumptions section (as amended 2026-08-20) requires per-shape
+coverage, not one representative example standing in for all three — each shape has distinct
+fields (`stacks[*]` is a `schema.Affected`, `instances[*]` is a `dtos.UploadInstance`, neither
+resembling `TerraformExecData`'s fields), so a consumer contract that only demonstrated the
+terraform shape would leave Atmos Pro's provider implementation unable to validate/parse the
+other two shapes from the contract artifact alone (violating SC-006's "without reading Atmos's
+Go source code" bar for the two new shapes). Constructing the interactions directly (not via
+the real threshold logic) keeps the new Pact cases fast and deterministic — a Pact interaction
+asserts a request/response *shape*, not the code path that decided to produce that shape;
+that decision is already unit-tested with a real threshold (the seventh re-plan's Testing
+section already listed `pkg/proexec`-level threshold tests, unaffected by this decision).
+
+**Alternatives considered**:
+- One representative shape (terraform's) demonstrating both delivery modes, with the two new
+  shapes covered only in inline mode (on the theory that "the blob-URL wire shape is identical
+  regardless of which command's data is inside it") — rejected: explicitly rejected by the
+  2026-08-20 clarification's own wording ("not only for one representative command"); the
+  wire-shape argument is true for the *envelope* (`data` as a URL string looks the same
+  regardless of payload), but the contract's job is to let Atmos Pro validate each shape's own
+  fields, which only the inline-mode interaction actually exercises per shape — so skipping
+  blob-URL mode for two of three shapes would still leave a real (if narrow) coverage gap for
+  "does the blob-URL variant's `execution_id` pairing behave identically for this shape," even
+  if unlikely to differ in practice.
+- Route each new shape's blob-URL case through the real threshold check with an artificially
+  small `MaxPayloadBytes`, matching quickstart.md's manual-verification pattern — rejected by
+  the clarification answer itself; a Pact consumer test's job is contract-shape verification,
+  and coupling it to the actual threshold-decision code path would make these tests brittle
+  against unrelated changes to that logic and slower to write/maintain for a benefit (exercising
+  the real decision) already delivered by the separate unit tests.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,
-2026-08-18, 2026-08-19 — three separate sessions that day) before planning began. No NEEDS
+2026-08-18, 2026-08-19, 2026-08-20 — four separate sessions) before planning began. No NEEDS
 CLARIFICATION markers remain in this plan or the spec.

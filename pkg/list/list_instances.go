@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -540,6 +541,14 @@ func uploadInstancesWithDeps(
 		RepoHost:  repoInfo.RepoHost,
 		Instances: uploadInstances,
 	}
+
+	// Attach the same instance list to this command's exec-metadata
+	// execution record, so Atmos Pro gets it without a separate lookup
+	// against POST /api/v1/instances (FR-006c, research.md Decision 23).
+	// This only fires here, inside the --upload branch — a plain
+	// `list instances` (no --upload) never computes uploadInstances at all,
+	// so it never reaches this call.
+	proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))
 
 	err = apiClient.UploadInstances(&req)
 	if err != nil {

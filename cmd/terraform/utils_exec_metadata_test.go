@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -70,16 +71,17 @@ func TestParseTerraformResourceChanges_NonTerraformSubcommand(t *testing.T) {
 }
 
 // TestBuildTerraformExecData_ApplySuccess verifies the single-component
-// combined-object Data shape (research.md Decision 18, data-model.md's
-// TerraformExecData) — resource_counts/outputs/warnings/changes all present
-// in one object, built from the same real fixture used by the
-// multi-component tests above, proving both call sites decode through the
-// same parseTerraformOutputMirror helper consistently.
+// combined-object Data shape (research.md Decisions 18/19/20/21,
+// data-model.md's TerraformExecData) — resource_counts/outputs/warnings/
+// changes/has_changes/has_errors/errors/version all present in one object,
+// built from the same real fixture used by the multi-component tests above,
+// proving both call sites decode through the same parseTerraformOutputMirror
+// helper consistently.
 func TestBuildTerraformExecData_ApplySuccess(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("apply", string(data))
+	result := buildTerraformExecData("apply", string(data), "web", "plat-use2-dev")
 	require.NotNil(t, result)
 
 	asMap, ok := result.(map[string]any)
@@ -99,8 +101,58 @@ func TestBuildTerraformExecData_ApplySuccess(t *testing.T) {
 	}
 	assert.Contains(t, addresses, "aws_instance.web")
 
-	assert.Contains(t, asMap, "outputs")
+	require.Contains(t, asMap, "outputs")
+	outputs, ok := asMap["outputs"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, outputs, "instance_id")
+	instanceID, ok := outputs["instance_id"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, false, instanceID["sensitive"])
+	assert.Equal(t, "i-12345678", instanceID["value"])
+
 	assert.Contains(t, asMap, "warnings")
+	assert.Equal(t, true, asMap["has_changes"])
+	assert.Equal(t, false, asMap["has_errors"])
+	assert.Empty(t, asMap["errors"])
+	assert.Equal(t, terraformExecDataVersion, asMap["version"])
+	assert.Equal(t, "web", asMap["component"])
+	assert.Equal(t, "plat-use2-dev", asMap["stack"])
+}
+
+// TestBuildTerraformExecData_ApplyFailure verifies HasErrors/Errors decode
+// correctly for a failing apply (research.md Decision 20), using the
+// existing apply_failure.txt fixture.
+func TestBuildTerraformExecData_ApplyFailure(t *testing.T) {
+	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_failure.txt")
+	require.NoError(t, err)
+
+	result := buildTerraformExecData("apply", string(data), "", "")
+	require.NotNil(t, result)
+
+	asMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, true, asMap["has_errors"])
+	errs, ok := asMap["errors"].([]string)
+	require.True(t, ok)
+	assert.NotEmpty(t, errs)
+}
+
+// TestBuildTerraformExecData_EmptyComponentStackOmitted verifies component/
+// stack are absent from the map (not empty strings) when either argument is
+// empty — research.md Decision 21's explicit "omission is the clearer
+// signal" rule.
+func TestBuildTerraformExecData_EmptyComponentStackOmitted(t *testing.T) {
+	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
+	require.NoError(t, err)
+
+	result := buildTerraformExecData("apply", string(data), "", "")
+	require.NotNil(t, result)
+
+	asMap, ok := result.(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, asMap, "component")
+	assert.NotContains(t, asMap, "stack")
 }
 
 // TestBuildTerraformExecData_DeployParsedAsApply mirrors
@@ -110,7 +162,7 @@ func TestBuildTerraformExecData_DeployParsedAsApply(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("deploy", string(data))
+	result := buildTerraformExecData("deploy", string(data), "web", "plat-use2-dev")
 	require.NotNil(t, result)
 }
 
@@ -118,8 +170,39 @@ func TestBuildTerraformExecData_DeployParsedAsApply(t *testing.T) {
 // for a non-terraform subcommand or empty output, matching
 // parseTerraformResourceChanges's existing coverage shape.
 func TestBuildTerraformExecData_NonTerraformSubcommand(t *testing.T) {
-	assert.Nil(t, buildTerraformExecData("output", "anything"))
-	assert.Nil(t, buildTerraformExecData("plan", ""))
+	assert.Nil(t, buildTerraformExecData("output", "anything", "", ""))
+	assert.Nil(t, buildTerraformExecData("plan", "", "", ""))
+}
+
+// TestMaskSensitiveOutputs covers FR-010a/research.md Decision 19: a
+// Sensitive:true entry's Value is replaced with pkg/io.MaskReplacement while
+// Type/Sensitive pass through unchanged; a Sensitive:false entry's Value
+// passes through unchanged; a malformed/undecodable entry defaults to masked
+// (fail-safe), never forwarding raw, undecoded bytes.
+func TestMaskSensitiveOutputs(t *testing.T) {
+	outputs := map[string]json.RawMessage{
+		"secret_key": json.RawMessage(`{"Value":"top-secret","Type":"string","Sensitive":true}`),
+		"bucket_arn": json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
+		"malformed":  json.RawMessage(`not-json`),
+	}
+
+	result := maskSensitiveOutputs(outputs)
+
+	secret, ok := result["secret_key"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, iolib.MaskReplacement, secret["value"])
+	assert.Equal(t, "string", secret["type"])
+	assert.Equal(t, true, secret["sensitive"])
+
+	bucket, ok := result["bucket_arn"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "arn:aws:s3:::prod-bucket", bucket["value"])
+	assert.Equal(t, false, bucket["sensitive"])
+
+	malformed, ok := result["malformed"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, iolib.MaskReplacement, malformed["value"])
+	assert.Equal(t, true, malformed["sensitive"])
 }
 
 // TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser is the regression
@@ -129,7 +212,7 @@ func TestBuildTerraformExecData_NonTerraformSubcommand(t *testing.T) {
 // closure must always be wired, regardless of whether the caller separately
 // decides to also use ciMode for its own CI-job-summary post-processing.
 func TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser(t *testing.T) {
-	opts, stdoutBuf, stderrBuf := terraformCaptureShellOpts()
+	opts, stdoutBuf, stderrBuf := terraformCaptureShellOpts("web", "plat-use2-dev")
 
 	require.NotNil(t, stdoutBuf)
 	require.NotNil(t, stderrBuf)
@@ -139,15 +222,16 @@ func TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser(t *testing.T) {
 // TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime verifies the
 // closure terraformCaptureShellOpts wires into WithExecMetadataParser reads
 // whatever has been written into stdoutBuf/stderrBuf by the time it's
-// invoked, combining both streams and stripping ANSI before parsing —
-// mirroring how ExecuteTerraform populates the buffers during execution and
-// captureExecMetadataSync invokes the parser afterward.
+// invoked, combining both streams and stripping ANSI before parsing, and
+// threads component/stack through to buildTerraformExecData (research.md
+// Decision 21) — mirroring how ExecuteTerraform populates the buffers during
+// execution and captureExecMetadataSync invokes the parser afterward.
 func TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime(t *testing.T) {
 	fixture, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	parser := terraformExecMetadataParserFunc(&stdoutBuf, &stderrBuf)
+	parser := terraformExecMetadataParserFunc(&stdoutBuf, &stderrBuf, "web", "plat-use2-dev")
 
 	// Nothing written yet: parser must return nil (empty output).
 	assert.Nil(t, parser("apply"))
@@ -162,6 +246,8 @@ func TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime(t *testing.T) {
 	resourceCounts, ok := asMap["resource_counts"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 3, resourceCounts["create"])
+	assert.Equal(t, "web", asMap["component"])
+	assert.Equal(t, "plat-use2-dev", asMap["stack"])
 }
 
 // TestTerraformNodeHooks_RecordExecResultAccumulates verifies After()

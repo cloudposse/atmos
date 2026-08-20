@@ -361,12 +361,30 @@
                 "address": "aws_s3_bucket.example"
               }
             ],
+            "component": "vpc",
+            "errors": [],
+            "has_changes": true,
+            "has_errors": false,
+            "outputs": {
+              "bucket_arn": {
+                "sensitive": false,
+                "type": "string",
+                "value": "arn:aws:s3:::prod-bucket"
+              },
+              "secret_key": {
+                "sensitive": true,
+                "type": "string",
+                "value": "<MASKED>"
+              }
+            },
             "resource_counts": {
               "change": 1,
               "create": 2,
               "destroy": 0,
               "replace": 0
             },
+            "stack": "plat-use2-dev",
+            "version": 1,
             "warnings": [
               "deprecated argument used"
             ]
@@ -422,6 +440,30 @@
           "$.body.data.changes[*].address": {
             "match": "type"
           },
+          "$.body.data.component": {
+            "match": "type"
+          },
+          "$.body.data.has_changes": {
+            "match": "type"
+          },
+          "$.body.data.has_errors": {
+            "match": "type"
+          },
+          "$.body.data.outputs.bucket_arn.sensitive": {
+            "match": "type"
+          },
+          "$.body.data.outputs.bucket_arn.type": {
+            "match": "type"
+          },
+          "$.body.data.outputs.bucket_arn.value": {
+            "match": "type"
+          },
+          "$.body.data.outputs.secret_key.sensitive": {
+            "match": "type"
+          },
+          "$.body.data.outputs.secret_key.type": {
+            "match": "type"
+          },
           "$.body.data.resource_counts.change": {
             "match": "type"
           },
@@ -432,6 +474,9 @@
             "match": "type"
           },
           "$.body.data.resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.stack": {
             "match": "type"
           },
           "$.body.data.warnings": {
@@ -609,6 +654,329 @@
       }
     },
     {
+      "description": "a request to upload describe-affected execution metadata with inline data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "describe affected",
+          "data": {
+            "stacks": [
+              {
+                "affected": "component",
+                "affected_all": null,
+                "component": "vpc",
+                "component_path": "",
+                "component_type": "terraform",
+                "dependents": [],
+                "included_in_dependents": false,
+                "settings": null,
+                "stack": "plat-use2-dev",
+                "stack_slug": ""
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "e6e4b5e3-4567-4d4e-bf4a-4567890abcde",
+          "exit_code": 0,
+          "flags": [],
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 80,
+            "user_cpu_time_ms": 400,
+            "wall_time_ms": 900
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.stacks": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.stacks[*].affected": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component_path": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component_type": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].included_in_dependents": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].stack": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].stack_slug": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload describe-affected out-of-band command-execution structured data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "data": {
+            "stacks": [
+              {
+                "affected": "component",
+                "affected_all": null,
+                "component": "vpc",
+                "component_path": "",
+                "component_type": "terraform",
+                "dependents": [],
+                "included_in_dependents": false,
+                "settings": null,
+                "stack": "plat-use2-dev",
+                "stack_slug": ""
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "f7f5c6f4-5678-4e5f-cf5b-567890abcdef"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.stacks": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.stacks[*].affected": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component_path": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].component_type": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].included_in_dependents": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].stack": {
+            "match": "type"
+          },
+          "$.body.data.stacks[*].stack_slug": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec/data"
+      },
+      "response": {
+        "body": {
+          "success": true,
+          "url": "https://blob.vercel-storage.com/atmos-exec/f7f5c6f4/data.json"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          },
+          "$.body.url": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload describe-affected execution metadata with out-of-band data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "",
+          "atmos_os": "",
+          "atmos_pro_run_id": "",
+          "atmos_version": "",
+          "command": "describe affected",
+          "data": "https://blob.vercel-storage.com/atmos-exec/f7f5c6f4/data.json",
+          "execution_id": "f7f5c6f4-5678-4e5f-cf5b-567890abcdef",
+          "exit_code": 0,
+          "flags": [],
+          "git_sha": "",
+          "metrics": {
+            "system_cpu_time_ms": 0,
+            "user_cpu_time_ms": 0,
+            "wall_time_ms": 0
+          },
+          "repo_host": "",
+          "repo_name": "",
+          "repo_owner": "",
+          "repo_url": ""
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to upload drift detection instances",
       "providerState": "workspace exists and accepts drift detection instances",
       "request": {
@@ -721,6 +1089,303 @@
       }
     },
     {
+      "description": "a request to upload list-instances execution metadata with inline data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "list instances",
+          "data": {
+            "instances": [
+              {
+                "component": "vpc",
+                "component_type": "terraform",
+                "stack": "plat-use2-dev"
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "a8a6d7a5-6789-4f6a-df6c-67890abcdef0",
+          "exit_code": 0,
+          "flags": [
+            "--upload"
+          ],
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 50,
+            "user_cpu_time_ms": 250,
+            "wall_time_ms": 600
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.instances": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.instances[*].component": {
+            "match": "type"
+          },
+          "$.body.data.instances[*].component_type": {
+            "match": "type"
+          },
+          "$.body.data.instances[*].stack": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.flags": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload list-instances out-of-band command-execution structured data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "data": {
+            "instances": [
+              {
+                "component": "vpc",
+                "component_type": "terraform",
+                "stack": "plat-use2-dev"
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "b9b7e8b6-789a-4a7b-ea7d-7890abcdef01"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.instances": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.instances[*].component": {
+            "match": "type"
+          },
+          "$.body.data.instances[*].component_type": {
+            "match": "type"
+          },
+          "$.body.data.instances[*].stack": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec/data"
+      },
+      "response": {
+        "body": {
+          "success": true,
+          "url": "https://blob.vercel-storage.com/atmos-exec/b9b7e8b6/data.json"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          },
+          "$.body.url": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload list-instances execution metadata with out-of-band data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "",
+          "atmos_os": "",
+          "atmos_pro_run_id": "",
+          "atmos_version": "",
+          "command": "list instances",
+          "data": "https://blob.vercel-storage.com/atmos-exec/b9b7e8b6/data.json",
+          "execution_id": "b9b7e8b6-789a-4a7b-ea7d-7890abcdef01",
+          "exit_code": 0,
+          "flags": [
+            "--upload"
+          ],
+          "git_sha": "",
+          "metrics": {
+            "system_cpu_time_ms": 0,
+            "user_cpu_time_ms": 0,
+            "wall_time_ms": 0
+          },
+          "repo_host": "",
+          "repo_name": "",
+          "repo_owner": "",
+          "repo_url": ""
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.flags": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to upload out-of-band command-execution structured data",
       "providerState": "workspace exists and accepts execution metadata",
       "request": {
@@ -731,7 +1396,11 @@
                 "action": "created",
                 "address": "aws_s3_bucket.example"
               }
-            ]
+            ],
+            "errors": [],
+            "has_changes": true,
+            "has_errors": false,
+            "version": 1
           },
           "execution_id": "d5d3a4d2-3456-4c3d-ae3f-34567890abcd"
         },
@@ -748,6 +1417,12 @@
             "match": "type"
           },
           "$.body.data.changes[*].address": {
+            "match": "type"
+          },
+          "$.body.data.has_changes": {
+            "match": "type"
+          },
+          "$.body.data.has_errors": {
             "match": "type"
           },
           "$.body.execution_id": {

@@ -97,6 +97,68 @@ This supplements the existing "Pact Contract Testing" README section
   `TestTerraformNodeHooks_RecordExecResultAccumulates`), verifying
   `captureExecMetadataSync`'s new `WithExecMetadataParser`-supplied closure actually ran.
 
+12. **(research.md Decision 19)** Run `atmos terraform plan <component> -s <stack>` against a
+  component whose outputs include at least one `sensitive = true` output (e.g. add a test
+  output block marked sensitive to a scratch component), and inspect the logged request
+  body's `data.outputs` field: the sensitive output's `value` MUST be the literal string
+  `"<MASKED>"` while its `sensitive` field still reads `true` and `type` is still reported —
+  never the real value, even if that value would not match any Gitleaks secret pattern (e.g.
+  a plain internal ID). Confirm a non-sensitive output in the same run still reports its real
+  `value` unmasked (unless it separately happens to match a Gitleaks pattern, in which case
+  layer 2 masks it instead — either way, no sensitive-flagged output's real value should ever
+  appear in the logged body).
+
+13. **(research.md Decision 20)** Run `atmos terraform plan <component> -s <stack>` twice —
+  once against a component with no pending changes, once against one with pending changes or
+  a deliberate error — and confirm the logged request body's `data.has_changes`/
+  `data.has_errors`/`data.errors` accurately reflect each run's outcome, matching what the
+  command's own terminal output already showed.
+
+14. **(research.md Decision 21)** Run `atmos terraform plan <component> -s <stack>` and
+  confirm the logged request body's `data.component`/`data.stack` match the invocation's
+  actual component/stack — this is the single-component structured-data counterpart to the
+  base envelope's `Args`/`Flags` (step 8), giving Atmos Pro a direct identity field instead of
+  requiring it to parse `args[0]`/the `--stack` value out of `flags`.
+
+15. **(research.md Decision 22)** Run `atmos describe affected` (no `--upload`) in CI with
+  Atmos Pro configured, and confirm the logged request body's `data` field is present and
+  shaped `{"version": 1, "stacks": [...]}` — not `null` — even though `--upload` was not
+  passed, since the affected-stacks list is already computed for every invocation regardless.
+
+16. **(research.md Decision 23)** Run `atmos list instances --upload` (with the CI event/repo
+  preconditions `--upload` requires) and confirm the logged request body's `data` field is
+  `{"version": 1, "instances": [...]}`. Then run `atmos list instances` **without** `--upload`
+  and confirm `data` is absent/`null` — this is the regression check for FR-006c's "MUST NOT
+  compute the instance list solely to populate this field" requirement.
+
+17. **(research.md Decision 24)** Inspect the logged request bodies from steps 11 (terraform),
+  15 (`describe affected`), and 16 (`list instances`) together and confirm each `data.version`
+  reads `1` — independently present on all three shapes, never on the outer envelope itself
+  (no top-level `version` field alongside `execution_id`/`atmos_version`/etc.).
+
+### Automated-test coverage of steps 11-17 (Phase 7/T025)
+
+Steps 11-17 above require a live/stubbed Atmos Pro endpoint and CI-mode simulation, so they
+remain manual/exploratory end-to-end checks. The table below maps each to the automated test(s)
+that already cover its underlying behavior at the unit/contract level, so a contributor can
+confirm the logic is exercised by `go test` without needing a live Pro backend:
+
+| Step | Behavior | Automated coverage |
+|------|----------|---------------------|
+| 11 | Single-component `data` shape populated | `TestBuildTerraformExecData_ApplySuccess`, `TestTerraformNodeHooks_RecordExecResultAccumulates` (`cmd/terraform/utils_exec_metadata_test.go`) |
+| 12 | Sensitive outputs masked to `<MASKED>` | `TestMaskSensitiveOutputs` (`cmd/terraform/utils_exec_metadata_test.go`), `TestBuildRecord_SecretMaskingAppliedToData`-family (`pkg/proexec/envelope_test.go`), `TestPact_UploadExecMetadata` (`pkg/pro/consumer_pact_test.go`) |
+| 13 | `has_changes`/`has_errors`/`errors` accurate | `TestBuildTerraformExecData_ApplySuccess`, `TestBuildTerraformExecData_ApplyFailure` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
+| 14 | `component`/`stack` present/omitted correctly | `TestBuildTerraformExecData_EmptyComponentStackOmitted`, `TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser`, `TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
+| 15 | `describe affected` `data` unconditional | `TestExecuteInner_ReturnsAffected`, `TestExecute_AttachesAffectedAsStructuredData` (`internal/exec/describe_affected_upload_test.go`), `TestPact_UploadExecMetadata_DescribeAffected`(`_BlobURL`) |
+| 16 | `list instances` `data` gated on `--upload` | `TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata` (`pkg/list/list_instances_upload_test.go`), `TestCaptureAsync_UsesAndClearsPendingAsyncData` (`pkg/proexec/async_test.go`), `TestPact_UploadExecMetadata_ListInstances`(`_BlobURL`) |
+| 17 | `version: 1` present on every shape, absent from envelope | `TestVersionedData_*` (`pkg/proexec/envelope_test.go`); every `TestPact_UploadExecMetadata*` case asserts `version` as an exact-literal `1` |
+
+Step 10 (inline-vs-blob-URL threshold) has no automated Pact equivalent by design — per
+research.md Decision 25, the Pact suite constructs the inline and blob-URL cases directly
+rather than routing through the real size-threshold code, so the threshold decision itself
+stays covered only by `pkg/proexec/envelope_test.go`'s own threshold-focused unit tests, not
+by the six shape-coverage Pact interactions.
+
 ## Regenerating the Pact contract
 
 ```bash

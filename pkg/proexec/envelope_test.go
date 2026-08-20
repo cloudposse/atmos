@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	git "github.com/cloudposse/atmos/pkg/git"
+	io "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
 )
 
@@ -202,18 +203,69 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	}
 
 	// A recognizable AWS access key pattern the Gitleaks-based masker detects.
+	// io.GetContext() lazily initializes the global masking context on first
+	// use (io/global.go's Initialize, via sync.Once), so this pattern is
+	// actually masked in-process, not merely passed through unmodified.
 	req, err := buildRecord(&ExecRecordInput{
 		Command: "atmos terraform plan",
 		Data:    sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"},
 	}, testMetrics(), repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
-	// Masking is a no-op without an initialized masking context in this unit
-	// test (pkg/io.GetContext() returns nil by default), so this test only
-	// asserts the masking call path executes without corrupting the payload.
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(req.Data, &decoded))
 	assert.Contains(t, decoded, "aws_key")
+	assert.Equal(t, io.MaskReplacement, decoded["aws_key"], "Gitleaks-pattern masking must replace the AWS-shaped key")
+}
+
+// TestBuildRecord_BothMaskingLayersRunIndependently verifies FR-010a
+// (research.md Decisions 19/24): a Terraform-sensitive output already masked
+// by cmd/terraform's maskSensitiveOutputs (layer 1, upstream of buildRecord)
+// stays masked after the Gitleaks maskedDataJSON pass (layer 2) here; a
+// separate, non-sensitive output containing a Gitleaks-pattern-matching
+// literal is still caught by layer 2 even though layer 1 never touched it
+// (buildRecord has no knowledge of per-output "sensitive" flags — it only
+// ever sees the already-shaped Data map); and a `version` field (FR-005a)
+// survives both passes unchanged, since it never matches any secret pattern.
+func TestBuildRecord_BothMaskingLayersRunIndependently(t *testing.T) {
+	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	// Mirrors cmd/terraform's buildTerraformExecData output shape: outputs
+	// already ran through maskSensitiveOutputs (layer 1) before this Data
+	// value is ever built — "already_masked" simulates a Sensitive:true
+	// output layer 1 already replaced; "leaked_aws_key" simulates a
+	// non-sensitive output whose real value happens to match a Gitleaks
+	// pattern, which layer 1 (Terraform-sensitive-flag-only) would not catch.
+	data := map[string]any{
+		"version": 1,
+		"outputs": map[string]any{
+			"already_masked": map[string]any{"value": io.MaskReplacement, "type": "string", "sensitive": true},
+			"leaked_aws_key": map[string]any{"value": "AKIAIOSFODNN7EXAMPLE", "type": "string", "sensitive": false},
+		},
+	}
+
+	req, err := buildRecord(&ExecRecordInput{
+		Command: "atmos terraform apply",
+		Data:    data,
+	}, testMetrics(), repo)
+	require.NoError(t, err)
+	require.NotNil(t, req.Data)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(req.Data, &decoded))
+
+	outputs, ok := decoded["outputs"].(map[string]any)
+	require.True(t, ok)
+
+	alreadyMasked, ok := outputs["already_masked"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, io.MaskReplacement, alreadyMasked["value"], "layer 1's masked placeholder must survive layer 2 unchanged")
+
+	leaked, ok := outputs["leaked_aws_key"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, io.MaskReplacement, leaked["value"], "layer 2 (Gitleaks) must still catch a pattern-matching value layer 1 left untouched")
+
+	assert.InDelta(t, float64(1), decoded["version"], 0, "version must survive both masking passes unchanged")
 }
 
 func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
@@ -233,3 +285,28 @@ type simpleError string
 func (e simpleError) Error() string { return string(e) }
 
 func assertError(msg string) error { return simpleError(msg) }
+
+// TestVersionedData_WrapsPayloadWithVersion is the regression test for
+// research.md Decision 24: every command-specific structured Data shape
+// carries its own top-level `version` field (FR-005a), a plain integer
+// starting at 1, independent per shape. VersionedData is the shared helper
+// for the two genuinely identical single-key-wrap shapes (describe
+// affected's {stacks}, list instances' {instances}) — TerraformExecData's
+// multi-key shape deliberately does not use it (its own map literal gets
+// "version" added directly instead).
+func TestVersionedData_WrapsPayloadWithVersion(t *testing.T) {
+	someSlice := []string{"a", "b"}
+
+	got := VersionedData(1, "stacks", someSlice)
+
+	assert.Equal(t, map[string]any{"version": 1, "stacks": someSlice}, got)
+}
+
+// TestVersionedData_NilPayloadStillWraps ensures a nil payload (e.g. list
+// instances with a genuinely empty instance list) does not panic and still
+// produces a well-formed, versioned wrapper rather than a bare nil.
+func TestVersionedData_NilPayloadStillWraps(t *testing.T) {
+	got := VersionedData(1, "instances", nil)
+
+	assert.Equal(t, map[string]any{"version": 1, "instances": nil}, got)
+}

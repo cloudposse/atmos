@@ -1,6 +1,11 @@
 package proexec
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -239,4 +244,69 @@ func TestCaptureAsync_ReturnsAfterUploadCompletes(t *testing.T) {
 	// (mirrors TestCaptureSync_WarnAndContinueOnFailure's ~7s runtime); just
 	// assert CaptureAsync doesn't hang indefinitely.
 	assert.Less(t, elapsed, 15*time.Second)
+}
+
+// TestCaptureAsync_UsesAndClearsPendingAsyncData is the regression test for
+// research.md Decision 23: list instances (and any future async-path command
+// with its own structured data) has no per-command hook into CaptureAsync,
+// unlike the sync path's caller-supplied parser closure (Decision 18). This
+// asserts SetPendingAsyncData's read-and-clear hand-off: (a) data set before
+// a CaptureAsync call is used as that call's ExecRecordInput.Data; (b) a
+// second CaptureAsync call immediately after, with no intervening
+// SetPendingAsyncData, sees Data: nil — preventing one invocation's
+// structured data from leaking into the next; (c) a command that never calls
+// SetPendingAsyncData at all (today's behavior for every command except
+// list instances) continues to see Data: nil, unchanged.
+func TestCaptureAsync_UsesAndClearsPendingAsyncData(t *testing.T) {
+	withCIEnv(t, true)
+
+	var mu sync.Mutex
+	var received []dtos.ExecUploadRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+		mu.Lock()
+		received = append(received, req)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Settings.Pro.Token = "test-token"
+	SetAtmosConfig(atmosConfig)
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	cmd := &cobra.Command{Use: "list-instances"}
+
+	// (c) No SetPendingAsyncData call at all: Data must be absent.
+	CaptureAsync(cmd, nil)
+
+	// (a) SetPendingAsyncData before CaptureAsync: Data must reflect it.
+	SetPendingAsyncData(map[string]any{"version": 1, "instances": []string{"cdn"}})
+	CaptureAsync(cmd, nil)
+
+	// (b) A second CaptureAsync with no intervening SetPendingAsyncData: Data
+	// must be nil again — the read-and-clear must not leak into this call.
+	CaptureAsync(cmd, nil)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.Len(t, received, 3)
+	assert.Nil(t, received[0].Data, "no SetPendingAsyncData call was made: Data must be absent")
+	require.NotNil(t, received[1].Data, "SetPendingAsyncData's payload must be used as this call's Data")
+	assert.JSONEq(t, `{"version":1,"instances":["cdn"]}`, string(received[1].Data))
+	assert.Nil(t, received[2].Data, "pendingAsyncData must be cleared after being consumed once")
 }

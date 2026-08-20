@@ -33,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
@@ -595,24 +596,29 @@ type terraformOutputDataMirror struct {
 }
 
 // terraformOutputResultMirror mirrors pkg/ci/internal/plugin.OutputResult's
-// JSON shape — only the Data field is needed here.
+// JSON shape. HasChanges/HasErrors/Errors are the parser's own top-level
+// status fields (research.md Decision 20) — previously decoded and then
+// silently discarded, since only Data was read from this struct.
 type terraformOutputResultMirror struct {
-	Data *terraformOutputDataMirror `json:"Data"`
+	HasChanges bool                       `json:"HasChanges"`
+	HasErrors  bool                       `json:"HasErrors"`
+	Errors     []string                   `json:"Errors"`
+	Data       *terraformOutputDataMirror `json:"Data"`
 }
 
 // parseTerraformOutputMirror calls citerraform.ParseOutput (safe from
 // cmd/terraform per research.md Decision 17) and decodes its result via a
-// JSON round-trip into terraformOutputDataMirror, without ever importing or
+// JSON round-trip into terraformOutputResultMirror, without ever importing or
 // naming pkg/ci/internal/plugin directly (which would reintroduce the
 // cmd/terraform -> internal/exec -> pkg/ci/plugins/terraform -> internal/exec
 // import cycle, research.md Decisions 12/17/18). Shared by
 // parseTerraformResourceChanges (multi-component, US2/US3) and
-// buildTerraformExecData (single-component, US3, Decision 18). "deploy" is
-// parsed as "apply", matching pkg/ci/plugins/terraform's own onAfterDeploy
-// override ("deploy is semantically apply for CI purposes"). Returns
-// (nil, false) for subcommands with no terraform-shaped output, empty
-// output, or when parsing finds nothing.
-func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputDataMirror, bool) {
+// buildTerraformExecData (single-component, US3, Decisions 18/20). "deploy"
+// is parsed as "apply", matching pkg/ci/plugins/terraform's own
+// onAfterDeploy override ("deploy is semantically apply for CI purposes").
+// Returns (nil, false) for subcommands with no terraform-shaped output,
+// empty output, or when parsing finds nothing.
+func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputResultMirror, bool) {
 	if output == "" {
 		return nil, false
 	}
@@ -635,7 +641,7 @@ func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputData
 		return nil, false
 	}
 
-	return parsed.Data, true
+	return &parsed, true
 }
 
 // terraformResourceChanges flattens a terraformOutputDataMirror's per-action
@@ -666,38 +672,102 @@ func terraformResourceChanges(data *terraformOutputDataMirror) []execNodeResult 
 // (FR-006, data-model.md Decision 17). Returns nil when
 // parseTerraformOutputMirror finds nothing to parse.
 func parseTerraformResourceChanges(subCommand, output string) []execNodeResult {
-	data, ok := parseTerraformOutputMirror(subCommand, output)
+	result, ok := parseTerraformOutputMirror(subCommand, output)
 	if !ok {
 		return nil
 	}
-	return terraformResourceChanges(data)
+	return terraformResourceChanges(result.Data)
+}
+
+// terraformExecDataVersion is TerraformExecData's own schema version
+// (research.md Decision 24, FR-005a) — a plain integer, independent of the
+// Atmos release version and of every other structured-Data shape's version.
+// Bump only when this shape's own fields change in a way Atmos Pro needs to
+// branch on.
+const terraformExecDataVersion = 1
+
+// terraformOutputMirror locally mirrors the JSON shape of a single
+// plugin.TerraformOutput entry ({Value, Type, Sensitive}) so
+// maskSensitiveOutputs can decode each Outputs map entry without importing
+// pkg/ci/internal/plugin directly (same import-cycle rationale as
+// terraformOutputDataMirror).
+type terraformOutputMirror struct {
+	Value     any    `json:"Value"`
+	Type      string `json:"Type"`
+	Sensitive bool   `json:"Sensitive"`
+}
+
+// maskSensitiveOutputs masks any output Terraform itself marks sensitive
+// with pkg/io.MaskReplacement, independent of and prior to the separate
+// Gitleaks-pattern masking pkg/proexec/envelope.go's maskedDataJSON applies
+// to the whole Data blob afterward (FR-010a, research.md Decision 19). A
+// Sensitive:true entry's Value is replaced; Type/Sensitive and every
+// non-sensitive entry's Value pass through unchanged. An entry that fails to
+// decode into the expected shape defaults to masked (fail-safe), consistent
+// with FR-010's "exclude/mask on doubt" posture.
+func maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any {
+	result := make(map[string]any, len(outputs))
+	for key, raw := range outputs {
+		var out terraformOutputMirror
+		if err := json.Unmarshal(raw, &out); err != nil {
+			result[key] = map[string]any{"value": iolib.MaskReplacement, "sensitive": true}
+			continue
+		}
+
+		value := out.Value
+		if out.Sensitive {
+			value = iolib.MaskReplacement
+		}
+		result[key] = map[string]any{
+			"value":     value,
+			"type":      out.Type,
+			"sensitive": out.Sensitive,
+		}
+	}
+	return result
 }
 
 // buildTerraformExecData parses a captured single-component terraform
 // plan/apply/deploy invocation's combined output into the combined-object
 // Data shape data-model.md's TerraformExecData specifies
-// (resource_counts/outputs/warnings/changes), for internal/exec's
-// captureExecMetadataSync (via WithExecMetadataParser, research.md Decision
-// 18) to attach to the execution record. Returns nil when
-// parseTerraformOutputMirror finds nothing to parse (e.g. a non-terraform
-// subcommand, or empty output).
-func buildTerraformExecData(subCommand, output string) any {
-	data, ok := parseTerraformOutputMirror(subCommand, output)
+// (resource_counts/outputs/warnings/changes/has_changes/has_errors/errors/
+// component/stack/version), for internal/exec's captureExecMetadataSync (via
+// WithExecMetadataParser, research.md Decision 18) to attach to the
+// execution record. Component/stack are the invocation's already-resolved
+// identity (research.md Decision 21) — included only when non-empty, never
+// as an empty string, per FR-006. Returns nil when parseTerraformOutputMirror
+// finds nothing to parse (e.g. a non-terraform subcommand, or empty output).
+func buildTerraformExecData(subCommand, output, component, stack string) any {
+	result, ok := parseTerraformOutputMirror(subCommand, output)
 	if !ok {
 		return nil
 	}
+	data := result.Data
 
-	return map[string]any{
+	execData := map[string]any{
+		"version": terraformExecDataVersion,
 		"resource_counts": map[string]any{
 			"create":  data.ResourceCounts.Create,
 			"change":  data.ResourceCounts.Change,
 			"replace": data.ResourceCounts.Replace,
 			"destroy": data.ResourceCounts.Destroy,
 		},
-		"outputs":  data.Outputs,
-		"warnings": data.Warnings,
-		"changes":  terraformResourceChanges(data),
+		"outputs":     maskSensitiveOutputs(data.Outputs),
+		"warnings":    data.Warnings,
+		"changes":     terraformResourceChanges(data),
+		"has_changes": result.HasChanges,
+		"has_errors":  result.HasErrors,
+		"errors":      result.Errors,
 	}
+
+	if component != "" {
+		execData["component"] = component
+	}
+	if stack != "" {
+		execData["stack"] = stack
+	}
+
+	return execData
 }
 
 // terraformCaptureShellOpts builds the stdout/stderr capture
@@ -707,13 +777,17 @@ func buildTerraformExecData(subCommand, output string) any {
 // buffers populated regardless of whether Native CI job summaries are also
 // enabled. Callers read the returned buffers themselves for their own
 // ciMode-gated CI-job-summary post-processing (e.g. capturedPlanOutput).
-func terraformCaptureShellOpts() (opts []e.ShellCommandOption, stdoutBuf, stderrBuf *bytes.Buffer) {
+// Component/stack are the invocation's already-resolved identity (research.md
+// Decision 21), threaded through to buildTerraformExecData's Data payload —
+// component is typically args[0], stack the already-parsed --stack value;
+// both empty for the multi-component path, which never reaches this closure.
+func terraformCaptureShellOpts(component, stack string) (opts []e.ShellCommandOption, stdoutBuf, stderrBuf *bytes.Buffer) {
 	stdoutBuf = &bytes.Buffer{}
 	stderrBuf = &bytes.Buffer{}
 	opts = []e.ShellCommandOption{
 		e.WithStdoutCapture(stdoutBuf),
 		e.WithStderrCapture(stderrBuf),
-		e.WithExecMetadataParser(terraformExecMetadataParserFunc(stdoutBuf, stderrBuf)),
+		e.WithExecMetadataParser(terraformExecMetadataParserFunc(stdoutBuf, stderrBuf, component, stack)),
 	}
 	return opts, stdoutBuf, stderrBuf
 }
@@ -724,13 +798,13 @@ func terraformCaptureShellOpts() (opts []e.ShellCommandOption, stdoutBuf, stderr
 // executeCommandPipeline has already finished writing into them). Split out
 // from terraformCaptureShellOpts so it's directly unit-testable without
 // reaching into e.ShellCommandOption's private fields.
-func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer) func(subCommand string) any {
+func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer, component, stack string) func(subCommand string) any {
 	return func(subCommand string) any {
 		combined := stdoutBuf.String()
 		if errOut := stderrBuf.String(); errOut != "" {
 			combined += "\n" + errOut
 		}
-		return buildTerraformExecData(subCommand, ansi.Strip(combined))
+		return buildTerraformExecData(subCommand, ansi.Strip(combined), component, stack)
 	}
 }
 

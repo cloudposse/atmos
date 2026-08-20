@@ -359,10 +359,13 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 // Execute executes `describe affected` command. It reports an execution
 // record to Atmos Pro synchronously (warn-and-continue on failure) before
 // returning, per the synchronous allowlist (terraform plan/apply, describe
-// affected). Data is passed as nil — describe affected has no defined
-// structured-data extension (data-model.md's Delivery Classification table).
+// affected). The record's structured Data carries the same per-stack data
+// already reported to the existing POST /api/v1/affected-stacks upload, as
+// {"version": 1, "stacks": [...]} — unconditionally, not gated on --upload,
+// since the affected list is already computed for every invocation
+// (FR-006b, research.md Decision 22).
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
-	err := d.executeInner(a)
+	affected, err := d.executeInner(a)
 
 	// describe affected has no numeric "exit code" the way a shell command
 	// does; 0/1 mirrors the success/failure convention used elsewhere in this
@@ -376,7 +379,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	// captureExecMetadataSync (research.md Decision 14).
 	flags := proexec.FlagsFromCommand(a.Cmd)
 
-	in := &proexec.ExecRecordInput{Command: "describe affected", Flags: flags, ExitCode: exitCode}
+	in := &proexec.ExecRecordInput{
+		Command:  "describe affected",
+		Flags:    flags,
+		ExitCode: exitCode,
+		Data:     proexec.VersionedData(1, "stacks", affected),
+	}
 	if syncErr := proexec.CaptureSync(a.CLIConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}
@@ -462,8 +470,12 @@ func toAffectedResolution(affected []schema.Affected, headHead, baseHead *plumbi
 	return affectedResolution{Affected: affected, HeadHead: headHead, BaseHead: baseHead, RepoURL: repoURL}, err
 }
 
-// executeInner contains the original `describe affected` execution logic.
-func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
+// executeInner contains the original `describe affected` execution logic. It
+// returns the computed affected list alongside its error so Execute can
+// attach it to the execution record's structured Data (FR-006b, research.md
+// Decision 22) — the same slice already used for rendering/upload below, no
+// second computation.
+func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 	defer perf.Track(nil, "exec.Execute")()
 
 	// Built once and reused across every describe-stacks call this command makes (HEAD,
@@ -473,7 +485,7 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 
 	resolution, err := d.resolveAffectedStacks(a, errOptions)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	affected := resolution.Affected
 
@@ -481,7 +493,7 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 	if len(affected) > 0 && a.IncludeDependents {
 		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -492,11 +504,11 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) error {
 	}
 
 	if err := d.view(a, resolution.RepoURL, resolution.HeadHead, resolution.BaseHead, affected); err != nil {
-		return err
+		return nil, err
 	}
 
 	PrintErrorModeSummary(a.ErrorMode, collector)
-	return nil
+	return affected, nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {

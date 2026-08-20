@@ -7,49 +7,42 @@ description: "Task list for Atmos Pro Command-Execution Metadata Upload — rema
 
 **Input**: Design documents from `/specs/002-pro-exec-metadata/`
 
-**Prerequisites**: plan.md (fourth re-plan, 2026-08-19), spec.md, research.md, data-model.md,
+**Prerequisites**: plan.md (eighth re-plan, 2026-08-20), spec.md, research.md, data-model.md,
 contracts/interactions.md, quickstart.md
 
 **Tests**: Included — the constitution's Test-First principle (III) is NON-NEGOTIABLE and
 CLAUDE.md's Bug-Fixing Workflow requires a failing regression test before any behavior
 change.
 
-**Already shipped, no tasks generated for these** (verified present and correct in the
-current tree):
-- The `CaptureSync`/`CaptureAsync` dedup fix (`pkg/proexec/classify.go`, `async.go` —
-  `IsSyncCommand` shared predicate).
-- The `terraform deploy` sync-allowlist join (`syncAllowlist` includes
-  `"atmos terraform deploy"`).
-- The `Command`/`Args`/`Flags` shape fix (third re-plan): `Command` strips the `atmos` root;
-  `Args` holds only positional arguments; `Flags` is sourced from
-  `proexec.FlagsFromCommand(cmd)` (`cmd.Flags().Visit`, canonical long-form, bare-token
-  serialization) in both `internal/exec/terraform.go`'s `captureExecMetadataSync` and
-  `pkg/proexec/async.go`'s `commandArgsAndFlags`.
+**Regenerated in full** (not patched) — the previous tasks.md was written against the
+fourth re-plan (`ExecutionID`/`Data` redesign) and marked US1/US2/US3's *base* work
+(`ExecutionID`, multi-component aggregation, single-component `buildTerraformExecData`) as
+done. That base work is confirmed still present and correct in the current tree (re-verified
+this session: `cmd/terraform/utils.go`'s `buildTerraformExecData`/`terraformCaptureShellOpts`,
+`internal/exec/describe_affected.go`'s `CaptureSync` call, `pkg/proexec/async.go`'s
+`CaptureAsync` all exist exactly as previously shipped) and is **not** re-tasked here.
 
-**Still open before this delta** (verified against the current tree — unchanged by this
-regeneration, carried forward from the third re-plan's Phase 4/5):
-- US2 (multi-component aggregation, FR-006a): `captureExecMetadataSync`
-  (`internal/exec/terraform.go:201`) still fires once per graph node, ungated by
-  `wasMultiComponentExecution` (`cmd/terraform/utils.go:66`).
-- US3 (structured infrastructure-change data, FR-006): both sync-path call sites
-  (`internal/exec/terraform.go:249`, `internal/exec/describe_affected.go:372`) still always
-  pass `nil, nil` for `data`/`dataItems` to `proexec.CaptureSync`.
+**This regeneration's scope** — seven deltas across the seventh and eighth re-plans, **none
+implemented yet** (verified by reading the current code, not assumed from the plan docs):
 
-**This regeneration's scope (fourth re-plan, 2026-08-19 "redo batch uploading" +
-`ExecutionID` clarifications)**: Two DTO/client-level changes that touch every existing and
-still-open story:
-1. **`ExecutionID`** (FR-003c) — a new UUID v4 field on every execution record, generated in
-   `buildRecord`.
-2. **`Data` delivery redesign** (FR-011/FR-011a, research.md Decision 16) — retires the
-   shipped multi-chunk `DataItems`/`BatchID`/`BatchIndex`/`BatchTotal` model in favor of a
-   binary choice on the single `Data` field: inline JSON under 4 MB, or a blob URL (via new
-   `POST /v1/atmos/exec/data`, `execution_id`-keyed, never chunked) at/over 4 MB.
+1. FR-010a — Terraform output masking (`maskSensitiveOutputs`, research.md Decision 19)
+2. FR-006 shape completeness — `has_changes`/`has_errors`/`errors` (Decision 20)
+3. FR-006 — `component`/`stack` identity fields (Decision 21)
+4. FR-006b — `describe affected` structured data (Decision 22)
+5. FR-006c — `list instances` structured data, `--upload`-gated (Decision 23)
+6. FR-005a — per-shape `version` field (Decision 24)
+7. FR-013/Assumptions — 6-interaction-total Pact coverage, 3 shapes × 2 delivery modes
+   (Decision 25)
 
-Since both changes touch `buildRecord`/`CaptureSync`/`CaptureAsync`'s shared signature (the
-`dataItems []any` parameter is removed) and `pkg/pro`'s DTOs/client (which the still-open
-US2/US3 tasks depend on), they are placed in **Phase 2: Foundational** — US2/US3
-implementation tasks are revised to target the new single-`data`-field shape rather than
-`dataItems`.
+**Spec-mapping note**: spec.md's User Story 3 (P3) is titled "Structured infrastructure-change
+data for **plan/apply/deploy**" and its four Acceptance Scenarios only reference `terraform
+plan`/`apply`. Deltas 1-3 above extend `TerraformExecData` and clearly belong to US3. Deltas
+4-5 (`describe affected`, `list instances`) are required by FR-006b/FR-006c and now map to
+**User Story 4** (Priority P4, "Pro inventory visibility for `describe affected` and `list
+instances`"), added to spec.md in the 2026-08-20 clarification session specifically to close
+this gap — every task below now carries a `[USn]` label. Delta 6 (`version`) is genuinely
+cross-cutting (all three shapes) and sits in Foundational. Delta 7 (Pact coverage) is
+cross-cutting test infrastructure and sits in Polish.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -57,397 +50,244 @@ implementation tasks are revised to target the new single-`data`-field shape rat
 
 ## Phase 1: Setup
 
-No setup tasks — no new packages or dependencies (`github.com/google/uuid` is already a
-direct dependency; the 4 MB threshold reuses the existing `DefaultMaxPayloadBytes` constant,
-plan.md Scale/Scope).
+No setup tasks — no new packages, no new external dependencies. All seven deltas are edits
+to already-existing files plus, at most, two new exported functions inside the
+already-existing `pkg/proexec` package (plan.md Scale/Scope).
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Goal**: Redesign the DTO/client layer so every execution record carries `ExecutionID` and
-delivers `Data` via the inline-or-blob-URL model, before any user-story task builds
-structured data on top of it.
+**Goal**: Land the two small, genuinely shared pieces of infrastructure — the per-shape
+`version` field helper and the async "pending data" hand-off — before the user-story-scoped
+work (Phase 5/6) that depends on them.
 
 ### Tests for Foundational Phase ⚠️
 
-- [x] T001 [P] Test in `pkg/pro/dtos/exec_test.go` (new file, or add to an existing DTO test
-  file if one exists) asserting `ExecUploadRequest` marshals `execution_id` and that
-  `DataItems`/`BatchID`/`BatchIndex`/`BatchTotal` no longer exist as fields (compile-time
-  removal — a struct-literal compile guard, e.g. `var _ = ExecUploadRequest{ExecutionID:
-  "x"}`, is sufficient alongside a marshal-shape assertion). **Done** —
-  `TestExecUploadRequest_MarshalsExecutionID` + compile guard.
-- [x] T002 [P] Test in `pkg/pro/dtos/exec_test.go` asserting `ExecDataUploadRequest`
-  marshals `{execution_id, data}` and `ExecDataUploadResponse` unmarshals `{success, url}`
-  (data-model.md's new entities). **Done** —
-  `TestExecDataUploadRequest_MarshalsExecutionIDAndData`,
-  `TestExecDataUploadResponse_UnmarshalsSuccessAndURL`.
-- [x] T003 [P] Test in `pkg/proexec/envelope_test.go` asserting `buildRecord` sets a
-  non-empty `ExecutionID` that parses as a valid UUID (`github.com/google/uuid.Parse`), and
-  that two separate `buildRecord` calls produce two different `ExecutionID` values. **Done**
-  — `TestBuildRecord_ExecutionIDIsFreshUUIDPerCall`.
-- [x] T004 [P] Table-driven test in `pkg/pro/api_client_exec_test.go` asserting
-  `UploadExecMetadata`:
-  - sends exactly one `POST .../atmos/exec` request with `data` inline when the marshaled
-    record is under `MaxPayloadBytes`
-  - sends exactly one `POST .../atmos/exec/data` request (asserting its body has
-    `execution_id` matching the record's `ExecutionID` and `data` equal to the original
-    structured data) followed by exactly one `POST .../atmos/exec` request whose `data`
-    field is the JSON string returned as `url`, when the marshaled record is at/over
-    `MaxPayloadBytes`
-  - never sends `batch_id`/`batch_index`/`batch_total` fields in either case (regression
-    guard against the retired chunking model reappearing)
-  **Done** — `TestUploadExecMetadata_InlineUnderThreshold`,
-  `TestUploadExecMetadata_BlobURLOverThreshold` (plus direct `TestUploadExecData_Success`/
-  `_Error` coverage for the new method itself).
+- [X] T001 [P] Test in `pkg/proexec/envelope_test.go` asserting `VersionedData(1, "stacks",
+  someSlice)` returns `map[string]any{"version": 1, "stacks": someSlice}`; a second case with
+  a `nil` payload still wraps correctly (`map[string]any{"version": 1, "instances": nil}`),
+  no panic.
+- [X] T002 [P] Test in `pkg/proexec/async_test.go` asserting: (a) `SetPendingAsyncData(x)`
+  followed by a `CaptureAsync` call uses `x` as `ExecRecordInput.Data`; (b) a *second*
+  `CaptureAsync` call immediately after (no intervening `SetPendingAsyncData`) sees `Data:
+  nil` — proves the read-and-clear behavior prevents cross-invocation leakage (matches
+  `cmd.NewTestKit(t)`-style isolation, CLAUDE.md MANDATORY); (c) never calling
+  `SetPendingAsyncData` at all (today's behavior for every command except `list instances`)
+  continues to produce `Data: nil`, unchanged. Use the existing fake upload client
+  (`fakeUploadClient`) already present in this test file to inspect the request `CaptureAsync`
+  builds.
 
 ### Implementation for Foundational Phase
 
-- [x] T005 In `pkg/pro/dtos/exec.go`: add `ExecutionID string \`json:"execution_id"\`` to
-  `ExecUploadRequest` (placed first, before `AtmosProRunID`, matching data-model.md's field
-  order); remove `DataItems`, `BatchID`, `BatchIndex`, `BatchTotal`. Add new
-  `ExecDataUploadRequest{ExecutionID string \`json:"execution_id"\`; Data json.RawMessage
-  \`json:"data"\`}` and `ExecDataUploadResponse{AtmosApiResponse; URL string
-  \`json:"url"\`}`. Makes T001/T002 pass. **Done.**
-- [x] T006 In `pkg/proexec/envelope.go`'s `buildRecord`: generate `executionID :=
-  uuid.New().String()` (import `github.com/google/uuid`) once per call and set it on the
-  returned `ExecUploadRequest.ExecutionID`; remove the `dataItems []any` parameter and the
-  now-dead `maskedDataItemsJSON` helper (masking of `data` alone is unchanged). Update the
-  function signature's callers (T009). Makes T003 pass. **Done.**
-- [x] T007 In `pkg/pro/api_client_exec.go`: add `UploadExecData(dto
-  *dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error)` — `POST {BaseURL}/
-  {BaseAPIEndpoint}/atmos/exec/data`, same `doWithRetry`/`getAuthenticatedRequest` shape as
-  `sendExecMetadataRequest`, decoding the response body itself (rather than reusing
-  `handleAPIResponse`, which discards the body) so the `URL` field survives. Added to
-  `AtmosProAPIClientInterface` (`pkg/pro/api_client.go`). **Done.**
-- [x] T008 In `pkg/pro/api_client_exec.go`'s `UploadExecMetadata`: replaced the `sendChunked`
-  call with: marshal the full record (envelope + `Metrics` + `Data` inline) once via
-  `json.Marshal`; if `len(marshaled) < c.MaxPayloadBytes` (falling back to
-  `DefaultMaxPayloadBytes`), send it as-is via `sendExecMetadataRequest`; otherwise call
-  `UploadExecData(&dtos.ExecDataUploadRequest{ExecutionID: dto.ExecutionID, Data:
-  dto.Data})`, set a copy of the record's `Data` to the marshaled JSON string of the
-  returned `URL`, then send that copy via `sendExecMetadataRequest`. Makes T004 pass.
-  **Done.**
-- [x] T009 Updated `pkg/proexec/sync.go`'s `CaptureSync` and `pkg/proexec/async.go`'s
-  `CaptureAsync`/`uploadExecMetadata` to drop the `dataItems []any` parameter (folded into
-  the existing `data any` parameter) and updated their calls to `buildRecord` to match T006's
-  new signature. **Done.**
-- [x] T010 ~~Regenerate `pkg/pro/mock_interface.go`~~ **Not needed** — verified
-  `mock_interface.go` is mockgen output for the narrower `APIClient` interface
-  (`pkg/pro/interface.go`, only `UploadInstances`), not `AtmosProAPIClientInterface`. No
-  generated mock exists for `AtmosProAPIClientInterface`; the hand-written test fakes
-  (`internal/exec/pro_test.go`'s `MockProAPIClient`, `pkg/proexec/async_test.go`'s
-  `fakeUploadClient`) were updated directly with a new `UploadExecData` method instead.
-- [x] T011 Updated the two existing sync call sites (`internal/exec/terraform.go:249`,
-  `internal/exec/describe_affected.go:372`) to match T009's new signature (dropped the
-  trailing `nil` `dataItems` argument). No other `CaptureSync`/`CaptureAsync` call sites
-  exist in production code; `cmd/root.go`'s `CaptureAsync(cmd, err)` call is unaffected
-  (its signature didn't change). **Done.**
+- [X] T003 [P] Add `VersionedData(version int, key string, payload any) map[string]any` to
+  `pkg/proexec/envelope.go` (research.md Decision 24: two genuinely identical single-key-wrap
+  call sites justify one small helper; `TerraformExecData`'s multi-key shape deliberately does
+  NOT use this helper — see T010). Makes T001 pass.
+- [X] T004 In `pkg/proexec/async.go`: add an unexported package-level `pendingAsyncData any`
+  var and an exported `SetPendingAsyncData(data any)` setter, mirroring the existing
+  `currentAtmosConfig`/`SetAtmosConfig` pair in the same file exactly (same doc-comment style,
+  same `defer perf.Track(nil, "proexec.SetPendingAsyncData")()` convention). In
+  `CaptureAsync`, when building `ExecRecordInput` (currently `Data` is implicitly omitted from
+  the struct literal, i.e. `nil`), read and clear it: `data := pendingAsyncData;
+  pendingAsyncData = nil`, then set `Data: data` on the `ExecRecordInput`. Makes T002 pass.
 
-**Checkpoint**: Every execution record now carries `ExecutionID`; `Data` delivery is
-inline-or-blob-URL with no chunking; the codebase compiles and all existing tests pass with
-the new signatures. US1/US2/US3 phases below build on this foundation.
+**Checkpoint**: `pkg/proexec` now exposes the two small primitives (`VersionedData`,
+`SetPendingAsyncData`) that Phase 6's `describe affected`/`list instances` tasks build on.
+Phase 5 (US3 terraform deltas) does not depend on this phase — it can proceed in parallel.
 
 ---
 
 ## Phase 3: User Story 1 - Automatic visibility into CI command execution (Priority: P1) 🎯 MVP
 
-**Goal**: Every qualifying `atmos` command reports a correct, complete base execution
-record, now including a fresh `ExecutionID` per invocation (FR-003c). The `Flags`
-source-of-truth fix from the third re-plan is already shipped (see "Already shipped" above)
-— this phase only adds the `ExecutionID` verification.
-
-**Independent Test**: Run any `atmos` command in CI with Atmos Pro configured; inspect the
-logged request body and confirm `execution_id` is present, UUID-shaped, and differs between
-two separate invocations (quickstart.md step 9).
-
-### Tests for User Story 1 ⚠️
-
-- [x] T012 [US1] Test asserting the record built for a real invocation has a non-empty,
-  UUID-shaped `ExecutionID`, distinct from `AtmosProRunID`. **Done, fulfilled via the
-  Foundational-phase tests rather than a new `internal/exec` file**: T003's
-  `TestBuildRecord_ExecutionIDIsFreshUUIDPerCall` covers this directly at the `buildRecord`
-  level (both sync and async paths converge there — see T006), and
-  `TestUploadExecMetadata_DispatchesOnGateOpen` (`pkg/proexec/async_test.go`) was extended
-  with a `client.lastRequest.ExecutionID` assertion to also cover the async
-  `*cobra.Command`-driven path end-to-end.
-
-### Implementation for User Story 1
-
-- [x] T013 [US1] No production code change needed — T006 (Foundational) already makes
-  `ExecutionID` flow through every `CaptureSync`/`CaptureAsync` call. T012 is GREEN without
-  further changes.
-
-**Checkpoint**: Every execution record — regardless of command — carries a correct,
-complete `Flags` field (already shipped) and a fresh `ExecutionID` (this phase).
+**No remaining tasks.** `ExecutionID`, base envelope fields, and the `Flags` source-of-truth
+fix are already shipped and unaffected by any of this regeneration's seven deltas (all of
+which are scoped to command-specific `Data`, not the base envelope FR-003/FR-003b covers).
 
 ---
 
 ## Phase 4: User Story 2 - Reliable reporting for critical operations (Priority: P2)
 
-**Goal**: A multi-component `--affected`/`--all` `plan`/`apply`/`deploy` invocation
-produces exactly one execution record for the whole run (FR-006a), not one per graph node,
-with per-component results folded into the single `Data` field (not `DataItems`, which no
-longer exists — research.md Decision 17).
-
-**Independent Test**: Run `atmos terraform plan --affected` against a stack with 2+
-affected components; confirm exactly one `POST /v1/atmos/exec` (or
-`/exec/data`-then-`/exec` pair) upload attempt is logged for the whole invocation
-(quickstart.md step 6).
-
-### Tests for User Story 2 ⚠️
-
-- [x] T014 [P] [US2] Test asserting a multi-component graph run triggers exactly one
-  `proexec.CaptureSync` call after the whole graph completes, not one per node, with `data`
-  containing one entry per component. **Done, in a new file rather than `utils_test.go`** —
-  `cmd/terraform/utils_exec_metadata_test.go`:
-  `TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun` (end-to-end via a real
-  `httptest` server, asserting exactly one `POST .../atmos/exec` with both nodes' results in
-  `Data`), plus `TestTerraformNodeHooks_RecordExecResultAccumulates` and the two no-op guard
-  tests (`..._NoOpWithoutNodeHooks`, `..._NoOpForNonSyncSubcommand`). Placed in a new file
-  instead of growing the already very large (1492-line) `utils_hooks_test.go` further.
-- [x] T015 [P] [US2] Test asserting `captureExecMetadataSync` does NOT call
-  `proexec.CaptureSync` directly when invoked as part of a multi-component graph run. **Done**
-  — `internal/exec/terraform_exec_metadata_flags_test.go`:
-  `TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired`.
-
-### Implementation for User Story 2
-
-- [x] T016 [US2] In `internal/exec/terraform.go`'s `captureExecMetadataSync`, skip the
-  per-node call when `info.NodeHooks != nil` (the signal `cmd/terraform/utils.go`'s
-  `wirePerComponentHook` already sets for every multi-component `--affected`/`--all`/query
-  run) rather than the cmd/terraform-package-local `wasMultiComponentExecution` var, which
-  `internal/exec` cannot reach (`cmd/terraform` imports `internal/exec`, not the reverse).
-  Verified this signal reaches `ExecuteTerraform`'s per-node call for all three
-  multi-component paths (`--affected`/`--all`/query) by tracing
-  `pkg/scheduler/adapters.TerraformDispatcher.Dispatch` → `executeTerraformQueryComponent`
-  → `ExecuteTerraform(execution.Info, ...)`, which passes `nodeInfo` (carrying `NodeHooks`)
-  through by value. **Done.**
-- [x] T017 [US2] In `cmd/terraform/utils.go`: added `execNodeResult{Component, Stack,
-  ExitCode}` and a mutex-guarded `results []execNodeResult` field on `terraformNodeHooks`,
-  appended to by a new `recordExecResult` call at the end of `AfterWithWriters` (thread-safe
-  — the scheduler may dispatch nodes concurrently). Added `captureMultiComponentExecMetadata`
-  (checks `info.NodeHooks` is wired and `proexec.IsSyncCommand`, then fires exactly one
-  `proexec.CaptureSync` with the accumulated `results` as `data`), called after each of the
-  three multi-component branches (`info.Affected`/`info.All`/`isMultiComponentExecution`) in
-  `terraformRunWithOptions` once their execution call returns. **Done.**
-- [x] T018 [US2] Verified `quickstart.md` step 6's expected log output ("confirm exactly one
-  upload attempt is logged for the whole invocation, not one per component") already matched
-  the implemented behavior — no edit needed (it was written during `/speckit-plan` to already
-  describe this target state).
-
-**Checkpoint**: Multi-component runs now report exactly one execution record via the
-redesigned `Data` field, independent of US1's `ExecutionID`/`Flags` and US3's structured
-data content.
+**No remaining tasks.** The sync/async dedup fix, the `terraform deploy` sync-allowlist join,
+and the multi-component one-record-per-invocation aggregation (FR-006a) are already shipped.
+None of this regeneration's seven deltas touch delivery classification or aggregation
+mechanics — they only touch what goes *inside* `Data`.
 
 ---
 
 ## Phase 5: User Story 3 - Structured infrastructure-change data for plan/apply/deploy (Priority: P3)
 
-**Goal**: `terraform plan`/`apply`/`deploy` execution records carry itemized
-created/updated/deleted/replaced/moved/imported resources, outputs, and warnings (FR-006),
-in the single `Data` field — small runs inline, large runs via the new blob-URL path
-(FR-011, transparently handled by `UploadExecMetadata`, Phase 2) — using the already-existing
-stdout-capture plumbing (research.md Decision 12), not a new tee mechanism.
+**Goal**: Close the three confirmed gaps in `TerraformExecData` (FR-006/FR-010a): sensitive
+outputs currently ship unmasked, `has_changes`/`has_errors`/`errors` are silently discarded
+by the JSON-mirror decode, and there is no `component`/`stack` identity on the payload.
 
-**Independent Test**: Run `atmos terraform plan` against a component with pending
-changes; confirm the uploaded execution record's `data` (inline, or fetchable via the
-`/exec/data`-returned URL for a large plan) contains the resource counts/addresses visible
-in the plan's own output (spec.md SC-007).
-
-**Status**: Both halves are **done**. The multi-component half (T028) landed in the prior
-`/speckit-implement` pass; the single-component half (T019-T027, research.md Decision 18)
-landed this session.
-
-**Design (research.md Decision 18)**: Inversion of control via a caller-supplied closure —
-`internal/exec` never imports `pkg/ci/plugins/terraform` (which would reintroduce the
-confirmed import cycle: `pkg/ci/plugins/terraform` → `internal/exec`). Instead:
-1. New `internal/exec/shell_utils.go` option `WithExecMetadataParser(fn func(subCommand
-   string) any) ShellCommandOption`, storing `fn` on `shellCommandConfig.execMetadataParser`,
-   plus `execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string) any`
-   — both mirror the already-shipped `WithInvokingCommand`/`invokingCommandFromOpts` pair
-   exactly (same file, same pattern).
-2. `cmd/terraform/plan.go`/`apply.go`/`deploy.go` move `stdoutBuf`/`stderrBuf` construction
-   and `WithStdoutCapture`/`WithStderrCapture` wiring **outside** the `ciMode` conditional
-   (always capture now — cheap, an in-memory buffer append; the *separate* `ciMode`-gated
-   `capturedPlanOutput` CI-job-summary post-processing is untouched), and additionally pass
-   `WithExecMetadataParser(func(subCommand string) any { return
-   buildTerraformExecData(subCommand, ansiStrippedCombinedBuffer) })`.
-3. New `cmd/terraform/utils.go` helper `buildTerraformExecData(subCommand, output string)
-   any`, sharing a refactored-out `parseTerraformOutputMirror` decode step with the
-   already-shipped `parseTerraformResourceChanges` (T028) — no duplicated
-   `citerraform.ParseOutput`/JSON-round-trip logic — producing the combined-object shape
-   (`resource_counts`/`outputs`/`warnings`/`changes`) `data-model.md`'s `TerraformExecData`
-   already specifies.
-4. `internal/exec/terraform.go`'s `captureExecMetadataSync` extracts the closure via
-   `execMetadataParserFromOpts(opts...)` and, only when non-nil AND `IsSyncCommand` AND
-   `info.NodeHooks == nil` (existing multi-component skip), calls `parser(subCommand)` once
-   to obtain `data` for `proexec.CaptureSync` — never for async/non-allowlisted commands.
+**Independent Test**: Run `atmos terraform plan <component> -s <stack>` against a component
+with a `sensitive = true` output and a pending change; inspect the logged request body's
+`data` field and confirm `outputs[<sensitive-key>].value == "<MASKED>"`,
+`has_changes/has_errors/errors` are present and correct, and `component`/`stack` match the
+invocation (quickstart.md steps 12-14, 17).
 
 ### Tests for User Story 3 ⚠️
 
-- [x] T019 [P] [US3] Test asserting `execMetadataParserFromOpts` round-trips a closure passed
-  via `WithExecMetadataParser` and returns `nil` when no such option was passed. **Done** —
-  new file `internal/exec/shell_utils_exec_metadata_test.go`:
-  `TestExecMetadataParserFromOpts_RoundTrips`, `TestExecMetadataParserFromOpts_NilWhenNotSet`.
-- [x] T020 [P] [US3] Test asserting `captureExecMetadataSync`: (a) calls the parser closure
-  exactly once and forwards its return value as `CaptureSync`'s `data` argument when
-  `IsSyncCommand` is true and `info.NodeHooks == nil`; (b) never calls the closure for a
-  non-sync-allowlisted subcommand; (c) never calls the closure when `info.NodeHooks != nil`.
-  **Done** — `internal/exec/terraform_exec_metadata_flags_test.go`:
-  `TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent`,
-  `TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand`,
-  `TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired`.
-- [x] T021 [P] [US3] Test asserting a `terraform plan` with a very large synthetic
-  resource-change list routes through the `/exec/data`-then-`/exec` blob-URL path. **Done —
-  fulfilled by Phase 2's foundational coverage** (`pkg/pro/api_client_exec_test.go`'s
-  `TestUploadExecMetadata_BlobURLOverThreshold`), which already exercises exactly this
-  mechanism generically (the threshold check is size-based, not command-type-based, so it
-  applies uniformly regardless of which command produced the oversized `Data`); a
-  `TerraformExecData`-flavored variant would exercise the identical code path with no
-  additional coverage value.
-- [x] T022 [P] [US3] Test asserting `buildTerraformExecData("plan"/"apply"/"deploy", output)`
-  produces the combined `resource_counts`/`outputs`/`warnings`/`changes` object against the
-  same real fixture T028's tests use, and returns `nil` for a non-terraform subcommand or
-  empty output. **Done** — `cmd/terraform/utils_exec_metadata_test.go`:
-  `TestBuildTerraformExecData_ApplySuccess`, `TestBuildTerraformExecData_DeployParsedAsApply`,
-  `TestBuildTerraformExecData_NonTerraformSubcommand`.
-- [x] T023 [P] [US3] Test asserting `stdoutBuf`/`stderrBuf` construction and
-  `WithStdoutCapture`/`WithStderrCapture` wiring happen regardless of `ciMode`. **Done, via a
-  refactor** — rather than testing `plan.go`'s inline `RunE` closure directly (not separately
-  callable), the shared buffer/option construction was extracted into a new
-  `cmd/terraform/utils.go` helper, `terraformCaptureShellOpts()` (called unconditionally —
-  structurally provable it's not gated by `ciMode`, since `ciMode` isn't even a parameter),
-  used identically by `plan.go`/`apply.go`/`deploy.go`. Covered by
-  `cmd/terraform/utils_exec_metadata_test.go`:
-  `TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser`,
-  `TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime` (the parser closure itself was
-  further split into `terraformExecMetadataParserFunc` for direct unit-testability).
+- [X] T005 [P] [US3] Table-driven test in `cmd/terraform/utils_exec_metadata_test.go` for a
+  new `maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any`: a `Sensitive:
+  true` entry's `Value` becomes `pkg/io.MaskReplacement` (`"<MASKED>"`) while `Type`/
+  `Sensitive` pass through unchanged; a `Sensitive: false` entry's `Value` passes through
+  unchanged; a malformed/undecodable `json.RawMessage` entry defaults to masked (fail-safe,
+  research.md Decision 19).
+- [X] T006 [P] [US3] Extend `terraformOutputResultMirror`'s decode tests (or add new cases to
+  `cmd/terraform/utils_exec_metadata_test.go`) asserting `HasChanges`/`HasErrors`/`Errors`
+  decode correctly from `citerraform.ParseOutput`'s result, using the existing
+  `pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt` fixture (has_changes=true,
+  has_errors=false) plus one error-producing fixture already present under
+  `pkg/ci/plugins/terraform/testdata/stdout/` for the has_errors=true/errors-non-empty case.
+- [X] T007 [P] [US3] Extend `TestBuildTerraformExecData_ApplySuccess` (and add a
+  single-component-with-`component`/`stack`-args case) in
+  `cmd/terraform/utils_exec_metadata_test.go` asserting `buildTerraformExecData`'s returned
+  map includes: `outputs` masked per T005, `has_changes`/`has_errors`/`errors` per T006,
+  `component`/`stack` when passed non-empty and *absent from the map* (not empty-string) when
+  either is empty, and `"version": 1`.
+- [X] T008 [P] [US3] Extend `TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser`/
+  `TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime` in
+  `cmd/terraform/utils_exec_metadata_test.go` to pass/assert `component`/`stack` flow from
+  `terraformCaptureShellOpts(component, stack)` through `terraformExecMetadataParserFunc`
+  into `buildTerraformExecData`'s call.
+- [ ] T009 [P] [US3] Add cases to `cmd/terraform/plan_test.go`/`apply_test.go`/`deploy_test.go`
+  (whichever already exercise `RunE`'s shell-opts construction) asserting
+  `terraformCaptureShellOpts` is called with `args[0]` (when present) and the parsed
+  `--stack`/`-s` value — not empty strings — for a single-component invocation.
+- [X] T010 [P] [US3] Extend `pkg/proexec/envelope_test.go`'s
+  `TestBuildRecord_SecretMaskingAppliedToData` (or add a sibling test) asserting both masking
+  layers run independently: a Terraform-sensitive output masked by `maskSensitiveOutputs`
+  stays masked after the Gitleaks `maskedDataJSON` pass; a separate non-sensitive output
+  containing a Gitleaks-pattern-matching literal (e.g. an AWS access key shape) is still
+  caught by the Gitleaks pass even though `maskSensitiveOutputs` left it untouched; a
+  `version` field survives both passes unchanged.
 
 ### Implementation for User Story 3
 
-- [x] T024 [US3] In `internal/exec/shell_utils.go`: added `WithExecMetadataParser(fn
-  func(subCommand string) any) ShellCommandOption` and `execMetadataParserFromOpts(opts
-  ...ShellCommandOption) func(subCommand string) any`, following the existing
-  `WithInvokingCommand`/`invokingCommandFromOpts` pattern exactly (same file, adjacent to
-  it). Makes T019 pass. **Done.**
-- [x] T025 [US3] In `internal/exec/terraform.go`'s `captureExecMetadataSync`: added a `parser
-  func(subCommand string) any` parameter (extracted at the call site via
-  `execMetadataParserFromOpts(opts...)`, alongside the existing `invokingCommandFromOpts`
-  extraction); after the existing `IsSyncCommand`/`info.NodeHooks != nil` gates, calls
-  `parser(subCommand)` when non-nil and passes its result as `CaptureSync`'s `data` argument
-  instead of the previous hardcoded `nil`. All five existing test call sites updated to the
-  new signature. Makes T020 pass. **Done.**
-- [x] T026 [US3] In `cmd/terraform/utils.go`: extracted the JSON-mirror decode step out of
-  `parseTerraformResourceChanges` into a shared `parseTerraformOutputMirror(subCommand,
-  output string) (*terraformOutputDataMirror, bool)` helper (also extended the mirror struct
-  with `ResourceCounts`/`Outputs`/`HasOutputChanges`/`ChangedResult`/`Warnings`, and factored
-  the per-action flattening into `terraformResourceChanges`); `parseTerraformResourceChanges`
-  now calls it (T028's existing tests confirmed still green — no behavior change); added
-  `buildTerraformExecData(subCommand, output string) any` using the same helper, returning
-  `resource_counts`/`outputs`/`warnings`/`changes`. Makes T022 pass. **Done.**
-- [x] T027 [US3] In `cmd/terraform/plan.go`/`apply.go`/`deploy.go`: replaced the
-  `ciMode`-gated inline `stdoutBuf`/`stderrBuf`/`shellOpts` construction with a single
-  unconditional call to a new shared helper, `terraformCaptureShellOpts()`
-  (`cmd/terraform/utils.go`), which always wires `WithStdoutCapture`/`WithStderrCapture` plus
-  a new `WithExecMetadataParser(terraformExecMetadataParserFunc(...))`; the
-  `capturedPlanOutput`/`capturedApplyOutput`/`capturedDeployOutput` CI-job-summary
-  assignments remain inside their respective `if ciMode` blocks, untouched. Removed the
-  now-unused `bytes`/`internal/exec` (`e`) imports from all three files (no longer referenced
-  directly). Makes T023 pass — depended on T026. **Done.**
-- [x] T028 [US3] For the multi-component aggregation path (US2, `cmd/terraform/utils.go`),
-  fold each node's parsed resource changes into the single aggregate record's `data` (one
-  entry per component per resource action) instead of discarding it. **Done** —
-  `cmd/terraform/utils.go`'s `terraformNodeHooks.recordExecResult` now calls a new
-  `parseTerraformResourceChanges(subCommand, output)` helper (uses
-  `pkg/ci/plugins/terraform.ParseOutput` + a local JSON-mirror struct) and folds one
-  `execNodeResult{component, stack, exitCode, action, address}` entry per
-  created/updated/replaced/deleted/imported/moved resource into `results`, alongside the
-  always-present base per-node identity/outcome entry. Covered by
-  `cmd/terraform/utils_exec_metadata_test.go`:
-  `TestParseTerraformResourceChanges_ApplySuccess` (real fixture:
-  `pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt`),
-  `TestParseTerraformResourceChanges_DeployParsedAsApply`,
-  `TestParseTerraformResourceChanges_NonTerraformSubcommand`, and
-  `TestTerraformNodeHooks_RecordExecResultAccumulates` (updated to assert the enriched shape).
-  "deploy" is parsed with apply semantics, matching `pkg/ci/plugins/terraform`'s own
-  `onAfterDeploy` override ("deploy is semantically apply for CI purposes").
+- [X] T011 [US3] In `cmd/terraform/utils.go`: add `maskSensitiveOutputs(outputs
+  map[string]json.RawMessage) map[string]any`, importing `pkg/io` for `MaskReplacement`.
+  Makes T005 pass.
+- [X] T012 [US3] In `cmd/terraform/utils.go`: extend `terraformOutputResultMirror` with
+  `HasChanges bool \`json:"HasChanges"\``, `HasErrors bool \`json:"HasErrors"\``, `Errors
+  []string \`json:"Errors"\``, decoded via the same JSON round-trip `parseTerraformOutputMirror`
+  already performs (no second parse). `parseTerraformOutputMirror` returns the fuller struct
+  (or its three new fields alongside the existing `Data`/`ok` return) so `buildTerraformExecData`
+  can consume them. Makes T006 pass.
+- [X] T013 [US3] In `cmd/terraform/utils.go`'s `buildTerraformExecData`: change signature to
+  `buildTerraformExecData(subCommand, output, component, stack string) any`; call
+  `maskSensitiveOutputs(data.Outputs)` in place of the current `"outputs": data.Outputs`
+  pass-through; add `"has_changes"`, `"has_errors"`, `"errors"` from T012's decoded fields;
+  add `"component"`/`"stack"` to the map only when the corresponding parameter is non-empty;
+  add `"version": 1`. Makes T007 pass. Depends on T011, T012.
+- [X] T014 [US3] In `cmd/terraform/utils.go`: change `terraformExecMetadataParserFunc(stdoutBuf,
+  stderrBuf *bytes.Buffer, component, stack string) func(subCommand string) any` and
+  `terraformCaptureShellOpts(component, stack string) (...)` to thread the two new parameters
+  through to T013's call. Makes T008 pass. Depends on T013.
+- [X] T015 [US3] In `cmd/terraform/plan.go`/`apply.go`/`deploy.go`: update each `RunE`'s
+  `terraformCaptureShellOpts()` call to `terraformCaptureShellOpts(component, stack)`, where
+  `component` is `args[0]` when `len(args) > 0` (empty string otherwise — the multi-component
+  `--affected`/`--all` path never reaches this closure, gated out by
+  `captureExecMetadataSync`'s existing `info.NodeHooks == nil` check) and `stack` is the
+  already-parsed `--stack`/`-s` value each `RunE` already resolves for other purposes (no new
+  parsing). Makes T009 pass. Depends on T014.
 
-**Checkpoint**: US3 is fully functional. The multi-component half (T028) — `--affected`/
-`--all`/query `plan`/`apply`/`deploy` runs carry per-resource structured data, correctly
-aggregated. The single-component half (T019-T027, research.md Decision 18) — a plain
-`atmos terraform plan <component> -s <stack>` now also carries structured `data`
-(`resource_counts`/`outputs`/`warnings`/`changes`), via a caller-supplied parser closure
-threaded from `cmd/terraform` into `internal/exec`'s `captureExecMetadataSync`, with no new
-import-cycle risk. Both halves verified: `go build ./...`, `atmos lint --changed`, and
-`go test ./cmd/terraform/ ./internal/exec/...` (targeted exec-metadata tests; the two
-`internal/exec` failures seen in a full-package run are pre-existing environment issues —
-missing toolchain shim files in the test sandbox — unrelated to this work) all clean.
+**Checkpoint**: `TerraformExecData` now masks sensitive outputs via a dedicated layer,
+reports `has_changes`/`has_errors`/`errors`, carries `component`/`stack` for single-component
+runs, and includes `version: 1` — closing all three US3-scoped gaps from the seventh re-plan.
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: User Story 4 - Pro inventory visibility for `describe affected` and `list instances` (Priority: P4)
 
-- [x] T029 [P] Regenerated the Pact contract with the three interactions from
-  `contracts/interactions.md`. **Done** — `pkg/pro/consumer_pact_test.go`'s
-  `TestPact_UploadExecMetadata` (inline `data`, now includes `execution_id` and a `changes`
-  array replacing the old `data_items`), `TestPact_UploadExecMetadata_NoData` (`execution_id`
-  added), and a new `TestPact_UploadExecMetadata_BlobURL` (replacing the retired
-  `TestPact_UploadExecMetadata_Chunked` — two chained interactions: `POST
-  /api/v1/atmos/exec/data` keyed by `execution_id`, then `POST /api/v1/atmos/exec` with
-  `data` as the returned URL string). Regenerated via `rm pacts/atmos-AtmosPro.json && go
-  test -tags pact ./pkg/pro/...` (deleted first so stale interactions from the old test names
-  don't linger in the merged output — `go test -tags pact ./pkg/pro/... -v -run
-  'TestPact_UploadExecMetadata|TestPact_UploadExecData'` to run just these). Verified via a
-  Python JSON walk: 12 interactions total, all current descriptions, zero occurrences of
-  `batch_id`/`batch_index`/`batch_total`/`data_items` anywhere in the file.
-- [x] T030 [P] Ran `go test -cover` for the touched packages and confirmed coverage.
-  **Done, re-confirmed after T019-T027 landed.** `pkg/proexec`: 87.2%, `pkg/pro`: 87.2%,
-  `pkg/pro/dtos`: 100% (all above the 85% floor, unchanged this session). `cmd/terraform`'s
-  whole-package figure (56.4%) remains a pre-existing characteristic of that large,
-  many-command, binary-dependent package — the specific functions this session added have
-  solid direct coverage per `go tool cover -func`: `parseTerraformOutputMirror` 85.7%,
-  `terraformResourceChanges` 91.7%, `buildTerraformExecData` 100%,
-  `terraformCaptureShellOpts` 100%, `terraformExecMetadataParserFunc` 80%. `internal/exec`'s
-  new `WithExecMetadataParser`/`execMetadataParserFromOpts` are at 100%, and the modified
-  `captureExecMetadataSync` is at 88.9%.
-- [ ] T031 Manually walk `quickstart.md` steps 1–11 end-to-end against a local Pro stub or
-  test workspace, including step 9 (`ExecutionID`), step 10 (4 MB threshold / blob-URL path),
-  and the new step 11 (single-component structured data). **Not done this session** —
-  requires a live/stubbed Atmos Pro endpoint and a human (or a dedicated `run`/browser-driven
-  session) to walk interactively; the automated test suite already exercises the same code
-  paths, but this manual walkthrough is a distinct verification step deliberately left for a
-  human or the `run` skill.
-- [x] T032 `atmos lint --changed` and `go build ./...` across all touched files. **Done,
-  re-confirmed after T019-T027 landed** — both clean.
-- [ ] T033 **Carried-over open item — end-to-end regression test for the still-unresolved
-  duplicate-row question** (2026-08-19 production report). Two `atexec_*` DB rows were
-  observed for what should be a single `atmos terraform plan cdn -s plat-use2-dev
-  --upload-status` invocation — one row (sync-path shape) with populated envelope/metrics
-  but (at the time) empty `flags` (root-caused and already fixed by the shipped `Flags`
-  source-of-truth fix), the other (thin shape) with `flags` populated but envelope/metrics
-  fields null and a *different* `workflow_job` id. Static inspection did not turn up an
-  obvious live double-fire bug in `pkg/proexec/classify.go`/`async.go`/
-  `internal/exec/terraform.go`, but this was never proven with a real end-to-end run. Write
-  an integration test that:
-  - Drives the real `atmos terraform plan {component} -s {stack} --upload-status`
-    invocation through the actual `cmd.Execute()` (`cmd/root.go`) — not just
-    `RootCmd.Execute()` — since the async `proexec.CaptureAsync` hook only fires from that
-    top-level wrapper. `Execute()` reads `os.Args[1:]` directly, so the test must mutate
-    `os.Args` (save/restore), not just `RootCmd.SetArgs`.
-  - Points `Settings.Pro.BaseURL`/`ATMOS_PRO_BASE_URL` at an `httptest.NewServer` fake, with
-    `CI=true` and `ATMOS_PRO_TOKEN` set so `gateOpen` passes.
-  - Runs against the existing `tests/fixtures/scenarios/terraform-generate-planfile`
-    `mock`/`component-1` fixture (`tests.RequireTerraform(t)`-gated) so no real cloud
-    credentials are needed.
-  - Asserts the fake server received **exactly one** `POST .../atmos/exec` request (and, if
-    the fixture's plan output is large enough, exactly one preceding `POST
-    .../atmos/exec/data` request with a matching `execution_id`) for the invocation, with
-    correctly populated `flags`/`atmos_version`/`atmos_os`/`atmos_arch`/`metrics`, AND
-    **exactly one** `POST .../repos/{owner}/{repo}/instances` request (the independent
-    `--upload-status` mechanism) with the correct `stack`/`component`/`exit_code`.
-  - If this test passes cleanly, the production duplicate is confirmed to be a stale-build
-    artifact rather than a live bug, and this task can close as verification-only.
+**Goal**: `describe affected`'s and `list instances`' execution records carry structured
+`Data` reusing data already computed for their existing Pro uploads (`POST
+/api/v1/affected-stacks`, `POST /api/v1/instances`), instead of always sending `Data: nil`.
+
+**Independent Test**: Run `atmos describe affected` (no `--upload` needed) in CI with Atmos
+Pro configured; confirm the logged request body's `data` is `{"version": 1, "stacks":
+[...]}`. Separately, run `atmos list instances --upload` and confirm `data` is `{"version":
+1, "instances": [...]}`; run `atmos list instances` without `--upload` and confirm `data` is
+absent (quickstart.md steps 15-16; spec.md US4 Independent Test/Acceptance Scenarios 1-3).
+
+### Tests for User Story 4 ⚠️
+
+- [X] T016 [P] [US4] Extend `internal/exec/describe_affected_test.go`/`describe_affected_upload_test.go`
+  asserting `executeInner`'s new `([]schema.Affected, error)` return matches the slice it
+  already computes internally (no new computation to assert — a signature-shape test).
+- [X] T017 [P] [US4] Extend `internal/exec/describe_affected_upload_test.go` asserting `Execute`
+  passes `Data: map[string]any{"version": 1, "stacks": affected}` (via `proexec.VersionedData`)
+  to `proexec.CaptureSync`'s `ExecRecordInput`, for both a `--upload` and a non-`--upload`
+  invocation (the list is unconditional — no gating, unlike `list instances`). Mock/spy
+  `proexec.CaptureSync` the same way this file's existing cases already do.
+- [X] T018 [P] [US4] Extend `pkg/list/list_instances_upload_test.go` asserting
+  `ExecuteListInstancesCmd` calls `proexec.SetPendingAsyncData(proexec.VersionedData(1,
+  "instances", req.Instances))` only inside the existing `if opts.Upload { ... }` branch —
+  present after an `--upload` run, absent (never called) after a non-`--upload` run. Assert by
+  resetting the package's `pendingAsyncData` state before each case and inspecting it after
+  (matching the test style already used for `currentAtmosConfig` in `pkg/proexec/async_test.go`),
+  or via a small test-only accessor if `pendingAsyncData` needs one.
+
+### Implementation for User Story 4
+
+- [X] T019 [US4] In `internal/exec/describe_affected.go`: change `executeInner(a
+  *DescribeAffectedCmdArgs) error` to `executeInner(a *DescribeAffectedCmdArgs)
+  ([]schema.Affected, error)`, returning the already-computed `affected []schema.Affected`
+  slice (the same one used for rendering and, inside the existing `if args.Upload` branch,
+  `UploadAffectedStacksRequest.Stacks`) alongside its existing error — no second computation.
+  Makes T016 pass. Depends on nothing (independent of Phase 5).
+- [X] T020 [US4] In `internal/exec/describe_affected.go`'s `Execute`: capture `executeInner`'s
+  new `affected` return value; replace the current `ExecRecordInput{Command: "describe
+  affected", Flags: flags, ExitCode: exitCode}` (implicit `Data: nil`) with one that also sets
+  `Data: proexec.VersionedData(1, "stacks", affected)`. Update the function's doc comment
+  (currently: "Data is passed as nil — describe affected has no defined structured-data
+  extension") to reflect the new behavior. Makes T017 pass. Depends on T019, T003
+  (Foundational).
+- [X] T021 [US4] In `pkg/list/list_instances.go`'s `ExecuteListInstancesCmd`: inside the
+  existing `if opts.Upload { ... }` branch, after `req.Instances` is built (same point
+  `apiClient.UploadInstances(&req)` is called, ~line 536-544), add `proexec.SetPendingAsyncData(
+  proexec.VersionedData(1, "instances", req.Instances))`. Add the `pkg/proexec` import (none
+  exists in this file today). Makes T018 pass. Depends on T003, T004 (Foundational).
+
+**Checkpoint**: `describe affected` always attaches its `{version, stacks}` structured data;
+`list instances` attaches `{version, instances}` only when `--upload` was passed, with zero
+added cost to the plain (non-uploading) invocation. Closes US4's Acceptance Scenarios 1-3.
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
+
+- [X] T022 [P] Regenerate the Pact contract to 15 total interactions (covering both US3's and
+  US4's shapes — up from today's fewer —
+  verify exact current count in `pacts/atmos-AtmosPro.json` before regenerating), adding, in
+  `pkg/pro/consumer_pact_test.go`: (a) `version`/`has_changes`/`has_errors`/`errors`/
+  `component`/`stack` assertions to the existing `TestPact_UploadExecMetadata`
+  (interaction 9, terraform inline) and `TestPact_UploadExecMetadata_BlobURL` (interaction
+  10); (b) two new test functions for `describe affected`'s shape (inline + blob-URL,
+  interactions 12/13, paired with a `describe affected`-flavored `UploadExecData` interaction
+  14); (c) two new test functions for `list instances`' shape (inline + blob-URL, interaction
+  15 + its paired `/exec/data` interaction) — per `contracts/interactions.md`'s interactions
+  12-15 and research.md Decision 25. Every new/extended `data` example's `version` field MUST
+  be asserted as an exact literal `1` (`Like`, not exact-literal, is wrong here per
+  contracts/interactions.md's explicit rule). Regenerate via `rm pacts/atmos-AtmosPro.json &&
+  go test -tags pact ./pkg/pro/...`, then `git diff pacts/atmos-AtmosPro.json`.
+- [X] T023 [P] Run `go test -cover` for every touched package (`cmd/terraform`, `pkg/proexec`,
+  `internal/exec`, `pkg/list`, `pkg/pro`) and confirm each stays at/above the 85% floor
+  (CLAUDE.md MANDATORY); fix any gap introduced by T011-T021 with additional table-driven
+  cases rather than coverage theater.
+- [X] T024 `atmos lint --changed` and `go build ./...` across all touched files.
+- [X] T025 Manually walk `quickstart.md` steps 12-17 end-to-end against a local Pro stub or
+  test workspace (masking, shape completeness, `component`/`stack`, `describe affected`'s
+  `Data`, `list instances`' `Data` with/without `--upload`, and `version` present on all three
+  shapes) — requires a live/stubbed Atmos Pro endpoint and a human or the `run` skill,
+  matching the prior re-plan's T031.
+- [X] T026 Docs check: none of this regeneration's seven deltas add a new user-facing CLI
+  flag, command, or config surface (`describe affected`/`list instances` reuse their existing
+  `--upload` flags unchanged; the only new user-visible artifact is upload *payload content*,
+  not a CLI surface) — confirmed against CLAUDE.md's "All new commands/flags/parameters MUST
+  have Docusaurus documentation" rule: **no `website/docs/cli/commands/` changes are
+  required** for this regeneration.
 
 ---
 
@@ -455,63 +295,63 @@ missing toolchain shim files in the test sandbox — unrelated to this work) all
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: Empty — no new dependencies/structure.
-- **Foundational (Phase 2)**: No dependencies on other phases; MUST complete before Phase
-  3-5, since all three user-story phases call `buildRecord`/`CaptureSync`/`CaptureAsync`
-  with the new signature and the new DTO shape.
-- **US1 (Phase 3)**: Depends on Foundational (T006). Independently testable/deliverable once
-  Phase 2 lands.
-- **US2 (Phase 4)**: Depends on Foundational (T006, T009). Independent of US1 beyond the
-  shared foundation.
-- **US3 (Phase 5)**: Depends on Foundational (T006, T008) and US2 (T016/T017), since T028
-  builds directly on T016's/T017's call-site shape — implement after US2 lands (matches the
-  third re-plan's existing US3-depends-on-US2 ordering). The single-component tasks
-  (T019-T027, this session's Decision 18) are independent of T028 (different call sites —
-  `internal/exec`'s single-component path vs. `cmd/terraform`'s multi-component aggregator)
-  and can proceed in parallel with it, though T026/T027 do depend on the
-  `parseTerraformOutputMirror` refactor staying compatible with T028's existing tests.
-- **Polish (Phase 6)**: T029-T032 depend on all three user-story phases (T030/T032 should be
-  re-run once T019-T027 land, since they were measured before that work). T033 (duplicate-row
-  end-to-end test) has no code dependency on US1/US2/US3 and can run in parallel with them,
-  though running it after Phase 2/3 land is recommended so its assertions reflect the fixed
-  `Flags`/`ExecutionID` shape.
+- **Setup (Phase 1)**: Empty.
+- **Foundational (Phase 2)**: `VersionedData` (T003) and `SetPendingAsyncData` (T004) are
+  required by Phase 6/US4 (T020, T021) but NOT by Phase 5 (US3's terraform deltas add
+  `"version": 1` as a plain map key, deliberately not via `VersionedData` — research.md
+  Decision 24). Phase 5 and Phase 2 can proceed fully in parallel.
+- **US1 (Phase 3)** / **US2 (Phase 4)**: No remaining tasks — already shipped, untouched by
+  this regeneration.
+- **US3 (Phase 5)**: Independent of Phase 2/Phase 6 (US4). Internally sequential where noted
+  (T011→T013, T012→T013, T013→T014, T014→T015); T005-T010 (tests) are `[P]` — different
+  concerns/files, though several target the same file (`utils_exec_metadata_test.go`) so
+  coordinate if run by parallel agents to avoid edit conflicts.
+- **US4 (Phase 6)**: Depends on Phase 2 (T003, T004). T019/T020 (`describe affected`) are
+  independent of T021 (`list instances`) — different files, different commands. Independent of
+  Phase 5 (US3) — no shared files, no shared dependency in either direction.
+- **Polish (Phase 7)**: T022 depends on Phase 5 (US3) AND Phase 6 (US4) both landing (it
+  covers all three shapes). T023/T024 depend on all prior phases. T025/T026 have no code
+  dependency and can run once any subset has landed, but are most meaningful after everything
+  above is done.
 
 ### Parallel Opportunities
 
-- T001-T004 (Foundational tests) are `[P]` — different files/concerns
-- T014-T015 (US2 tests) are `[P]` — different files
-- T019-T023 (US3 single-component tests) are `[P]` — different files
-- T029-T030 (Polish) are `[P]` — independent concerns
-- US2 (Phase 4) and US1 (Phase 3) can proceed in parallel once Phase 2 lands — they touch
-  different call-site concerns (`ExecutionID` verification vs. multi-component gating)
-- T024 (the new `ShellCommandOption`) has no dependency on T025-T028 and can start
-  immediately; T025 depends on T024, T026 is independent of T024/T025, T027 depends on T026
-- T033 can be worked independently of T001-T032 by a different session/agent
+- T001-T002 (Foundational tests) are `[P]` — different files.
+- T005-T010 (US3 tests) are `[P]` in intent (different concerns) but several share
+  `cmd/terraform/utils_exec_metadata_test.go` — a single agent/session should own that file's
+  edits to avoid clobbering, even though the tasks are conceptually independent.
+- T016-T018 (US4 tests) are `[P]` — three different files/packages.
+- T019 (`describe affected` signature change) has no dependency on T021 (`list instances`) —
+  can proceed fully in parallel by different sessions.
+- T022-T024 (Polish) are `[P]` — independent concerns.
+- Phase 5 (US3) and Phase 2 (Foundational) can run fully in parallel — no shared files, no
+  shared dependency in either direction. Phase 5 (US3) and Phase 6 (US4) can also run fully in
+  parallel — different commands, different files.
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (Foundational + User Story 1)
+### MVP First
 
-1. Complete Phase 2 (Foundational — `ExecutionID` + `Data` redesign): T001-T004 (tests) →
-   T005-T011 (implementation)
-2. Complete Phase 3 (US1 — `ExecutionID` verification): T012 (test) → T013 (confirm/fix)
-3. **STOP and VALIDATE**: run T001-T004 and T012, confirm GREEN; run quickstart.md steps 9-10
-4. This alone ships the two clarified changes (`ExecutionID`, `Data` redesign) for every
-   command's base record, independent of US2/US3's still-open multi-component/structured-data
-   work
+There is no new MVP here — US1/US2's MVP already shipped in a prior session. The smallest
+next increment is **Phase 5 alone** (US3's three terraform gaps): it's independently
+testable/shippable (quickstart.md steps 12-14) and doesn't require Phase 2/6 at all.
+
+1. Complete Phase 5 (US3 — masking, shape completeness, `component`/`stack`): T005-T010
+   (tests) → T011-T015 (implementation)
+2. **STOP and VALIDATE**: run the new/extended tests, confirm GREEN; walk quickstart.md steps
+   12-14
+3. This alone closes FR-010a/the `has_changes`/`has_errors`/`errors` gap/the `component`/
+   `stack` gap for every `terraform plan`/`apply`/`deploy` invocation, independent of whether
+   `describe affected`/`list instances` (Phase 6) ship in the same pass.
 
 ### Incremental Delivery
 
-1. Phase 2 (Foundational) → validate → ship (unblocks US1/US2/US3)
-2. Phase 3 (US1 — `ExecutionID`) → validate → ship
-3. Phase 4 (US2 — multi-component aggregation into `Data`) → validate (single upload) → ship
-4. Phase 5 (US3):
-   a. Multi-component half (T028) — **done**, shipped
-   b. Single-component half (T019-T027, Decision 18) — **done**, shipped: a plain `atmos
-      terraform plan <component> -s <stack>`'s execution record now carries non-nil
-      structured `data`
-5. Phase 6 (Polish) → Pact contract regenerated (3 interactions) — done; coverage/lint
-   re-confirmed after T019-T027 landed (T030/T032) — done; T031 (quickstart walked
-   end-to-end) and T033 (duplicate-row open question) remain
+1. Phase 5 (US3 terraform deltas) → validate → ship independently (see MVP above)
+2. Phase 2 (Foundational: `VersionedData`, `SetPendingAsyncData`) → validate → ship (unblocks
+   Phase 6; can be done before, after, or in parallel with Phase 5)
+3. Phase 6 (`describe affected` + `list instances` structured data) → validate (quickstart.md
+   steps 15-16) → ship
+4. Phase 7 (Polish): T022 (6-interaction Pact regeneration) only after both Phase 5 and Phase
+   6 have landed, since it covers all three shapes together; T023-T026 as each phase completes

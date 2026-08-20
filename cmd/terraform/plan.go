@@ -83,7 +83,16 @@ For complete Terraform/OpenTofu documentation, see:
 			ciMode = ci.IsCI()
 		}
 
-		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts()
+		// component/stack for the exec-metadata Data payload (research.md
+		// Decision 21) — the multi-component --affected/--all path never
+		// reaches captureExecMetadataSync's single-component parser closure
+		// (gated out by its existing info.NodeHooks == nil check), so an
+		// empty component here (no positional arg) is expected, not an error.
+		var execComponent string
+		if len(args) > 0 {
+			execComponent = args[0]
+		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
