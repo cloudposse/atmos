@@ -209,12 +209,13 @@ jobs:
           - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    # 20m cut it too close for windows: recent successful runs on main took
-    # 14-18.6m end-to-end (slow `go test -c` compile and post-job cache save
-    # on Windows I/O), and one run was cancelled mid cache-save at 20m12s with
-    # the actual test already passed. 30m gives real margin above the observed
-    # max without loosening linux/macos, which finish in 6-12m regardless.
-    timeout-minutes: 30
+    # windows-latest is the slowest target here too: the actual test finishes
+    # within its own 15m sub-step timeout, but the post-job Go module/build
+    # cache save (tar + zstd) runs after that and is much slower on Windows,
+    # so a flat 20m job budget can expire mid-save even though the test
+    # itself already passed (see the Acceptance tests step's timeout comment
+    # below for the same Windows-is-slower pattern).
+    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 30 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
