@@ -12,9 +12,19 @@ const (
 // MCPSettings contains configuration for the MCP (Model Context Protocol) server
 // and external MCP server connections.
 type MCPSettings struct {
-	Enabled bool                       `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Enabled controls whether Atmos can run as an MCP server (default: false).
+	Enabled *bool                      `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Servers map[string]MCPServerConfig `yaml:"servers,omitempty" json:"servers,omitempty" mapstructure:"servers"`
 	Routing MCPRoutingConfig           `yaml:"routing,omitempty" json:"routing,omitempty" mapstructure:"routing"`
+}
+
+// IsEnabled returns true if Atmos can run as an MCP server (defaults to false
+// when not explicitly set).
+func (s MCPSettings) IsEnabled() bool {
+	if s.Enabled == nil {
+		return false
+	}
+	return *s.Enabled
 }
 
 // MCPRoutingConfig configures the two-pass routing that selects which MCP servers

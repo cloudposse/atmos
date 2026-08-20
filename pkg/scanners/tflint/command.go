@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/scanners"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -487,7 +488,7 @@ func resolveAndProvisionComponentPath(ctx context.Context, atmosConfig *schema.A
 
 	provisionCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	componentPath, exists, err := component.ProvisionAndResolveComponentPath(provisionCtx, atmosConfig, info, cfg.TerraformComponentType, componentPath)
+	componentPath, exists, err := component.ProvisionAndResolveComponentPath(provisionCtx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentPath)
 	if err != nil {
 		return "", err
 	}

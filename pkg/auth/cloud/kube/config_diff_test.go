@@ -163,42 +163,42 @@ func TestConfigContentEqual_Diagnostics(t *testing.T) {
 	info := testClusterInfo()
 
 	t.Run("equal configs return true", func(t *testing.T) {
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		a := BuildClusterConfig(info, "dev-eks")
+		b := BuildClusterConfig(info, "dev-eks")
 		assert.True(t, configContentEqual(a, b))
 	})
 
 	t.Run("nil configs", func(t *testing.T) {
 		assert.True(t, configContentEqual(nil, nil))
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		a := BuildClusterConfig(info, "dev-eks")
 		assert.False(t, configContentEqual(a, nil))
 		assert.False(t, configContentEqual(nil, a))
 	})
 
 	t.Run("current-context differs", func(t *testing.T) {
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		a := BuildClusterConfig(info, "dev-eks")
+		b := BuildClusterConfig(info, "dev-eks")
 		b.CurrentContext = "other-context"
 		assert.False(t, configContentEqual(a, b))
 	})
 
 	t.Run("clusters differ propagates false", func(t *testing.T) {
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b.Clusters[info.ARN].Server = "https://different.eks.amazonaws.com"
+		a := BuildClusterConfig(info, "dev-eks")
+		b := BuildClusterConfig(info, "dev-eks")
+		b.Clusters[info.ID].Server = "https://different.eks.amazonaws.com"
 		assert.False(t, configContentEqual(a, b))
 	})
 
 	t.Run("contexts differ propagates false", func(t *testing.T) {
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		a := BuildClusterConfig(info, "dev-eks")
+		b := BuildClusterConfig(info, "dev-eks")
 		b.Contexts["dev-eks"].Namespace = "custom-namespace"
 		assert.False(t, configContentEqual(a, b))
 	})
 
 	t.Run("auth infos differ propagates false", func(t *testing.T) {
-		a := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		b := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		a := BuildClusterConfig(info, "dev-eks")
+		b := BuildClusterConfig(info, "dev-eks")
 		b.AuthInfos["atmos-eks-dev-cluster-us-east-2"].Exec.Command = "different"
 		assert.False(t, configContentEqual(a, b))
 	})
@@ -212,45 +212,45 @@ func TestConfigContentEqual_Diagnostics(t *testing.T) {
 // diagnostic within the AuthInfos case.
 func TestMergeWouldChange_Diagnostics(t *testing.T) {
 	info := testClusterInfo()
-	base := BuildClusterConfig(info, "dev-eks", "dev-admin")
+	base := BuildClusterConfig(info, "dev-eks")
 
 	t.Run("current-context differs", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.CurrentContext = "different-context"
 		assert.True(t, mergeWouldChange(base, other))
 	})
 
 	t.Run("cluster key missing from existing", func(t *testing.T) {
-		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		delete(existing.Clusters, info.ARN)
+		existing := BuildClusterConfig(info, "dev-eks")
+		delete(existing.Clusters, info.ID)
 		assert.True(t, mergeWouldChange(existing, base))
 	})
 
 	t.Run("cluster entry differs", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		other.Clusters[info.ARN].Server = "https://different.eks.amazonaws.com"
+		other := BuildClusterConfig(info, "dev-eks")
+		other.Clusters[info.ID].Server = "https://different.eks.amazonaws.com"
 		assert.True(t, mergeWouldChange(base, other))
 	})
 
 	t.Run("context key missing from existing", func(t *testing.T) {
-		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		existing := BuildClusterConfig(info, "dev-eks")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.Contexts["extra-context"] = &clientcmdapi.Context{
-			Cluster:  info.ARN,
+			Cluster:  info.ID,
 			AuthInfo: "atmos-eks-dev-cluster-us-east-2",
 		}
 		assert.True(t, mergeWouldChange(existing, other))
 	})
 
 	t.Run("context entry differs", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.Contexts["dev-eks"].Namespace = "custom-namespace"
 		assert.True(t, mergeWouldChange(base, other))
 	})
 
 	t.Run("auth info key missing from existing", func(t *testing.T) {
-		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		existing := BuildClusterConfig(info, "dev-eks")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.AuthInfos["extra-user"] = &clientcmdapi.AuthInfo{Token: "abc"}
 		assert.True(t, mergeWouldChange(existing, other))
 	})
@@ -264,7 +264,7 @@ func TestMergeWouldChange_Diagnostics(t *testing.T) {
 	})
 
 	t.Run("auth info entry differs with exec", func(t *testing.T) {
-		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other := BuildClusterConfig(info, "dev-eks")
 		other.AuthInfos["atmos-eks-dev-cluster-us-east-2"].Exec.Command = "different-command"
 		assert.True(t, mergeWouldChange(base, other))
 	})

@@ -447,7 +447,10 @@ func TestPrintSubcommandAliases(t *testing.T) {
 				{Use: "destroy", Aliases: []string{"d", "del"}, Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"SUBCOMMAND ALIASES", "a", "Alias of"},
+			// "destroy" registers two aliases -- both must be listed, not just
+			// the first ("d"), otherwise "del" is silently undiscoverable via
+			// --help even though it works when invoked directly.
+			contains: []string{"SUBCOMMAND ALIASES", "a", "d", "del", "Alias of"},
 		},
 		{
 			name: "subcommands without aliases",

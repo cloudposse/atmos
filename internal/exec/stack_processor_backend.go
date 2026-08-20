@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -64,6 +65,12 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 		if !ok {
 			return "", nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformBackend, cfg.component)
 		}
+	} else if err := checkTerraformBackendTypeMatch(
+		cfg.component,
+		finalComponentBackendType,
+		finalComponentBackendSection,
+	); err != nil {
+		return "", nil, err
 	}
 
 	// Set backend-specific defaults.
@@ -81,6 +88,33 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 	}
 
 	return finalComponentBackendType, finalComponentBackend, nil
+}
+
+// checkTerraformBackendTypeMatch errors when backend: configures at least one
+// backend-type key but none of them match the resolved backend_type -- a
+// plausible copy-paste mistake (e.g. backend_type: http with backend:
+// {s3: {...}}) that would otherwise silently resolve to an empty backend
+// config. An empty backend_type is a separate, already-handled case (the
+// caller skips backend generation and logs a warning), not a mismatch.
+// Mirrors checkRemoteStateBackendTypeMatch.
+func checkTerraformBackendTypeMatch(component, backendType string, backendSection map[string]any) error {
+	if backendType == "" || len(backendSection) == 0 {
+		return nil
+	}
+
+	configuredKeys := make([]string, 0, len(backendSection))
+	for k := range backendSection {
+		configuredKeys = append(configuredKeys, k)
+	}
+	sort.Strings(configuredKeys)
+
+	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
+		WithContext("component", component).
+		WithContext("backend_type", backendType).
+		WithContext("backend_keys", strings.Join(configuredKeys, ", ")).
+		WithHintf("backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
+			backendType, strings.Join(configuredKeys, ", "), backendType).
+		Err()
 }
 
 // setS3BackendDefaults sets AWS S3 backend defaults.
@@ -230,6 +264,10 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 	// backend section. Precedence is preserved because the layered remotes
 	// are merged in the same order (global → base component → component) as
 	// the un-scoped path would have.
+	if err := checkRemoteStateBackendTypeMatch(cfg, finalComponentRemoteStateBackendType); err != nil {
+		return "", nil, err
+	}
+
 	globalRemoteVal, err := extractBackendTypeMap(cfg.globalRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
 	if err != nil {
 		return "", nil, err
@@ -285,6 +323,43 @@ func extractBackendTypeMap(section map[string]any, backendType, component string
 		return nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformRemoteStateBackend, component)
 	}
 	return asMap, nil
+}
+
+// checkRemoteStateBackendTypeMatch errors when any of the (unscoped)
+// remote_state_backend sections configure at least one backend-type key but none
+// of them match the resolved remote_state_backend_type -- a plausible copy-paste
+// mistake (e.g. remote_state_backend_type: http with remote_state_backend:
+// {s3: {...}}) that would otherwise silently resolve to an empty remote-state
+// backend config. Mirrors the backend_type/backend check in
+// processTerraformBackend.
+func checkRemoteStateBackendTypeMatch(cfg *remoteStateBackendConfig, finalComponentRemoteStateBackendType string) error {
+	configuredKeys := map[string]bool{}
+	for _, section := range []map[string]any{
+		cfg.globalRemoteStateBackendSection,
+		cfg.baseComponentRemoteStateBackendSection,
+		cfg.componentRemoteStateBackendSection,
+	} {
+		for k := range section {
+			configuredKeys[k] = true
+		}
+	}
+	if finalComponentRemoteStateBackendType == "" || len(configuredKeys) == 0 || configuredKeys[finalComponentRemoteStateBackendType] {
+		return nil
+	}
+
+	keys := make([]string, 0, len(configuredKeys))
+	for k := range configuredKeys {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
+		WithContext("component", cfg.component).
+		WithContext("remote_state_backend_type", finalComponentRemoteStateBackendType).
+		WithContext("remote_state_backend_keys", strings.Join(keys, ", ")).
+		WithHintf("remote_state_backend_type is %q but remote_state_backend: only configures %s. Add a %q key under remote_state_backend:, or change remote_state_backend_type to match.",
+			finalComponentRemoteStateBackendType, strings.Join(keys, ", "), finalComponentRemoteStateBackendType).
+		Err()
 }
 
 // getWorkspacePrefixSeparator returns the configured separator for auto-generated

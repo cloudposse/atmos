@@ -81,6 +81,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/azure"
 	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
@@ -90,6 +91,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	_ "github.com/cloudposse/atmos/cmd/gcp"
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
@@ -1622,6 +1624,18 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 		return nil
 	}
 
+	if isCIGitCloneBootstrapArgs(args) {
+		// The CI git-clone bootstrap clone runs in an empty workspace (e.g.
+		// replacing actions/checkout), where atmos.yaml and any profile it
+		// references cannot exist yet. This mirrors PersistentPreRun's later,
+		// cmd-aware applyCIGitCloneBootstrap tolerance (see that function),
+		// but is needed here too since this handler runs before Cobra ever
+		// resolves the command -- a config/profile error at this point would
+		// otherwise abort Execute() before PersistentPreRun's check runs.
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1649,6 +1663,29 @@ func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfi
 
 	// Return other errors as-is.
 	return initErr
+}
+
+// isCIGitCloneBootstrapArgs reports whether args represent a no-argument
+// `atmos git clone` invocation under a detected CI provider -- the same
+// bootstrap shape gitcmd.CICloneBootstrapRequested recognizes once Cobra has
+// resolved the command, but checked directly against raw args before Cobra
+// has parsed anything (see handleConfigInitErrorWithArgs's caller).
+//
+// After isolating the clone-specific arguments (stripping "atmos [rootflags]
+// git clone"), this defers to gitcmd.CIGitCloneBootstrapRequestedFromRawArgs,
+// which parses them against the real clone flag set so value-taking flags,
+// such as --depth 0 or --branch main, are correctly distinguished from a
+// positional repo name/URI, rather than guessing from a "-"-prefix
+// heuristic.
+func isCIGitCloneBootstrapArgs(args []string) bool {
+	if len(args) < 1 {
+		return false
+	}
+	rest, ok := skipLeadingRootFlags(args[1:])
+	if !ok || !matchesLeadingTokens(rest, "git", "clone") {
+		return false
+	}
+	return gitcmd.CIGitCloneBootstrapRequestedFromRawArgs(rest[2:])
 }
 
 // configCommandToken is the "config" argument/subcommand token shared by all
@@ -2326,6 +2363,55 @@ func isHelpRequested(command *cobra.Command, args []string) bool {
 	return helpRequested
 }
 
+// stripHelpTokens removes help-related tokens ("--help", "-h", the "help"
+// subcommand keyword) from arguments so the unknown-subcommand validation in
+// rejectUnknownSubcommandForHelp isn't confused by the help invocation itself.
+func stripHelpTokens(arguments []string) []string {
+	filtered := make([]string, 0, len(arguments))
+	for _, a := range arguments {
+		if a == helpFlagLong || a == helpFlagShort || a == helpFlagName {
+			continue
+		}
+		filtered = append(filtered, a)
+	}
+	return filtered
+}
+
+// rejectUnknownSubcommandForHelp guards against a misleading help screen when
+// Cobra's command resolution stops at a PARENT command because the next
+// token in the invocation doesn't match any registered subcommand -- e.g.
+// "atmos toolchain versions --help" resolves command to "toolchain" (the
+// parent) with "versions" left over as an unmatched argument, since
+// "versions" isn't a real toolchain subcommand. Without this check,
+// rootHelpFunc would silently drop "versions" and render toolchain's own
+// help, which looks exactly like "versions --help" succeeded.
+//
+// It runs the same unknown-subcommand validation rootUsageFunc runs for the
+// equivalent non-help invocation (flags.ValidateArgsOrNil against command's
+// own Args validator) and, when that validation reports an error, shows the
+// same "Unknown command" error via showUsageAndExit instead of letting the
+// caller render command's help -- this call never returns in that case.
+//
+// Returns false (nothing to reject, caller should render help as usual) when:
+//   - there are no leftover arguments once help tokens are stripped, e.g.
+//     "atmos toolchain --help" or "atmos toolchain install --help", or
+//   - command is a leaf with no subcommands, so leftover tokens are its own
+//     positional arguments (e.g. "atmos terraform plan component1 --help"),
+//     not subcommand names, or
+//   - the leftover arguments validate cleanly against command's own Args
+//     validator.
+func rejectUnknownSubcommandForHelp(command *cobra.Command, arguments []string) bool {
+	arguments = stripHelpTokens(arguments)
+	if len(arguments) == 0 || len(command.Commands()) == 0 {
+		return false
+	}
+	if argErr := flags.ValidateArgsOrNil(command, arguments); argErr == nil {
+		return false
+	}
+	showUsageAndExit(command, arguments)
+	return true
+}
+
 // parsePagerFlagValue interprets the --pager flag's string value as a
 // tri-state boolean: recognized on/off tokens map directly, anything else
 // (e.g. a pager command like "less") is treated as enabling the pager.
@@ -2427,10 +2513,22 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 		command.Example = exampleContent.Content
 	}
 
+	// Get actual arguments (handles DisableFlagParsing=true case).
+	arguments := flags.GetActualArgs(command, os.Args)
+
 	if !isHelpRequested(command, args) {
-		// Get actual arguments (handles DisableFlagParsing=true case).
-		arguments := flags.GetActualArgs(command, os.Args)
 		showUsageAndExit(command, arguments)
+	}
+
+	// Help was requested, but Cobra may have resolved command to a PARENT
+	// because the next token isn't a registered subcommand (e.g. "atmos
+	// toolchain versions --help" resolves to "toolchain" with "versions"
+	// left over). Catch that here with the same validation rootUsageFunc
+	// uses, and error out instead of silently rendering the parent's help --
+	// otherwise the unmatched token is dropped and the output misleadingly
+	// looks like real help for a subcommand that doesn't exist.
+	if rejectUnknownSubcommandForHelp(command, arguments) {
+		return
 	}
 
 	// Cobra renders help before the persistent pre-run hooks fire, so an

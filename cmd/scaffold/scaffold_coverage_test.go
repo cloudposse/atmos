@@ -322,6 +322,21 @@ func TestExecuteScaffoldGenerate_DryRunBuiltInTemplate(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExecuteScaffoldGenerate_InvalidMergeDriver(t *testing.T) {
+	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
+		templateName:   "simple",
+		targetDir:      t.TempDir(),
+		dryRun:         true,
+		interactive:    false,
+		useDefaults:    true,
+		mergeDriver:    "bogus",
+		templateValues: map[string]interface{}{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
+}
+
 func TestExecuteScaffoldGenerate_DryRunRequiresTarget(t *testing.T) {
 	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
 		templateName:   "simple",

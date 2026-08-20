@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -56,6 +57,174 @@ func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
 	assert.Equal(t, "run stdout\n", res.Metadata["stdout"])
 	assert.Equal(t, 0, res.Metadata[exitCodeMetadata])
 	assert.Equal(t, "container-id", res.Metadata["container_id"])
+}
+
+// TestContainerHandlerExecuteRunStackResolutionErrorPropagates covers executeRun's
+// error path when resolveContainerStepStack fails (e.g. an unresolvable `stack:`
+// template) -- the error must be wrapped in errUtils.ErrContainerStepResolveStack
+// and returned rather than silently ignored or causing the container to run
+// without shared networking.
+func TestContainerHandlerExecuteRunStackResolutionErrorPropagates(t *testing.T) {
+	installStepFakeDocker(t)
+	h := &ContainerHandler{}
+
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "{{ .steps.missing.value",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrContainerStepResolveStack)
+	assert.Nil(t, res)
+}
+
+// TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker is a
+// regression test for a bug where a `type: container, action: run` step's
+// `restart:`/`healthcheck:` fields decoded successfully from `with:` but were
+// silently dropped before reaching the `docker create` invocation: neither
+// container.EphemeralConfig nor the runtime CreateConfig it built carried the
+// values, so no --restart/--health-* flags were ever emitted. Asserts the
+// real recorded argv (not a hand-built struct) includes both.
+func TestContainerHandlerExecuteRunPassesRestartAndHealthCheckToDocker(t *testing.T) {
+	installStepFakeDocker(t)
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+
+	_, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name: "run",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+			Restart: &schema.ContainerRestart{
+				Policy:     "on-failure",
+				MaxRetries: 3,
+			},
+			HealthCheck: &schema.ContainerHealthCheck{
+				Test:     []string{"CMD", "true"},
+				Interval: "5s",
+				Retries:  2,
+			},
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a docker create invocation, got: %v", args)
+	assert.Contains(t, createLine, "--restart\ton-failure:3")
+	assert.Contains(t, createLine, "--health-cmd\ttrue")
+	assert.Contains(t, createLine, "--health-interval\t5s")
+	assert.Contains(t, createLine, "--health-retries\t2")
+}
+
+func TestContainerHandlerExecuteRunAttachesSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "dev",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.Contains(t, args, "network\tcreate\tatmos-dev")
+
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a create invocation")
+	assert.Contains(t, createLine, "--network\tatmos-dev")
+	assert.Contains(t, createLine, "--network-alias\tdev-smoke")
+}
+
+func TestContainerHandlerExecuteRunHostNetworkOverrideSkipsSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name:  "smoke",
+		Stack: "dev",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+			RunArgs:  []string{"--network=host"},
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	for _, line := range args {
+		assert.False(t, strings.HasPrefix(line, "network\t"), "explicit --network override must not also get the shared network: %q", line)
+		assert.NotContains(t, line, "--network\tatmos-dev", "explicit --network override must not also get the shared network alias")
+	}
+
+	var createLine string
+	for _, line := range args {
+		if strings.HasPrefix(line, "create\t") {
+			createLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, createLine, "expected a create invocation")
+	assert.Contains(t, createLine, "--network=host", "the user's explicit run_args override must still be applied")
+}
+
+func TestContainerHandlerExecuteRunNoStackSkipsSharedNetwork(t *testing.T) {
+	installStepFakeDocker(t)
+	t.Setenv("ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK", "false")
+	argsPath := filepath.Join(t.TempDir(), "docker-args.log")
+	t.Setenv("ATMOS_FAKE_RUNTIME_ARGS_FILE", argsPath)
+
+	h := &ContainerHandler{}
+	res, err := h.executeRun(context.Background(), &schema.WorkflowStep{
+		Name: "smoke",
+		Run: &schema.ContainerRunStep{
+			Image:    "alpine",
+			Command:  "echo hi",
+			Provider: string(container.TypeDocker),
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	args := fakeRuntimeArgs(t, argsPath)
+	assert.NotContains(t, args, "network\tcreate\tatmos-default", "no stack in scope should mean no network attachment")
+	for _, line := range args {
+		assert.False(t, strings.HasPrefix(line, "network\t"), "no stack in scope should mean no network attachment: %q", line)
+	}
 }
 
 func TestContainerHandlerExecuteBuildWithFakeDocker(t *testing.T) {

@@ -120,6 +120,12 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "manual",
 		},
+		{
+			name:         "merge-driver flag",
+			flagName:     "merge-driver",
+			shorthand:    "",
+			defaultValue: "auto",
+		},
 	}
 
 	for _, tt := range tests {

@@ -632,12 +632,17 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 
 	// Fall back to the summary line when per-run lines were not captured (e.g.
 	// output buffering differences); per-run lines are preferred since they also
-	// surface skips.
+	// surface skips. The summary line carries no per-run detail, so synthesize a
+	// single aggregate row into Runs -- otherwise the CI summary's results table
+	// (gated on len(Runs) > 0) silently disappears even though badges still render.
 	if data.Total == 0 {
 		if match := testSummaryRe.FindStringSubmatch(output); len(match) == 3 {
 			data.Pass = parseIntOrZero(match[1])
 			data.Fail = parseIntOrZero(match[2])
 			data.Total = data.Pass + data.Fail
+			if data.Total > 0 {
+				data.Runs = append(data.Runs, synthesizeFallbackRun(data.Pass, data.Fail))
+			}
 		}
 	}
 
@@ -651,6 +656,20 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	}
 
 	return result
+}
+
+// synthesizeFallbackRun builds a single aggregate run entry standing in for the
+// per-run detail ParseTestOutput could not capture, so the CI summary's results
+// table still renders one row instead of none.
+func synthesizeFallbackRun(pass, fail int) plugin.TerraformTestRun {
+	status := testStatusPass
+	if fail > 0 {
+		status = testStatusFail
+	}
+	return plugin.TerraformTestRun{
+		Name:   fmt.Sprintf("test summary (per-run detail unavailable): %d passed, %d failed", pass, fail),
+		Status: status,
+	}
 }
 
 // isJSONStream reports whether output contains Terraform/OpenTofu `test -json`
