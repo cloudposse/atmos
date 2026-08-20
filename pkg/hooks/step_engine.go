@@ -153,6 +153,7 @@ func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 				Err()
 		}
 	}
+	preserveGenericWith(ws, hook.With)
 	// The envelope owns type and retry; they always win over anything in `with:`.
 	ws.Type = hook.Type
 	ws.Retry = hook.Retry
@@ -160,6 +161,25 @@ func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 		ws.Name = "hook:" + hook.Type
 	}
 	return ws, nil
+}
+
+// preserveGenericWith backfills ws.With from the hook's `with:` payload when
+// the step's own YAML decode left it nil. StepFromHook and
+// workflowStepFromHookPayload treat the hook's `with:` block as the step's
+// own top-level YAML document rather than a nested `with:` key, so step
+// types with flat WorkflowStep fields (archive, container, emulator, and
+// others) decode correctly, but step types whose config lives entirely in
+// the generic With map (store, tflint) have no flat fields to receive it and
+// silently lose their whole configuration. Only backfills when the normal
+// decode left With empty, so a step type that does define a real nested
+// `with:` key of its own is left untouched.
+func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
+	if ws.With != nil {
+		return
+	}
+	if m, ok := payload.(map[string]any); ok {
+		ws.With = m
+	}
 }
 
 // stepsEngine runs an ordered list of registered step types as a single hook.
@@ -261,6 +281,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			WithExplanation("Failed to decode a rendered step hook payload into a step").
 			Err()
 	}
+	preserveGenericWith(ws, processed)
 	return ws, nil
 }
 
