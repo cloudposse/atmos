@@ -3,7 +3,6 @@ package exec
 import (
 	"testing"
 
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -109,24 +108,11 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Verify component_info is present even though validation was skipped.
+		// Verify component_info is present even though validation may have been skipped.
 		componentInfo, ok := componentSection["component_info"].(map[string]any)
 		require.True(t, ok, "component_info should be present")
 
-		// Check if validation was skipped due to OpenTofu detection.
-		if skipped, exists := componentInfo["validation_skipped_opentofu"]; exists {
-			assert.True(t, skipped.(bool), "validation_skipped_opentofu should be true when OpenTofu-specific syntax is detected")
-		}
-
-		// Terraform config may be nil (validation skipped) or the parsed module.
-		// Either is acceptable - the important part is that the error didn't fail the operation.
-		if terraformConfig, exists := componentInfo[terraformConfigKey]; exists {
-			// If it exists, it should either be nil or the module parsed by terraform-config-inspect.
-			if terraformConfig != nil {
-				_, ok := terraformConfig.(*tfconfig.Module)
-				assert.True(t, ok, "If terraform_config is not nil, it should be a parsed Terraform module")
-			}
-		}
+		assertModuleSourceInterpolationHandledCorrectly(t, componentInfo)
 
 		// Component path should still be resolved correctly.
 		componentPath, ok := componentInfo["component_path"].(string)
