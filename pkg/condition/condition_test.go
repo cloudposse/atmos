@@ -188,6 +188,36 @@ func TestConditionUnmarshalYAML(t *testing.T) {
 			ctx:  Context{Status: PredicateSuccess, Matrix: nil},
 			want: true,
 		},
+		{
+			name: "cel flags bool value",
+			yaml: "when: \"flags.dry_run == true\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: map[string]any{"dry_run": true}},
+			want: true,
+		},
+		{
+			name: "cel flags string value false",
+			yaml: "when: \"flags['env'] == 'prod'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: map[string]any{"env": "staging"}},
+			want: false,
+		},
+		{
+			name: "cel flags nil map defaults to empty",
+			yaml: "when: \"size(flags) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: nil},
+			want: true,
+		},
+		{
+			name: "cel arguments map lookup",
+			yaml: "when: \"arguments.environment == 'prod'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Arguments: map[string]string{"environment": "prod"}},
+			want: true,
+		},
+		{
+			name: "cel arguments nil map defaults to empty",
+			yaml: "when: \"size(arguments) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Arguments: nil},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
