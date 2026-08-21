@@ -93,9 +93,10 @@ the only gap was the classifier not wrapping this particular error shape.
 - `TestClassifySignatureVerificationError` — added cases for a `16.root.json` fetch 403, a
   `timestamp.json` fetch 403, and a 403 outside the TUF CDN host (must NOT be retried), using the
   verbatim error text observed in CI.
-- `TestRunCosignWithRetry_RecoversFromTUFCDNFetch403` — end-to-end: a flaky runner that fails
-  twice with the CI's exact `16.root.json ... http status code: 403` error, then succeeds; asserts
-  `runCosignWithRetry` retries and ultimately succeeds after 3 calls.
+- `TestRunCosignWithRetry_RecoversFromTUFCDNFetch403` — retry-path recovery test: an in-process
+  `flakyRunner` (not a real `cosign` binary or the external TUF service) fails twice with the CI's
+  exact `16.root.json ... http status code: 403` error, then succeeds; asserts `runCosignWithRetry`
+  retries and ultimately succeeds after 3 calls.
 
 ---
 
