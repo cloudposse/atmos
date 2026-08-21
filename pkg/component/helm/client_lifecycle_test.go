@@ -55,6 +55,7 @@ func testdataChartSpec(t *testing.T, releaseName string) *chartSpec {
 		ReleaseName: releaseName,
 		Namespace:   "testns",
 		Values:      map[string]any{"replicaCount": 2, "image": map[string]any{"tag": "1.0"}},
+		Release:     releasePolicyInput{},
 	}
 }
 
@@ -67,10 +68,11 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	spec := testdataChartSpec(t, "lifecycle")
 
 	// No release yet -> applyRelease takes the install branch.
-	manifest, err := applyRelease(context.Background(), spec, false)
+	result, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
-	assert.Contains(t, manifest, "name: lifecycle")
+	assert.Equal(t, "install", result.Operation)
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "name: lifecycle")
 
 	// The installed release is now the diff baseline.
 	deployed, err := getDeployedManifest("lifecycle", "testns")
@@ -80,11 +82,12 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	// Release exists -> applyRelease takes the upgrade branch.
 	upgraded, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	assert.Contains(t, upgraded, "kind: ConfigMap")
+	assert.Equal(t, "upgrade", upgraded.Operation)
+	assert.Contains(t, upgraded.Manifest, "kind: ConfigMap")
 
 	// Delete removes it; deleting an absent release is a no-op (idempotent).
-	require.NoError(t, deleteRelease("lifecycle", "testns"))
-	require.NoError(t, deleteRelease("lifecycle", "testns"))
+	require.NoError(t, deleteRelease(spec, false))
+	require.NoError(t, deleteRelease(spec, false))
 
 	// After delete the baseline is empty (release not found), not an error.
 	deployed, err = getDeployedManifest("lifecycle", "testns")
@@ -99,9 +102,9 @@ func TestApplyReleaseDryRunInstall(t *testing.T) {
 	stubActionContext(t, actx)
 	spec := testdataChartSpec(t, "preview")
 
-	manifest, err := applyRelease(context.Background(), spec, true)
+	result, err := applyRelease(context.Background(), spec, true)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
 
 	// A dry run must not persist a release.
 	deployed, err := getDeployedManifest("preview", "testns")
@@ -120,7 +123,21 @@ func TestUpgradeReleaseDryRun(t *testing.T) {
 	stubActionContext(t, actx)
 	spec := testdataChartSpec(t, "seeded")
 
-	manifest, err := applyRelease(context.Background(), spec, true)
+	result, err := applyRelease(context.Background(), spec, true)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
+}
+
+func TestDeleteReleaseDryRunPreservesRelease(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "delete-preview")
+
+	_, err := applyRelease(context.Background(), spec, false)
+	require.NoError(t, err)
+	require.NoError(t, deleteRelease(spec, true))
+
+	deployed, err := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, err)
+	assert.Contains(t, deployed, "kind: ConfigMap")
 }

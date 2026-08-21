@@ -677,6 +677,54 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 	})
 }
 
+func TestExtractHelmLifecycleSections(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:        "charts/demo-release",
+		cfg.ValuesSectionName:       map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName: []any{map[string]any{"name": "internal"}},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmTimeoutSectionName: "30m",
+			cfg.HelmWaitSectionName: map[string]any{
+				cfg.HelmWaitStrategySectionName: "watcher",
+			},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+		},
+		"unrecognized": "ignored",
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], component[cfg.HelmReleaseSectionName])
+	assert.NotContains(t, component, "unrecognized")
+
+	defaults := extractHelmLifecycleSection(section)
+	assert.NotContains(t, defaults, cfg.ChartSectionName)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
+	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], defaults[cfg.HelmReleaseSectionName])
+
+	overrides := extractHelmOverrideSection(section)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, overrides[cfg.ValuesSectionName])
+	assert.NotContains(t, overrides, cfg.ChartSectionName)
+	assert.NotContains(t, overrides, cfg.RepositoriesSectionName)
+	assert.NotContains(t, overrides, cfg.HelmReleaseSectionName)
+	assert.NotContains(t, overrides, "unrecognized")
+}
+
+func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:  ".",
+		cfg.ValuesSectionName: nil,
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, ".", component[cfg.ChartSectionName])
+	assert.NotContains(t, component, cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmLifecycleSection(section), cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmOverrideSection(section), cfg.ValuesSectionName)
+}
+
 // Compile-time guard: a rename of the schema Plugins fields fails the build.
 var (
 	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}

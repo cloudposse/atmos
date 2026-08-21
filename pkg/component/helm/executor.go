@@ -209,6 +209,19 @@ func runWithHooks(
 	if spec.ReleaseName == "" {
 		return errUtils.ErrHelmReleaseNameRequired
 	}
+	if namespace, ok := ctx.Flags["namespace"].(string); ok && namespace != "" {
+		spec.Namespace = namespace
+	}
+	if operation == OperationApply {
+		spec.LifecycleFlags = ctx.Flags
+	}
+	if operation == OperationDelete {
+		spec.Lifecycle, err = resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationDelete, ctx.Flags)
+		if err != nil {
+			return err
+		}
+		emitLifecycleWarnings(spec.Lifecycle.Warnings)
+	}
 	if operation != OperationDelete {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err
@@ -259,11 +272,18 @@ func runOperation(
 		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
-		err := deleteHelmRelease(spec.ReleaseName, spec.Namespace)
+		err := deleteHelmRelease(spec, info.DryRun)
+		summary["release"] = lifecycleSummary(releaseOperationDelete, spec.Lifecycle.Policy)
 		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err
 	default:
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrHelmUnsupportedOperation, operation)
+	}
+}
+
+func emitLifecycleWarnings(warnings []lifecycleWarning) {
+	for _, warning := range warnings {
+		ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
 	}
 }
 
