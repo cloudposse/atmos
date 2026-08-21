@@ -1,0 +1,42 @@
+name: TruffleHog secret scan
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trufflehog:
+    name: Scan for verified secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          # TruffleHog needs full history to diff base->head on pull_request/push,
+          # and to do a full-history scan on workflow_dispatch.
+          fetch-depth: 0
+
+      # Scans the git repo + commit history for leaked credentials — distinct
+      # from the Trivy `secret` scanner on the built Docker image (build.yml),
+      # which scans the container filesystem layers instead. Both are needed:
+      # a secret can leak into git without ever reaching the image, or into an
+      # image layer (e.g. via a --build-arg) without ever touching git.
+      #
+      # --results=verified: only fail on secrets TruffleHog actively confirmed
+      # are still live against the provider's API, not just pattern matches —
+      # keeps this a real blocking gate without pattern-only noise.
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+        with:
+          extra_args: --results=verified
