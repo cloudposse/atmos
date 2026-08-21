@@ -2653,7 +2653,9 @@
     },
     "depends_on": {
       "title": "depends_on",
-      "description": "Depends_on section",
+      "description": "Depends_on section. Deprecated: use `dependencies.components` instead, which uses a simpler list syntax with append merge behavior. Still supported for backward compatibility.",
+      "deprecated": true,
+      "x-atmos-replacement": "dependencies.components",
       "oneOf": [
         {
           "type": "string",
@@ -2681,26 +2683,37 @@
         {
           "type": "object",
           "properties": {
+            "stack": {
+              "type": "string",
+              "description": "Atmos stack where the `component` is provisioned (e.g. `tenant1-ue2-prod`). Supports Go templates."
+            },
             "namespace": {
-              "type": "string"
+              "type": "string",
+              "description": "The `namespace` where the `component` is provisioned."
             },
             "tenant": {
-              "type": "string"
+              "type": "string",
+              "description": "The `tenant` where the `component` is provisioned."
             },
             "environment": {
-              "type": "string"
+              "type": "string",
+              "description": "The `environment` where the `component` is provisioned."
             },
             "stage": {
-              "type": "string"
+              "type": "string",
+              "description": "The `stage` where the `component` is provisioned."
             },
             "component": {
-              "type": "string"
+              "type": "string",
+              "description": "An Atmos component that the current component depends on."
             },
             "file": {
-              "type": "string"
+              "type": "string",
+              "description": "A file on the local filesystem that the current component depends on."
             },
             "folder": {
-              "type": "string"
+              "type": "string",
+              "description": "A folder on the local filesystem that the current component depends on."
             }
           },
           "oneOf": [
