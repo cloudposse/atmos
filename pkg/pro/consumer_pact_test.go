@@ -752,8 +752,8 @@ func TestPact_UploadExecMetadata_MultiComponent(t *testing.T) {
 								"replace": matchers.Like(0),
 								"destroy": matchers.Like(0),
 							},
-							"outputs":     body{},
-							"warnings":    []interface{}{},
+							"outputs":  body{},
+							"warnings": []interface{}{},
 							"changes": matchers.EachLike(body{
 								"action":  matchers.Like("created"),
 								"address": matchers.Like("aws_vpc.this"),
