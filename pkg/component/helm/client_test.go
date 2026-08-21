@@ -159,7 +159,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease(spec, false)
+	err = deleteRelease(context.Background(), spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -173,8 +173,10 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err := installRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }

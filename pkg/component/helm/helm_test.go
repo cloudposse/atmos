@@ -190,6 +190,27 @@ func TestBuildValues_MergeAndFiles(t *testing.T) {
 	assert.Equal(t, "override", img["tag"]) // inline values win over values_files
 }
 
+func TestBuildValues_PreservesHelmTemplateSyntaxAcrossSources(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	dir := t.TempDir()
+	valuesFile := filepath.Join(dir, "templated.yaml")
+	templateValue := "{{ .Values.kafka.password }}"
+	require.NoError(t, os.WriteFile(valuesFile, []byte("fromFile: '{{ .Values.kafka.password }}'\n"), 0o600))
+
+	section := map[string]any{
+		cfg.ValuesFilesSectionName: []any{valuesFile},
+		cfg.ValuesSectionName: map[string]any{
+			"inline": templateValue,
+		},
+	}
+
+	values, err := buildValues(atmosConfig, section, "")
+	require.NoError(t, err)
+	assert.Equal(t, templateValue, values["fromFile"])
+	assert.Equal(t, templateValue, values["inline"])
+	assert.Equal(t, values["fromFile"], values["inline"])
+}
+
 func TestResolveRenderOptions_FlagsOverrideComponent(t *testing.T) {
 	componentSection := map[string]any{
 		"render": map[string]any{"output": map[string]any{"path": "from-component.yaml"}},
@@ -225,5 +246,76 @@ func TestRenderManifest_LocalChart(t *testing.T) {
 	assert.Contains(t, rendered, "namespace: testns")
 	assert.Contains(t, rendered, `replicas: "5"`)
 	assert.Contains(t, rendered, "nginx:9.9")
-	assert.True(t, strings.Contains(rendered, "ConfigMap"))
+	assert.Contains(t, rendered, "# Source: testchart/templates/hook.yaml")
+	assert.Contains(t, rendered, `name: "unit-settings"`)
+}
+
+func TestLoadChartReportsMissingDependencies(t *testing.T) {
+	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart-missing-dependency"))
+	require.NoError(t, err)
+
+	_, err = loadChart(chartPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+	assert.Contains(t, err.Error(), "while checking Helm chart dependencies")
+	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
+	assert.Contains(t, err.Error(), "helm-test-library")
+}
+
+func TestRenderManifestReportsMissingDependenciesOnce(t *testing.T) {
+	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart-missing-dependency"))
+	require.NoError(t, err)
+
+	_, err = renderManifest(context.Background(), &chartSpec{
+		Chart:       chartPath,
+		ReleaseName: "unit",
+		Namespace:   "testns",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrHelmRenderFailed.Error()))
+	assert.Contains(t, err.Error(), "helm dependency build "+chartPath)
+	assert.Contains(t, err.Error(), "--dependency-update")
+}
+
+func TestRenderManifestPreservesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := renderManifest(ctx, &chartSpec{
+		Chart:       filepath.Join("testdata", "chart"),
+		ReleaseName: "unit",
+		Namespace:   "testns",
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+}
+
+func TestLoadChartUpdatesMissingDependenciesWhenRequested(t *testing.T) {
+	testdataRoot := t.TempDir()
+	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
+	chartPath := filepath.Join(testdataRoot, "chart-missing-dependency")
+
+	settings := newSettings()
+	settings.RepositoryConfig = filepath.Join(testdataRoot, "repositories.yaml")
+	settings.RepositoryCache = filepath.Join(testdataRoot, "repository")
+	settings.ContentCache = filepath.Join(testdataRoot, "content")
+
+	loaded, err := loadChartForAction(context.Background(), chartPath, settings, nil, true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	assert.FileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
+}
+
+func TestLoadChartDoesNotUpdateDependenciesAfterCancellation(t *testing.T) {
+	testdataRoot := t.TempDir()
+	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
+	chartPath := filepath.Join(testdataRoot, "chart-missing-dependency")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := loadChartForAction(ctx, chartPath, newSettings(), nil, true)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NoFileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
 }

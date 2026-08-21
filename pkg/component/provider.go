@@ -44,8 +44,12 @@ type ComponentProvider interface {
 	GetAvailableCommands() []string
 }
 
-// ExecutionContext provides all necessary context for component execution.
+// ExecutionContext contains component execution metadata and the caller context.
+// Construct values with keyed fields because new execution metadata may be added over time.
 type ExecutionContext struct {
+	// Context carries caller cancellation and deadlines into component execution.
+	// Use GoContext so legacy callers that omit it retain background behavior.
+	Context             context.Context
 	AtmosConfig         *schema.AtmosConfiguration
 	ComponentType       string
 	Component           string
@@ -56,6 +60,14 @@ type ExecutionContext struct {
 	ConfigAndStacksInfo schema.ConfigAndStacksInfo
 	Args                []string
 	Flags               map[string]any
+}
+
+// GoContext returns the caller context or a non-nil compatibility fallback.
+func (e *ExecutionContext) GoContext() context.Context {
+	if e != nil && e.Context != nil {
+		return e.Context
+	}
+	return context.Background()
 }
 
 // ComponentInfo provides metadata about a component provider.
