@@ -536,20 +536,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - check: "Acceptance Tests (linux)"
-            target: linux
-          - check: "Acceptance Tests (macos)"
-            target: macos
-          - check: "Acceptance Tests (windows)"
-            target: windows
+        check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Check per-OS test matrix result
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET: ${{ matrix.target }}
+          CHECK: ${{ matrix.check }}
         run: |
           set -euo pipefail
+
+          # Derive the OS token (e.g. "linux") from the legacy check name
+          # (e.g. "Acceptance Tests (linux)") instead of a separate matrix
+          # field, so internal/ci/acceptance/verify.go's
+          # workflowRequiredCheckPattern - which requires this job's matrix
+          # to stay a literal `check: [...]` list - keeps matching.
+          target=${CHECK#Acceptance Tests (}
+          target=${target%)}
+          export TARGET="$target"
 
           mapfile -t shard_jobs < <(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs" \
             --paginate \
@@ -583,7 +586,7 @@ jobs:
         # terraform-registry-cache only runs a linux/windows matrix (no macos
         # leg - see its `matrix.flavor` above), so its aggregated result must
         # not gate the macos alias.
-        if: matrix.target != 'macos'
+        if: matrix.check != 'Acceptance Tests (macos)'
         run: |
           if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
