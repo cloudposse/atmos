@@ -1318,7 +1318,7 @@ jobs:
   release:
     needs: [test, terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step, magefiles]
     if: github.event_name == 'push'
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
     with:
       publish: false
       format: binary
