@@ -54,6 +54,12 @@ type Provider interface {
 	SupportsScope(scope Scope) bool
 }
 
+// RawGetter is an optional capability for providers that can retrieve the original textual
+// secret without structured decoding. `!secret ... | raw` explicitly requests this capability.
+type RawGetter interface {
+	GetRaw(coord Coordinate) (string, error)
+}
+
 // Provider-construction errors.
 var (
 	// ErrStoreNotFound indicates the referenced store is not configured.
@@ -64,6 +70,8 @@ var (
 	ErrProviderNotFound = errors.New("referenced secrets provider is not configured")
 	// ErrDeleteNotSupported indicates the backend cannot delete values.
 	ErrDeleteNotSupported = errors.New("backend does not support delete")
+	// ErrRawNotSupported indicates the backend cannot return an original textual payload.
+	ErrRawNotSupported = errors.New("backend does not support raw secret retrieval")
 	// ErrKeygenNotSupported indicates a provider implements the keygen capability but cannot
 	// generate for this particular vault/kind (e.g. a KMS/GPG-backed SOPS vault). Callers should
 	// surface it as a friendly "not implemented" message, not a hard failure.

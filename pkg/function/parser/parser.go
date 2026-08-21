@@ -69,6 +69,14 @@ type StoreGetArgs struct {
 	Query   string
 }
 
+// SecretArgs contains a declared secret name and its optional modifiers.
+type SecretArgs struct {
+	Name    string
+	Path    string
+	Raw     bool
+	Default *string
+}
+
 const (
 	tokenWhitespace = "Whitespace"
 	tokenQuoted     = "Quoted"
@@ -327,6 +335,62 @@ func ParseStoreGet(input string) (StoreGetArgs, error) {
 		return StoreGetArgs{}, invalidArity(words, "store.get function requires 2 parameters")
 	}
 	return StoreGetArgs{Store: words[0], Key: words[1], Default: options.defaultValue, Query: options.query}, nil
+}
+
+// ParseSecret parses `name [| path expression | raw] [| default value]`.
+func ParseSecret(input string) (SecretArgs, error) {
+	hasPath := false
+	tokens, err := tokenize(input)
+	if err != nil {
+		return SecretArgs{}, err
+	}
+	if len(tokens) == 0 {
+		return SecretArgs{}, emptyError()
+	}
+	if tokens[0].typeName == tokenPipe {
+		return SecretArgs{}, parseError(tokens[0], "secret name must not be empty")
+	}
+
+	result := SecretArgs{Name: unquote(tokens[0].value)}
+	for index := 1; index < len(tokens); {
+		if tokens[index].typeName != tokenPipe || index+1 >= len(tokens) {
+			return SecretArgs{}, parseError(tokens[index], "expected option delimiter")
+		}
+		keyword := unquote(tokens[index+1].value)
+		switch keyword {
+		case "raw":
+			result.Raw = true
+			index += 2
+		case "path":
+			hasPath = true
+			if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
+				return SecretArgs{}, parseError(tokens[index+1], "expected option value")
+			}
+			next := index + 3
+			for next < len(tokens) && tokens[next].typeName != tokenPipe {
+				next++
+			}
+			end := len(input)
+			if next < len(tokens) {
+				end = tokens[next].position.Offset
+			}
+			result.Path = unquote(strings.TrimSpace(input[tokens[index+2].position.Offset:end]))
+			index = next
+		case "default":
+			if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
+				return SecretArgs{}, parseError(tokens[index+1], "expected option value")
+			}
+			value := unquote(tokens[index+2].value)
+			result.Default = &value
+			index += 3
+		default:
+			return SecretArgs{}, parseError(tokens[index+1], "expected path, raw, or default option")
+		}
+	}
+	if result.Raw && hasPath {
+		return SecretArgs{}, &Error{Position: Position{Line: 1, Column: 1}, Message: "raw and path options are mutually exclusive"}
+	}
+	return result, nil
 }
 
 func words(input string) ([]string, error) {
