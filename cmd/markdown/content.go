@@ -71,3 +71,8 @@ var AtmosGitMarkdown string
 //
 //go:embed atmos_cast_render_usage.md
 var CastRenderUsageMarkdown string
+
+// CastRecordUsageMarkdown contains usage examples for the cast record command.
+//
+//go:embed atmos_cast_record_usage.md
+var CastRecordUsageMarkdown string
