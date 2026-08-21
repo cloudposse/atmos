@@ -165,6 +165,7 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 // WriteSummary writes content to the job summary.
 func (w *OutputWriter) WriteSummary(content string) error {
 	defer perf.Track(nil, "generic.OutputWriter.WriteSummary")()
+	content = provider.MaskPublishedContent(content)
 
 	if w.summaryFile != "" {
 		// Write to file.
