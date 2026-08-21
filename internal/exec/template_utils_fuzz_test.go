@@ -43,6 +43,23 @@ func FuzzProcessTmpl(f *testing.F) {
 	})
 }
 
+// knownIsGolangTemplateResults pins the expected IsGolangTemplate result for
+// specific seed inputs, under both the default and custom-delimiter configs.
+// FuzzIsGolangTemplate asserts against this for any fuzzer-generated input
+// that happens to exactly match one of these known strings — verifying real
+// detection correctness (e.g. that custom delimiters are actually honored),
+// not just the absence of panics, without trying to predict the "right"
+// answer for arbitrary mutated input the fuzzer generates on its own.
+var knownIsGolangTemplateResults = map[string]struct {
+	wantDefault bool // IsGolangTemplate(nil, str) — default "{{"/"}}" delimiters
+	wantCustom  bool // IsGolangTemplate(customDelimiterAtmosConfig(), str) — "[["/"]]" delimiters
+}{
+	"{{ .Foo }}":                {wantDefault: true, wantCustom: false},
+	"[[ .Foo ]]":                {wantDefault: false, wantCustom: true},
+	"plain string, no template": {wantDefault: false, wantCustom: false},
+	"":                          {wantDefault: false, wantCustom: false},
+}
+
 // FuzzIsGolangTemplate exercises the Go-template detection helper with
 // arbitrary strings to catch panics in the template parser or node walk.
 // Each input is run against both the default (nil atmosConfig) and a
@@ -57,7 +74,16 @@ func FuzzIsGolangTemplate(f *testing.F) {
 	f.Add("value: [[ invalid syntax ]]")
 
 	f.Fuzz(func(t *testing.T, str string) {
-		_, _ = IsGolangTemplate(nil, str)
-		_, _ = IsGolangTemplate(customDelimiterAtmosConfig(), str)
+		gotDefault, _ := IsGolangTemplate(nil, str)
+		gotCustom, _ := IsGolangTemplate(customDelimiterAtmosConfig(), str)
+
+		if want, ok := knownIsGolangTemplateResults[str]; ok {
+			if gotDefault != want.wantDefault {
+				t.Errorf("IsGolangTemplate(nil, %q) = %v, want %v", str, gotDefault, want.wantDefault)
+			}
+			if gotCustom != want.wantCustom {
+				t.Errorf("IsGolangTemplate(customDelimiterAtmosConfig(), %q) = %v, want %v", str, gotCustom, want.wantCustom)
+			}
+		}
 	})
 }

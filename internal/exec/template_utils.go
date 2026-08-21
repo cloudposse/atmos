@@ -19,6 +19,7 @@ import (
 	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -319,29 +320,9 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
-		// Template delimiters
-		leftDelimiter := "{{"
-		rightDelimiter := "}}"
-
-		if len(atmosConfig.Templates.Settings.Delimiters) > 0 {
-			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
-				"'delimiters' must be an array with two string items: left and right delimiter\n"+
-				"the left and right delimiters must not be an empty string", atmosConfig.Templates.Settings.Delimiters)
-
-			if len(atmosConfig.Templates.Settings.Delimiters) != 2 {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[0] == "" {
-				return "", delimiterError
-			}
-
-			if atmosConfig.Templates.Settings.Delimiters[1] == "" {
-				return "", delimiterError
-			}
-
-			leftDelimiter = atmosConfig.Templates.Settings.Delimiters[0]
-			rightDelimiter = atmosConfig.Templates.Settings.Delimiters[1]
+		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(atmosConfig.Templates.Settings.Delimiters)
+		if err != nil {
+			return "", err
 		}
 
 		t.Delims(leftDelimiter, rightDelimiter)
@@ -411,10 +392,51 @@ func ProcessTmplWithDatasources(
 	return result, nil
 }
 
-// IsGolangTemplate checks if the provided string is a Go template.
+// resolveTemplateDelimiters returns the effective left/right Go template
+// delimiters for the given configured pair, falling back to the default
+// "{{"/"}}" when none are configured. Shared by every code path that needs
+// to honor 'templates.settings.delimiters' from 'atmos.yaml'.
+func resolveTemplateDelimiters(delimiters []string) (string, string, error) {
+	leftDelimiter := "{{"
+	rightDelimiter := "}}"
+
+	if len(delimiters) == 0 {
+		return leftDelimiter, rightDelimiter, nil
+	}
+
+	delimiterError := fmt.Errorf("%w: invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
+		"'delimiters' must be an array with two string items: left and right delimiter\n"+
+		"the left and right delimiters must not be an empty string", errUtils.ErrInvalidTemplateSettings, delimiters)
+
+	if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
+		return "", "", delimiterError
+	}
+
+	return delimiters[0], delimiters[1], nil
+}
+
+// IsGolangTemplate checks if the provided string is a Go template, honoring
+// the effective delimiters from atmosConfig.Templates.Settings.Delimiters
+// (falling back to the default "{{"/"}}" when atmosConfig is nil or none are
+// configured) — the same delimiters ProcessTmplWithDatasources actually
+// executes it with. Without this, a project configured with custom
+// delimiters (e.g. "[[ ]]") would have its templated import strings
+// misclassified as plain text here, and treated as a genuinely missing
+// import instead of a template awaiting later resolution.
 func IsGolangTemplate(atmosConfig *schema.AtmosConfiguration, str string) (bool, error) {
 	defer perf.Track(atmosConfig, "exec.IsGolangTemplate")()
-	t, err := template.New(str).Parse(str)
+
+	var configuredDelimiters []string
+	if atmosConfig != nil {
+		configuredDelimiters = atmosConfig.Templates.Settings.Delimiters
+	}
+
+	leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(configuredDelimiters)
+	if err != nil {
+		return false, err
+	}
+
+	t, err := template.New(str).Delims(leftDelimiter, rightDelimiter).Parse(str)
 	if err != nil {
 		return false, err
 	}
