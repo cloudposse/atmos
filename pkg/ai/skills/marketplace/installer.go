@@ -654,6 +654,10 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 	installPath := filepath.Join(skillsDir, sourceInfo.Owner, sourceInfo.Repo, skillName)
 	if opts.Path != "" {
 		installPath = filepath.Join(skillsDir, skillName)
+		if !strings.HasPrefix(installPath, filepath.Clean(skillsDir)+string(filepath.Separator)) {
+			log.Warnf("Failed to install %s: invalid path: path traversal detected in %s", skillName, skillName)
+			return outcomeFailed
+		}
 	}
 
 	wasInstalled, skip := i.prepareOverwrite(skillName, installPath, opts.Force)

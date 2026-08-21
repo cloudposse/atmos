@@ -202,6 +202,10 @@ func GetStackTerraformStateFolder(componentPath string, stack string) ([]Directo
 		for i := range directories {
 			if directories[i].Files != nil {
 				for j := range directories[i].Files {
+					joined := filepath.Join(filepath.Join(componentPath, TerraformStateDir), folderName)
+					if !strings.HasPrefix(joined, filepath.Clean(filepath.Join(componentPath, TerraformStateDir))+string(filepath.Separator)) {
+						return nil, fmt.Errorf("invalid path: path traversal detected in %s", folderName)
+					}
 					directories[i].Files[j].Name = filepath.Join(folderName, directories[i].Files[j].Name)
 				}
 			}
