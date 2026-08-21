@@ -80,7 +80,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@2f9facafe44ca1b8ac6ab581df7567f06d27ef9e # v3.2.0
+        uses: cloudposse/github-action-docker-build-push@ff59bd5b5c0c953aef60f5eb9b80178fff407597 # v3.2.1
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
