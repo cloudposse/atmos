@@ -1,17 +1,17 @@
 ---
 
-description: "Task list for the eleventh re-plan: FR-006e/f correctness fixes (plan-only `-detailed-exitcode` + local exit-code neutralization)"
+description: "Task list for the twelfth re-plan: TerraformExecData's logs field (base64, masked-before-encoding), single/multi-component Data unification, and the sensitive-output-flag documentation-only clarification"
 ---
 
-# Tasks: Atmos Pro Command-Execution Metadata Upload — Eleventh Re-Plan (exit_code / buffer-scoping)
+# Tasks: Atmos Pro Command-Execution Metadata Upload — Twelfth Re-Plan (logs field / unified components shape)
 
-**Input**: Design documents from `specs/002-pro-exec-metadata/` (plan.md eleventh re-plan, spec.md FR-006e/f, research.md Decisions 31-32/35-36, data-model.md provenance amendment)
+**Input**: Design documents from `specs/002-pro-exec-metadata/` (plan.md twelfth re-plan, spec.md FR-006a/FR-006i/FR-010a, research.md Decisions 37-38, data-model.md "Unified shape" section, contracts/interactions.md interaction 9/10)
 
-**Prerequisites**: plan.md (eleventh re-plan), spec.md, research.md Decisions 31-32/35-36, data-model.md
+**Prerequisites**: plan.md (twelfth re-plan), spec.md, research.md Decisions 37-38, data-model.md
 
-**Tests**: Included — this repo's CLAUDE.md mandates a reproduce-first bug-fixing workflow (write a test that fails against current code, then fix), and each delta fixes a confirmed production bug.
+**Tests**: Included — this repo's CLAUDE.md mandates a reproduce-first bug-fixing workflow for bug fixes, and unit tests for all new/changed exported and package-private functions per Constitution Principle III.
 
-**Organization**: All tasks serve **User Story 3** ("Structured infrastructure-change data for plan/apply/deploy", spec.md, Priority P3) — specifically its SC-007 accuracy guarantee. There is no US1/US2/US4 work in this re-plan; those stories' behavior is unaffected. Tasks are grouped by the two FR deltas within the US3 phase, since they are independent bug fixes that happen to share one user story. `pkg/ci/plugins/terraform` is not touched by this re-plan — a `-json`-stream parser rewrite (FR-006g/h) was scoped, then retracted before implementation (research.md Decisions 33-34); extraction stays regex-based, identical to what Native CI already does today.
+**Organization**: All tasks serve **User Story 3** ("Structured infrastructure-change data for plan/apply/deploy", spec.md, Priority P3) — the `TerraformExecData` payload itself. Tasks are grouped by the four independent deltas within the US3 phase: (A) `logs` field (add, mask-before-encode, base64), (B) multi-component restructure (flat entries → list of full `TerraformExecData` objects), (C) single/multi-component shape unification (drop the bare-object single-component design), (D) sensitive-output-flag known-limitation documentation (no code change). `pkg/ci/plugins/terraform`'s extraction logic itself is not touched by this re-plan — its `Sensitive`-detection limitation is recorded, not fixed (out of scope, shared with Native CI).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -21,7 +21,7 @@ description: "Task list for the eleventh re-plan: FR-006e/f correctness fixes (p
 
 ## Path Conventions
 
-Single Go project at repository root: `internal/exec/`, `cmd/terraform/`, `pkg/pro/`.
+Single Go project at repository root: `cmd/terraform/`, `pkg/pro/`, `pkg/ci/plugins/terraform/`.
 
 ---
 
@@ -33,41 +33,59 @@ Not applicable — this re-plan extends already-shipped files only; no new proje
 
 ## Phase 2: Foundational
 
-Not applicable — Groups A and B are independent bug fixes with no shared prerequisite; there is no blocking foundational work.
+Not applicable — Groups A-D are independent deltas with no shared blocking prerequisite, though B and C are sequenced (C builds directly on B's per-component `TerraformExecData` entries).
 
 ---
 
-## Phase 3: User Story 3 — Structured infrastructure-change data accuracy (Priority: P3)
+## Phase 3: User Story 3 — Structured infrastructure-change data, final shape (Priority: P3)
 
-**Goal**: `TerraformExecData.exit_code` reflects the real terraform/tofu subprocess outcome (not silently `0`/uninformative), Atmos's own process exit code for `plan` is provably unaffected by that fix, and `resource_counts`/`outputs`/`changes` reflect only the actual plan/apply's own output (not poisoned by init/workspace-select noise) — satisfying SC-007's "100%" guarantee via the existing regex-based parser, correctly scoped.
+**Goal**: `TerraformExecData` carries the full scoped plan/apply/deploy console text (masked, base64-encoded) as `logs`; `Data` for every `terraform plan`/`apply`/`deploy` invocation — single- or multi-component — is the identical `{"version": 1, "components": [TerraformExecData, ...]}` shape, with no per-component `version` field; and the known limitation in `outputs[*].sensitive` detection is recorded in the spec without a code change.
 
-**Independent Test**: Run `atmos terraform plan` against a component with pending changes, in a CI environment satisfying FR-001 but WITHOUT `ci.enabled: true` set in `atmos.yaml` (the common real-world case per research.md Decision 36), with Atmos Pro configured; confirm (a) the uploaded `TerraformExecData.exit_code` is the real non-zero pre-remap value, (b) Atmos's own process exit code for the `atmos terraform plan` invocation itself is unchanged (still 0 for a successful plan with changes, not 2), and (c) `resource_counts`/`outputs`/`changes` match the plan's actual output exactly, even when `terraform init` or `workspace select` emitted incidental "No changes."-shaped text earlier in the run.
+**Independent Test**: Run `atmos terraform plan` against a single component with pending changes and a sensitive output, in CI with Atmos Pro configured; confirm the uploaded record's `Data` is `{"version": 1, "components": [{...}]}` (one entry, no `version` inside it), that entry's `logs` field decodes (base64) to the real console text with any sensitive output's literal value redacted, and `outputs[*].value` is `<MASKED>` for the sensitive entry. Separately, run `atmos terraform plan --affected` against multiple components and confirm `components` has one entry per component, each shaped identically to the single-component case.
 
-### Group A — `exit_code` pre-remap capture (FR-006e, FR-006e/Decisions 31/35/36)
+### Group A — `logs` field: add, mask-before-encode, base64 (FR-006i, FR-010a, research.md Decision 38)
 
-- [X] T001 [US3] Extend the `-detailed-exitcode` gate in `buildPlanSubcommandArgs` (`internal/exec/terraform_execute_helpers_args.go:38-40`) with an OR'd condition: add the flag whenever exec-metadata capture is active for this **`plan`** invocation (reuse the same `proexec.IsSyncCommand`-derived signal `captureExecMetadataSync` already checks, `internal/exec/terraform.go:210`), independent of `uploadStatusFlag`. Do **not** add `-detailed-exitcode` to `apply`/`deploy`'s internal `apply` invocation anywhere in this codebase (research.md Decision 35 — version-support risk on older pinned terraform/tofu binaries; `apply`/`deploy` keep plain 0/1 exit-code semantics)
-- [X] T002 [P] [US3] Regression test in `internal/exec/terraform_execute_helpers_args_test.go`: `-detailed-exitcode` is present on `plan` when exec-metadata capture is active and `uploadStatusFlag` is `false`; still present (unchanged behavior) when `uploadStatusFlag` alone is `true` and exec-metadata capture is inactive; confirm the equivalent `apply`/`deploy` argument-building path never adds `-detailed-exitcode` under any combination of these flags
-- [X] T003 [US3] Change `executeMainTerraformCommand` (`internal/exec/terraform_execute_helpers_exec.go:416-471`) to surface the pre-`mapCIExitCode` exit code to its caller — add a second return value or a field on an existing result type — without altering its existing `error`-return or CI-remap behavior (the `mapCIExitCode` call at line ~468-470 still determines what this function returns as `error`)
-- [X] T004 [US3] Implement the local exit-2-neutralization guarantee (research.md Decision 36): at the `plan` call site in `executeMainTerraformCommand`/`executeCommandPipeline`, when `-detailed-exitcode` was added to this invocation specifically because T001's exec-metadata-capture trigger fired (not because `uploadStatusFlag` alone did, and not because `atmosConfig.CI.Enabled` already covers it via the existing `mapCIExitCode` path), and the resulting exit code is `2` ("changes detected"), remap it to a success-equivalent (`nil`/`0`) for **Atmos's own returned error/exit status only** — leave `atmosConfig.CI.Enabled` untouched (do NOT force-set it to `true`; do NOT widen `mapCIExitCode`'s own gate). This is a narrow, call-site-local remap, not a change to the global CI-mode switch or its other consumers (`pkg/ci.AnnotationsEnabled`/`ResultsEnabled`, container summaries, hooks CI-mode). Depends on T001, T003
-- [X] T005 [US3] Regression test reproducing the exit-code-neutralization guarantee: with exec-metadata capture active (FR-001 gate true) and `ci.enabled` **NOT** set in the test's `atmos.yaml` fixture (the common real-world case, research.md Decision 36), a `plan` fixture with real pending changes (`-detailed-exitcode` → real exit 2) must still result in `atmos terraform plan`'s own process exit code being unchanged from today's baseline (0), while `TerraformExecData.exit_code` still reports the real `2` (per T003/T008). Also assert `atmosConfig.CI.Enabled` remains `false` after the invocation (guards against a regression that force-flips the global switch). Depends on T004
-- [X] T006 [US3] Thread the pre-remap exit code from `executeMainTerraformCommand` through `executeCommandPipeline` (`internal/exec/terraform_execute_helpers_exec.go:164-220`) up to `ExecuteTerraform` (`internal/exec/terraform.go:92-204`) — depends on T004 (the local-neutralization change and the pre-remap-exit-code plumbing touch the same return path, so implement neutralization first, then thread the now-stable pre-remap value upward)
-- [X] T007 [US3] Update `captureExecMetadataSync`'s call site in `ExecuteTerraform` (`internal/exec/terraform.go:200-204`) and the function itself (`terraform.go:243-281`) to pass the pre-remap exit code — not `errUtils.GetExitCode(params.Err)` (`terraform.go:254`), which reflects the post-remap/neutralized error — into `params.Parser(subCommand, exitCode)`. `ExecutionRecord.exit_code` (the base envelope, FR-003) is unaffected and continues to be sourced from the existing post-remap/neutralized `err` — depends on T006
-- [X] T008 [US3] Regression test reproducing the original production bug in `internal/exec/terraform_test.go` (or a new adjacent test file): a fixture where `mapCIExitCode`/the T004 local neutralization together turn a real `ExitCodeError{Code: 2}` into a neutralized success for Atmos's own status, asserting `TerraformExecData.exit_code` still reports `2` while the base envelope's `exit_code` reports `0` — depends on T007
+- [X] T001 [US3] Add `logs` (base64-encoded) to `buildTerraformExecData`'s returned map in `cmd/terraform/utils.go`, replacing the field that was briefly named `raw_output` — set from `encodeLogs(output)` in the default/unparseable branch and `encodeLogs(redactSensitiveOutputsFromRawOutput(output, data.Outputs))` in the parse-succeeded branch
+- [X] T002 [P] [US3] Implement `redactSensitiveOutputsFromRawOutput(text string, outputs map[string]json.RawMessage) string` in `cmd/terraform/utils.go` — replaces every literal occurrence of a string-valued, `Sensitive: true` output's own value with `iolib.MaskReplacement`; document the known limitation that the production regex parser never actually sets `Sensitive: true` (see Group D)
+- [X] T003 [P] [US3] Implement `encodeLogs(text string) string` in `cmd/terraform/utils.go` — applies `iolib.MaskString` (the same Gitleaks-pattern masking `pkg/proexec/envelope.go` uses) to the plaintext, THEN base64-encodes; masking must happen before encoding since a downstream secret-pattern scan cannot see into base64-encoded bytes
+- [X] T004 [US3] Unit test `TestBuildTerraformExecData_LogsWiredThroughRedactionAndEncoding` in `cmd/terraform/utils_exec_metadata_test.go` — confirms `buildTerraformExecData`'s `logs` field decodes back to expected text via the real fixture, proving the wiring (not just the standalone helpers). Depends on T001
+- [X] T005 [P] [US3] Unit test `TestRedactSensitiveOutputsFromRawOutput` in `cmd/terraform/utils_exec_metadata_test.go` — string-valued sensitive output redacted everywhere it appears; non-sensitive value untouched; non-string sensitive value skipped (no single unambiguous literal form). Depends on T002
+- [X] T006 [P] [US3] Unit test `TestEncodeLogs` in `cmd/terraform/utils_exec_metadata_test.go` — round-trips plaintext through base64 encode/decode. Depends on T003
+- [X] T007 [US3] Update `TestBuildTerraformExecData_ApplySuccess` and `TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData` in `cmd/terraform/utils_exec_metadata_test.go` to assert against `logs` (base64-decoded), not the old `raw_output` string field. Depends on T001
 
-### Group B — buffer scoping to the main invocation only (FR-006f)
+### Group B — Multi-component restructure: flat entries → list of full `TerraformExecData` objects (FR-006a, research.md Decision 37)
 
-- [X] T009 [P] [US3] Move `terraformCaptureShellOpts` (`cmd/terraform/utils.go:855-864`) construction from once-per-pipeline to freshly invoked (fresh `bytes.Buffer`s) immediately before `executeMainTerraformCommand` inside `executeCommandPipeline` (`internal/exec/terraform_execute_helpers_exec.go:164-220`), so `terraform init`'s (line ~179) and `terraform workspace select`'s (line ~196, via `runWorkspaceSetup`) output are no longer tee'd into the same buffer the exec-metadata parser reads. Any other consumer of `terraform init`'s/workspace-select's captured output (e.g. logging) MUST be unaffected — only the exec-metadata parser's input buffer is rescoped
-- [X] T010 [US3] Regression test reproducing the exact reported production bug: a fixture where the (now-separate) init-phase captured output alone contains a "No changes." lookalike string, but the main `plan` invocation's own captured output has a real `Plan: N to add, M to change, K to destroy.` summary — assert the parsed `resource_counts`/`has_changes` reflect the real summary, not an init-phase false match. Add to the nearest existing test file for `terraformExecMetadataParserFunc`/`terraformCaptureShellOpts` in `cmd/terraform/` — depends on T009
+- [X] T008 [US3] Remove `parseTerraformResourceChanges` from `cmd/terraform/utils.go` (now unused) and change `terraformNodeHooks.recordExecResult` to call `buildTerraformExecData` directly per graph node instead of hand-flattening resource changes — `n.results` becomes `[]any`, each entry one node's full `TerraformExecData` object. `execNodeResult` reverts to its original, narrower meaning: the `{action, address}` entry type inside a single `TerraformExecData.changes` list. Depends on T001 (both are in `buildTerraformExecData`'s output shape)
+- [X] T009 [US3] Update `captureMultiComponentExecMetadata` (`cmd/terraform/utils.go`) to wrap `hooks.results` via `proexec.VersionedData(terraformExecDataVersion, "components", components)` instead of sending the flat list directly as `Data`
+- [X] T010 [US3] Update `TestTerraformNodeHooks_RecordExecResultAccumulates` and `TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun` in `cmd/terraform/utils_exec_metadata_test.go` for the new per-node full-object shape and the `{"version": ..., "components": [...]}` wire shape. Depends on T008, T009
+- [X] T011 [P] [US3] New Pact consumer interaction `TestPact_UploadExecMetadata_MultiComponent` in `pkg/pro/consumer_pact_test.go` — asserts the `{"version": 1, "components": [TerraformExecData, TerraformExecData]}` shape for a 2-component run; regenerate `pacts/atmos-AtmosPro.json` (`go test -tags pact ./pkg/pro/...`). Depends on T009
 
-**Checkpoint**: User Story 3's `exit_code`/`resource_counts`/`outputs`/`changes` accuracy is fixed for both this feature and (transitively, since the underlying subprocess/buffer behavior is shared execution machinery) any other consumer of the same capture path — without touching `pkg/ci/plugins/terraform`, and without any observable change to Atmos's own process exit code or the global `ci.enabled` switch.
+### Group C — Single/multi-component shape unification (research.md Decision 38, direct user correction)
+
+- [X] T012 [US3] Add `stripComponentVersion(data any) any` and `wrapComponentsData(entries ...any) any` helpers to `cmd/terraform/utils.go` — the former deletes a `buildTerraformExecData` result's own `version` key, the latter wraps one or more stripped entries as `{"version": terraformExecDataVersion, "components": [...]}` via `proexec.VersionedData`. Depends on T008 (co-locates with the multi-component restructure it generalizes)
+- [X] T013 [US3] Change `terraformExecMetadataParserFunc` (`cmd/terraform/utils.go`, the single-component call site) to call `stripComponentVersion` then `wrapComponentsData` on `buildTerraformExecData`'s result before returning — single-component `Data` becomes `{"version": 1, "components": [TerraformExecData]}` (one entry), never a bare `TerraformExecData` object. Depends on T012
+- [X] T014 [US3] Change `terraformNodeHooks.recordExecResult`/`captureMultiComponentExecMetadata` (`cmd/terraform/utils.go`) to call the same `stripComponentVersion`/`wrapComponentsData` helpers instead of the inline logic T008/T009 introduced, so both call sites share one code path. Depends on T012
+- [X] T015 [US3] Update `TestTerraformExecMetadataParserFunc_UsesSuppliedOutput` in `cmd/terraform/utils_exec_metadata_test.go` to unwrap `{"version": ..., "components": [...]}` and assert the one entry has no `version` key. Depends on T013
+- [X] T016 [P] [US3] Rewrite `TestPact_UploadExecMetadata`/`TestPact_UploadExecMetadata_BlobURL` in `pkg/pro/consumer_pact_test.go` to use the unified `{"version": 1, "components": [{...}]}` shape (previously a bare `TerraformExecData` object); regenerate `pacts/atmos-AtmosPro.json`. Depends on T013
+
+### Group D — Sensitive-output-flag known limitation: documentation only, no code change (FR-010a, 2026-08-21 clarification)
+
+- [X] T017 [P] [US3] Regression test `TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue` in `pkg/ci/plugins/terraform/parser_test.go` — proves `extractApplyOutputs` returns Terraform's own `<sensitive>` placeholder (never a real secret) for a sensitive output, and that `Sensitive` stays `false` (the documented, accepted gap)
+- [X] T018 [P] [US3] End-to-end regression test `TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm` in `cmd/terraform/utils_exec_metadata_test.go` — confirms neither `Data.components[].outputs[*].value` nor the base64-decoded `logs` field ever carries a real secret for a sensitive output, despite the `Sensitive` flag being inaccurate. Depends on T001 (needs `logs`)
+- [X] T019 [US3] Amend `FR-010a` in `spec.md` with a "Known limitation" note: the regex console parser never sets `Sensitive: true` in production, so layer (1)'s redaction never triggers against real output; the no-leak property holds via Terraform's own console behavior instead. No code change — explicitly recorded as accepted, not a defect
+- [X] T020 [P] [US3] Add the matching "Known limitation" note to `data-model.md`'s "Outputs masking" section, cross-referencing T017/T018's regression tests. Depends on T019
+
+**Checkpoint**: `TerraformExecData`'s final shape — `logs` field, unconditional `components`-wrapper, no per-component `version` — is shipped and tested for both single- and multi-component invocations; the sensitive-flag limitation is recorded in the spec, not silently left undocumented.
 
 ---
 
 ## Phase 4: Polish & Cross-Cutting Concerns
 
-- [X] T011 Run `atmos test` and `atmos lint --changed` across all touched packages (`internal/exec`, `cmd/terraform`) — fix any findings before proceeding
-- [X] T012 Grep `pkg/pro/consumer_pact_test.go` (and any other Pact fixtures) for a hardcoded `exit_code: 0` used as "expected" for a plan-with-changes scenario; update if found, otherwise explicitly note in the PR description that no Pact/wire-shape changes were needed (only extraction-source correctness and Atmos's own exit-code stability changed, not the JSON envelope Atmos Pro receives) — depends on T007
-- [X] T013 [P] Re-read `specs/002-pro-exec-metadata/quickstart.md` and confirm no example values (if any reference `exit_code`/`resource_counts`) have gone stale as a result of these fixes; update only if an actual stale example is found (plan.md's Constitution Check already predicted no changes needed — verify that prediction held)
+- [X] T021 Run `go build ./...`, `go test ./cmd/terraform/... ./pkg/proexec/... ./internal/exec/...`, `go test -tags pact ./pkg/pro/...`, and `atmos lint --changed` — fix any findings before proceeding. Depends on all of Groups A-D
+- [X] T022 Update `research.md` with Decision 37 (multi-component restructure) and Decision 38 (logs rename/encoding + unification), including alternatives-considered and the breaking-change note re: `execNodeResult`'s reverted meaning. Depends on T008, T012
+- [X] T023 [P] Update `data-model.md`'s `TerraformExecData` section end-to-end: `logs` field description, the "Unified shape" paragraph replacing the old single-vs-multi-component split, the worked-example JSON. Depends on T013, T014
+- [X] T024 [P] Update `contracts/interactions.md` interactions 9/10: `data` example rewritten to the `{"version": 1, "components": [...]}` wrapper, `components[*]` field table (incl. `logs`, no `version`), Validation Rules table's `version`-field row scoped to "outer wrapper only". Depends on T013, T014
+- [X] T025 Regenerate `plan.md` (twelfth re-plan) summarizing all four groups, updated Technical Context/Constitution Check/Project Structure. Depends on T021-T024
 
 ---
 
@@ -77,36 +95,45 @@ Not applicable — Groups A and B are independent bug fixes with no shared prere
 
 - **Setup (Phase 1)**: N/A
 - **Foundational (Phase 2)**: N/A
-- **User Story 3 (Phase 3)**: Groups A and B have no dependency on each other and can run fully in parallel
-- **Polish (Phase 4)**: Depends on both Group A and Group B being complete
+- **User Story 3 (Phase 3)**: Group A is independent. Group B depends on Group A only insofar as both touch `buildTerraformExecData`'s output shape (T008 depends on T001). Group C depends on Group B (T012 generalizes T008/T009's inline logic). Group D is independent of A/B/C except T018, which needs `logs` (T001)
+- **Polish (Phase 4)**: Depends on all of Groups A-D
 
-### Within Group A (exit_code + neutralization)
+### Within Group A (logs field)
 
-T001 → T002 (test follows the gate change) · T003 → T004 → T005 (neutralization implemented, then verified) · T004 → T006 → T007 → T008 (strictly sequential — each step threads the value/behavior one layer further up the call stack, and T006's plumbing depends on T004's neutralization landing first so it threads a stable value)
+T001 → T004, T007 (wiring, then tests that depend on it) · T002 → T005 · T003 → T006 (helpers, then their standalone tests) — T002/T003/T005/T006 can run in parallel with each other
 
-### Within Group B (buffer scoping)
+### Within Group B (multi-component restructure)
 
-T009 → T010 (test follows the fix)
+T008 → T009 → T010 → T011 (strictly sequential — each step builds directly on the previous)
+
+### Within Group C (unification)
+
+T012 → T013, T014 (both call sites adopt the shared helpers in parallel) → T015, T016 (tests follow)
+
+### Within Group D (documentation)
+
+T017, T018 independent (parallel) → T019 → T020
 
 ### Parallel Opportunities
 
-- Group A (T001-T008) and Group B (T009-T010) can be implemented by two different people/sessions fully in parallel — different files, no shared state
-- T002 is marked [P] — independent test file from the rest of Group A's sequential chain
-- T009 is marked [P] relative to Group A — different files, no shared state
-- T013 is marked [P] relative to T011/T012 — independent of the code changes, only checks documentation
+- T002/T003/T005/T006 (Group A helpers + their tests) can run in parallel — different functions, no shared state
+- T011 [P] relative to the rest of Group B's sequential chain — independent Pact interaction
+- T016 [P] relative to Group C's core change — independent Pact test file
+- T017/T018 [P] — independent test files, no shared state
+- T023/T024 [P] relative to each other — independent doc files, both only depend on the code being final
 
 ---
 
-## Parallel Example: Groups A and B (fully independent)
+## Parallel Example: Groups A and D (independent of each other)
 
 ```bash
-# Track 1 — exit_code fix + exit-code-neutralization guarantee (internal/exec/):
-Task: "Extend -detailed-exitcode gate to plan only in terraform_execute_helpers_args.go (T001)"
-Task: "Implement local exit-2-neutralization in executeMainTerraformCommand, independent of global ci.enabled (T004)"
-Task: "Thread pre-remap exit code through executeCommandPipeline/captureExecMetadataSync (T006-T007)"
+# Track 1 — logs field (cmd/terraform/utils.go):
+Task: "Add encodeLogs/redactSensitiveOutputsFromRawOutput and wire into buildTerraformExecData (T001-T003)"
+Task: "Unit tests for the new helpers and end-to-end wiring (T004-T007)"
 
-# Track 2 — buffer scoping fix (cmd/terraform/ + internal/exec/):
-Task: "Relocate terraformCaptureShellOpts construction inside executeCommandPipeline (T009)"
+# Track 2 — sensitive-flag documentation (pkg/ci/plugins/terraform/, spec.md, data-model.md):
+Task: "Regression tests proving no real secret ever uploaded despite the flag gap (T017-T018)"
+Task: "Record the known limitation in FR-010a and data-model.md (T019-T020)"
 ```
 
 ---
@@ -115,21 +142,22 @@ Task: "Relocate terraformCaptureShellOpts construction inside executeCommandPipe
 
 ### Recommended order
 
-1. Start Groups A and B in parallel (two independent tracks, different files, no shared state)
-2. Within Group A, land T001/T003 first (mechanical plumbing), then T004 (the neutralization guarantee — the highest-risk, most novel piece of this re-plan), verified immediately by T005, before threading the value further upward (T006-T008)
-3. Each group closes one confirmed production bug on its own (exit_code reliability + exit-code stability; resource_counts/outputs accuracy) and can ship independently
-4. Phase 4 (Polish) last, gating merge
+1. Group A (`logs` field) first — Group B's per-component entries need `buildTerraformExecData` to already include `logs`
+2. Group B (multi-component restructure) next — Group C's unification helpers generalize what Group B introduces inline
+3. Group C (unification) — the direct user correction that retired the bare-object single-component design
+4. Group D (documentation) can land any time after Group A (T018 needs `logs`) — independent of B/C
+5. Phase 4 (Polish) last, gating merge — includes regenerating every design doc to match the final shape
 
 ### Incremental delivery
 
-Each of Groups A and B closes a distinct, independently-verifiable bug (see plan.md's Decisions 31/35/36 and 32) and can ship as its own PR if preferred, though this repo's `pull-request` skill and CLAUDE.md conventions should be consulted for whether splitting is appropriate versus one bundled PR for this re-plan.
+Each group closes a distinct, independently-verifiable change (see plan.md's Summary) and was in fact implemented and verified incrementally within this session — Group A → Group B → Group C → Group D, with `atmos lint --changed` and the full relevant test suite run after each.
 
 ---
 
 ## Notes
 
-- No new Pact/wire-shape changes are expected anywhere in this task list (T012 verifies this holds, doesn't introduce a change)
-- The global `atmosConfig.CI.Enabled` switch (and everything else it gates — annotations, SARIF uploads, container summaries, hooks CI-mode) MUST remain untouched by this re-plan; T004/T005 exist specifically to guarantee and verify that
-- Every new/changed public function needs `defer perf.Track(...)` per this repo's CLAUDE.md, if any new exported function is introduced during implementation (unlikely for these two targeted fixes, but apply the convention if one appears)
-- Follow this repo's mandatory bug-fixing workflow for every task in Groups A/B (T002/T005/T008/T010): write the failing regression test first, confirm it fails against current code, then implement the fix
+- This re-plan's Group C change is a **breaking change** to the already-implemented single-component wire shape (a bare `TerraformExecData` object at the top level no longer exists) — both `pacts/atmos-AtmosPro.json` and `contracts/interactions.md` needed corresponding updates (T016, T024)
+- `execNodeResult`'s meaning changed twice within this re-plan's history: Group B's predecessor (the eleventh re-plan's era) used it as a flat multi-component identity/outcome entry; Group B retires that use and reverts it to its original, narrower `{action, address}` role
+- No new Pact interaction was needed for the blob-URL delivery path specifically for the unified/multi-component shape — the inline-vs-blob-URL mechanism (FR-011) is shape-agnostic and already proven by the existing single-shape blob-URL interaction (spec.md, 2026-08-21 clarification)
+- Follow this repo's mandatory bug-fixing workflow only where applicable (T017/T018 are documentation-driven regression tests for an accepted limitation, not bug fixes — no fix is expected or wanted)
 - Avoid platform-specific test fixtures (no hardcoded Unix paths, no shell-outs to `terraform`) — all new tests use inline fixtures per this repo's cross-platform testing conventions

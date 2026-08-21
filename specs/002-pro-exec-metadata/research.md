@@ -1548,6 +1548,119 @@ without touching the global switch or any of its other-feature side effects.
 
 ---
 
+## Decision 37: `raw_output` added to `TerraformExecData`; multi-component `Data` restructured to a list of full per-component `TerraformExecData` objects
+
+**Decision**: `TerraformExecData` gains a top-level `raw_output` string field — the same
+already-scoped, ANSI-stripped `plan`/`apply`(/`deploy`'s internal `apply`) subprocess output
+text `buildTerraformExecData` itself parses (FR-006f/Decision 32), included even when
+itemized parsing fails entirely (empty string, not omitted). Before inclusion, `raw_output`
+passes through both existing masking layers: the whole-blob Gitleaks pass (FR-010), and an
+extended FR-010a Terraform-sensitive-output redaction — any literal occurrence of a
+Terraform-sensitive-flagged output's value within `raw_output` text is now also redacted, not
+just the corresponding `outputs.<name>.value` field.
+
+Separately, the multi-component aggregate `Data` shape (FR-006a) is restructured: instead of
+the flat shared list of `{component, stack, exitCode, action, address}` entries (Decision 17),
+`Data` becomes `{"version": 1, "components": [TerraformExecData, ...]}` — one complete,
+full-shape `TerraformExecData` object per component, each with its own
+`resource_counts`/`outputs`/`warnings`/`changes`/`has_changes`/`has_errors`/`errors`/
+`exit_code`/`component`/`stack`/`raw_output`. `cmd/terraform/utils.go`'s
+`terraformNodeHooks.recordExecResult` now calls `buildTerraformExecData` directly per graph
+node (the same function the single-component path uses) instead of hand-flattening resource
+changes via the now-removed `parseTerraformResourceChanges`, so both paths produce
+identically-shaped entries from one code path.
+`captureMultiComponentExecMetadata` wraps the accumulated per-node results with
+`proexec.VersionedData(terraformExecDataVersion, "components", components)`.
+
+**Rationale**: `raw_output` was added ad hoc (outside the normal speckit clarify→plan→tasks
+flow) to give Atmos Pro access to the full human-readable plan/apply text, not just the
+itemized/derived fields. A `/speckit-clarify` session run immediately afterward surfaced three
+real gaps this decision closes: (1) free text can repeat a sensitive output's value verbatim
+even when the structured `outputs` entry is masked — Gitleaks alone is not a reliable backstop
+for that specific case, the same reasoning FR-010a already established for the `outputs` map;
+(2) the existing FR-011 size-threshold/blob-upload mechanism already handles arbitrarily large
+`Data` correctly, so no separate cap is needed for the extra bytes `raw_output` adds; (3) the
+pre-existing multi-component shape had no way to carry `raw_output` (or, for that matter,
+per-node `outputs`/`warnings`/`errors`/`has_changes`/`has_errors` at all) without becoming
+inconsistent with the single-component shape — bolting one new field onto the flat shape would
+have compounded that inconsistency rather than resolving it, so the shape itself changed
+instead.
+
+**Alternatives considered**:
+- Defer multi-component `raw_output` support and leave the flat shape as-is — rejected by the
+  user during the clarify session in favor of an explicit design fix: "multi-component should
+  be a list of single-component structs."
+- Bolt a per-node `raw_output` field onto the existing flat `execNodeResult` entries (keeping
+  `{component, stack, exitCode, action, address, raw_output}`-shaped items) — rejected: this
+  still leaves multi-component missing per-node `outputs`/`warnings`/`errors`/`has_changes`/
+  `has_errors`, an inconsistency the flat shape already had and that a full restructure
+  resolves in one pass rather than accumulating further one-off additions.
+- Give `raw_output` its own dedicated size cap/truncation, independent of FR-011 — rejected:
+  FR-011's "never truncate, use `POST /v1/atmos/exec/data` at/over 4 MB" mechanism already
+  handles arbitrarily large `Data` correctly; a separate cap would be new, untested truncation
+  behavior solving a problem FR-011 already solves.
+- Omit `raw_output` from the payload entirely whenever any output is Terraform-sensitive-
+  flagged — rejected: this would silently withhold `raw_output` for a large fraction of real
+  runs (any component with at least one sensitive output) rather than performing the targeted
+  redaction FR-010a's existing precedent already established for the `outputs` map.
+
+**Breaking change note**: This retires the already-implemented `execNodeResult`-as-multi-
+component-identity/outcome shape and its `parseTerraformResourceChanges` helper (both
+removed from `cmd/terraform/utils.go`); `execNodeResult` is repurposed to mean only the
+`{action, address}` resource-change entry type used inside a single `TerraformExecData.changes`
+list, its pre-existing role. The Pact consumer contract test suite gained a new interaction,
+`TestPact_UploadExecMetadata_MultiComponent`, covering the restructured shape.
+
+---
+
+## Decision 38: `raw_output` renamed `logs` and base64-encoded; masking moved to plaintext before encoding; per-component `version` dropped
+
+**Decision**: Decision 37's `raw_output` field is renamed `logs` and its value is
+base64-encoded (`encodeLogs`, `cmd/terraform/utils.go`) rather than sent as a plain string.
+Because base64-encoded bytes are opaque to pattern-based text scanning, masking that
+previously could rely on `pkg/proexec/envelope.go`'s later whole-blob Gitleaks pass over the
+marshaled `Data` string now MUST happen directly on `logs`'s plaintext, before encoding:
+`redactSensitiveOutputsFromRawOutput` (Terraform-sensitive-output redaction, unchanged from
+Decision 37) runs first, then `iolib.MaskString` — the same Gitleaks-pattern masking function
+`pkg/proexec/envelope.go` itself uses — runs directly on the result, and only then is the
+masked plaintext base64-encoded. `pkg/proexec/envelope.go`'s later whole-blob pass is
+unaffected and still runs over the rest of `Data` as before; it simply can no longer usefully
+inspect `logs`'s content, which is why the field's own masking can no longer depend on it.
+
+Separately, per-component entries in the multi-component `{"components": [...]}` list
+(Decision 37) now omit their own `version` field — `terraformNodeHooks.recordExecResult`
+deletes the key from the map `buildTerraformExecData` returns before appending it to
+`n.results`. The single-component call sites (`terraformExecMetadataParserFunc`) are
+unaffected and keep `buildTerraformExecData`'s `version` field as-is, since there it IS the
+top-level `Data` object, not a list entry.
+
+**Rationale**: Direct user instruction, given as a concrete worked JSON example rather than
+raised through `/speckit-clarify`. The masking-before-encoding requirement was not explicitly
+asked for by the user but is a necessary consequence flagged and implemented proactively:
+shipping `logs` as base64 without adapting its masking would have silently defeated FR-010's
+Gitleaks-pattern masking guarantee for this field specifically, since a secret embedded in
+`logs`'s plaintext would survive intact inside the base64-encoded bytes, undetectable to a
+pattern scan over the outer JSON string.
+
+**Alternatives considered**:
+- Base64-encode `logs` without changing where masking happens, relying on
+  `pkg/proexec/envelope.go`'s existing whole-blob pass — rejected: this pass runs on the
+  final marshaled `Data` JSON, by which point `logs` is already base64 text; Gitleaks
+  patterns (API key formats, token prefixes, etc.) cannot match against base64-transformed
+  bytes, so this would silently and permanently disable Gitleaks-pattern masking for
+  anything embedded in `logs` specifically, with no error or warning.
+- Keep `raw_output` as a plain string and encode only at the Atmos Pro API boundary
+  (outside Atmos's own code) — not applicable: `logs` is part of the client-side wire
+  contract this feature defines (FR-013), so the encoding is Atmos's own responsibility,
+  not something deferred to the server.
+- Give per-component entries their own `version` field, matching the single-component shape
+  exactly — rejected per the user's explicit worked example, which omits `version` from each
+  `components[]` entry; also consistent with the general principle that `version` identifies
+  a *shape*, and the outer `{"version": 1, "components": [...]}` wrapper is itself already
+  a fully version-tagged shape distinct from bare `TerraformExecData`.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,

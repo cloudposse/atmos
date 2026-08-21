@@ -846,6 +846,43 @@ public_ip = "54.123.45.67"
 	}
 }
 
+// TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue documents a
+// known, deliberately-not-fixed limitation (specs/002-pro-exec-metadata,
+// 2026-08-21 session): extractApplyOutputs never sets Sensitive: true on any
+// entry it produces, because it only ever sees Terraform's own
+// human-readable console text — and Terraform itself already replaces a
+// sensitive output's real value with the literal placeholder "<sensitive>"
+// before printing it, so there is no real value here to detect sensitivity
+// from or leak in the first place. This test is the regression guard for
+// the actual safety property that matters ("we should not upload sensitive
+// data in any case"): even though the Sensitive flag is inaccurate (always
+// false) for a genuinely sensitive output, Value is Terraform's own safe
+// placeholder text, never the real secret — the same guarantee
+// cmd/terraform's downstream maskSensitiveOutputs/buildTerraformExecData
+// pipeline relies on. If Terraform ever changed to print a sensitive
+// output's real value in its console text, this test would need a
+// corresponding fix in extractApplyOutputs to detect and redact it —
+// nothing downstream currently does that detection.
+func TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue(t *testing.T) {
+	output := `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+secret_key = <sensitive>
+`
+
+	got := extractApplyOutputs(output)
+
+	require.Contains(t, got, "secret_key")
+	secret := got["secret_key"]
+	assert.Equal(t, "<sensitive>", secret.Value, "Terraform's own placeholder, never the real secret value")
+	assert.False(t, secret.Sensitive, "known limitation: the regex console parser never sets Sensitive true — see comment above")
+
+	require.Contains(t, got, "instance_id")
+	assert.Equal(t, "i-12345678", got["instance_id"].Value, "non-sensitive output must still pass through unaffected")
+}
+
 func TestParseApplyOutput_WithOutputs(t *testing.T) {
 	output := `aws_instance.web: Creating...
 aws_instance.web: Creation complete after 35s [id=i-12345678]

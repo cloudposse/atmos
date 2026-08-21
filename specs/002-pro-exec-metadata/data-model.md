@@ -85,28 +85,51 @@ chunkable) — as of research.md Decision 16, both are folded into the single `D
   `UpdatedResources`, `ReplacedResources`, `DeletedResources`, `MovedResources`,
   `ImportedResources` — `action` is the source field name (`"created"`/`"updated"`/
   `"replaced"`/`"deleted"`/`"moved"`/`"imported"`), `address` is the resource address string.
+- `logs` (string, base64-encoded — Decision 38): the same ANSI-stripped,
+  already-scoped output text `buildTerraformExecData` itself parses
+  (FR-006f/Decision 32) — only the final `plan`/`apply` (or `deploy`'s
+  internal `apply`) subprocess invocation's own stdout+stderr, never
+  `terraform init`'s or `terraform workspace select`'s. Always included, even
+  when the covered subcommand's output can't be parsed into the other fields
+  (Decision 29) — the actual captured text in that case too (base64-encoded),
+  not an empty string, since a failed/unparseable run's raw text is exactly
+  the case a consumer needs it most. Applies uniformly to both the
+  single-component shape and every per-component entry in the multi-component
+  `{"components": [...]}` list (Decision 37) — each component's own `logs`
+  lives inside its own `TerraformExecData` entry. Masking happens on the
+  plaintext, before encoding (`encodeLogs`, `cmd/terraform/utils.go`): when
+  parsing succeeds, `redactSensitiveOutputsFromRawOutput` first replaces every
+  literal occurrence of a string-valued, Terraform-sensitive-flagged output's
+  own value with the mask placeholder (spec.md FR-010a, extended by the
+  2026-08-21 clarification session), then `iolib.MaskString` — the same
+  Gitleaks-pattern masking `pkg/proexec/envelope.go` applies to the rest of
+  `Data` — is applied directly to the plaintext here, before base64-encoding
+  (Decision 38: required because once encoded, envelope.go's later whole-blob
+  pass can no longer pattern-match secrets inside this field's encoded
+  bytes). When parsing fails, no output values are known, so only the
+  Gitleaks-pattern masking step applies to the plaintext before encoding.
 - Top-level status portion (research.md Decision 20): `has_changes` (bool), `has_errors`
   (bool), `errors` (array of string) — decoded from `citerraform.ParseOutput`'s top-level
   `OutputResult.HasChanges`/`HasErrors`/`Errors` fields, which the parser already computes
   correctly but which the pre-Decision-20 mirror struct silently discarded (it only decoded
   the nested `Data` field).
-- Top-level identity portion, single-component invocations only (research.md Decision 21):
-  `component` (string), `stack` (string) — sourced from `cmd/terraform`'s already-resolved
-  call-site data (the positional component argument, the parsed `--stack` value), not from a
-  second parse of the captured output. Omitted (not empty-string) when unknown.
-- Top-level `version` (research.md Decision 24): `1` (plain integer) — added directly to
-  `buildTerraformExecData`'s own map literal, not via the shared `proexec.VersionedData`
-  helper (that helper only fits the two single-key-wrapped shapes below).
+- Top-level identity portion (research.md Decision 21): `component` (string), `stack`
+  (string) — sourced from `cmd/terraform`'s already-resolved call-site data (the positional
+  component argument, the parsed `--stack` value), not from a second parse of the captured
+  output. Omitted (not empty-string) when unknown.
+- `buildTerraformExecData`'s own map literal includes a `version` field (research.md
+  Decision 24), but — as of Decision 38 — this is stripped from every entry before it becomes
+  one item in the outer `components` list (see "Unified shape" below); `buildTerraformExecData`
+  itself is never sent as `Data` directly, so this internal `version` never actually reaches
+  the wire.
 - Top-level `exit_code` (research.md Decisions 27-29): the terraform/tofu subprocess's own
   process exit code — the authoritative pass/fail/parse-completeness signal, distinct from
-  the base `ExecutionRecord.ExitCode` (`atmos`'s own process exit code). Single-component: a
-  top-level field alongside `component`/`stack`. Multi-component: reported per-component on
-  each `execNodeResult` entry in the folded breakdown (`execNodeResult.ExitCode` already
-  exists — `cmd/terraform/utils.go:538` — this decision reuses it as the multi-component
-  counterpart, no new field), never as one aggregate top-level value. Always populated —
-  including when itemized parsing fails entirely, in which case `TerraformExecData` is still
-  returned with `version`/`exit_code`/`component`/`stack` set and every unparseable field
-  defaulted (Decision 29), rather than `Data` being omitted.
+  the base `ExecutionRecord.ExitCode` (`atmos`'s own process exit code). Each component's own
+  entry in the `components` list carries its own `exit_code`, never a single aggregate
+  top-level value — true whether the list has one entry or many. Always populated —
+  including when itemized parsing fails entirely, in which case the entry is still returned
+  with `exit_code`/`component`/`stack` set and every unparseable field defaulted (Decision
+  29), rather than that component's entry being omitted.
 - List-typed fields (`changes`, `warnings`, `errors`) MUST serialize as `[]`, never `null`,
   when empty (research.md Decision 26) — `buildTerraformExecData` MUST initialize these as
   non-nil zero-length slices before the map literal is built, not pass a possibly-nil slice
@@ -126,11 +149,13 @@ chunkable) — as of research.md Decision 16, both are folded into the single `D
   `ParseApplyOutput`, same as Native CI) — no shape change to `TerraformExecData` itself, only
   a correctness fix to how its fields are populated and what text they're populated from.
 
-All portions are nested together in the single `Data` value (e.g.
-`{"version": 1, "resource_counts": {...}, "outputs": {...}, "warnings": [], "changes":
+All portions are nested together in one `TerraformExecData` object (e.g.
+`{"resource_counts": {...}, "outputs": {...}, "warnings": [], "changes":
 [{"action": "created", "address": "aws_vpc.this"}, ...], "has_changes": true, "has_errors":
-false, "errors": [], "exit_code": 0, "component": "vpc", "stack": "plat-use2-dev"}`), not
-split into multiple top-level `Data`-sibling fields.
+false, "errors": [], "exit_code": 0, "component": "vpc", "stack": "plat-use2-dev",
+"logs": "UGxhbjogMiB0byBhZGQuLi4="}` — no `version` field, per Decision 38), not split into
+multiple top-level `Data`-sibling fields. This object is never sent as `Data` on its own; it
+is always exactly one entry in the unified `components` list `Data` itself is (see below).
 
 **`terraform deploy` uses this identical shape, not a split view (research.md Decision 30r,
 correcting the retracted Decision 30)**: `deploy` continues to be parsed with apply semantics
@@ -145,15 +170,40 @@ subprocess, with one captured output stream and one exit code. There is no indep
 plan-phase output/exit-code for Atmos to report separately, so the single-object shape is
 correct, not a workaround.
 
-**Population (research.md Decision 17/18)**: For a multi-component `--affected`/`--all`/query
-run, `cmd/terraform/utils.go`'s `terraformNodeHooks` populates this per-node, folding each
-node's parsed changes (flat `execNodeResult` entries, plus `component`/`stack`/`exitCode`)
-into the aggregate record — implemented (Decision 17). For a single-component invocation,
-`internal/exec/terraform.go`'s `captureExecMetadataSync` populates this combined-object shape
-via a caller-supplied parser closure threaded in from `cmd/terraform/plan.go`/`apply.go`/
+**Unified shape — single- and multi-component invocations are structurally identical
+(research.md Decisions 37/38, spec.md Session 2026-08-21, supersedes Decision 17's
+flat-entries shape AND the earlier "single-component Data is a bare TerraformExecData
+object" design)**: `Data` for `terraform plan`/`apply`/`deploy` is ALWAYS `{"version": 1,
+"components": [TerraformExecData, ...]}` — never a bare `TerraformExecData` object at the
+top level, regardless of whether the invocation targeted one component or many. A
+single-component invocation (`atmos terraform plan vpc -s dev`) produces a `components` list
+of exactly one entry; a multi-component `--affected`/`--all` run produces one entry per
+component. There is no other distinction between the two cases — same wrapper, same
+per-entry shape, same masking, same size-threshold handling. This retires the earlier,
+now-superseded design where a single-component invocation's `Data` was the `TerraformExecData`
+object itself with `version` at its own top level.
+
+Each entry in `components` omits its own `version` field (Decision 38) — redundant with the
+outer wrapper's `"version": 1`; `stripComponentVersion` (`cmd/terraform/utils.go`) deletes the
+key from the map `buildTerraformExecData` returns before it is wrapped. Both call sites —
+`terraformExecMetadataParserFunc` (single-component) and `terraformNodeHooks.recordExecResult`
+(multi-component) — call `buildTerraformExecData` per component and then
+`wrapComponentsData`/`stripComponentVersion` to produce this same shape, so there is exactly
+one code path for the wire shape regardless of component count.
+`captureMultiComponentExecMetadata` wraps the accumulated list with
+`wrapComponentsData(components...)` (itself `proexec.VersionedData(terraformExecDataVersion,
+"components", entries)`) before attaching it as the record's `Data`; the single-component path
+wraps its one entry the same way, via the same helper.
+
+**Population (research.md Decision 17/18)**: For a single-component invocation,
+`internal/exec/terraform.go`'s `captureExecMetadataSync` populates each component's entry via
+a caller-supplied parser closure threaded in from `cmd/terraform/plan.go`/`apply.go`/
 `deploy.go` (`WithExecMetadataParser`, a new `ShellCommandOption`) — `internal/exec` never
 imports the CI plugin's parser directly, since doing so would reintroduce a confirmed import
-cycle (`pkg/ci/plugins/terraform` → `internal/exec`); implemented (Decision 18).
+cycle (`pkg/ci/plugins/terraform` → `internal/exec`); implemented (Decision 18). This closure
+is `terraformExecMetadataParserFunc`, which calls `buildTerraformExecData` then wraps its
+result via `wrapComponentsData`/`stripComponentVersion` into the same unified shape the
+multi-component path produces.
 
 **`Outputs` masking (research.md Decision 19, FR-010a)**: Each entry in `Outputs` is
 `{value, type, sensitive}`. Before `buildTerraformExecData` returns, a `maskSensitiveOutputs`
@@ -163,11 +213,24 @@ pass replaces `value` with `pkg/io.MaskReplacement` (`"<MASKED>"`) for any entry
 and runs strictly before, `pkg/proexec/envelope.go`'s existing Gitleaks-pattern masking pass
 over the whole marshaled `Data` blob — both layers always execute; the Terraform-`sensitive`
 layer exists because a sensitive-flagged value need not match any Gitleaks-recognizable
-secret pattern. The multi-component aggregation path does not currently surface `Outputs` per
-node at all (only `{action, address}` resource changes), so this masking pass applies only to
-the single-component `buildTerraformExecData` path today; any future addition of per-node
-outputs to the multi-component shape MUST reuse `maskSensitiveOutputs` rather than
-duplicating the rule.
+secret pattern. Since Decision 37/38's restructure, every `components[]` entry — whether from
+a single-component or a multi-component invocation — is built by the same
+`buildTerraformExecData` call and so carries its own masked `Outputs`; this is no longer a
+single-component-only concern.
+
+**Known limitation (spec.md FR-010a, 2026-08-21 clarification, accepted — not a defect)**:
+`maskSensitiveOutputs`'s `sensitive`-driven redaction depends on
+`pkg/ci/plugins/terraform.extractApplyOutputs` (the regex-based console parser) correctly
+setting `Sensitive: true` — it never does, since it only ever sees Terraform's own
+human-readable console text, and Terraform already replaces a sensitive output's real value
+with the literal placeholder `<sensitive>` before printing it. So `maskSensitiveOutputs`'s
+`sensitive: true` branch is currently unreachable against real production output; the
+no-real-secret-uploaded property still holds (regression-tested by
+`TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue` and
+`TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm`) because Terraform's own
+console behavior never emits the real value, not because of this masking layer. Fixing
+`extractApplyOutputs`'s sensitivity detection is out of scope for this feature (it is shared
+with Native CI and deliberately not touched here).
 
 ### AffectedStacksExecData (`Data` shape for `describe affected`, research.md Decision 22)
 
@@ -229,16 +292,17 @@ Both `cmd/root.go` (async call site) and `internal/exec/terraform.go`/`describe 
 Decision 10) so the two paths cannot independently drift — this was the root cause of a
 production defect where a single `atmos terraform plan` produced two execution records.
 
-**Multi-component invocations (FR-006a, 2026-08-18 clarification)**: When `plan`/`apply`/
-`deploy` targets multiple components in one CLI invocation (`--affected`/`--all`), exactly
-one `ExecutionRecord` is produced for the whole invocation — not one per component. Each
-component's identity (`component`, `stack`), outcome (`exitCode`), and structured data
-(created/updated/deleted/replaced/moved/imported resources, outputs, warnings) are folded
-into that single record's `Data` as one entry per component (research.md Decision 17), e.g.
-`{"component": "vpc", "stack": "plat-use2-dev", "exitCode": 0, "action": "created",
-"address": "aws_vpc.this"}`-shaped items — `UploadExecMetadata`'s inline-vs-blob-URL size
-check (FR-011, research.md Decision 16) applies transparently if the combined
-multi-component `Data` is large enough to exceed the 4 MB threshold.
+**Multi-component invocations (FR-006a, 2026-08-18 clarification, restructured by research.md
+Decisions 37/38, spec.md Session 2026-08-21)**: When `plan`/`apply`/`deploy` targets multiple
+components in one CLI invocation (`--affected`/`--all`), exactly one `ExecutionRecord` is
+produced for the whole invocation — not one per component. `Data` is `{"version": 1,
+"components": [TerraformExecData, ...]}` — the identical unified shape a single-component
+invocation also uses (see "Unified shape" above), just with more than one entry: one complete
+object per component (identity, outcome, itemized resource changes, outputs, warnings,
+`logs`, etc., minus its own `version` field per Decision 38), not the retired flat shared list
+of `{component, stack, exitCode, action, address}` entries. `UploadExecMetadata`'s
+inline-vs-blob-URL size check (FR-011, research.md Decision 16) applies transparently if the
+combined multi-component `Data` is large enough to exceed the 4 MB threshold.
 
 ---
 

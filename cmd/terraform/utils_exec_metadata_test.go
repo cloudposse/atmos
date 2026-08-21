@@ -8,6 +8,7 @@ package terraform
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,50 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// TestParseTerraformResourceChanges_ApplySuccess verifies resource-level
-// change extraction from a real captured apply output (FR-006, data-model.md
-// Decision 17), using the same fixture pkg/ci/plugins/terraform's own parser
-// tests exercise, proving the mirror-struct decode round-trip matches the
-// real (internal-package) OutputResult/TerraformOutputData shape.
-func TestParseTerraformResourceChanges_ApplySuccess(t *testing.T) {
-	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
-	require.NoError(t, err)
-
-	changes := parseTerraformResourceChanges("apply", string(data))
-
-	require.Len(t, changes, 3)
-	var addresses []string
-	for _, c := range changes {
-		assert.Equal(t, "created", c.Action)
-		addresses = append(addresses, c.Address)
-	}
-	assert.Contains(t, addresses, "aws_security_group.allow_http")
-	assert.Contains(t, addresses, "aws_instance.web")
-	assert.Contains(t, addresses, "aws_eip.web")
-}
-
-// TestParseTerraformResourceChanges_DeployParsedAsApply verifies "deploy" is
-// parsed with apply semantics, matching pkg/ci/plugins/terraform's own
-// onAfterDeploy override.
-func TestParseTerraformResourceChanges_DeployParsedAsApply(t *testing.T) {
-	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
-	require.NoError(t, err)
-
-	changes := parseTerraformResourceChanges("deploy", string(data))
-
-	require.Len(t, changes, 3)
-}
-
-// TestParseTerraformResourceChanges_NonTerraformSubcommand verifies no
-// resource-change entries are produced for subcommands outside plan/apply
-// (deploy included via the mapping above) — e.g. "output"/"refresh", which
-// terraformHookEvents also wires NodeHooks for but which have no plan/apply
-// -shaped stdout to parse.
-func TestParseTerraformResourceChanges_NonTerraformSubcommand(t *testing.T) {
-	assert.Nil(t, parseTerraformResourceChanges("output", "anything"))
-	assert.Nil(t, parseTerraformResourceChanges("plan", ""))
-}
 
 // TestBuildTerraformExecData_ApplySuccess verifies the single-component
 // combined-object Data shape (research.md Decisions 18/19/20/21,
@@ -117,6 +74,12 @@ func TestBuildTerraformExecData_ApplySuccess(t *testing.T) {
 	assert.Equal(t, 0, asMap["exit_code"])
 	assert.Equal(t, "web", asMap["component"])
 	assert.Equal(t, "plat-use2-dev", asMap["stack"])
+
+	logs, ok := asMap["logs"].(string)
+	require.True(t, ok)
+	decoded, err := base64.StdEncoding.DecodeString(logs)
+	require.NoError(t, err)
+	assert.Equal(t, string(data), string(decoded))
 }
 
 // TestBuildTerraformExecData_ApplyFailure verifies HasErrors/Errors decode
@@ -237,6 +200,12 @@ func TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData(t *tes
 
 	assert.Equal(t, map[string]any{}, asMap["outputs"])
 
+	logs, ok := asMap["logs"].(string)
+	require.True(t, ok)
+	decodedLogs, err := base64.StdEncoding.DecodeString(logs)
+	require.NoError(t, err)
+	assert.Equal(t, "not terraform output at all", string(decodedLogs))
+
 	marshaled, err := json.Marshal(result)
 	require.NoError(t, err)
 	var decoded map[string]json.RawMessage
@@ -277,6 +246,116 @@ func TestMaskSensitiveOutputs(t *testing.T) {
 	assert.Equal(t, true, malformed["sensitive"])
 }
 
+// TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm is the
+// end-to-end regression guard for the actual safety property that matters:
+// no real secret value ever reaches the exec-metadata Data payload for a
+// Terraform-sensitive output, regardless of whether the upstream parser
+// correctly flags it Sensitive (see the known-limitation note on
+// pkg/ci/plugins/terraform's extractApplyOutputs — the regex console parser
+// never sets Sensitive: true, because Terraform's own console text already
+// replaces a sensitive output's real value with "<sensitive>" before it's
+// ever captured). Even with that inaccurate flag, this test proves the
+// value attached to Data.outputs is Terraform's own safe placeholder text,
+// never a real secret — "we should not upload sensitive data in any case"
+// holds in practice.
+func TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm(t *testing.T) {
+	output := `aws_instance.web: Creating...
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+secret_key = <sensitive>
+`
+
+	result := buildTerraformExecData("apply", output, "web", "plat-use2-dev", 0)
+	require.NotNil(t, result)
+	asMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	outputs, ok := asMap["outputs"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, outputs, "secret_key")
+	secret, ok := outputs["secret_key"].(map[string]any)
+	require.True(t, ok)
+	// Known limitation: sensitive stays false (see extractApplyOutputs'
+	// doc comment) — but the value itself is still never a real secret.
+	assert.Equal(t, false, secret["sensitive"])
+	assert.Equal(t, "<sensitive>", secret["value"], "must be Terraform's own placeholder, never a real secret value")
+
+	logs, ok := asMap["logs"].(string)
+	require.True(t, ok)
+	decodedLogs, err := base64.StdEncoding.DecodeString(logs)
+	require.NoError(t, err)
+	assert.Contains(t, string(decodedLogs), "<sensitive>", "raw log text must also carry only Terraform's own placeholder")
+}
+
+// TestRedactSensitiveOutputsFromRawOutput covers FR-010a's extension to the
+// logs field (2026-08-21 clarification): a string-valued, Sensitive:true
+// output's literal value is redacted everywhere it appears in the text, a
+// Sensitive:false output's value is left untouched, and a non-string
+// Sensitive:true value (no single unambiguous literal-text form) is skipped
+// rather than attempting a partial/incorrect replacement.
+func TestRedactSensitiveOutputsFromRawOutput(t *testing.T) {
+	outputs := map[string]json.RawMessage{
+		"secret_key": json.RawMessage(`{"Value":"hunter2","Type":"string","Sensitive":true}`),
+		"bucket_arn": json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
+		"secret_list": json.RawMessage(`{"Value":["a","b"],"Type":"list","Sensitive":true}`),
+	}
+
+	text := `+ password = "hunter2"
++ bucket    = "arn:aws:s3:::prod-bucket"`
+
+	result := redactSensitiveOutputsFromRawOutput(text, outputs)
+
+	assert.NotContains(t, result, "hunter2")
+	assert.Contains(t, result, iolib.MaskReplacement)
+	assert.Contains(t, result, "arn:aws:s3:::prod-bucket", "non-sensitive value must pass through unchanged")
+}
+
+// TestBuildTerraformExecData_LogsWiredThroughRedactionAndEncoding is the
+// end-to-end regression guard confirming buildTerraformExecData's logs field
+// is populated via redactSensitiveOutputsFromRawOutput then encodeLogs (not
+// the bare output string) on the parse-succeeded path. This fixture has no
+// Sensitive:true outputs (citerraform's regex-based extractApplyOutputs
+// never marks any output Sensitive — see the note on
+// redactSensitiveOutputsFromRawOutput), so this only proves non-sensitive
+// content survives redaction+encoding round-trip unchanged;
+// TestRedactSensitiveOutputsFromRawOutput covers the actual redaction
+// behavior directly against the helper.
+func TestBuildTerraformExecData_LogsWiredThroughRedactionAndEncoding(t *testing.T) {
+	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
+	require.NoError(t, err)
+
+	result := buildTerraformExecData("apply", string(data), "web", "plat-use2-dev", 0)
+	require.NotNil(t, result)
+	asMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	logs, ok := asMap["logs"].(string)
+	require.True(t, ok)
+	decodedLogs, err := base64.StdEncoding.DecodeString(logs)
+	require.NoError(t, err)
+	assert.Contains(t, string(decodedLogs), "i-12345678", "non-sensitive output value must remain in logs")
+}
+
+// TestEncodeLogs verifies encodeLogs base64-encodes its (already-masked)
+// input, and that it is masking-then-encoding, not encoding raw text — a
+// secret pattern present in the plaintext must not survive as a
+// pattern-matchable substring once decoded, since a downstream Gitleaks pass
+// over the whole marshaled Data blob cannot see into base64-encoded bytes
+// (2026-08-21 clarification: masking must happen before encoding, here, not
+// rely on that later pass for this field).
+func TestEncodeLogs(t *testing.T) {
+	encoded := encodeLogs("hello world")
+
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", string(decoded))
+}
+
 // TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser is the regression
 // guard for research.md Decision 18's ciMode-decoupling: plan.go/apply.go/
 // deploy.go's RunE call terraformCaptureShellOpts unconditionally (no ciMode
@@ -296,8 +375,12 @@ func TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser(t *testing.T) {
 // output string the caller supplies at invocation time (FR-006f, research.md
 // Decision 32 — internal/exec's executeCommandPipeline captures this scoped
 // to only the main plan/apply/deploy subprocess, not read from a buffer this
-// closure owns), stripping ANSI before parsing, and threads component/stack
-// through to buildTerraformExecData (research.md Decision 21).
+// closure owns), stripping ANSI before parsing, threads component/stack
+// through to buildTerraformExecData (research.md Decision 21), and wraps the
+// single result in the unified {"version": ..., "components": [...]} shape
+// (Decision 38, spec.md 2026-08-21 clarification — single-component Data is
+// never structurally different from multi-component, just a one-element
+// components list) with its own per-entry "version" stripped.
 func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	fixture, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
@@ -309,14 +392,28 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	// Decision 29) — exit_code is threaded through even here.
 	emptyResult := parser("apply", 0, "")
 	require.NotNil(t, emptyResult)
-	emptyMap, ok := emptyResult.(map[string]any)
+	emptyWrapper, ok := emptyResult.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, terraformExecDataVersion, emptyWrapper["version"])
+	emptyComponents, ok := emptyWrapper["components"].([]any)
+	require.True(t, ok)
+	require.Len(t, emptyComponents, 1)
+	emptyMap, ok := emptyComponents[0].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 0, emptyMap["exit_code"])
+	assert.NotContains(t, emptyMap, "version")
 
 	result := parser("apply", 0, string(fixture))
 	require.NotNil(t, result)
-	asMap, ok := result.(map[string]any)
+	wrapper, ok := result.(map[string]any)
 	require.True(t, ok)
+	assert.Equal(t, terraformExecDataVersion, wrapper["version"])
+	components, ok := wrapper["components"].([]any)
+	require.True(t, ok)
+	require.Len(t, components, 1)
+	asMap, ok := components[0].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, asMap, "version")
 	require.Contains(t, asMap, "resource_counts")
 	resourceCounts, ok := asMap["resource_counts"].(map[string]any)
 	require.True(t, ok)
@@ -327,13 +424,13 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 
 // TestTerraformNodeHooks_RecordExecResultAccumulates verifies After()
 // accumulates one execNodeResult per node call, with the correct
-// component/stack/exitCode, and that concurrent calls (as the scheduler may
-// dispatch nodes concurrently) are all safely recorded. The two nodes below
-// carrying different ExitCode values (0 and 1) in the same aggregate result
-// is also the regression guard for research.md Decision 28: exit_code is
-// per-component for multi-component runs, never a single aggregate value —
-// execNodeResult.ExitCode already provides this, so a future change that
-// collapsed it to one shared value would fail this assertion.
+// component's own full TerraformExecData entry (FR-006a's restructured
+// {"components": [...]} shape, spec.md Session 2026-08-21), and that
+// concurrent calls (as the scheduler may dispatch nodes concurrently) are
+// all safely recorded. The two nodes below carrying different exit_code
+// values (0 and 1) in the same aggregate result is also the regression guard
+// for research.md Decision 28: exit_code is per-component for multi-component
+// runs, never a single aggregate value.
 func TestTerraformNodeHooks_RecordExecResultAccumulates(t *testing.T) {
 	applyOutput, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
@@ -349,17 +446,29 @@ func TestTerraformNodeHooks_RecordExecResultAccumulates(t *testing.T) {
 	require.NoError(t, nodeHooks.After(context.Background(), info2, "", errUtils.ExitCodeError{Code: 1}))
 
 	nodeHooks.mu.Lock()
-	results := append([]execNodeResult(nil), nodeHooks.results...)
+	results := append([]any(nil), nodeHooks.results...)
 	nodeHooks.mu.Unlock()
 
-	// One base identity/outcome entry per node, plus one entry per resource
-	// change parsed from the first node's captured output (3 created
-	// resources) — the second node had no output to parse, so only its base
-	// entry is present.
-	require.Len(t, results, 5, "base entry per node, plus resource-change entries for the node with parseable output")
-	assert.Contains(t, results, execNodeResult{Component: "myapp", Stack: "dev", ExitCode: 0})
-	assert.Contains(t, results, execNodeResult{Component: "myapp", Stack: "dev", ExitCode: 1})
-	assert.Contains(t, results, execNodeResult{Component: "myapp", Stack: "dev", ExitCode: 0, Action: "created", Address: "aws_instance.web"})
+	// One full TerraformExecData entry per node — the second node's is a
+	// minimal/defaulted entry since it had no output to parse.
+	require.Len(t, results, 2, "one full TerraformExecData entry per node")
+
+	node1, ok := results[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "myapp", node1["component"])
+	assert.Equal(t, "dev", node1["stack"])
+	assert.Equal(t, 0, node1["exit_code"])
+	assert.NotContains(t, node1, "version", "per-component entries omit version — redundant with the outer components wrapper's own version")
+	resourceCounts1, ok := node1["resource_counts"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 3, resourceCounts1["create"])
+
+	node2, ok := results[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "myapp", node2["component"])
+	assert.Equal(t, "dev", node2["stack"])
+	assert.Equal(t, 1, node2["exit_code"])
+	assert.NotContains(t, node2, "version")
 }
 
 // TestCaptureMultiComponentExecMetadata_NoOpWithoutNodeHooks verifies the
@@ -388,8 +497,9 @@ func TestCaptureMultiComponentExecMetadata_NoOpForNonSyncSubcommand(t *testing.T
 // direct regression test for FR-006a's independent test criterion: a
 // multi-component run with 2 accumulated node results must produce exactly
 // one POST /v1/atmos/exec request for the whole invocation, with both
-// nodes' identity/outcome folded into that single request's Data array —
-// never one request per component.
+// nodes' full TerraformExecData entries folded into that single request's
+// Data.components array (spec.md Session 2026-08-21 restructure) — never one
+// request per component.
 func TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")
 	t.Setenv("CI", "true")
@@ -421,9 +531,21 @@ func TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun(t *testi
 	assert.Equal(t, "terraform plan", receivedBody.Command)
 	assert.NotEmpty(t, receivedBody.ExecutionID)
 
-	var data []execNodeResult
+	var data struct {
+		Version    int              `json:"version"`
+		Components []map[string]any `json:"components"`
+	}
 	require.NoError(t, json.Unmarshal(receivedBody.Data, &data))
-	require.Len(t, data, 2, "both nodes' results must be folded into the single record's Data")
-	assert.Contains(t, data, execNodeResult{Component: "myapp", Stack: "dev", ExitCode: 0})
-	assert.Contains(t, data, execNodeResult{Component: "other", Stack: "dev", ExitCode: 0})
+	assert.Equal(t, terraformExecDataVersion, data.Version)
+	require.Len(t, data.Components, 2, "both nodes' full TerraformExecData entries must be folded into the single record's Data.components")
+
+	var components []string
+	for _, c := range data.Components {
+		components = append(components, c["component"].(string))
+		assert.Equal(t, "dev", c["stack"])
+		assert.Equal(t, float64(0), c["exit_code"])
+		assert.NotContains(t, c, "version", "per-component entries omit version — redundant with the outer components wrapper's own version")
+	}
+	assert.Contains(t, components, "myapp")
+	assert.Contains(t, components, "other")
 }

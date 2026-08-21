@@ -3,6 +3,7 @@
 package pro
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -371,6 +372,11 @@ func TestPact_GetGitHubOIDCToken(t *testing.T) {
 // TestPact_UploadExecMetadata verifies the consumer contract for
 // POST /api/v1/atmos/exec with a populated `data` field (terraform plan
 // shape), per specs/002-pro-exec-metadata/contracts/interactions.md.
+// Single- and multi-component invocations are never structurally different
+// (spec.md FR-006a, 2026-08-21 clarification): a single-component invocation's
+// `Data` is the same {"version": 1, "components": [TerraformExecData]}
+// wrapper as a multi-component run, just with a one-element list — never a
+// bare TerraformExecData object at the top level.
 func TestPact_UploadExecMetadata(t *testing.T) {
 	mockProvider := newHTTPMockProvider(t)
 
@@ -410,35 +416,38 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 					},
 					"data": body{
 						"version": 1,
-						"resource_counts": body{
-							"create":  matchers.Like(2),
-							"change":  matchers.Like(1),
-							"replace": matchers.Like(0),
-							"destroy": matchers.Like(0),
-						},
-						"outputs": body{
-							"bucket_arn": body{
-								"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
-								"type":      matchers.Like("string"),
-								"sensitive": matchers.Like(false),
+						"components": matchers.EachLike(body{
+							"resource_counts": body{
+								"create":  matchers.Like(2),
+								"change":  matchers.Like(1),
+								"replace": matchers.Like(0),
+								"destroy": matchers.Like(0),
 							},
-							"secret_key": body{
-								"value":     iolib.MaskReplacement,
-								"type":      matchers.Like("string"),
-								"sensitive": matchers.Like(true),
+							"outputs": body{
+								"bucket_arn": body{
+									"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
+									"type":      matchers.Like("string"),
+									"sensitive": matchers.Like(false),
+								},
+								"secret_key": body{
+									"value":     iolib.MaskReplacement,
+									"type":      matchers.Like("string"),
+									"sensitive": matchers.Like(true),
+								},
 							},
-						},
-						"warnings": matchers.EachLike("deprecated argument used", 1),
-						"changes": matchers.EachLike(body{
-							"action":  matchers.Like("created"),
-							"address": matchers.Like("aws_s3_bucket.example"),
+							"warnings": matchers.EachLike("deprecated argument used", 1),
+							"changes": matchers.EachLike(body{
+								"action":  matchers.Like("created"),
+								"address": matchers.Like("aws_s3_bucket.example"),
+							}, 1),
+							"has_changes": matchers.Like(true),
+							"has_errors":  matchers.Like(false),
+							"errors":      []interface{}{},
+							"exit_code":   matchers.Like(2),
+							"component":   matchers.Like("vpc"),
+							"stack":       matchers.Like("plat-use2-dev"),
+							"logs":        matchers.Like(base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 1 to change, 0 to destroy."))),
 						}, 1),
-						"has_changes": matchers.Like(true),
-						"has_errors":  matchers.Like(false),
-						"errors":      []interface{}{},
-						"exit_code":   matchers.Like(2),
-						"component":   matchers.Like("vpc"),
-						"stack":       matchers.Like("plat-use2-dev"),
 					},
 				})
 		}).
@@ -451,31 +460,40 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 			client := newPactClient(config)
 			data, err := json.Marshal(map[string]any{
 				"version": 1,
-				"resource_counts": map[string]any{
-					"create":  2,
-					"change":  1,
-					"replace": 0,
-					"destroy": 0,
+				"components": []map[string]any{
+					{
+						"resource_counts": map[string]any{
+							"create":  2,
+							"change":  1,
+							"replace": 0,
+							"destroy": 0,
+						},
+						"outputs": map[string]any{
+							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
+							"secret_key": map[string]any{"value": iolib.MaskReplacement, "type": "string", "sensitive": true},
+						},
+						"warnings": []string{"deprecated argument used"},
+						"changes": []map[string]any{
+							{"action": "created", "address": "aws_s3_bucket.example"},
+						},
+						"has_changes": true,
+						"has_errors":  false,
+						"errors":      []string{},
+						// exit_code (research.md Decision 27) is the terraform subprocess's
+						// own exit code — distinct from the envelope's own ExitCode (0)
+						// above: a `plan -detailed-exitcode`-style 2 signals "succeeded,
+						// changes present", the authoritative signal independent of
+						// has_changes/resource_counts.
+						"exit_code": 2,
+						"component": "vpc",
+						"stack":     "plat-use2-dev",
+						// logs is base64-encoded plaintext (already masked before
+						// encoding, per FR-010a) — never raw/inline text, since a
+						// downstream Gitleaks pass over the whole marshaled Data blob
+						// cannot pattern-match secrets inside base64-encoded bytes.
+						"logs": base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 1 to change, 0 to destroy.")),
+					},
 				},
-				"outputs": map[string]any{
-					"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
-					"secret_key": map[string]any{"value": iolib.MaskReplacement, "type": "string", "sensitive": true},
-				},
-				"warnings": []string{"deprecated argument used"},
-				"changes": []map[string]any{
-					{"action": "created", "address": "aws_s3_bucket.example"},
-				},
-				"has_changes": true,
-				"has_errors":  false,
-				"errors":      []string{},
-				// exit_code (research.md Decision 27) is the terraform subprocess's
-				// own exit code — distinct from the envelope's own ExitCode (0)
-				// above: a `plan -detailed-exitcode`-style 2 signals "succeeded,
-				// changes present", the authoritative signal independent of
-				// has_changes/resource_counts.
-				"exit_code": 2,
-				"component": "vpc",
-				"stack":     "plat-use2-dev",
 			})
 			if err != nil {
 				return err
@@ -682,6 +700,131 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 				Flags:       []string{},
 				ExitCode:    0,
 				Data:        data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_MultiComponent verifies the consumer contract
+// for POST /api/v1/atmos/exec carrying a multi-component `terraform plan
+// --affected`/`--all` run's structured Data shape (FR-006a, spec.md Session
+// 2026-08-21 restructure): `{"version": 1, "components": [TerraformExecData,
+// ...]}` — the same unified shape TestPact_UploadExecMetadata already covers
+// for a single component, exercised here with a components list of length >1
+// to prove the list itself, not just the wrapper. Per-component entries omit
+// their own "version" field — it's redundant with the outer wrapper's.
+func TestPact_UploadExecMetadata_MultiComponent(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload multi-component command-execution metadata").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like("11e1f1e1-6789-4a1b-8c1d-1234567890ab"),
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("terraform plan"),
+					"args":             []interface{}{},
+					"flags":            matchers.EachLike("--affected", 1),
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(2345),
+						"user_cpu_time_ms":   matchers.Like(1200),
+						"system_cpu_time_ms": matchers.Like(200),
+					},
+					"data": body{
+						"version": 1,
+						"components": matchers.EachLike(body{
+							"resource_counts": body{
+								"create":  matchers.Like(2),
+								"change":  matchers.Like(0),
+								"replace": matchers.Like(0),
+								"destroy": matchers.Like(0),
+							},
+							"outputs":     body{},
+							"warnings":    []interface{}{},
+							"changes": matchers.EachLike(body{
+								"action":  matchers.Like("created"),
+								"address": matchers.Like("aws_vpc.this"),
+							}, 1),
+							"has_changes": matchers.Like(true),
+							"has_errors":  matchers.Like(false),
+							"errors":      []interface{}{},
+							"exit_code":   matchers.Like(2),
+							"component":   matchers.Like("vpc"),
+							"stack":       matchers.Like("plat-use2-dev"),
+							"logs":        matchers.Like(base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 0 to change, 0 to destroy."))),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"components": []map[string]any{
+					{
+						"resource_counts": map[string]any{
+							"create":  2,
+							"change":  0,
+							"replace": 0,
+							"destroy": 0,
+						},
+						"outputs":  map[string]any{},
+						"warnings": []string{},
+						"changes": []map[string]any{
+							{"action": "created", "address": "aws_vpc.this"},
+						},
+						"has_changes": true,
+						"has_errors":  false,
+						"errors":      []string{},
+						"exit_code":   2,
+						"component":   "vpc",
+						"stack":       "plat-use2-dev",
+						"logs":        base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 0 to change, 0 to destroy.")),
+					},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "11e1f1e1-6789-4a1b-8c1d-1234567890ab",
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "terraform plan",
+				Args:          []string{},
+				Flags:         []string{"--affected"},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      2345,
+					UserCPUTimeMS:   1200,
+					SystemCPUTimeMS: 200,
+				},
+				Data: data,
 			})
 		})
 	require.NoError(t, err)

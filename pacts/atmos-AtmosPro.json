@@ -355,40 +355,45 @@
           "atmos_version": "1.2.3",
           "command": "atmos terraform plan",
           "data": {
-            "changes": [
+            "components": [
               {
-                "action": "created",
-                "address": "aws_s3_bucket.example"
+                "changes": [
+                  {
+                    "action": "created",
+                    "address": "aws_s3_bucket.example"
+                  }
+                ],
+                "component": "vpc",
+                "errors": [],
+                "exit_code": 2,
+                "has_changes": true,
+                "has_errors": false,
+                "logs": "UGxhbjogMiB0byBhZGQsIDEgdG8gY2hhbmdlLCAwIHRvIGRlc3Ryb3ku",
+                "outputs": {
+                  "bucket_arn": {
+                    "sensitive": false,
+                    "type": "string",
+                    "value": "arn:aws:s3:::prod-bucket"
+                  },
+                  "secret_key": {
+                    "sensitive": true,
+                    "type": "string",
+                    "value": "<MASKED>"
+                  }
+                },
+                "resource_counts": {
+                  "change": 1,
+                  "create": 2,
+                  "destroy": 0,
+                  "replace": 0
+                },
+                "stack": "plat-use2-dev",
+                "warnings": [
+                  "deprecated argument used"
+                ]
               }
             ],
-            "component": "vpc",
-            "errors": [],
-            "exit_code": 2,
-            "has_changes": true,
-            "has_errors": false,
-            "outputs": {
-              "bucket_arn": {
-                "sensitive": false,
-                "type": "string",
-                "value": "arn:aws:s3:::prod-bucket"
-              },
-              "secret_key": {
-                "sensitive": true,
-                "type": "string",
-                "value": "<MASKED>"
-              }
-            },
-            "resource_counts": {
-              "change": 1,
-              "create": 2,
-              "destroy": 0,
-              "replace": 0
-            },
-            "stack": "plat-use2-dev",
-            "version": 1,
-            "warnings": [
-              "deprecated argument used"
-            ]
+            "version": 1
           },
           "execution_id": "b3b1e2b0-1234-4a1b-8c1d-1234567890ab",
           "exit_code": 0,
@@ -431,59 +436,66 @@
           "$.body.command": {
             "match": "type"
           },
-          "$.body.data.changes": {
+          "$.body.data.components": {
             "match": "type",
             "min": 1
           },
-          "$.body.data.changes[*].action": {
+          "$.body.data.components[*].changes": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes[*].action": {
             "match": "type"
           },
-          "$.body.data.changes[*].address": {
+          "$.body.data.components[*].changes[*].address": {
             "match": "type"
           },
-          "$.body.data.component": {
+          "$.body.data.components[*].component": {
             "match": "type"
           },
-          "$.body.data.exit_code": {
+          "$.body.data.components[*].exit_code": {
             "match": "type"
           },
-          "$.body.data.has_changes": {
+          "$.body.data.components[*].has_changes": {
             "match": "type"
           },
-          "$.body.data.has_errors": {
+          "$.body.data.components[*].has_errors": {
             "match": "type"
           },
-          "$.body.data.outputs.bucket_arn.sensitive": {
+          "$.body.data.components[*].logs": {
             "match": "type"
           },
-          "$.body.data.outputs.bucket_arn.type": {
+          "$.body.data.components[*].outputs.bucket_arn.sensitive": {
             "match": "type"
           },
-          "$.body.data.outputs.bucket_arn.value": {
+          "$.body.data.components[*].outputs.bucket_arn.type": {
             "match": "type"
           },
-          "$.body.data.outputs.secret_key.sensitive": {
+          "$.body.data.components[*].outputs.bucket_arn.value": {
             "match": "type"
           },
-          "$.body.data.outputs.secret_key.type": {
+          "$.body.data.components[*].outputs.secret_key.sensitive": {
             "match": "type"
           },
-          "$.body.data.resource_counts.change": {
+          "$.body.data.components[*].outputs.secret_key.type": {
             "match": "type"
           },
-          "$.body.data.resource_counts.create": {
+          "$.body.data.components[*].resource_counts.change": {
             "match": "type"
           },
-          "$.body.data.resource_counts.destroy": {
+          "$.body.data.components[*].resource_counts.create": {
             "match": "type"
           },
-          "$.body.data.resource_counts.replace": {
+          "$.body.data.components[*].resource_counts.destroy": {
             "match": "type"
           },
-          "$.body.data.stack": {
+          "$.body.data.components[*].resource_counts.replace": {
             "match": "type"
           },
-          "$.body.data.warnings": {
+          "$.body.data.components[*].stack": {
+            "match": "type"
+          },
+          "$.body.data.components[*].warnings": {
             "match": "type",
             "min": 1
           },
@@ -1331,6 +1343,181 @@
             "match": "type"
           },
           "$.body.data": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.flags": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload multi-component command-execution metadata",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "terraform plan",
+          "data": {
+            "components": [
+              {
+                "changes": [
+                  {
+                    "action": "created",
+                    "address": "aws_vpc.this"
+                  }
+                ],
+                "component": "vpc",
+                "errors": [],
+                "exit_code": 2,
+                "has_changes": true,
+                "has_errors": false,
+                "logs": "UGxhbjogMiB0byBhZGQsIDAgdG8gY2hhbmdlLCAwIHRvIGRlc3Ryb3ku",
+                "outputs": {},
+                "resource_counts": {
+                  "change": 0,
+                  "create": 2,
+                  "destroy": 0,
+                  "replace": 0
+                },
+                "stack": "plat-use2-dev",
+                "warnings": []
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "11e1f1e1-6789-4a1b-8c1d-1234567890ab",
+          "exit_code": 0,
+          "flags": [
+            "--affected"
+          ],
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 200,
+            "user_cpu_time_ms": 1200,
+            "wall_time_ms": 2345
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.components": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes[*].action": {
+            "match": "type"
+          },
+          "$.body.data.components[*].changes[*].address": {
+            "match": "type"
+          },
+          "$.body.data.components[*].component": {
+            "match": "type"
+          },
+          "$.body.data.components[*].exit_code": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_changes": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_errors": {
+            "match": "type"
+          },
+          "$.body.data.components[*].logs": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.change": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.create": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.destroy": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.components[*].stack": {
             "match": "type"
           },
           "$.body.execution_id": {

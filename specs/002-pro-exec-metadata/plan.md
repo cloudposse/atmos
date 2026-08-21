@@ -4,154 +4,128 @@
 
 **Input**: Feature specification from `specs/002-pro-exec-metadata/spec.md`
 
-**Note**: This is an eleventh re-plan. It narrows the tenth re-plan's already-narrow
-scope further, based on two 2026-08-21 clarifications made directly against FR-006e:
+**Note**: This is a re-plan reflecting the feature's shipped, current state after several
+2026-08-21 sessions of implementation and follow-on `/speckit-clarify` corrections against
+the already-shipped `TerraformExecData` payload. The prior plan revision (see git history)
+covered only the `exit_code`/buffer-scoping bug fixes (FR-006e/FR-006f); this revision folds
+in three subsequent, larger changes to the same payload:
 
-1. **`-detailed-exitcode` is `plan`-only**, not also added to `apply`/`deploy`'s
-   internal `apply` invocation — `-detailed-exitcode` support on `apply` only landed
-   in Terraform 1.5+/OpenTofu, and Atmos supports arbitrary pinned older terraform/tofu
-   binaries via `atmos.yaml` that could hard-fail on the unrecognized flag on `apply`.
-   `apply`/`deploy` keep plain 0 (success)/1 (error) semantics; their `exit_code` is
-   still captured pre-CI-remap for consistency, but its value space stays 0/1, never 2.
-2. **Atmos's own process exit code for `plan` must be provably unaffected** by adding
-   `-detailed-exitcode`. Investigating this (Decision 35 below) found the two gates
-   involved are **not the same mechanism and do not coincide today**:
-   - FR-001's CI-detection gate (`pkg/proexec/gate.go`'s `gateOpen`) uses
-     `telemetry.IsCI()` — broad, automatic environment-variable-based CI-provider
-     detection (`GITHUB_ACTIONS`, `GITLAB_CI`, `CI=true`, etc.), always-on with no
-     opt-in required.
-   - The CI-mode exit-code remap (`internal/exec/ci_exit_codes.go`'s `mapCIExitCode`)
-     is gated by `atmosConfig.CI.Enabled`, which is bound **only** from an explicit
-     `ci.enabled: true` in `atmos.yaml` (mapstructure-bound config, not a flag/env
-     binding) — a deliberate master switch also gating CI annotations, SARIF result
-     uploads, container run summaries, and hook CI-mode behavior
-     (`pkg/ci/mode.go`'s `Enabled`/`AnnotationsEnabled`/`ResultsEnabled`,
-     `pkg/runner/step/container_summary.go`, `pkg/hooks/hooks.go`). The codebase
-     already treats "detected in CI" and "`ci.enabled` set" as a KNOWN, intentional
-     divergence — `cmd/ci/status.go` explicitly errors when `cipkg.IsCI()` is true but
-     `atmosConfig.CI.Enabled` is false, instructing the user to opt in.
+1. **`logs` field added** (FR-006i) — the scoped, ANSI-stripped plan/apply/deploy subprocess
+   text is now attached to `TerraformExecData` as a base64-encoded `logs` field. Originally
+   shipped as a plain-string `raw_output` field, then renamed and re-encoded (research.md
+   Decision 38) once base64 was chosen: masking (Terraform-sensitive-output redaction, then
+   Gitleaks-pattern masking) had to move to run directly on the plaintext, before encoding,
+   since a downstream secret-pattern scan over the marshaled `Data` JSON cannot see into
+   base64-encoded bytes.
+2. **Multi-component `Data` restructured** (FR-006a, research.md Decision 37) — from a flat
+   shared list of `{component, stack, exitCode, action, address}` entries to a list of
+   complete, full-shape `TerraformExecData` objects, one per component.
+3. **Single- and multi-component `Data` unified** (research.md Decision 38, direct user
+   correction) — `Data` for `terraform plan`/`apply`/`deploy` is now UNCONDITIONALLY
+   `{"version": 1, "components": [TerraformExecData, ...]}`; a single-component invocation
+   produces a one-element `components` list, never a bare `TerraformExecData` object at the
+   top level. Each `components[*]` entry omits its own `version` — redundant with the outer
+   wrapper's.
 
-   Because most real CI environments satisfying FR-001 do **not** also have
-   `ci.enabled: true` set in `atmos.yaml`, adding `-detailed-exitcode` to `plan`
-   unconditionally under FR-001's gate would, in the common case, leave `mapCIExitCode`
-   inactive and let terraform's real exit 2 propagate straight through to Atmos's own
-   process exit code — a real, not hypothetical, behavior change from today's always-0.
-   **Flipping the global `ci.enabled` master switch to close this gap is rejected** —
-   it would silently turn on annotations/SARIF/summaries/hooks CI-mode as a side effect
-   of an unrelated bug fix. The correct fix is narrower: a **local** exit-code
-   neutralization specific to the `-detailed-exitcode` value added for exec-metadata
-   purposes, applied only at the call site that added the flag, independent of the
-   global `ci.enabled` switch.
+A fourth, documentation-only clarification (spec.md FR-010a, 2026-08-21) recorded — without
+any code change — a known, accepted limitation: the shared regex-based console parser
+(`pkg/ci/plugins/terraform.extractApplyOutputs`) never actually sets a `sensitive: true` flag
+on any output entry, because Terraform's own console output already replaces a sensitive
+output's real value with the literal placeholder `<sensitive>` before Atmos ever captures it.
+The "no real secret ever uploaded" property this feature's masking exists to guarantee still
+holds — regression-tested by `TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue`
+and `TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm` — but via Terraform's
+own console behavior, not via accurate flag-driven redaction. Fixing the parser is explicitly
+out of scope (shared with Native CI, deliberately not touched by this feature).
 
 ## Summary
 
-Two deltas, both confined to `cmd/terraform/utils.go` / `internal/exec/terraform*.go`,
-fixing two confirmed production bugs in the already-shipped `TerraformExecData` (FR-006)
-exec-metadata payload:
+`TerraformExecData` — the structured `Data` payload `terraform plan`/`apply`/`deploy`
+execution records attach (FR-006) — has three deltas relative to the previously-shipped
+shape, all confined to `cmd/terraform/utils.go` plus the Pact consumer contract test
+(`pkg/pro/consumer_pact_test.go`):
 
-1. **`exit_code` reliability (FR-006e)**: `buildPlanSubcommandArgs`
-   (`internal/exec/terraform_execute_helpers_args.go`) currently only adds
-   `-detailed-exitcode` when the legacy `--upload-status` flag is set. It must instead
-   add `-detailed-exitcode` to `plan` whenever exec-metadata capture is active
-   (`pkg/proexec.IsSyncCommand`), independent of `--upload-status`, and NOT add it to
-   `apply`/`deploy`'s internal `apply` invocation at all. `captureExecMetadataSync`
-   (`internal/exec/terraform.go`) must capture the terraform/tofu subprocess's real,
-   pre-remap exit code for `TerraformExecData.exit_code`, before
-   `executeMainTerraformCommand`'s `mapCIExitCode` call
-   (`internal/exec/terraform_execute_helpers_exec.go`) remaps it for Atmos's own
-   returned error/exit status. Additionally, whenever `-detailed-exitcode` was added to
-   a `plan` invocation specifically because exec-metadata capture required it (not
-   because the user's own `ci.enabled` config already covers it), that same code path
-   must apply its own local exit-2-to-0 neutralization to what Atmos itself returns —
-   independent of the global `atmosConfig.CI.Enabled` switch, since that switch must
-   not be force-enabled as a side effect of this fix (see Decision 35).
-2. **`resource_counts`/`outputs`/`changes` reliability (FR-006f)**:
-   `terraformCaptureShellOpts` (`cmd/terraform/utils.go`) currently shares one
-   stdout/stderr buffer across `terraform init`, `terraform workspace select`, and the
-   main `plan`/`apply` invocation (`executeCommandPipeline`,
-   `internal/exec/terraform_execute_helpers_exec.go`). The buffer fed to
-   `terraformExecMetadataParserFunc` (`cmd/terraform/utils.go`) must instead be
-   reset/isolated immediately before the final `plan`/`apply` subprocess invocation, so
-   the existing regex-based `citerraform.ParseOutput`/`ParsePlanOutput`/`ParseApplyOutput`
-   parser (`pkg/ci/plugins/terraform` — unchanged, same mechanism Native CI already
-   uses) only ever sees that invocation's own output.
+1. A new `logs` field: base64-encoded, masked-before-encoding, scoped plan/apply/deploy
+   console text (`buildTerraformExecData` sets it via `encodeLogs`, which composes
+   `redactSensitiveOutputsFromRawOutput` then the existing Gitleaks `iolib.MaskString`).
+2. `Data` is unconditionally `{"version": 1, "components": [TerraformExecData, ...]}` for
+   every `terraform plan`/`apply`/`deploy` invocation, single- or multi-component alike —
+   `stripComponentVersion` and `wrapComponentsData` (`cmd/terraform/utils.go`) are the two
+   small shared helpers both the single-component (`terraformExecMetadataParserFunc`) and
+   multi-component (`terraformNodeHooks.recordExecResult`/`captureMultiComponentExecMetadata`)
+   call sites now use, so there is exactly one code path producing the wire shape regardless
+   of component count.
+3. No functional/behavioral change to `resource_counts`/`outputs`/`warnings`/`changes`/
+   `has_changes`/`has_errors`/`errors`/`exit_code`/`component`/`stack` — those fields and
+   their masking/defaulting rules are unchanged from the prior shipped shape.
 
-No `-json`-stream parser rewrite, no shared-parser change touching Native CI's own
-code path — that direction was proposed and retracted earlier in this spec's
-Clarifications (FR-006g/FR-006h, marked Retracted).
+No `-json`-stream parser rewrite, no shared-parser change touching Native CI's own code
+path — that direction was proposed and retracted earlier in this spec's Clarifications
+(FR-006g/FR-006h, marked Retracted), and remains out of scope here.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26 (per `go.mod`; CI pins via `go-version-file: go.mod`)
 
 **Primary Dependencies**:
-- `internal/exec/terraform_execute_helpers_args.go` — `buildPlanSubcommandArgs`
-  (currently gates `-detailed-exitcode` behind `uploadStatusFlag`) needs an additional
-  trigger: exec-metadata capture being active for this invocation
-  (`pkg/proexec.IsSyncCommand(subCommand)` for `"plan"`).
-- `internal/exec/terraform_execute_helpers_exec.go` — `executeMainTerraformCommand`
-  (owns `mapCIExitCode` application) needs to (a) surface the pre-remap exit code
-  separately for `captureExecMetadataSync` to read, and (b) apply a local
-  exit-2-neutralization for Atmos's own returned status when `-detailed-exitcode` was
-  added specifically for exec-metadata purposes and the global `ci.enabled` switch is
-  not already covering it.
-- `internal/exec/ci_exit_codes.go` — `mapCIExitCode`/`defaultCIExitCodes` — read, not
-  modified; this is the existing global-`ci.enabled`-gated remap, left as-is per
-  Decision 35's finding that widening its gate is the wrong fix.
-- `internal/exec/terraform.go` — `captureExecMetadataSync`/`ExecuteTerraform` — exit
-  code plumbing into `TerraformExecData.exit_code`.
-- `cmd/terraform/utils.go` — `buildTerraformExecData`, `parseTerraformOutputMirror`,
-  `terraformCaptureShellOpts`, `terraformExecMetadataParserFunc` — buffer scoping fix
-  (FR-006f) and `exitCode` parameter plumbing (FR-006e).
-- `pkg/ci/plugins/terraform` (`ParsePlanOutput`/`ParseApplyOutput`/`ParseOutput`) —
-  consumed, unchanged.
-- `pkg/proexec` (`IsSyncCommand`, `gateOpen`) — consumed to determine when
-  exec-metadata capture (and therefore this fix's behavior) is active.
+- `cmd/terraform/utils.go` — `buildTerraformExecData` (per-component `TerraformExecData`
+  builder), `encodeLogs`/`redactSensitiveOutputsFromRawOutput` (masking + base64 for `logs`),
+  `stripComponentVersion`/`wrapComponentsData` (the shared unification helpers), and
+  `terraformNodeHooks.recordExecResult`/`captureMultiComponentExecMetadata`
+  (multi-component accumulation and delivery)
+- `pkg/proexec` — `VersionedData` (generic `{version, key: payload}` wrapper, reused by
+  `wrapComponentsData`), `CaptureSync`/`ExecRecordInput` (delivery, unaffected by this
+  revision — `Data` remains an opaque `any`)
+- `pkg/io` — `MaskString` (Gitleaks-pattern masking, now also invoked directly against
+  `logs`'s plaintext, not only via the existing whole-blob pass in `pkg/proexec/envelope.go`)
+- `pkg/ci/plugins/terraform` — `extractApplyOutputs` (the regex-based console parser
+  `buildTerraformExecData` decodes through `parseTerraformOutputMirror`; unchanged by this
+  revision, its `Sensitive`-detection limitation is documented, not fixed)
+- `pkg/pro/dtos` — `ExecUploadRequest`/`ExecDataUploadRequest` (outer envelope, unaffected —
+  `Data`/`data` remains `json.RawMessage`/opaque object)
 
-**Storage**: N/A (no new persistence; existing Atmos Pro upload endpoints unchanged)
+**Storage**: N/A (no local persistence; this feature is an outbound HTTP upload to Atmos Pro)
 
-**Testing**: `atmos test` (short mode), `atmos test --coverage`; existing suites in
-`internal/exec/terraform_execute_helpers_args_test.go`,
-`internal/exec/terraform_exitcode_test.go`, `cmd/terraform/utils_test.go` (or
-equivalent) to extend per this repo's mandatory bug-fixing workflow (write a failing
-test reproducing each bug first, then fix).
+**Testing**: `go test ./cmd/terraform/...` (unit, table-driven — `buildTerraformExecData`,
+`encodeLogs`, `redactSensitiveOutputsFromRawOutput`, `stripComponentVersion`/
+`wrapComponentsData`, `terraformNodeHooks.recordExecResult`, `captureMultiComponentExecMetadata`);
+`go test -tags pact ./pkg/pro/...` (local-only Pact consumer contract suite — regenerates
+`pacts/atmos-AtmosPro.json`, no broker); `go test ./pkg/ci/plugins/terraform/...` (the
+shared console parser's own tests, including the new sensitive-output-placeholder regression
+guard)
 
-**Target Platform**: Linux/macOS/Windows (cross-platform CLI); no platform-specific
-behavior introduced by either fix.
+**Target Platform**: Cross-platform CLI (Linux/macOS/Windows) — this feature has no
+platform-specific code path beyond the pre-existing resource-metrics `omitempty` fields
 
-**Project Type**: CLI (single Go module, `cmd/`/`internal/`/`pkg/` layout)
+**Project Type**: CLI (single Go module, no frontend/backend split)
 
-**Performance Goals**: N/A — no measurable perf target; both fixes are correctness
-fixes with no new I/O beyond what the existing `plan`/`apply` invocation already does.
+**Performance Goals**: N/A beyond the feature's existing SC-003/SC-004 delivery-timing
+budgets (unaffected by this revision — `logs` adds bytes to `Data`, handled transparently by
+the existing FR-011 4 MB inline-vs-blob-URL threshold, no new timing budget)
 
-**Constraints**: Must not change Atmos's own process exit code for `plan`/`apply`/
-`deploy` in any CI environment satisfying FR-001 (the exit-code-neutralization
-guarantee, Decision 35). Must not force-enable the global `ci.enabled` config switch as
-a side effect. Must not add `-detailed-exitcode` to `apply`/`deploy` (version-support
-risk on older pinned terraform/tofu binaries).
+**Constraints**: `logs` MUST be masked on the plaintext before base64-encoding (FR-010a) —
+the existing whole-blob Gitleaks pass in `pkg/proexec/envelope.go` cannot pattern-match a
+secret once it is inside base64-encoded bytes, so this field cannot rely on that later pass
+the way every other plain-string field in `Data` does
 
-**Scale/Scope**: Two functions/call sites for FR-006e, one buffer-lifecycle change for
-FR-006f; no new files expected, no schema/wire-shape changes (payload fields defined by
-FR-006 are unchanged, only how they get populated is fixed).
+**Scale/Scope**: Single payload shape (`TerraformExecData`) touched; three files change
+(`cmd/terraform/utils.go`, its test, `pkg/pro/consumer_pact_test.go`) plus this feature's
+own spec/data-model/research/contracts documentation — no schema or database migration, no
+new CLI command or flag
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Interface-Driven Design / DI**: N/A — no new external dependency being introduced;
-  existing `ShellCommandOption`/functional-options pattern for
-  `terraformCaptureShellOpts` is reused as-is for the buffer-scoping fix.
-- **Error Handling (static errors, `errors.Is`)**: No new error paths introduced by
-  either fix; existing exit-code plumbing (`errUtils.GetExitCode`) is reused.
-- **Performance Tracking**: Any new/modified public function gets
-  `defer perf.Track(atmosConfig, "pkg.FuncName")()` per existing convention (both
-  touched files already follow this).
-- **Test Isolation / Test Quality**: New tests reproduce each bug first (mandatory bug-
-  fixing workflow), then verify the fix; existing `pkg/ci/plugins/terraform` tests are
-  unaffected since that package's code is not modified by either fix.
-- **Package Organization**: No new package needed; both fixes live in existing
-  `cmd/terraform` and `internal/exec` files.
-- **No violations requiring Complexity Tracking.**
+| Principle | Status | Notes |
+|---|---|---|
+| I. Registry-Driven Extensibility | N/A | No new CLI command/store provider introduced by this revision |
+| II. Interface-Driven Design with DI | Pass | `buildTerraformExecData`/`encodeLogs`/`stripComponentVersion`/`wrapComponentsData` are pure functions over their inputs, not hidden singletons; existing `proexec.CaptureSync`/`ExecRecordInput` DI seams are unchanged |
+| III. Test-First, 80% Coverage | Pass | Every new/changed function has a dedicated unit test (`TestEncodeLogs`, `TestRedactSensitiveOutputsFromRawOutput`, `TestBuildTerraformExecData_LogsWiredThroughRedactionAndEncoding`, `TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm`, the unified-shape assertions in `TestTerraformExecMetadataParserFunc_UsesSuppliedOutput`/`TestTerraformNodeHooks_RecordExecResultAccumulates`/`TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun`), plus the Pact consumer contract (`TestPact_UploadExecMetadata`/`_MultiComponent`) |
+| IV. Separated I/O and UI | N/A | This feature performs no terminal output of its own; it constructs an HTTP payload |
+| V. Simplicity, No Over-Engineering | Pass | `stripComponentVersion`/`wrapComponentsData` are two small, single-purpose functions extracted specifically to eliminate the duplicated inline logic the single- and multi-component call sites previously each carried — this is a de-duplication, not a new abstraction layer |
+
+No violations requiring justification — Complexity Tracking section is empty.
 
 ## Project Structure
 
@@ -159,45 +133,52 @@ FR-006 are unchanged, only how they get populated is fixed).
 
 ```text
 specs/002-pro-exec-metadata/
-├── plan.md              # This file (eleventh re-plan)
-├── research.md          # Decisions 1-35 (33/34 retracted, see Clarifications)
-├── data-model.md        # TerraformExecData shape (fields unchanged by this re-plan)
-├── quickstart.md        # Unaffected by this re-plan (wire shape unchanged)
-├── contracts/           # Unaffected by this re-plan (wire shape unchanged)
-└── tasks.md             # Regenerated to match this re-plan's two-fix scope
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output — Decisions 1-38
+├── data-model.md        # Phase 1 output — ExecutionRecord, TerraformExecData, etc.
+├── quickstart.md        # Phase 1 output — manual end-to-end + Pact regeneration steps
+├── contracts/
+│   └── interactions.md  # Phase 1 output — Pact interactions 1-15 (9/10 cover TerraformExecData)
+└── tasks.md              # Phase 2 output (/speckit-tasks command)
 ```
 
 ### Source Code (repository root)
 
 ```text
 cmd/terraform/
-├── utils.go              # buildTerraformExecData, parseTerraformOutputMirror,
-│                          # terraformCaptureShellOpts, terraformExecMetadataParserFunc
-└── plan.go                # plan subcommand wiring (ciMode local var, unrelated to
-                            # atmosConfig.CI.Enabled — see Decision 35)
-
-internal/exec/
-├── terraform_execute_helpers_args.go   # buildPlanSubcommandArgs (-detailed-exitcode)
-├── terraform_execute_helpers_exec.go   # executeMainTerraformCommand, mapCIExitCode
-│                                        # call site, executeCommandPipeline (buffer
-│                                        # threading through init/workspace/main)
-├── ci_exit_codes.go                    # mapCIExitCode, defaultCIExitCodes (read-only)
-└── terraform.go                        # captureExecMetadataSync, ExecuteTerraform
+├── utils.go                       # buildTerraformExecData, encodeLogs,
+│                                   # redactSensitiveOutputsFromRawOutput,
+│                                   # stripComponentVersion, wrapComponentsData,
+│                                   # terraformNodeHooks.recordExecResult,
+│                                   # captureMultiComponentExecMetadata,
+│                                   # terraformExecMetadataParserFunc
+├── utils_exec_metadata_test.go    # Unit tests for all of the above
+├── plan.go / apply.go / deploy.go # Wire terraformCaptureShellOpts (unchanged this revision)
 
 pkg/proexec/
-└── gate.go               # gateOpen (FR-001 CI-detection gate, telemetry.IsCI())
+├── envelope.go                    # buildRecord, VersionedData, maskedDataJSON (unaffected —
+│                                   # Data remains an opaque any/json.RawMessage)
+├── sync.go / async.go             # CaptureSync/CaptureAsync (unaffected)
 
-pkg/ci/
-└── mode.go                # Enabled/AnnotationsEnabled/ResultsEnabled (all keyed off
-                            # atmosConfig.CI.Enabled — the switch this fix must NOT
-                            # force-enable)
+pkg/pro/
+├── dtos/exec.go                   # ExecUploadRequest/ExecDataUploadRequest (unaffected)
+├── consumer_pact_test.go          # Pact consumer interactions, incl. TestPact_UploadExecMetadata
+│                                   # and TestPact_UploadExecMetadata_MultiComponent
+
+pkg/ci/plugins/terraform/
+├── parser.go                      # extractApplyOutputs (unchanged — its Sensitive-detection
+│                                   # limitation is documented, not fixed, per FR-010a)
+├── parser_test.go                 # TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue
+
+internal/exec/
+├── terraform.go                   # captureExecMetadataSync (unaffected — Data remains opaque)
 ```
 
-**Structure Decision**: No new packages or files. Both fixes are confined to existing
-files in `cmd/terraform/` and `internal/exec/`, following this repo's existing
-convention of small, focused changes within already-established file boundaries rather
-than new abstractions.
+**Structure Decision**: No new packages or directories. This revision is entirely
+change-in-place within the existing `cmd/terraform` package (the `TerraformExecData` builder
+and the two new unification helpers) plus test/contract-doc updates — consistent with
+Constitution Principle V (no premature structure for a payload-shape change).
 
 ## Complexity Tracking
 
-*No Constitution Check violations — this section intentionally left empty.*
+*No violations — table intentionally empty.*

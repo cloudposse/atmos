@@ -6,7 +6,13 @@
 research.md Decisions 22-25; further revised 2026-08-20 — `exit_code` field, `[]`-not-`null`
 list normalization, research.md Decisions 26-29; a `terraform deploy` two-phase shape
 (Decision 30) was proposed and then retracted the same session — see Decision 30r and
-interaction 16's note below)
+interaction 16's note below; further revised 2026-08-21 — `TerraformExecData`'s wire shape
+was restructured twice more, research.md Decisions 37/38: (a) `logs` field added (originally
+`raw_output`, renamed and base64-encoded), and (b) `data` for `terraform plan`/`apply`/`deploy`
+is now UNCONDITIONALLY `{"version": 1, "components": [TerraformExecData, ...]}` — a
+single-component invocation is a one-element `components` list, never a bare `TerraformExecData`
+object at the top level. Interaction 9 below reflects this final shape; the earlier
+bare-object/flat-multi-component shapes it describes are historical and no longer sent)
 **Extends**: `specs/001-pact-consumer-contracts/contracts/interactions.md` (interactions 1-8)
 
 These interactions are added to the same local-only Pact consumer suite
@@ -56,16 +62,26 @@ interaction.
 | `vol_ctx_switches` | integer, optional | `Like(30)` |
 | `invol_ctx_switches` | integer, optional | `Like(5)` |
 
-#### `data` object — inline mode (example: `terraform plan`/`apply` structured payload)
+#### `data` object — inline mode (example: `terraform plan`/`apply`/`deploy` structured payload)
 
-Present only for `terraform plan`/`apply` interactions in the pact test; other example
-interactions in the same consumer test file omit `data` entirely (`null`) to cover the "no
-structured data" case per spec Acceptance Scenario US3.4. Sent in full, inline, since the
-whole record fits under 4 MB in this example.
+Present only for `terraform plan`/`apply`/`deploy` interactions in the pact test; other
+example interactions in the same consumer test file omit `data` entirely (`null`) to cover
+the "no structured data" case per spec Acceptance Scenario US3.4. Sent in full, inline, since
+the whole record fits under 4 MB in this example.
+
+As of research.md Decisions 37/38 (2026-08-21), `data` is UNCONDITIONALLY the same wrapper
+shape regardless of how many components the invocation targeted — there is no separate
+"single-component" shape:
 
 | Field | Type | Matcher |
 |-------|------|---------|
 | `version` | integer | exact literal `1` |
+| `components` | array of `TerraformExecData` (≥1 entries — exactly 1 for a single-component invocation, one per component for `--affected`/`--all`) | `EachLike({...})`, table below |
+
+#### `components[*]` object (`TerraformExecData`, per-component entry)
+
+| Field | Type | Matcher |
+|-------|------|---------|
 | `resource_counts` | object `{create, change, replace, destroy}` (integers) | `Like` per field |
 | `outputs` | object, values `{value, type, sensitive}` | `Like` per key |
 | `warnings` | array of string | `EachLike(...)` |
@@ -74,36 +90,63 @@ whole record fits under 4 MB in this example.
 | `has_errors` | boolean | `Like(false)` |
 | `errors` | array of string, never `null` when empty | `EachLike(...)`, MAY be `[]` |
 | `exit_code` | integer | `Like(0)` |
-| `component` | string, single-component invocations only | `Like("vpc")` |
-| `stack` | string, single-component invocations only | `Like("plat-use2-dev")` |
+| `component` | string | `Like("vpc")` |
+| `stack` | string | `Like("plat-use2-dev")` |
+| `logs` | string, base64-encoded | `Like("UGxhbjogMi4uLg==")` |
 
-`version` (research.md Decision 24) is an exact-literal match, not `Like`, since it is a fixed
-shape identifier the provider branches on — an unexpected value here is itself the signal a
-schema mismatch occurred, not noise a matcher should absorb.
+**No `version` field inside `components[*]`** — research.md Decision 38: each entry's own
+`version` (present internally in `buildTerraformExecData`'s return value) is deleted before
+the entry is appended to the list, since it would be redundant with the outer wrapper's
+`version`. A `components[*]` entry that includes its own `version` field is a contract
+violation, not a benign extra field.
+
+`version` (research.md Decision 24) — the OUTER wrapper's, not any per-component field — is
+an exact-literal match, not `Like`, since it is a fixed shape identifier the provider branches
+on — an unexpected value here is itself the signal a schema mismatch occurred, not noise a
+matcher should absorb.
 
 `exit_code` (research.md Decisions 27-29) is the terraform/tofu subprocess's own exit code,
 distinct from the request's own top-level `exit_code` (the `atmos` process's exit code) —
-always present, including on a fixture where itemized fields are otherwise empty/zero/false,
-to assert the "still attach minimal Data" contract. `changes`/`warnings`/`errors`
-(research.md Decision 26) MUST be asserted as `[]`, never `null`, in the empty-case fixture —
-the pact test's own empty-list fixture is the regression guard for the nil-slice bug this
-decision fixes.
+always present per component, including on a fixture where itemized fields are otherwise
+empty/zero/false, to assert the "still attach minimal entry" contract. `changes`/`warnings`/
+`errors` (research.md Decision 26) MUST be asserted as `[]`, never `null`, in the empty-case
+fixture — the pact test's own empty-list fixture is the regression guard for the nil-slice bug
+this decision fixes.
 
 `outputs[*].value` is `"<MASKED>"` (a literal string, never the real value) whenever
 `outputs[*].sensitive` is `true` (data-model.md Decision 19 / FR-010a) — this is independent
 of, and in addition to, the general Gitleaks-pattern secret masking (FR-010) already applied
 to the whole `data` blob before upload. The pact test's example fixture MUST include at least
 one sensitive output to assert this at the contract level (`Like("<MASKED>")` when
-`sensitive` is `Like(true)`).
+`sensitive` is `Like(true)`). **Known limitation** (research.md, spec.md FR-010a 2026-08-21
+clarification): the production regex-based console parser never actually sets
+`sensitive: true` on any entry — Terraform's own console output already prints the literal
+placeholder `<sensitive>` in place of a real sensitive value before Atmos ever captures it, so
+this masking layer is exercised at the contract/unit level but is not reachable against real
+production `plan`/`apply` console text today. The no-real-secret-uploaded property still holds
+via Terraform's own console behavior, not via this flag.
+
+`logs` (research.md Decision 38, FR-006i) is the same already-scoped, ANSI-stripped
+plan/apply/deploy subprocess text `resource_counts`/`outputs`/etc. are parsed from,
+base64-encoded. Masking (Terraform-sensitive-output redaction, then Gitleaks-pattern masking)
+is applied to the plaintext BEFORE encoding — a downstream secret-pattern scan over the
+marshaled `data` JSON cannot see into base64-encoded bytes, so `logs` cannot rely on any
+masking pass that runs after `data` is assembled.
 
 `has_changes`/`has_errors`/`errors` (data-model.md Decision 20) are sourced from the same
 parse result that already produces `resource_counts`/`outputs`/`warnings` — no second parse.
-`component`/`stack` (data-model.md Decision 21) are present only for a single-component
-invocation and are omitted entirely (not sent as empty strings) when the invoking command's
-identity is not known at the point the record is built.
+`component`/`stack` (data-model.md Decision 21) are omitted entirely from an entry (not sent
+as empty strings) when the invoking command's identity is not known at the point that
+component's entry is built.
 
 `execution_id` is `Like("b3b1e2b0-....-....-....-............")` (a UUID-v4-shaped string) —
 never an exact literal, since it is freshly generated per invocation.
+
+**Multi-component example**: the same shape with `components` holding more than one entry
+(one per targeted component) is exercised by a dedicated interaction,
+`TestPact_UploadExecMetadata_MultiComponent` (`pkg/pro/consumer_pact_test.go`) — not a
+separately numbered interaction here, since it is the identical wire shape as interaction 9
+with a longer list, not a distinct contract.
 
 ---
 
@@ -270,7 +313,7 @@ not as a separate Pact interaction, matching how `plan` vs. `apply` also share i
 | Response `success` field | MUST be `true` in the 200 response body for both endpoints |
 | `data` shape coverage | The contract MUST cover, per FR-005/FR-011: a present-inline-`data` interaction, an absent/`null`-`data` interaction (non-terraform command with no structured-data extension, included in the test suite alongside interaction 9's sibling case), and a blob-URL-`data` interaction pair. Per FR-005a/FR-013 (Assumptions, 2026-08-20 clarification, research.md Decision 25), this coverage MUST be repeated **per structured-`Data` shape**, not only for one representative shape: `TerraformExecData` (9 + 10/11, covering `plan`/`apply`/`deploy` — one shape, not three), `AffectedStacksExecData` (12 + 13/14), `InstancesExecData` (15 + its paired `/exec/data` interaction) — 3 shapes total, each blob-URL sub-case constructed directly rather than routed through the real size-threshold decision code |
 | List-typed fields never `null` | Per research.md Decision 26, `changes`/`warnings`/`errors` MUST be asserted as `[]` in every empty-case fixture, never `null` |
-| `version` field | Every structured `Data` shape's example in this contract MUST include `version` as an exact-literal integer (`1` for every shape today), never `Like()`-matched, since it identifies the shape itself (FR-005a, research.md Decision 24) |
+| `version` field | Every structured `Data` shape's example in this contract MUST include `version` as an exact-literal integer (`1` for every shape today), never `Like()`-matched, since it identifies the shape itself (FR-005a, research.md Decision 24). For `TerraformExecData`, this MUST appear exactly once, at the outer `{"version": 1, "components": [...]}` wrapper — never inside any `components[*]` entry (research.md Decision 38) |
 | No truncation | The contract MUST NOT model `data` as truncated or dropped in any interaction — either the full structure is inline (9), or it is fully represented via the out-of-band blob referenced by URL (10+11), never a partial/truncated subset (FR-011) |
 | No chunking | Unlike the retired multi-chunk model, no interaction in this contract includes `batch_id`/`batch_index`/`batch_total` fields — `UploadExecData` is always exactly one request (research.md Decision 16) |
 | `execution_id` presence | MUST be present (a UUID-v4-shaped string, `Like(...)`) on every `/exec` and `/exec/data` request; MUST be literally identical between a paired interaction 10 + interaction 11 request within the same test scenario |
