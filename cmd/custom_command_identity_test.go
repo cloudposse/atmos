@@ -69,8 +69,11 @@ func TestPrepareCustomCommandAuth_SelectValue(t *testing.T) {
 		Auth: schema.AuthConfig{Identities: map[string]schema.Identity{"resolved-identity": {Kind: "aws/user"}}},
 	}
 
-	result := prepareCustomCommandAuth(atmosConfig, cfg.IdentityFlagSelectValue, "ci-build", true)
+	result, resolvedIdentity := prepareCustomCommandAuth(atmosConfig, cfg.IdentityFlagSelectValue, "ci-build", true)
 
 	require.NotNil(t, result)
 	assert.Same(t, mgr, result)
+	assert.Equal(t, "resolved-identity", resolvedIdentity,
+		"caller must receive the resolved identity, not the select sentinel, for use in "+
+			"PrepareShellEnvironment/ExecuteCustomCommandControlStep")
 }

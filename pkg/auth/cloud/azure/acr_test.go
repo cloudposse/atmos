@@ -121,6 +121,11 @@ func TestLoadDefaultAzureCredentials_RetrieveFailureHasIdentityHint(t *testing.T
 	_, err := LoadDefaultAzureCredentials(ctx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrACRAuthFailed)
+	// azidentity's DefaultAzureCredential returns an aggregate error over each attempted
+	// credential's failure text rather than chaining context.Canceled via Unwrap(), so
+	// errors.Is(err, context.Canceled) does not hold here (unlike the AWS SDK case in
+	// ecr_test.go). Assert on the preserved cancellation message instead.
+	assert.Contains(t, err.Error(), "context canceled", "WithCause must preserve the original cancellation cause")
 
 	hints := strings.Join(errors.GetAllHints(err), "\n")
 	assert.Contains(t, hints, "atmos azure acr login --identity")

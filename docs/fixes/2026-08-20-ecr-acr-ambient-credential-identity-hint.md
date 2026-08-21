@@ -15,7 +15,7 @@ deadline exceeded` — with no indication that configuring an Atmos identity was
 
 A user ran `atmos app build` and hit:
 
-```
+```text
 ECR authentication failed: failed to retrieve AWS credentials: failed to refresh cached credentials, no EC2
 IMDS role found, operation error ec2imds: GetMetadata, request canceled, context deadline exceeded
 ```

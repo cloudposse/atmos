@@ -146,7 +146,7 @@ func LoadDefaultAWSCredentials(ctx context.Context) (*types.AWSCredentials, erro
 		return nil, errUtils.Build(errUtils.ErrECRAuthFailed).
 			WithCause(err).
 			WithExplanation("Failed to retrieve AWS credentials from the ambient environment (env vars, shared config, SSO, or EC2 instance metadata).").
-			WithHint("No Atmos identity is configured for this registry — run `atmos aws ecr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
+			WithHint("If ambient credentials aren't available in this environment, configure an Atmos identity instead — run `atmos aws ecr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
 			Err()
 	}
 

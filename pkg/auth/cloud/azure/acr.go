@@ -172,7 +172,7 @@ func LoadDefaultAzureCredentials(ctx context.Context) (*types.AzureCredentials, 
 		return nil, errUtils.Build(errUtils.ErrACRAuthFailed).
 			WithCause(err).
 			WithExplanation("Failed to retrieve Azure credentials from the ambient environment (env vars, managed identity, workload identity, or Azure CLI).").
-			WithHint("No Atmos identity is configured for this registry — run `atmos azure acr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
+			WithHint("If ambient credentials aren't available in this environment, configure an Atmos identity instead — run `atmos azure acr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
 			Err()
 	}
 

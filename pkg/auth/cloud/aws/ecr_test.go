@@ -137,6 +137,7 @@ func TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint(t *testing.T) 
 	_, err := LoadDefaultAWSCredentials(ctx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrECRAuthFailed)
+	assert.ErrorIs(t, err, context.Canceled, "WithCause must preserve the original cancellation error in the chain")
 
 	hints := strings.Join(errors.GetAllHints(err), "\n")
 	assert.Contains(t, hints, "atmos aws ecr login --identity")
