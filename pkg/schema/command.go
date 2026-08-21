@@ -73,8 +73,13 @@ type Command struct {
 	// top-level `command_aliases:` map (CommandAliases), which redirects to a possibly-unrelated
 	// command via a subprocess re-exec.
 	Aliases []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
-	// Internal hides this command from help/list output while leaving it fully invocable,
-	// mirroring go-task's `internal: true` (maps to Cobra's Command.Hidden).
+	// Internal excludes the command from `atmos --help` / `atmos <group> --help` subcommand
+	// listings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while
+	// leaving it fully runnable: `atmos <name> ...` still executes it directly, and
+	// `atmos <name> --help` still renders its own help when invoked explicitly. Use for
+	// helper commands meant to be called by other commands or run manually for debugging,
+	// analogous to Just's `[private]` recipes or Task's `internal: true` tasks (maps to Cobra's
+	// Command.Hidden).
 	Internal bool `yaml:"internal,omitempty" json:"internal,omitempty" mapstructure:"internal"`
 }
 
