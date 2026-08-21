@@ -796,6 +796,38 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	// Extract raw (pre-prompt) arguments/flags once, before the `when:` pre-check loop below --
+	// these values are already fully known from already-parsed cmd flags and finalArgs, so the
+	// pre-check loop's `when:` evaluation (and the real per-step loop later) can both see
+	// `arguments`/`flags`/`component` CEL facts consistently. Semantic/constrained-value prompting
+	// (which mutates these same maps in place) intentionally still runs after the pre-check loop --
+	// see the comment at that call site.
+	argumentsData := map[string]string{}
+	for ix, arg := range commandConfig.Arguments {
+		argumentsData[arg.Name] = finalArgs[ix]
+	}
+
+	flagsData := map[string]any{}
+	for i := range commandConfig.Flags {
+		fl := &commandConfig.Flags[i]
+		flag := cmd.Flag(fl.Name)
+		if flag == nil {
+			exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+			return
+		}
+		switch fl.Type {
+		case "", "string":
+			flagsData[fl.Name] = flag.Value.String()
+		case "bool":
+			boolFlag, err := strconv.ParseBool(flag.Value.String())
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
+			flagsData[fl.Name] = boolFlag
+		}
+	}
+
 	commandConditionEnv := envpkg.EnvironToMap()
 	if commandConditionEnv == nil {
 		commandConditionEnv = make(map[string]string)
@@ -822,7 +854,15 @@ func executeCustomCommand(
 			hasRunnableStep = true
 			break
 		}
-		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv, schema.ConditionPredicateSuccess))
+		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(customCommandConditionParams{
+			commandConfig: commandConfig,
+			step:          step,
+			index:         i,
+			env:           commandConditionEnv,
+			status:        schema.ConditionPredicateSuccess,
+			argumentsData: argumentsData,
+			flagsData:     flagsData,
+		}))
 		if err != nil {
 			exitOrRecordDependencyErr(cmd, err, "", "")
 			return
@@ -971,38 +1011,11 @@ func executeCustomCommand(
 	freshnessStateDir := freshness.StateDir(atmosConfig.BasePath)
 	freshnessScope := "command:" + commandConfig.Name
 
-	// Prepare template data for arguments and flags once, before the step loop -- these values
-	// don't vary per-step, and building them (and running the semantic/constrained-value prompts
-	// below) inside the loop made a required interactive prompt repeat once per step instead of
-	// once per command invocation.
-	argumentsData := map[string]string{}
-	for ix, arg := range commandConfig.Arguments {
-		argumentsData[arg.Name] = finalArgs[ix]
-	}
-
-	flagsData := map[string]any{}
-	for i := range commandConfig.Flags {
-		fl := &commandConfig.Flags[i]
-		flag := cmd.Flag(fl.Name)
-		if flag == nil {
-			exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
-			return
-		}
-		switch fl.Type {
-		case "", "string":
-			flagsData[fl.Name] = flag.Value.String()
-		case "bool":
-			boolFlag, err := strconv.ParseBool(flag.Value.String())
-			if err != nil {
-				exitOrRecordDependencyErr(cmd, err, "", "")
-				return
-			}
-			flagsData[fl.Name] = boolFlag
-		}
-	}
-
-	// Prompt for missing semantic-typed values if interactive mode is enabled.
-	// This enables interactive selection for custom commands with component/stack arguments.
+	// Prompt for missing semantic-typed values if interactive mode is enabled. This enables
+	// interactive selection for custom commands with component/stack arguments. Runs here
+	// (after the `when:` pre-check loop, not before it) so a command with no runnable step
+	// never triggers an interactive prompt; argumentsData/flagsData were already extracted
+	// above the pre-check loop and are mutated in place here.
 	promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
 
 	// Validate (and, if missing+required+interactive, prompt for) values:-constrained
@@ -1027,7 +1040,15 @@ func executeCustomCommand(
 			}
 		}
 
-		conditionCtx := customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus)
+		conditionCtx := customCommandConditionContext(customCommandConditionParams{
+			commandConfig: commandConfig,
+			step:          &step,
+			index:         i,
+			env:           commandConditionEnv,
+			status:        conditionStatus,
+			argumentsData: argumentsData,
+			flagsData:     flagsData,
+		})
 		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
 		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
 		if step.Inputs != nil || step.Artifacts != nil || step.Preconditions != nil {
@@ -1487,7 +1508,15 @@ func executeCustomCommand(
 			// mirroring GitHub Actions' continue-on-error. Malformed `continue:` CEL is a
 			// hard failure, never silently forgiven.
 			forgiven, continueErr := step.Continue.EvaluateContinueE(
-				customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, schema.ConditionPredicateFailure),
+				customCommandConditionContext(customCommandConditionParams{
+					commandConfig: commandConfig,
+					step:          &step,
+					index:         i,
+					env:           commandConditionEnv,
+					status:        schema.ConditionPredicateFailure,
+					argumentsData: argumentsData,
+					flagsData:     flagsData,
+				}),
 			)
 			if continueErr != nil {
 				exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr), "", "")
@@ -1557,36 +1586,51 @@ func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *
 	})
 }
 
-func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {
+// customCommandConditionParams bundles customCommandConditionContext's inputs so the function
+// signature stays under the argument-limit lint threshold (revive: max 5 params).
+type customCommandConditionParams struct {
+	commandConfig *schema.Command
+	step          *schema.Task
+	index         int
+	env           map[string]string
+	status        string
+	argumentsData map[string]string
+	flagsData     map[string]any
+}
+
+func customCommandConditionContext(p customCommandConditionParams) schema.ConditionContext {
 	stepName := ""
 	stack := ""
-	stepEnv := env
-	if step != nil {
-		stepName = step.Name
-		stack = step.Stack
-		if len(step.Env) > 0 {
-			stepEnv = make(map[string]string, len(env))
-			for key, value := range env {
+	stepEnv := p.env
+	if p.step != nil {
+		stepName = p.step.Name
+		stack = p.step.Stack
+		if len(p.step.Env) > 0 {
+			stepEnv = make(map[string]string, len(p.env))
+			for key, value := range p.env {
 				stepEnv[key] = value
 			}
-			for key, value := range step.Env {
+			for key, value := range p.step.Env {
 				stepEnv[key] = value
 			}
 		}
 	}
 	if stepName == "" {
-		stepName = fmt.Sprintf("step-%d", index)
+		stepName = fmt.Sprintf("step-%d", p.index)
 	}
 	return schema.ConditionContext{
-		CI:       telemetry.IsCI(),
-		Status:   status,
-		Stack:    stack,
-		Workflow: commandName,
-		Step:     stepName,
-		Env:      stepEnv,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
-		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+		CI:        telemetry.IsCI(),
+		Status:    p.status,
+		Stack:     stack,
+		Component: findTypedValue(p.commandConfig, p.argumentsData, p.flagsData, semanticTypeComponent),
+		Workflow:  p.commandConfig.Name,
+		Step:      stepName,
+		Env:       stepEnv,
+		Flags:     p.flagsData,
+		Arguments: p.argumentsData,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		Platform:  runtime.GOOS + "/" + runtime.GOARCH,
 	}
 }
 

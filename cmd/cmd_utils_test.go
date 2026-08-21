@@ -2418,6 +2418,63 @@ func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T)
 	assert.Equal(t, "1", string(got))
 }
 
+// TestExecuteCustomCommandStepWhenFlagsFact covers the end-to-end wiring of a custom command's
+// --flag value into a step's `when:` CEL expression via the `flags` fact -- including the
+// `hasRunnableStep` pre-check loop, which runs before the main step loop and must see the same
+// flags/arguments data (previously it evaluated `flags` as always absent/empty).
+func TestExecuteCustomCommandStepWhenFlagsFact(t *testing.T) {
+	ensureIOInitialized(t)
+
+	tests := []struct {
+		name        string
+		dryRun      string
+		wantWritten bool
+	}{
+		{name: "flag true runs the step", dryRun: "true", wantWritten: true},
+		{name: "flag false skips the step", dryRun: "false", wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-flags-when",
+				Description:      "exercise the flags fact in when:",
+				WorkingDirectory: workDir,
+				Flags: []schema.CommandFlag{
+					{Name: "dry-run", Type: "bool"},
+				},
+				Steps: []schema.Task{{
+					Name:    "capture-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "1" > sentinel.txt`,
+					When:    schema.MustCondition(`!cel flags["dry-run"] == true`),
+				}},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-flags-when")
+			require.NotNil(t, customCmd)
+			require.NoError(t, customCmd.PersistentFlags().Set("dry-run", tt.dryRun))
+
+			customCmd.PreRun(customCmd, nil)
+			customCmd.Run(customCmd, nil)
+
+			_, err := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, err)
+			} else {
+				require.True(t, os.IsNotExist(err))
+			}
+		})
+	}
+}
+
 func TestFindTypedValue(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -2563,6 +2620,43 @@ func TestFindTypedValue(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestCustomCommandConditionContext covers that flags/arguments/component reach the CEL `when:`
+// context: flagsData/argumentsData are passed straight through as Flags/Arguments, and Component
+// is resolved via findTypedValue the same way processCustomComponentType already resolves it.
+func TestCustomCommandConditionContext(t *testing.T) {
+	_ = NewTestKit(t)
+
+	commandConfig := &schema.Command{
+		Name: "deploy",
+		Arguments: []schema.CommandArgument{
+			{Name: "comp", Type: "component"},
+		},
+		Flags: []schema.CommandFlag{
+			{Name: "dry-run"},
+		},
+	}
+	argumentsData := map[string]string{"comp": "vpc"}
+	flagsData := map[string]any{"dry-run": true}
+	step := &schema.Task{Name: "apply", Stack: "prod"}
+
+	ctx := customCommandConditionContext(customCommandConditionParams{
+		commandConfig: commandConfig,
+		step:          step,
+		index:         0,
+		env:           map[string]string{},
+		status:        schema.ConditionPredicateSuccess,
+		argumentsData: argumentsData,
+		flagsData:     flagsData,
+	})
+
+	assert.Equal(t, "deploy", ctx.Workflow)
+	assert.Equal(t, "apply", ctx.Step)
+	assert.Equal(t, "prod", ctx.Stack)
+	assert.Equal(t, "vpc", ctx.Component)
+	assert.Equal(t, flagsData, ctx.Flags)
+	assert.Equal(t, argumentsData, ctx.Arguments)
 }
 
 // errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
