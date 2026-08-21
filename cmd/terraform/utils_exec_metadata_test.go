@@ -81,7 +81,7 @@ func TestBuildTerraformExecData_ApplySuccess(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("apply", string(data), "web", "plat-use2-dev")
+	result := buildTerraformExecData("apply", string(data), "web", "plat-use2-dev", 0)
 	require.NotNil(t, result)
 
 	asMap, ok := result.(map[string]any)
@@ -115,6 +115,7 @@ func TestBuildTerraformExecData_ApplySuccess(t *testing.T) {
 	assert.Equal(t, false, asMap["has_errors"])
 	assert.Empty(t, asMap["errors"])
 	assert.Equal(t, terraformExecDataVersion, asMap["version"])
+	assert.Equal(t, 0, asMap["exit_code"])
 	assert.Equal(t, "web", asMap["component"])
 	assert.Equal(t, "plat-use2-dev", asMap["stack"])
 }
@@ -126,13 +127,14 @@ func TestBuildTerraformExecData_ApplyFailure(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_failure.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("apply", string(data), "", "")
+	result := buildTerraformExecData("apply", string(data), "", "", 1)
 	require.NotNil(t, result)
 
 	asMap, ok := result.(map[string]any)
 	require.True(t, ok)
 
 	assert.Equal(t, true, asMap["has_errors"])
+	assert.Equal(t, 1, asMap["exit_code"])
 	errs, ok := asMap["errors"].([]string)
 	require.True(t, ok)
 	assert.NotEmpty(t, errs)
@@ -146,7 +148,7 @@ func TestBuildTerraformExecData_EmptyComponentStackOmitted(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("apply", string(data), "", "")
+	result := buildTerraformExecData("apply", string(data), "", "", 0)
 	require.NotNil(t, result)
 
 	asMap, ok := result.(map[string]any)
@@ -162,16 +164,87 @@ func TestBuildTerraformExecData_DeployParsedAsApply(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	result := buildTerraformExecData("deploy", string(data), "web", "plat-use2-dev")
+	result := buildTerraformExecData("deploy", string(data), "web", "plat-use2-dev", 0)
 	require.NotNil(t, result)
 }
 
 // TestBuildTerraformExecData_NonTerraformSubcommand verifies nil is returned
-// for a non-terraform subcommand or empty output, matching
+// for a subcommand this shape doesn't cover at all (e.g. "output"), matching
 // parseTerraformResourceChanges's existing coverage shape.
 func TestBuildTerraformExecData_NonTerraformSubcommand(t *testing.T) {
-	assert.Nil(t, buildTerraformExecData("output", "anything", "", ""))
-	assert.Nil(t, buildTerraformExecData("plan", "", "", ""))
+	assert.Nil(t, buildTerraformExecData("output", "anything", "", "", 0))
+}
+
+// TestBuildTerraformExecData_EmptyListsAreNotNull verifies changes/warnings/
+// errors always marshal as [], never null, when empty (research.md
+// Decision 26) — the regression check for a real CI payload
+// (atmos-pro-qa-3 run 32412509172) that showed errors:null/changes:null.
+func TestBuildTerraformExecData_EmptyListsAreNotNull(t *testing.T) {
+	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
+	require.NoError(t, err)
+
+	// apply_success.txt has resource changes, so use a run with no changes
+	// (empty captured output) to exercise the empty-list defaults instead.
+	result := buildTerraformExecData("plan", "", "web", "plat-use2-dev", 0)
+	require.NotNil(t, result)
+
+	marshaled, err := json.Marshal(result)
+	require.NoError(t, err)
+
+	var decoded map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(marshaled, &decoded))
+	assert.JSONEq(t, "[]", string(decoded["changes"]))
+	assert.JSONEq(t, "[]", string(decoded["warnings"]))
+	assert.JSONEq(t, "[]", string(decoded["errors"]))
+
+	// A successfully-parsed run's warnings/errors must also normalize to []
+	// rather than surface encoding/json's null for a nil Go slice.
+	successResult := buildTerraformExecData("apply", string(data), "", "", 0)
+	require.NotNil(t, successResult)
+	successMarshaled, err := json.Marshal(successResult)
+	require.NoError(t, err)
+	var successDecoded map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(successMarshaled, &successDecoded))
+	assert.JSONEq(t, "[]", string(successDecoded["warnings"]))
+	assert.JSONEq(t, "[]", string(successDecoded["errors"]))
+}
+
+// TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData
+// verifies a covered subcommand (plan/apply) whose output can't be parsed at
+// all still gets a defaulted TerraformExecData with version/exit_code/
+// component/stack populated, rather than Data being omitted entirely
+// (research.md Decision 29) — exit_code must remain available precisely when
+// the rest of the payload is empty.
+func TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData(t *testing.T) {
+	result := buildTerraformExecData("plan", "not terraform output at all", "web", "plat-use2-dev", 2)
+	require.NotNil(t, result)
+
+	asMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, terraformExecDataVersion, asMap["version"])
+	assert.Equal(t, 2, asMap["exit_code"])
+	assert.Equal(t, "web", asMap["component"])
+	assert.Equal(t, "plat-use2-dev", asMap["stack"])
+	assert.Equal(t, false, asMap["has_changes"])
+	assert.Equal(t, false, asMap["has_errors"])
+
+	resourceCounts, ok := asMap["resource_counts"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 0, resourceCounts["create"])
+	assert.Equal(t, 0, resourceCounts["change"])
+	assert.Equal(t, 0, resourceCounts["replace"])
+	assert.Equal(t, 0, resourceCounts["destroy"])
+
+	assert.Equal(t, map[string]any{}, asMap["outputs"])
+
+	marshaled, err := json.Marshal(result)
+	require.NoError(t, err)
+	var decoded map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(marshaled, &decoded))
+	assert.JSONEq(t, "[]", string(decoded["changes"]))
+	assert.JSONEq(t, "[]", string(decoded["warnings"]))
+	assert.JSONEq(t, "[]", string(decoded["errors"]))
 }
 
 // TestMaskSensitiveOutputs covers FR-010a/research.md Decision 19: a
@@ -233,12 +306,18 @@ func TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime(t *testing.T) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	parser := terraformExecMetadataParserFunc(&stdoutBuf, &stderrBuf, "web", "plat-use2-dev")
 
-	// Nothing written yet: parser must return nil (empty output).
-	assert.Nil(t, parser("apply"))
+	// Nothing written yet: a covered subcommand ("apply") with unparseable
+	// (empty) output still gets a minimal defaulted Data, not nil
+	// (research.md Decision 29) — exit_code is threaded through even here.
+	emptyResult := parser("apply", 0)
+	require.NotNil(t, emptyResult)
+	emptyMap, ok := emptyResult.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 0, emptyMap["exit_code"])
 
 	stdoutBuf.WriteString(string(fixture))
 
-	result := parser("apply")
+	result := parser("apply", 0)
 	require.NotNil(t, result)
 	asMap, ok := result.(map[string]any)
 	require.True(t, ok)
@@ -253,7 +332,12 @@ func TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime(t *testing.T) {
 // TestTerraformNodeHooks_RecordExecResultAccumulates verifies After()
 // accumulates one execNodeResult per node call, with the correct
 // component/stack/exitCode, and that concurrent calls (as the scheduler may
-// dispatch nodes concurrently) are all safely recorded.
+// dispatch nodes concurrently) are all safely recorded. The two nodes below
+// carrying different ExitCode values (0 and 1) in the same aggregate result
+// is also the regression guard for research.md Decision 28: exit_code is
+// per-component for multi-component runs, never a single aggregate value —
+// execNodeResult.ExitCode already provides this, so a future change that
+// collapsed it to one shared value would fail this assertion.
 func TestTerraformNodeHooks_RecordExecResultAccumulates(t *testing.T) {
 	applyOutput, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)

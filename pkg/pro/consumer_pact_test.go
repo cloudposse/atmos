@@ -436,6 +436,7 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 						"has_changes": matchers.Like(true),
 						"has_errors":  matchers.Like(false),
 						"errors":      []interface{}{},
+						"exit_code":   matchers.Like(2),
 						"component":   matchers.Like("vpc"),
 						"stack":       matchers.Like("plat-use2-dev"),
 					},
@@ -467,8 +468,14 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 				"has_changes": true,
 				"has_errors":  false,
 				"errors":      []string{},
-				"component":   "vpc",
-				"stack":       "plat-use2-dev",
+				// exit_code (research.md Decision 27) is the terraform subprocess's
+				// own exit code — distinct from the envelope's own ExitCode (0)
+				// above: a `plan -detailed-exitcode`-style 2 signals "succeeded,
+				// changes present", the authoritative signal independent of
+				// has_changes/resource_counts.
+				"exit_code": 2,
+				"component": "vpc",
+				"stack":     "plat-use2-dev",
 			})
 			if err != nil {
 				return err
@@ -606,6 +613,7 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 						"has_changes": matchers.Like(true),
 						"has_errors":  matchers.Like(false),
 						"errors":      []interface{}{},
+						"exit_code":   matchers.Like(0),
 					},
 				})
 		}).
@@ -661,6 +669,7 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 				"has_changes": true,
 				"has_errors":  false,
 				"errors":      []string{},
+				"exit_code":   0,
 			})
 			if err != nil {
 				return err

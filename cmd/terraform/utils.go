@@ -618,6 +618,15 @@ type terraformOutputResultMirror struct {
 // onAfterDeploy override ("deploy is semantically apply for CI purposes").
 // Returns (nil, false) for subcommands with no terraform-shaped output,
 // empty output, or when parsing finds nothing.
+// These constants name the two subcommands this feature's structured Data
+// shape covers, shared by parseTerraformOutputMirror and
+// terraformCoveredSubcommand to avoid repeating the "plan"/"apply" string
+// literals (golangci-lint revive add-constant).
+const (
+	terraformSubCommandPlan  = "plan"
+	terraformSubCommandApply = "apply"
+)
+
 func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputResultMirror, bool) {
 	if output == "" {
 		return nil, false
@@ -625,9 +634,9 @@ func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputResu
 
 	parseCommand := subCommand
 	if parseCommand == "deploy" {
-		parseCommand = "apply"
+		parseCommand = terraformSubCommandApply
 	}
-	if parseCommand != "plan" && parseCommand != "apply" {
+	if parseCommand != terraformSubCommandPlan && parseCommand != terraformSubCommandApply {
 		return nil, false
 	}
 
@@ -727,37 +736,99 @@ func maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any {
 	return result
 }
 
+// terraformCoveredSubcommand reports whether subCommand is one this feature's
+// structured Data shape covers at all ("plan"/"apply", with "deploy" parsed
+// as "apply" per parseTerraformOutputMirror's own mapping) — distinct from
+// "covered, but this specific run's output couldn't be parsed" (research.md
+// Decision 29), which still gets a (defaulted) Data payload.
+func terraformCoveredSubcommand(subCommand string) bool {
+	parseCommand := subCommand
+	if parseCommand == "deploy" {
+		parseCommand = terraformSubCommandApply
+	}
+	return parseCommand == terraformSubCommandPlan || parseCommand == terraformSubCommandApply
+}
+
+// nonNilStrings returns v unchanged if non-nil, otherwise a non-nil empty
+// slice — so encoding/json marshals an empty list as [], never null
+// (research.md Decision 26).
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
+// nonNilChanges is nonNilStrings' execNodeResult counterpart (research.md
+// Decision 26) — the "changes" field is a []execNodeResult, not []string.
+func nonNilChanges(v []execNodeResult) []execNodeResult {
+	if v == nil {
+		return []execNodeResult{}
+	}
+	return v
+}
+
 // buildTerraformExecData parses a captured single-component terraform
 // plan/apply/deploy invocation's combined output into the combined-object
 // Data shape data-model.md's TerraformExecData specifies
 // (resource_counts/outputs/warnings/changes/has_changes/has_errors/errors/
-// component/stack/version), for internal/exec's captureExecMetadataSync (via
-// WithExecMetadataParser, research.md Decision 18) to attach to the
-// execution record. Component/stack are the invocation's already-resolved
-// identity (research.md Decision 21) — included only when non-empty, never
-// as an empty string, per FR-006. Returns nil when parseTerraformOutputMirror
-// finds nothing to parse (e.g. a non-terraform subcommand, or empty output).
-func buildTerraformExecData(subCommand, output, component, stack string) any {
-	result, ok := parseTerraformOutputMirror(subCommand, output)
-	if !ok {
+// exit_code/component/stack/version), for internal/exec's
+// captureExecMetadataSync (via WithExecMetadataParser, research.md
+// Decision 18) to attach to the execution record. Component/stack are the
+// invocation's already-resolved identity (research.md Decision 21) —
+// included only when non-empty, never as an empty string, per FR-006.
+// The exitCode parameter is the terraform/tofu subprocess's own exit code
+// (research.md Decision 27) — the authoritative pass/fail/parse-completeness
+// signal, always included, distinct from the base execution record's own
+// exit code.
+// List-typed fields (changes/warnings/errors) always marshal as [], never
+// null, when empty (research.md Decision 26).
+//
+// Returns nil only when subCommand isn't one this shape covers at all (e.g.
+// "output"/"refresh"). For a covered subcommand whose output can't be parsed
+// (empty output, or output the parser doesn't recognize), a defaulted
+// TerraformExecData is still returned with version/exit_code/component/stack
+// populated and every other field at its empty/zero/false default, rather
+// than Data being omitted (research.md Decision 29) — exit_code must remain
+// available precisely in the case it's needed most.
+func buildTerraformExecData(subCommand, output, component, stack string, exitCode int) any {
+	if !terraformCoveredSubcommand(subCommand) {
 		return nil
 	}
-	data := result.Data
+
+	result, ok := parseTerraformOutputMirror(subCommand, output)
 
 	execData := map[string]any{
-		"version": terraformExecDataVersion,
+		"version":   terraformExecDataVersion,
+		"exit_code": exitCode,
 		"resource_counts": map[string]any{
+			"create":  0,
+			"change":  0,
+			"replace": 0,
+			"destroy": 0,
+		},
+		"outputs":     map[string]any{},
+		"warnings":    []string{},
+		"changes":     []execNodeResult{},
+		"has_changes": false,
+		"has_errors":  false,
+		"errors":      []string{},
+	}
+
+	if ok {
+		data := result.Data
+		execData["resource_counts"] = map[string]any{
 			"create":  data.ResourceCounts.Create,
 			"change":  data.ResourceCounts.Change,
 			"replace": data.ResourceCounts.Replace,
 			"destroy": data.ResourceCounts.Destroy,
-		},
-		"outputs":     maskSensitiveOutputs(data.Outputs),
-		"warnings":    data.Warnings,
-		"changes":     terraformResourceChanges(data),
-		"has_changes": result.HasChanges,
-		"has_errors":  result.HasErrors,
-		"errors":      result.Errors,
+		}
+		execData["outputs"] = maskSensitiveOutputs(data.Outputs)
+		execData["warnings"] = nonNilStrings(data.Warnings)
+		execData["changes"] = nonNilChanges(terraformResourceChanges(data))
+		execData["has_changes"] = result.HasChanges
+		execData["has_errors"] = result.HasErrors
+		execData["errors"] = nonNilStrings(result.Errors)
 	}
 
 	if component != "" {
@@ -797,14 +868,18 @@ func terraformCaptureShellOpts(component, stack string) (opts []e.ShellCommandOp
 // call time (by the time captureExecMetadataSync invokes it,
 // executeCommandPipeline has already finished writing into them). Split out
 // from terraformCaptureShellOpts so it's directly unit-testable without
-// reaching into e.ShellCommandOption's private fields.
-func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer, component, stack string) func(subCommand string) any {
-	return func(subCommand string) any {
+// reaching into e.ShellCommandOption's private fields. The exitCode
+// parameter is supplied by the caller at invocation time
+// (captureExecMetadataSync already computes it from the command's own
+// error, research.md Decision 27) — not captured here, since it isn't
+// known yet when this closure is created.
+func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer, component, stack string) func(subCommand string, exitCode int) any {
+	return func(subCommand string, exitCode int) any {
 		combined := stdoutBuf.String()
 		if errOut := stderrBuf.String(); errOut != "" {
 			combined += "\n" + errOut
 		}
-		return buildTerraformExecData(subCommand, ansi.Strip(combined), component, stack)
+		return buildTerraformExecData(subCommand, ansi.Strip(combined), component, stack, exitCode)
 	}
 }
 

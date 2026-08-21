@@ -3,7 +3,10 @@
 **Feature**: 002-pro-exec-metadata
 **Date**: 2026-08-11 (revised 2026-08-19 — ExecutionID, Data blob-upload redesign; revised
 2026-08-20 — `version` field, per-shape Pact coverage for `describe affected`/`list instances`,
-research.md Decisions 22-25)
+research.md Decisions 22-25; further revised 2026-08-20 — `exit_code` field, `[]`-not-`null`
+list normalization, research.md Decisions 26-29; a `terraform deploy` two-phase shape
+(Decision 30) was proposed and then retracted the same session — see Decision 30r and
+interaction 16's note below)
 **Extends**: `specs/001-pact-consumer-contracts/contracts/interactions.md` (interactions 1-8)
 
 These interactions are added to the same local-only Pact consumer suite
@@ -69,13 +72,22 @@ whole record fits under 4 MB in this example.
 | `changes` | array of `{action, address}` | `EachLike({action: Like("created"), address: Like("aws_s3_bucket.example")})` |
 | `has_changes` | boolean | `Like(true)` |
 | `has_errors` | boolean | `Like(false)` |
-| `errors` | array of string | `EachLike(...)`, MAY be empty |
+| `errors` | array of string, never `null` when empty | `EachLike(...)`, MAY be `[]` |
+| `exit_code` | integer | `Like(0)` |
 | `component` | string, single-component invocations only | `Like("vpc")` |
 | `stack` | string, single-component invocations only | `Like("plat-use2-dev")` |
 
 `version` (research.md Decision 24) is an exact-literal match, not `Like`, since it is a fixed
 shape identifier the provider branches on — an unexpected value here is itself the signal a
 schema mismatch occurred, not noise a matcher should absorb.
+
+`exit_code` (research.md Decisions 27-29) is the terraform/tofu subprocess's own exit code,
+distinct from the request's own top-level `exit_code` (the `atmos` process's exit code) —
+always present, including on a fixture where itemized fields are otherwise empty/zero/false,
+to assert the "still attach minimal Data" contract. `changes`/`warnings`/`errors`
+(research.md Decision 26) MUST be asserted as `[]`, never `null`, in the empty-case fixture —
+the pact test's own empty-list fixture is the regression guard for the nil-slice bug this
+decision fixes.
 
 `outputs[*].value` is `"<MASKED>"` (a literal string, never the real value) whenever
 `outputs[*].sensitive` is `true` (data-model.md Decision 19 / FR-010a) — this is independent
@@ -234,6 +246,21 @@ this command specifically.
 
 ---
 
+### 16. (Retracted — see research.md Decision 30r)
+
+A `terraform deploy`-specific two-phase interaction was planned here on the premise that
+`deploy` runs plan and apply as two separate terraform/tofu subprocess invocations. That
+premise was discovered false during implementation (`internal/exec/terraform.go`'s
+`handleDeploySubcommand` rewrites `deploy` to `apply` before any subprocess runs — `deploy`
+executes exactly one subprocess). `deploy` uses the identical `TerraformExecData` shape as
+`plan`/`apply` and needs no dedicated interaction beyond interaction 9/10 — a `command:
+"terraform deploy"` case is exercised at the unit level
+(`TestBuildTerraformExecData_DeployParsedAsApply`, `cmd/terraform/utils_exec_metadata_test.go`),
+not as a separate Pact interaction, matching how `plan` vs. `apply` also share interaction
+9/10 without a per-subcommand interaction each.
+
+---
+
 ## Validation Rules (these interactions)
 
 | Rule | Detail |
@@ -241,7 +268,8 @@ this command specifically.
 | Authorization header | MUST be present and match `Bearer <token>` pattern on both `/exec` and `/exec/data` |
 | Content-Type header | MUST be `application/json` on both endpoints |
 | Response `success` field | MUST be `true` in the 200 response body for both endpoints |
-| `data` shape coverage | The contract MUST cover, per FR-005/FR-011: a present-inline-`data` interaction, an absent/`null`-`data` interaction (non-terraform command with no structured-data extension, included in the test suite alongside interaction 9's sibling case), and a blob-URL-`data` interaction pair. Per FR-005a/FR-013 (Assumptions, 2026-08-20 clarification, research.md Decision 25), this coverage MUST be repeated **per structured-`Data` shape**, not only for one representative shape: `TerraformExecData` (9 + 10/11), `AffectedStacksExecData` (12 + 13/14), `InstancesExecData` (15 + its paired `/exec/data` interaction) — 3 shapes × 2 delivery modes = 6 `/exec` interactions total, each blob-URL sub-case constructed directly rather than routed through the real size-threshold decision code |
+| `data` shape coverage | The contract MUST cover, per FR-005/FR-011: a present-inline-`data` interaction, an absent/`null`-`data` interaction (non-terraform command with no structured-data extension, included in the test suite alongside interaction 9's sibling case), and a blob-URL-`data` interaction pair. Per FR-005a/FR-013 (Assumptions, 2026-08-20 clarification, research.md Decision 25), this coverage MUST be repeated **per structured-`Data` shape**, not only for one representative shape: `TerraformExecData` (9 + 10/11, covering `plan`/`apply`/`deploy` — one shape, not three), `AffectedStacksExecData` (12 + 13/14), `InstancesExecData` (15 + its paired `/exec/data` interaction) — 3 shapes total, each blob-URL sub-case constructed directly rather than routed through the real size-threshold decision code |
+| List-typed fields never `null` | Per research.md Decision 26, `changes`/`warnings`/`errors` MUST be asserted as `[]` in every empty-case fixture, never `null` |
 | `version` field | Every structured `Data` shape's example in this contract MUST include `version` as an exact-literal integer (`1` for every shape today), never `Like()`-matched, since it identifies the shape itself (FR-005a, research.md Decision 24) |
 | No truncation | The contract MUST NOT model `data` as truncated or dropped in any interaction — either the full structure is inline (9), or it is fully represented via the out-of-band blob referenced by URL (10+11), never a partial/truncated subset (FR-011) |
 | No chunking | Unlike the retired multi-chunk model, no interaction in this contract includes `batch_id`/`batch_index`/`batch_total` fields — `UploadExecData` is always exactly one request (research.md Decision 16) |

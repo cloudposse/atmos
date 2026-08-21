@@ -64,7 +64,7 @@ type shellCommandConfig struct {
 	// it can safely call pkg/ci/plugins/terraform's output parser, unlike
 	// internal/exec, which cannot import it without reintroducing a confirmed
 	// import cycle (research.md Decision 18).
-	execMetadataParser func(subCommand string) any
+	execMetadataParser func(subCommand string, exitCode int) any
 }
 
 // WithInvokingCommand provides the Cobra command the user actually invoked,
@@ -90,12 +90,16 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 }
 
 // WithExecMetadataParser provides a closure that, given the invoking
-// subcommand name, returns command-specific structured data (FR-006) for the
-// execution record — or nil if there is none to report. Cmd/terraform
+// subcommand name and the command's own exit code, returns command-specific
+// structured data (FR-006) for the execution record — or nil if there is
+// none to report. The exitCode parameter is the terraform/tofu subprocess's
+// own exit code (research.md Decision 27), supplied by
+// captureExecMetadataSync at call time since it isn't known when this
+// closure is created. Cmd/terraform
 // supplies this closure so ExecuteTerraform's exec-metadata sync capture can
 // obtain parsed terraform plan/apply/deploy output without internal/exec
 // itself importing the CI plugin's parser (research.md Decision 18).
-func WithExecMetadataParser(fn func(subCommand string) any) ShellCommandOption {
+func WithExecMetadataParser(fn func(subCommand string, exitCode int) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
 	return func(c *shellCommandConfig) {
@@ -105,7 +109,7 @@ func WithExecMetadataParser(fn func(subCommand string) any) ShellCommandOption {
 
 // execMetadataParserFromOpts extracts the parser closure (if any) set via
 // WithExecMetadataParser among opts.
-func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string) any {
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int) any {
 	var cfg shellCommandConfig
 	for _, opt := range opts {
 		opt(&cfg)

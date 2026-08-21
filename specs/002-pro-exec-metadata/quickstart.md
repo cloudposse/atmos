@@ -136,9 +136,38 @@ This supplements the existing "Pact Contract Testing" README section
   reads `1` — independently present on all three shapes, never on the outer envelope itself
   (no top-level `version` field alongside `execution_id`/`atmos_version`/etc.).
 
-### Automated-test coverage of steps 11-17 (Phase 7/T025)
+18. **(research.md Decision 26)** Run `atmos terraform plan <component> -s <stack>` against a
+  component with no warnings/errors/changes, and inspect the logged request body's
+  `data.changes`/`data.warnings`/`data.errors`: each MUST be `[]`, never `null` — this is the
+  regression check for the real CI payload (`atmos-pro-qa-3` run 32412509172) that surfaced
+  this gap.
 
-Steps 11-17 above require a live/stubbed Atmos Pro endpoint and CI-mode simulation, so they
+19. **(research.md Decisions 27-28)** Run `atmos terraform plan <component> -s <stack>` and
+  confirm the logged request body's `data.exit_code` matches the terraform subprocess's own
+  exit code (0 for a clean plan; non-zero for a deliberately-failing one), and that it is
+  distinct from the top-level request body's own `exit_code` field. Then run a multi-component
+  `plan --affected` where one component's terraform subprocess fails while another succeeds,
+  and confirm each component's own entry in the folded aggregate carries its own `exit_code` —
+  no single aggregate `data.exit_code`.
+
+20. **(research.md Decision 29)** Run `atmos terraform plan <component> -s <stack>` against a
+  component engineered to produce terraform output the parser cannot recognize at all (or
+  simulate via the unit test fixture, since reproducing this manually is awkward), and confirm
+  `data` is still present — not omitted — with `version`/`exit_code`/`component`/`stack`
+  populated and every other field at its empty/zero/false default.
+
+21. **(research.md Decision 30r, correcting the retracted Decision 30)** Run `atmos terraform
+  deploy <component> -s <stack>` against a component with pending changes, and inspect the
+  logged request body's `data` field: it MUST be the identical single `TerraformExecData`
+  shape `terraform plan`/`apply` use directly (including the new `exit_code` field) — NOT a
+  two-phase `{plan, apply}` wrapper. A prior design proposed the two-phase wrapper on the
+  premise that `deploy` runs plan and apply as two separate subprocesses; that premise was
+  found false during implementation (`deploy` runs exactly one subprocess), so the single
+  shape is correct, not a regression.
+
+### Automated-test coverage of steps 11-21 (Phase 7/T025)
+
+Steps 11-21 above require a live/stubbed Atmos Pro endpoint and CI-mode simulation, so they
 remain manual/exploratory end-to-end checks. The table below maps each to the automated test(s)
 that already cover its underlying behavior at the unit/contract level, so a contributor can
 confirm the logic is exercised by `go test` without needing a live Pro backend:
@@ -152,6 +181,10 @@ confirm the logic is exercised by `go test` without needing a live Pro backend:
 | 15 | `describe affected` `data` unconditional | `TestExecuteInner_ReturnsAffected`, `TestExecute_AttachesAffectedAsStructuredData` (`internal/exec/describe_affected_upload_test.go`), `TestPact_UploadExecMetadata_DescribeAffected`(`_BlobURL`) |
 | 16 | `list instances` `data` gated on `--upload` | `TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata` (`pkg/list/list_instances_upload_test.go`), `TestCaptureAsync_UsesAndClearsPendingAsyncData` (`pkg/proexec/async_test.go`), `TestPact_UploadExecMetadata_ListInstances`(`_BlobURL`) |
 | 17 | `version: 1` present on every shape, absent from envelope | `TestVersionedData_*` (`pkg/proexec/envelope_test.go`); every `TestPact_UploadExecMetadata*` case asserts `version` as an exact-literal `1` |
+| 18 | `changes`/`warnings`/`errors` are `[]`, never `null`, when empty | `TestBuildTerraformExecData_EmptyListsAreNotNull` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
+| 19 | `exit_code` present, distinct from envelope `exit_code`, per-component in multi-component runs | `TestBuildTerraformExecData_ExitCode`, `TestTerraformNodeHooks_RecordExecResultAccumulates` (per-node `ExitCode` already covered), `TestPact_UploadExecMetadata` |
+| 20 | Minimal `Data` still attached when parsing fails entirely | `TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData` (`cmd/terraform/utils_exec_metadata_test.go`) |
+| 21 | `terraform deploy` uses the identical `TerraformExecData` shape, not a two-phase split | `TestBuildTerraformExecData_DeployParsedAsApply` (`cmd/terraform/utils_exec_metadata_test.go`), `TestCaptureExecMetadataSync_DeployReportedAsDeploy` (`internal/exec/`) |
 
 Step 10 (inline-vs-blob-URL threshold) has no automated Pact equivalent by design — per
 research.md Decision 25, the Pact suite constructs the inline and blob-URL cases directly

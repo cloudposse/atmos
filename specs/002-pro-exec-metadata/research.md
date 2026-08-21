@@ -1075,6 +1075,158 @@ section already listed `pkg/proexec`-level threshold tests, unaffected by this d
 
 ---
 
+## Decision 26: List-typed `Data` fields normalize to `[]`, never `null`
+
+**Decision**: Every list-typed field in every command-specific structured `Data` shape
+(`TerraformExecData`'s `changes`/`warnings`/`errors` today; any future shape's list fields)
+MUST be initialized as a non-nil, zero-length slice before marshaling, so an empty case
+serializes as JSON `[]`, never `null`.
+
+**Rationale**: A real CI payload (`atmos-pro-qa-3` run 32412509172, surfaced in the
+2026-08-20 clarify session) showed `errors: null` and `changes: null` for a run with none of
+either — a plain Go nil-slice-marshals-to-`null` artifact, since `buildTerraformExecData`
+(`cmd/terraform/utils.go:740`) passes `result.Errors`/`terraformResourceChanges(...)`'s
+return value straight into the map literal without a nil check. This contradicts
+data-model.md's own worked example (`"errors": []`) and forces every consumer to treat
+`null` and `[]` as equivalent, which is exactly the kind of wire-shape ambiguity FR-013's
+"verifiable, versioned description" exists to eliminate.
+
+**Alternatives considered**:
+- Leave `null` as acceptable and just fix the doc's example to match — rejected: pushes the
+  null-vs-`[]` normalization burden onto every consumer (Atmos Pro and any future integrator)
+  instead of the one producer; Go's `omitempty` doesn't apply here either, since these fields
+  are always present, just sometimes empty.
+
+## Decision 27: `exit_code` — the authoritative pass/fail/parse-completeness signal
+
+**Decision**: `TerraformExecData` gains an `exit_code` field: the terraform/tofu subprocess's
+own process exit code, populated from the same `errUtils.GetExitCode(execErr)` call already
+used elsewhere in `cmd/terraform` (e.g. `execNodeResult.ExitCode`, `outcome.ExitCode`) — not
+a new exit-code-detection mechanism. This is distinct from the base `ExecutionRecord`'s own
+`ExitCode` field (FR-003), which is the `atmos` process's own exit code and can differ from
+the terraform subprocess's (e.g. a multi-component run where `atmos` exits non-zero because
+one of several components failed, while a given component's own subprocess exited 0).
+Consumers MUST treat `TerraformExecData.exit_code` — not the presence/absence/zero-ness of
+`resource_counts`/`outputs`/`changes` — as the authoritative signal for whether a given
+plan/apply/deploy actually failed or was fully parsed.
+
+**Rationale**: The same real payload showed `has_changes: true` next to all-zero
+`resource_counts` and an empty `outputs` object — the top-level status flags
+(`has_changes`/`has_errors`, Decision 20) and the itemized data (`resource_counts`/`outputs`/
+`changes`) are populated from related but distinct parts of `citerraform.ParseOutput`'s
+result and can silently diverge when the parser detects a change occurred but fails to
+extract itemized detail for this run's specific output format. Rather than inventing a new
+`partial_parse`-style indicator (considered and rejected — see Alternatives), reusing
+`exit_code` gives consumers a signal they can already reason about without learning a new
+concept, and one that is orthogonal to parsing quality entirely: a non-zero exit code means
+the subprocess itself reported failure, independent of how much of its output Atmos
+successfully parsed afterward.
+
+**Alternatives considered**:
+- A new `partial_parse: bool` (or similar) indicator flagging "has_changes/has_errors were
+  determined but itemized fields could not be" — rejected by explicit user direction in the
+  2026-08-20 clarify session: `exit_code` was chosen instead as a single field that already
+  exists conceptually (every subprocess has one) rather than a new bespoke concept a consumer
+  would need documentation to interpret correctly.
+
+## Decision 28: `exit_code` scoping — per-component for multi-component runs, never one aggregate value
+
+**Decision**: For a single-component invocation, `exit_code` is a top-level field in
+`TerraformExecData` alongside `component`/`stack` (Decision 21). For a multi-component
+`--affected`/`--all` invocation (FR-006a), `exit_code` is instead reported per-component, on
+each entry in the folded aggregate breakdown — there is no separate top-level aggregate
+`exit_code` field. Concretely, this reuses the exit code multi-component aggregation already
+captures per node: `execNodeResult.ExitCode` (`cmd/terraform/utils.go:538`,
+`recordExecResult`) already threads each node's own exit code into its per-node entry in the
+aggregate `Data`; this decision requires that field to be treated as the multi-component
+counterpart of the new single-component `exit_code` field, not a separate/parallel concept
+requiring new plumbing.
+
+**Rationale**: Each component in a multi-component run executes its own terraform/tofu
+subprocess with its own exit code; collapsing those into one aggregate value would either
+mask a per-component failure (if aggregated as "0 unless all failed") or falsely flag every
+component as failed (if aggregated as "non-zero if any failed"), either way losing the
+per-component granularity `execNodeResult` already preserves today. Reusing the existing
+field rather than adding a new one keeps this decision a pure documentation/contract fix, not
+a new implementation surface.
+
+## Decision 29: Minimal `Data` is still attached when itemized parsing fails entirely
+
+**Decision**: When a component's terraform output cannot be parsed at all (e.g. the
+subprocess crashed or produced no recognizable terraform-shaped output, so
+`parseTerraformOutputMirror` would otherwise return `(nil, false)`), `buildTerraformExecData`
+MUST still return a non-nil `TerraformExecData` populated with `version`, `exit_code`, and
+`component`/`stack` (when known) — with every field that could not be parsed defaulted to its
+empty/zero/false equivalent (`resource_counts` all `0`, `outputs: {}`, `changes`/`warnings`/
+`errors`: `[]` per Decision 26, `has_changes`/`has_errors`: `false`) — rather than the current
+behavior of omitting `Data` entirely for that component.
+
+**Rationale**: `exit_code` (Decision 27) is specifically meant to be available as a
+disambiguating signal in exactly the case where the rest of the payload is empty or
+inconsistent; if `Data` is simply absent whenever parsing fails completely, the one case
+where `exit_code` is most needed — a run whose output Atmos couldn't parse at all, which is
+precisely when a consumer most needs to know whether the underlying command actually failed —
+is the one case where it's unavailable. This changes `buildTerraformExecData`'s return
+contract: it goes from "return `nil` unless `parseTerraformOutputMirror` succeeds" to "return
+`nil` only when there is no exit code and no output at all to report" (i.e., effectively never
+for a `terraform plan`/`apply` invocation that actually ran a subprocess, since an exit code
+is always known by the time this function is called).
+
+**Alternatives considered**:
+- Keep the current all-or-nothing behavior and rely solely on the base `ExecutionRecord`'s own
+  `exit_code` for this edge case — rejected: for a multi-component run, the base record's exit
+  code is the aggregate `atmos` process's own code, which cannot distinguish which specific
+  component failed to parse versus which failed for another reason; per-component `exit_code`
+  (Decision 28) only has value if it's actually present even when parsing otherwise fails.
+
+## Decision 30 (SUPERSEDED — see Decision 30r): `terraform deploy` — two full `TerraformExecData` objects, not one collapsed-as-apply view
+
+**Original decision** (retracted, kept here for the record): `deploy`'s structured `Data`
+would be redefined as `{"version": 1, "component": ..., "stack": ..., "plan": {...}, "apply":
+{...}}`, on the premise that "deploy internally runs plan then apply as two separate
+terraform/tofu subprocess invocations." **That premise is factually wrong** — see Decision
+30r.
+
+## Decision 30r: `terraform deploy` keeps the single collapsed-as-apply `TerraformExecData` shape
+
+**Decision**: `deploy`'s structured `Data` is the same `TerraformExecData` shape as
+`plan`/`apply` — no `plan`/`apply` sub-object split. `deploy` continues to be parsed with
+apply semantics (`parseTerraformOutputMirror`, `cmd/terraform/utils.go`: `if parseCommand ==
+"deploy" { parseCommand = "apply" }`, unchanged), now also carrying Decisions 26/27/29's
+`exit_code`/null-safe-lists/minimal-Data amendments identically to `plan`/`apply`.
+
+**Rationale**: Decision 30's premise — "deploy internally runs plan then apply as two
+separate terraform/tofu subprocess invocations" — was discovered false during implementation.
+`internal/exec/terraform.go`'s `handleDeploySubcommand` rewrites `info.SubCommand` from
+`"deploy"` to `"apply"` **in place, before any subprocess runs** ("downstream terraform
+invocation logic can treat them uniformly"). `atmos terraform deploy` therefore executes
+exactly one `terraform apply -auto-approve`-equivalent subprocess call — one captured
+stdout/stderr stream, one exit code. Terraform's own `apply` computes an implicit plan
+internally as part of that single process and prints combined plan-then-apply text output,
+but this is one OS-level subprocess invocation, not two Atmos-orchestrated ones — there is no
+independent "plan phase" exit code or itemized output for Atmos to capture and report
+separately from the apply phase's, because Atmos never runs a plan phase as a separate step
+for `deploy`. A `{plan, apply}` wire shape built by parsing the *same single captured output*
+twice would produce two identical (or arbitrarily/incorrectly split) sub-objects with no
+independent basis for either — worse than the single collapsed view it was meant to improve
+on, since it would imply two real subprocess executions to any consumer reading the shape.
+
+**Alternatives considered** (post-correction):
+- Change `deploy`'s actual execution to run two real subprocesses (a genuine `plan`, then a
+  genuine `apply`) so the two-phase shape has real, independent data to report — rejected:
+  this changes `deploy`'s real-world runtime behavior (timing, auto-approve semantics, the
+  meaning of `--from-plan`/`--planfile`), a materially larger and riskier change than a
+  structured-data reporting fix, and out of scope for a feature whose stated purpose is
+  reporting on executions, not changing how they run. Flagged to the user during
+  implementation; explicitly declined in favor of reverting to Decision 30r.
+- Keep Decision 30's shape but populate `plan`/`apply` identically (both parsed from the same
+  single captured output) — rejected: actively misleading, since it would present one
+  subprocess's outcome as if it were two independently-meaningful ones, the opposite of what
+  Decision 30 was trying to achieve (losslessly preserving genuinely distinct phase data that,
+  it turns out, doesn't exist to preserve).
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,

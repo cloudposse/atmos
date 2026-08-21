@@ -97,12 +97,39 @@ chunkable) — as of research.md Decision 16, both are folded into the single `D
 - Top-level `version` (research.md Decision 24): `1` (plain integer) — added directly to
   `buildTerraformExecData`'s own map literal, not via the shared `proexec.VersionedData`
   helper (that helper only fits the two single-key-wrapped shapes below).
+- Top-level `exit_code` (research.md Decisions 27-29): the terraform/tofu subprocess's own
+  process exit code — the authoritative pass/fail/parse-completeness signal, distinct from
+  the base `ExecutionRecord.ExitCode` (`atmos`'s own process exit code). Single-component: a
+  top-level field alongside `component`/`stack`. Multi-component: reported per-component on
+  each `execNodeResult` entry in the folded breakdown (`execNodeResult.ExitCode` already
+  exists — `cmd/terraform/utils.go:538` — this decision reuses it as the multi-component
+  counterpart, no new field), never as one aggregate top-level value. Always populated —
+  including when itemized parsing fails entirely, in which case `TerraformExecData` is still
+  returned with `version`/`exit_code`/`component`/`stack` set and every unparseable field
+  defaulted (Decision 29), rather than `Data` being omitted.
+- List-typed fields (`changes`, `warnings`, `errors`) MUST serialize as `[]`, never `null`,
+  when empty (research.md Decision 26) — `buildTerraformExecData` MUST initialize these as
+  non-nil zero-length slices before the map literal is built, not pass a possibly-nil slice
+  straight through from `terraformResourceChanges`/`result.Warnings`/`result.Errors`.
 
 All portions are nested together in the single `Data` value (e.g.
-`{"version": 1, "resource_counts": {...}, "outputs": {...}, "warnings": [...], "changes":
+`{"version": 1, "resource_counts": {...}, "outputs": {...}, "warnings": [], "changes":
 [{"action": "created", "address": "aws_vpc.this"}, ...], "has_changes": true, "has_errors":
-false, "errors": [], "component": "vpc", "stack": "plat-use2-dev"}`), not split into multiple
-top-level `Data`-sibling fields.
+false, "errors": [], "exit_code": 0, "component": "vpc", "stack": "plat-use2-dev"}`), not
+split into multiple top-level `Data`-sibling fields.
+
+**`terraform deploy` uses this identical shape, not a split view (research.md Decision 30r,
+correcting the retracted Decision 30)**: `deploy` continues to be parsed with apply semantics
+(`if parseCommand == "deploy" { parseCommand = "apply" }`, `cmd/terraform/utils.go`) and
+produces one `TerraformExecData` object, same as `plan`/`apply`. A prior design
+(Decision 30) proposed splitting `deploy`'s `Data` into `{"version": 1, "component": ...,
+"stack": ..., "plan": {...}, "apply": {...}}` on the premise that `deploy` runs plan and
+apply as two separate terraform/tofu subprocess invocations — that premise was discovered
+false during implementation: `internal/exec/terraform.go`'s `handleDeploySubcommand`
+rewrites `deploy` to `apply` *before* any subprocess runs, so `deploy` executes exactly one
+subprocess, with one captured output stream and one exit code. There is no independent
+plan-phase output/exit-code for Atmos to report separately, so the single-object shape is
+correct, not a workaround.
 
 **Population (research.md Decision 17/18)**: For a multi-component `--affected`/`--all`/query
 run, `cmd/terraform/utils.go`'s `terraformNodeHooks` populates this per-node, folding each

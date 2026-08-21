@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -167,16 +168,21 @@ func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t 
 
 	var calls atomic.Int32
 	var gotSubCommand string
-	parser := func(subCommand string) any {
+	var gotExitCode int
+	parser := func(subCommand string, exitCode int) any {
 		calls.Add(1)
 		gotSubCommand = subCommand
+		gotExitCode = exitCode
 		return map[string]any{"resource_counts": map[string]any{"create": 1}}
 	}
 
-	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Cmd: plan, Parser: parser})
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{
+		Cmd: plan, Parser: parser, Err: errUtils.ExitCodeError{Code: 2},
+	})
 
 	assert.Equal(t, int32(1), calls.Load(), "parser must be called exactly once")
 	assert.Equal(t, "plan", gotSubCommand)
+	assert.Equal(t, 2, gotExitCode, "parser must receive the same exit code derived from params.Err (research.md Decision 27)")
 	require.NotNil(t, received.Data)
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(received.Data, &decoded))
@@ -193,7 +199,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand(t *testing
 	info := &schema.ConfigAndStacksInfo{}
 
 	var calls atomic.Int32
-	parser := func(string) any {
+	parser := func(string, int) any {
 		calls.Add(1)
 		return "should never be reached"
 	}
@@ -214,7 +220,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T
 	info := &schema.ConfigAndStacksInfo{NodeHooks: fakeNodeHooks{}}
 
 	var calls atomic.Int32
-	parser := func(string) any {
+	parser := func(string, int) any {
 		calls.Add(1)
 		return "should never be reached"
 	}

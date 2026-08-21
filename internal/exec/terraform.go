@@ -236,7 +236,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // to stay under the linter's argument-count limit.
 type execMetadataSyncParams struct {
 	Cmd    *cobra.Command
-	Parser func(subCommand string) any
+	Parser func(subCommand string, exitCode int) any
 	Err    error
 }
 
@@ -251,8 +251,8 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		return
 	}
 
-	exitCode := 0
-	if params.Err != nil {
+	exitCode := errUtils.GetExitCode(params.Err)
+	if params.Err != nil && exitCode == 0 {
 		exitCode = 1
 	}
 
@@ -271,7 +271,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 
 	var data any
 	if params.Parser != nil {
-		data = params.Parser(subCommand)
+		data = params.Parser(subCommand, exitCode)
 	}
 
 	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}

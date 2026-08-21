@@ -4,179 +4,164 @@
 
 **Input**: Feature specification from `specs/002-pro-exec-metadata/spec.md`
 
-**Note**: This is an eighth re-plan. `ExecutionID`, the `Data` inline-or-blob-URL redesign,
-and the multi-component aggregation are already implemented and present in the current tree.
-The seventh re-plan's three terraform-side deltas (output masking, `has_changes`/
-`has_errors`/`errors`, `component`/`stack`) are designed (research.md Decisions 19-21) but
-**not yet implemented** — `cmd/terraform/utils.go` still has no `maskSensitiveOutputs`
-helper and `terraformOutputResultMirror` still only decodes `Data`, confirmed by re-reading
-the file this session. This revision folds those three together with four more clarifications
-from the same 2026-08-20 session, none of which are implemented or previously planned:
+**Note**: This is a ninth re-plan. The eighth re-plan's three terraform-side deltas (output
+masking, `has_changes`/`has_errors`/`errors`, `component`/`stack`) are now confirmed
+**implemented** in the current tree — `cmd/terraform/utils.go`'s `maskSensitiveOutputs`,
+`buildTerraformExecData`, and `terraformOutputResultMirror` all exist and match
+research.md Decisions 19-21 (re-read this session). A second 2026-08-20 `/speckit-clarify`
+session, triggered by a real CI payload from `atmos-pro-qa-3` run 32412509172 showing
+`errors: null`, all-zero `resource_counts`, and `outputs: {}` alongside `has_changes: true`,
+surfaced five further gaps — none yet implemented:
 
-5. **FR-006b — `describe affected` structured data**: `describe affected` already calls
-   `proexec.CaptureSync` (`internal/exec/describe_affected.go:379-382`, `Execute`), but with
-   `Data` hardcoded to nothing — the doc comment on `Execute` literally states "Data is passed
-   as nil — describe affected has no defined structured-data extension." The `[]schema.Affected`
-   list this needs is already computed unconditionally by `executeInner` (every invocation, not
-   only `--upload` ones) but is never returned to `Execute`, which only sees `error`.
-6. **FR-006c — `list instances` structured data**: `pkg/list/list_instances.go` has **no**
-   exec-metadata wiring at all today (confirmed: no `proexec` import in that file) — it relies
-   entirely on the generic async default path (`cmd/root.go`'s `proexec.CaptureAsync(cmd, err)`,
-   which always builds `Data: nil` since it has no command-specific knowledge). Attaching
-   `list instances`' own `Data`, gated on `--upload`, requires a new hand-off from
-   `list_instances.go` to the generic async hook — there is no existing mechanism for a
-   non-sync-allowlisted command to attach its own `Data` to the async path.
-7. **FR-005a — per-shape `version` field**: none of the three structured-`Data` shapes
-   (`TerraformExecData`, and the two new ones above) currently has a `version` field.
+1. **Decision 26 — list fields must never be `null`**: `buildTerraformExecData` passes
+   `result.Errors`/`terraformResourceChanges(...)`'s return value straight into the `Data`
+   map literal; a nil Go slice marshals to JSON `null`, contradicting data-model.md's own
+   `"errors": []` example. Confirmed present in the reported payload.
+2. **Decision 27 — `exit_code` as the authoritative signal**: `has_changes`/`has_errors`
+   (from `OutputResult`'s top-level fields) and `resource_counts`/`outputs`/`changes` (from a
+   separate parse of `OutputResult.Data`) can silently diverge when the parser detects a
+   change but fails to extract itemized detail. `TerraformExecData` gains a new `exit_code`
+   field so consumers have a signal independent of parse quality.
+3. **Decision 28 — `exit_code` is per-component, not aggregate, for multi-component runs**:
+   the multi-component path's `execNodeResult` (`cmd/terraform/utils.go:535`) already carries
+   `ExitCode` per node — this decision requires the single-component `exit_code` field
+   (Decision 27) to have that field as its multi-component counterpart, not a new aggregate.
+4. **Decision 29 — minimal `Data` even when parsing fails entirely**: `buildTerraformExecData`
+   currently returns `nil` whenever `parseTerraformOutputMirror` can't decode anything at all
+   from the captured output; `exit_code` needs to be available in exactly that case, so this
+   changes the return contract to always attach `Data` when an exit code is known.
+5. **Decision 30, retracted during implementation → Decision 30r — `terraform deploy` keeps
+   the single collapsed-as-apply shape**: Decision 30 originally proposed a `{plan, apply}`
+   two-phase `Data` shape for `deploy`, on the premise that `deploy` runs plan and apply as
+   two separate terraform/tofu subprocess invocations. That premise is factually wrong:
+   `internal/exec/terraform.go`'s `handleDeploySubcommand` rewrites `deploy` to `apply`
+   *before* any subprocess runs, so `deploy` executes exactly one subprocess with one captured
+   output and one exit code — there is no independent plan-phase data to split out. Decision
+   30r reverts to the single `TerraformExecData` shape for `deploy`, identical to `plan`/
+   `apply`, now also carrying Decisions 26/27/29's amendments.
 
 ## Summary
 
-Three parts, landing together since two of them (describe affected, list instances) establish
-the pattern the third (`version`) then applies uniformly across all shapes:
+Five deltas, all confined to `cmd/terraform/utils.go` (plus the aggregate-multi-component
+folding it already does), fixing gaps a real CI run exposed in the already-shipped
+`TerraformExecData` shape from the eighth re-plan:
 
-1. **`describe affected`** (`internal/exec/describe_affected.go`): `executeInner` gains a
-   return value carrying the computed `[]schema.Affected` (or the struct is extended with an
-   out-field — see Constraints) so `Execute` can build
-   `Data: map[string]any{"version": 1, "stacks": affected}` and pass it to the existing
-   `proexec.CaptureSync` call, replacing the current always-nil `Data`. No gating flag — the
-   list is already computed on every invocation, matching `describe affected`'s existing
-   unconditional-compute behavior (unlike `list instances`, below).
-2. **`list instances`** (`pkg/list/list_instances.go`): a new `proexec.SetPendingAsyncData(data
-   any)` package-level setter (mirroring the existing `SetAtmosConfig`/`currentAtmosConfig`
-   pattern already in `pkg/proexec/async.go`) is called by `ExecuteListInstancesCmd` only when
-   `--upload` was passed and the `[]UploadInstance` list was already built for
-   `POST /api/v1/instances`, wrapping it as `map[string]any{"version": 1, "instances":
-   instances}`. `CaptureAsync` (`pkg/proexec/async.go`) reads and clears this pending value when
-   assembling its `ExecRecordInput`, defaulting to `nil` (today's behavior) when nothing was set.
-3. **`version` field** (all three shapes): `describe affected` and `list instances` share an
-   identical shape — a single array wrapped under one key (`stacks`/`instances`) — so a shared
-   helper, `proexec.VersionedData(version int, key string, payload any) map[string]any` in
-   `pkg/proexec`, builds `{"version": N, key: payload}` for both of those two call sites.
-   `TerraformExecData` is structurally different (multiple top-level keys — `resource_counts`,
-   `outputs`, `warnings`, `changes`, `has_changes`, `has_errors`, `errors`, and optionally
-   `component`/`stack` — not one wrapped array), so `buildTerraformExecData` simply adds
-   `"version": 1` as one more key in its own existing map literal directly, rather than being
-   forced through a single-key wrapper that doesn't fit its shape (see Constraints/Alternatives).
+1. **Null-safe lists**: `buildTerraformExecData` initializes `changes`/`warnings`/`errors` as
+   non-nil `[]T{}` before the map literal, so `json.Marshal` never emits `null` for an empty
+   case.
+2. **`exit_code` field**: `buildTerraformExecData` gains a new `exitCode int` parameter,
+   threaded from the same `errUtils.GetExitCode(execErr)` call already used at every other
+   exit-code call site in this file, surfaced as a new top-level `exit_code` key.
+3. **Per-component scoping**: no new plumbing needed for the multi-component path —
+   `execNodeResult.ExitCode` already exists and already flows into the aggregate `Data`; this
+   delta is a documentation/contract fix confirming that field fills the same role as the new
+   single-component `exit_code` field, not a second exit-code concept.
+4. **Always-attach minimal `Data`**: `buildTerraformExecData`'s early return
+   (`if !ok { return nil }`) is replaced with a defaulted `TerraformExecData` carrying
+   `version`/`exit_code`/`component`/`stack` and empty/zero/false values for everything
+   `parseTerraformOutputMirror` couldn't produce.
+5. **`deploy` (Decision 30r)**: no dedicated code path — `deploy` continues to flow through
+   the same `buildTerraformExecData` as `plan`/`apply` (parsed with apply semantics, as
+   before), so it automatically picks up deltas 1-4 with zero `deploy`-specific code.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26
 
 **Primary Dependencies**:
-- `cmd/terraform/utils.go` (existing, shipped, still unimplemented per Decisions 19-21) —
-  unchanged from the seventh re-plan's design, plus one more key: `buildTerraformExecData`'s
-  returned `map[string]any{...}` literal gains `"version": 1` directly alongside its existing
-  keys (`resource_counts`, `outputs`, `warnings`, `changes`, `has_changes`, `has_errors`,
-  `errors`, `component`, `stack`) — not via `VersionedData` (see Summary), since that shape has
-  no single wrapped payload to key on.
-- `internal/exec/describe_affected.go` (existing, shipped) —
-  - `executeInner(a *DescribeAffectedCmdArgs) error` → `executeInner(a
-    *DescribeAffectedCmdArgs) ([]schema.Affected, error)`: returns the already-computed
-    `affected` slice (present whether or not `--upload` fired) alongside its existing error,
-    so `Execute` can use it without recomputing or storing extra state.
-  - `Execute(a *DescribeAffectedCmdArgs) error`: captures `executeInner`'s new `[]schema.Affected`
-    return value and passes `Data: proexec.VersionedData(1, "stacks", affected)` into the
-    existing `ExecRecordInput{Command: "describe affected", ...}` in place of the implicit nil.
-- `pkg/proexec` (existing, shipped) —
-  - `VersionedData(version int, key string, payload any) map[string]any` (new): returns
-    `map[string]any{"version": version, key: payload}` — the one place the `{"version": N,
-    <key>: ...}` wrapping convention is implemented.
-  - `SetPendingAsyncData(data any)` / an unexported `pendingAsyncData` package-level var (new,
-    `pkg/proexec/async.go`, mirroring the file's existing `SetAtmosConfig`/`currentAtmosConfig`
-    pair): lets a command outside the synchronous allowlist attach its own `Data` before the
-    generic `CaptureAsync(cmd, err)` hook (`cmd/root.go`) runs. `CaptureAsync` reads and clears
-    it (`data := pendingAsyncData; pendingAsyncData = nil`) when building its `ExecRecordInput`,
-    so a value set by one invocation can never leak into a later one within the same test
-    process — required for `cmd.NewTestKit(t)`-style test isolation (CLAUDE.md, MANDATORY).
-- `pkg/list/list_instances.go` (existing, shipped) — `ExecuteListInstancesCmd`, at the point
-  `--upload`'s `apiClient.UploadInstances(&req)` call already has `req.Instances` built, calls
-  `proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))` — only
-  inside the existing `if opts.Upload { ... }` branch, never unconditionally.
-- No new external dependency, no new package (`VersionedData`/`SetPendingAsyncData` land in the
-  already-existing `pkg/proexec`, consistent with constitution Principle V — no new
-  purpose-built package for three small additions to an already-purpose-built package).
+- `cmd/terraform/utils.go` (existing, shipped) — `buildTerraformExecData` gains an
+  `exitCode int` parameter (fourth positional, after `component, stack`) and:
+  - initializes `changes := []execNodeResult{}` / ensures `warnings`/`errors` are non-nil
+    before the map literal (Decision 26);
+  - adds `"exit_code": exitCode` to the map literal (Decision 27);
+  - loses its `if !ok { return nil }` early return in favor of building a defaulted
+    `TerraformExecData` even when `parseTerraformOutputMirror` returns `(nil, false)`, as
+    long as an `exitCode` is available to report (Decision 29) — the function's signature
+    changes from "returns `any` (nil-able)" to "returns `any` (never nil once an invocation
+    actually ran a subprocess)", though it can still legitimately return `nil` for a
+    subcommand this feature doesn't cover at all (e.g. called with `subCommand` not one of
+    `plan`/`apply`/`deploy`, matching today's `parseTerraformOutputMirror`'s own early
+    `return nil, false` for non-terraform subcommands — that path is unaffected, since no
+    exit code is meaningfully "the terraform subprocess's" for a subcommand this function
+    doesn't handle at all).
+  - `WithExecMetadataParser`'s closure signature changes from `func(subCommand string) any`
+    to `func(subCommand string, exitCode int) any` (`internal/exec/shell_utils.go`), since
+    `exitCode` isn't known when `terraformCaptureShellOpts` creates the closure (before the
+    shell command runs) — it's only known where `internal/exec/terraform.go`'s
+    `captureExecMetadataSync` already computes it (from `params.Err` via
+    `errUtils.GetExitCode`, the same mechanism `execNodeResult.ExitCode`/`recordExecResult`
+    already use) and calls the closure. `execMetadataSyncParams.Parser`'s type changes to
+    match; `captureExecMetadataSync`'s existing crude `if params.Err != nil { exitCode = 1 }`
+    is replaced with `errUtils.GetExitCode(params.Err)` (falling back to `1` on a non-zero
+    error with no derivable code), consistent with the rest of this file's exit-code handling.
+  - `execNodeResult` (multi-component path) is unchanged — its existing `ExitCode` field
+    already satisfies Decision 28; only research.md/data-model.md needed updating to state
+    this explicitly, no code delta.
+  - No `deploy`-specific function (Decision 30r) — `deploy` reaches the same
+    `buildTerraformExecData` call as `plan`/`apply` via the same closure.
+- `pkg/proexec` (existing, shipped) — no changes; `exit_code`/list-normalization live entirely
+  inside `TerraformExecData`'s own construction, not the generic envelope/masking layers.
+- No new external dependency, no new package.
 
 **Storage**: N/A — unchanged.
 
-**Testing**: `atmos test` (unit, table-driven). New/changed cases needed, in addition to the
-seventh re-plan's still-outstanding terraform-side test list (masking, shape completeness,
-`component`/`stack`):
-- `proexec.VersionedData`: returns `{"version": N, key: payload}` for representative
-  version/key/payload combinations, including a nil payload (still wraps, doesn't panic).
-- `proexec.SetPendingAsyncData`/`CaptureAsync`: setting a value causes the next `CaptureAsync`
-  call to use it as `Data`; a second `CaptureAsync` call (simulating a later command in the
-  same test run, matching how `cmd.NewTestKit(t)` isolates state) sees `nil` again — proves the
-  clear-on-read behavior prevents cross-test/cross-invocation leakage. Not calling
-  `SetPendingAsyncData` at all (today's behavior for every command except `list instances`)
-  continues to produce `Data: nil`.
-- `describe_affected_test.go`: `executeInner`'s new `[]schema.Affected` return value matches
-  what it already computes (extend existing test assertions, no new computation to test);
-  `Execute` passes a non-nil `Data` shaped `{"version": 1, "stacks": [...]}` to `CaptureSync`
-  (mock/spy `proexec.CaptureSync` the same way existing `describe_affected_test.go` cases
-  already do), for both `--upload` and non-`--upload` invocations (the list is unconditional).
-- `list_instances_test.go`: `SetPendingAsyncData` is called with `{"version": 1, "instances":
-  [...]}` only when `--upload` is set; not called at all when `--upload` is absent (assert via
-  a test double / by resetting `pendingAsyncData` before and inspecting it after, matching the
-  test style already used for `currentAtmosConfig` in this package's existing tests).
-- `pkg/proexec/envelope_test.go`: extend the masking-layer-independence test (already planned
-  in the seventh re-plan) to also confirm a `version` field survives both the
-  `maskSensitiveOutputs`/structural pass and the Gitleaks `maskedDataJSON` pass unchanged (an
-  integer is never a masking target, but the field's presence end-to-end is worth asserting
-  once, e.g. in `TestBuildRecord_SecretMaskingAppliedToData`).
+**Testing**: `atmos test` (unit, table-driven). New/changed cases:
+- `TestBuildTerraformExecData_EmptyListsAreNotNull`: a run with no warnings/errors/changes
+  produces `Data["changes"]`/`["warnings"]`/`["errors"]` that marshal to `[]`, never `null`.
+- `TestBuildTerraformExecData_ExitCode`: `exit_code` in the returned map matches the
+  `exitCode` parameter passed in, for both zero and non-zero cases.
+- `TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData`: given output
+  `parseTerraformOutputMirror` can't decode at all, `buildTerraformExecData` still returns a
+  non-nil map with `version`/`exit_code`/`component`/`stack` set and every other field at its
+  empty/zero/false default (not `nil`).
+- `TestBuildTerraformExecData_DeployParsedAsApply` (already existing): still asserts `deploy`
+  produces the same shape as `apply` — Decision 30r keeps this test's premise valid; no new
+  `deploy`-specific test needed beyond what already exists.
+- `pkg/pro/consumer_pact_test.go`: extend interaction 9's fixture with a non-empty
+  `exit_code` and an explicitly-empty-but-`[]` `errors`/`warnings`/`changes` case, per
+  `contracts/interactions.md`.
+- `cmd/terraform/utils_exec_metadata_test.go`'s existing `TestTerraformNodeHooks_
+  RecordExecResultAccumulates` extended with an assertion that `execNodeResult.ExitCode`
+  differs across two nodes in the same run (regression guard for Decision 28's
+  no-new-aggregate-field claim — if this ever collapsed to one shared value, the per-component
+  scoping requirement would silently break).
 
-**Target Platform**: Linux, macOS, Windows — unchanged; all deltas are pure data-plumbing with
-no OS-specific behavior.
+**Target Platform**: Linux, macOS, Windows — unchanged; pure data-plumbing, no OS-specific
+behavior.
 
-**Project Type**: CLI feature — targeted additions to three already-shipped files plus one new
-pair of small exported functions in an already-shipped package. No new packages. All three
-structured-`Data` shapes gain a `version` field (additive) and two commands
-(`describe affected`, `list instances`) gain a `Data` shape where none existed before
-(additive — `FR-005`'s existing "absent Data is valid" behavior is what they had until now).
-`contracts/interactions.md` and the Pact contract need regenerating for all of this, including
-the new 3-shapes-times-2-modes coverage (Assumptions/FR-013 extension).
+**Project Type**: CLI feature — targeted additions to two already-shipped files
+(`cmd/terraform/utils.go`, `internal/exec/shell_utils.go`/`terraform.go` for the closure
+signature change), no new packages, no new non-test files.
 
-**Performance Goals**: Unchanged for `describe affected` (the `[]schema.Affected` list it
-attaches is already computed unconditionally today — this delta adds zero new computation,
-only a slice being returned instead of discarded). For `list instances`, `Data` attachment is
-strictly conditional on `--upload` already having built the list — the plain, non-uploading
-invocation (the common case) pays no new cost, matching FR-006c's explicit requirement.
+**Performance Goals**: Unchanged — Decisions 26/27/29/30r are pure data-shape corrections
+with no new computation (the exit code and resource counts are already computed today; this
+only changes how/whether they're surfaced). `deploy` incurs zero additional cost (Decision
+30r: no second parse, no new code path).
 
 **Constraints**:
-- `describe affected`'s `Data` MUST NOT be gated on `--upload` — FR-006b does not condition it
-  the way FR-006c conditions `list instances`, because the underlying `[]schema.Affected` list
-  is already computed for every invocation (it's the command's entire purpose), unlike
-  `list instances`' `[]UploadInstance` list, which is only built when `--upload` triggers it.
-  This asymmetry is intentional, not an inconsistency to "fix" — see Alternatives.
-- `executeInner`'s new `[]schema.Affected` return value MUST be the same slice `Execute`
-  already indirectly triggers computation of today (via `executeInner`'s existing internal
-  call chain) — no second resolution pass, no risk of a second run producing a different
-  answer (e.g. due to non-determinism in stack resolution) than what was actually reported to
-  `--upload`/the user's own table/JSON output.
-- `SetPendingAsyncData`/`pendingAsyncData` MUST be cleared on read by `CaptureAsync`, not left
-  to a caller's discretion — an uncleared value would leak into the next command's execution
-  record within the same process (relevant for tests, and for any future in-process
-  multi-command execution path), silently misattributing `list instances`' data to an unrelated
-  later command.
-- `version` MUST be a plain `int` literal at each of the three sites (`1`, `1`, `1` today,
-  whether via `VersionedData`'s parameter or `buildTerraformExecData`'s own map literal), not
-  derived from any external source (Atmos release version, build metadata) — matches FR-005a's
-  explicit "not tied to the Atmos release version" rule.
-- No new user-facing configuration surface for any of the seven deltas in this plan — all are
-  corrections/extensions to already-specified behavior (FR-005a/FR-006b/FR-006c plus the
-  seventh re-plan's three), not new capabilities needing a flag.
-- `internal/exec` MUST NOT gain a new import of `pkg/ci/plugins/terraform`/
-  `pkg/ci/internal/plugin` (Decision 18's constraint, unaffected — none of this plan's four new
-  deltas touch that import boundary).
+- `exit_code` MUST be sourced from the same `errUtils.GetExitCode(...)` mechanism already
+  used throughout `cmd/terraform`/`internal/exec` (e.g. `execNodeResult.ExitCode`,
+  `outcome.ExitCode`) — no new exit-code derivation logic.
+- List-typed fields (`changes`/`warnings`/`errors`) MUST be non-nil before marshaling for
+  every code path that constructs a `TerraformExecData` map, including the new
+  minimal-`Data`-on-parse-failure path (Decision 29) — not just the already-parsed-
+  successfully path.
+- `deploy` MUST NOT get a dedicated shape or code path (Decision 30r) — it flows through the
+  identical `buildTerraformExecData` call `plan`/`apply` use, parsed with apply semantics as
+  before.
+- No new user-facing configuration surface — all deltas are corrections/extensions to
+  already-specified, already-partially-implemented behavior, not new capabilities needing a
+  flag.
 
-**Scale/Scope** (this delta, on top of the still-outstanding seventh re-plan scope): 2 new
-exported functions in `pkg/proexec` (`VersionedData`, `SetPendingAsyncData`) plus 1 new
-unexported package-level var, 1 changed function signature
-(`describe_affected.go:executeInner`), 2 call-site changes (`describe_affected.go:Execute`,
-`list_instances.go:ExecuteListInstancesCmd`), 1 read-and-clear addition in
-`pkg/proexec/async.go:CaptureAsync`. 0 new packages, 0 new non-test files, 0 breaking
-wire-shape changes (additive only — a `version` field added to an already-additive shape, and
-`Data` populated for two commands that previously always sent `Data: nil`, which FR-005
-already documents as a valid, unremarkable state).
+**Scale/Scope**: 1 changed function signature (`buildTerraformExecData` gains `exitCode`),
+1 changed return-contract (never `nil` for a covered subcommand once an exit code is known),
+1 changed closure-type signature (`WithExecMetadataParser`'s `func(subCommand string) any` →
+`func(subCommand string, exitCode int) any`, threaded through
+`execMetadataParserFromOpts`/`execMetadataSyncParams.Parser`/`captureExecMetadataSync`).
+0 new packages, 0 new non-test files. 0 breaking wire-shape changes for `plan`/`apply`/
+`deploy` (additive: one new field, list-fields now guaranteed non-null, `Data` now attached in
+one more edge case than before) — Decision 30r means `deploy`'s wire shape does NOT change
+structurally, reversing the ninth re-plan's original (incorrect) breaking-change premise.
 
 ## Constitution Check
 
@@ -184,16 +169,18 @@ already documents as a valid, unremarkable state).
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags/endpoints. `SetPendingAsyncData` is a narrow, single-purpose hand-off (one setter, one reader, one package) — not a new extensibility mechanism competing with the registry pattern; it mirrors an already-established precedent (`SetAtmosConfig`/`currentAtmosConfig`) in the same file rather than inventing a new one. |
-| II. Interface-Driven Design with DI | ✅ Pass | `VersionedData` is a pure function; `SetPendingAsyncData`/`CaptureAsync`'s package-level var mirrors the existing `currentAtmosConfig` pattern exactly (same file, same rationale: a hook called at a `(cmd, err)`-only call site needs out-of-band access to data only available earlier in a different package). No interface needed since there is exactly one producer (`list_instances.go`) and one consumer (`CaptureAsync`) today. |
-| III. Test-First with 80% Coverage | ✅ Pass | New tests planned for every new/changed function before implementation (see Testing above), including the clear-on-read leak-prevention case. |
-| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output. |
-| V. Simplicity and No Over-Engineering | ✅ Pass | Rejected a general-purpose "structured-data provider registry" (e.g. a `map[string]func() any` keyed by command path, or a new interface every command type implements) in favor of two narrow, purpose-fit mechanisms — a direct return-value plumb for `describe affected` (already synchronous, already has the data in scope) and a minimal set/clear hand-off for `list instances` (async, generic hook, no data in scope at the hook site) — because today there are exactly two producers with two different shapes of "not having the data available at the generic call site," and a registry abstracting over a set of two, with no third planned, is premature per YAGNI. `VersionedData` was chosen over two copied literals (`describe affected`, `list instances` — the only two sites that genuinely share the identical single-key-wrap shape) because that duplication is the "three similar lines" the constitution tolerates edging into "would benefit from one non-duplicated helper"; `TerraformExecData`'s structurally different multi-key shape was deliberately kept OUT of `VersionedData` rather than warping the helper (e.g. a variadic/merge-based signature) to accommodate a third, differently-shaped caller — a narrower helper serving its two actual matching callers beats a more "flexible" one serving three mismatched ones. |
+| I. Registry-Driven Extensibility | ✅ Pass | No new CLI commands/flags/endpoints. All five deltas are internal shape/data corrections to an already-registered command path. |
+| II. Interface-Driven Design with DI | ✅ Pass | `buildTerraformExecData` remains a pure function of its inputs (output string, exit code, identity strings) — no new interfaces needed, consistent with the eighth re-plan's own reasoning for the same file. |
+| III. Test-First with 80% Coverage | ✅ Pass | New tests planned for every new/changed function before implementation (see Testing above), including a regression guard for the per-component exit-code claim (Decision 28) even though no code changes there. |
+| IV. Separated I/O and UI Architecture | ✅ Pass | No new user-visible output; this data flows only into the Pro upload payload. |
+| V. Simplicity and No Over-Engineering | ✅ Pass | Decision 30r rejects a `deploy`-specific two-phase shape once its premise (two real subprocess invocations) was discovered false during implementation — reusing the identical `TerraformExecData` shape for `deploy` is the minimal correct representation of what `deploy` actually does (one subprocess), not an over-engineered split modeling a distinction that doesn't exist. `exit_code`'s per-component scoping deliberately reuses `execNodeResult.ExitCode` rather than adding a parallel field, avoiding two names for the same concept. |
 
-**Post-design re-check**: Pending Phase 1 completion (this plan updates `data-model.md`,
-`contracts/interactions.md`, and `quickstart.md` in the same pass). No new violations
-anticipated — all four new deltas are additive extensions consistent with patterns this
-feature has already established and accepted (Decisions 12-21).
+**Post-design re-check**: Phase 1 artifacts (data-model.md, contracts/interactions.md,
+quickstart.md) updated in this same pass, including retracting Decision 30's `deploy`
+two-phase interaction/shape once its premise was found false. No new violations: the
+remaining four deltas extend patterns this feature already established (single-component
+identity threading, Decision 21; multi-component per-node folding, Decision 17) rather than
+introducing new ones, and Decision 30r removes a would-be violation rather than adding one.
 
 ## Project Structure
 
@@ -201,59 +188,45 @@ feature has already established and accepted (Decisions 12-21).
 
 ```text
 specs/002-pro-exec-metadata/
-├── plan.md                 # This file — eighth re-plan: describe affected + list instances Data, version field
-├── research.md              # Phase 0 output — Decisions 19-21 (7th re-plan, still unimplemented)
-│                              plus new Decisions 22 (describe affected), 23 (list instances +
-│                              SetPendingAsyncData), 24 (VersionedData/version field), 25 (Pact
-│                              per-shape coverage)
-├── data-model.md            # Phase 1 output — new AffectedStacksExecData/InstancesExecData
-│                              sections, version field noted on all three Data shapes, Delivery
-│                              Classification table's `describe affected`/list-instances-adjacent
-│                              rows updated
-├── quickstart.md            # Phase 1 output — new steps verifying describe affected's Data,
-│                              list instances' Data (with/without --upload), version field
+├── plan.md              # This file (/speckit-plan command output) — ninth re-plan
+├── research.md          # Decisions 26-30 appended this pass
+├── data-model.md        # TerraformExecData section updated: exit_code, null-safety;
+│                        # deploy two-phase split retracted (Decision 30r)
+├── quickstart.md        # Steps 18-21 + coverage-table rows added
 ├── contracts/
-│   └── interactions.md      # Updated — two new Data shapes' fields documented, version field
-│                              added to every `data` example, 6-interaction-total Pact coverage
-│                              requirement (3 shapes x 2 modes) documented with interaction
-│                              numbering extended past 11
-└── tasks.md                  # Phase 2 output (/speckit-tasks) — NEEDS REGENERATION for all
-                                seven still-unimplemented deltas across the 7th and 8th re-plans
+│   └── interactions.md  # Interaction 9's data table updated; interaction 16 retracted
+└── tasks.md              # Regenerated against this re-plan (deploy tasks removed/corrected)
 ```
 
 ### Source Code (repository root)
 
 ```text
-pkg/proexec/async.go
-├── pendingAsyncData      # New unexported package-level var — mirrors currentAtmosConfig
-├── SetPendingAsyncData    # New — sets pendingAsyncData; called by list_instances.go
-└── CaptureAsync           # Modified — reads and clears pendingAsyncData for ExecRecordInput.Data
+cmd/terraform/
+├── utils.go                        # buildTerraformExecData (extended: exitCode param,
+│                                    # null-safe lists, minimal-Data-on-parse-failure)
+├── utils_exec_metadata_test.go     # New/extended unit tests (see Testing above)
+├── plan.go / apply.go / deploy.go  # RunE unchanged — exit code now threaded via
+│                                    # captureExecMetadataSync, not per-RunE plumbing
+└── ...
 
-pkg/proexec/ (new file or added to an existing small file, e.g. envelope.go)
-└── VersionedData          # New — map[string]any{"version": version, key: payload}
+internal/exec/
+├── shell_utils.go                  # WithExecMetadataParser/execMetadataParserFromOpts:
+│                                    # closure signature gains exitCode int
+└── terraform.go                    # captureExecMetadataSync: exitCode via
+                                     # errUtils.GetExitCode, passed to Parser(subCommand, exitCode)
 
-internal/exec/describe_affected.go
-├── executeInner            # Modified — returns ([]schema.Affected, error) instead of error
-└── Execute                 # Modified — builds Data via proexec.VersionedData(1, "stacks", affected)
-
-pkg/list/list_instances.go
-└── ExecuteListInstancesCmd  # Modified — inside the existing --upload branch, calls
-                               proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))
-
-cmd/terraform/utils.go
-└── buildTerraformExecData   # Modified (still from 7th re-plan, now also) — adds "version": 1
-                               directly to its own map[string]any{...} literal, alongside
-                               resource_counts/outputs/warnings/changes/has_changes/has_errors/
-                               errors/component/stack — does NOT use proexec.VersionedData,
-                               since that shape has multiple top-level keys, not one wrapped
-                               payload (see Summary/Constraints).
+pkg/pro/
+└── consumer_pact_test.go           # Extended interaction 9 fixture (exit_code, empty-list case)
 ```
 
-**Structure Decision**: No new packages, no new non-test files beyond the modified files above.
-`VersionedData`/`SetPendingAsyncData` land inside the already-existing `pkg/proexec`, not a new
-package, consistent with constitution Principle V and this feature's established pattern
-(Decisions 12/17/18/19-21) of preferring the smallest change that closes a confirmed gap.
+**Structure Decision**: No new files. Everything lands in already-established locations for
+this feature; Decision 30r means no new `cmd/terraform/utils_deploy.go` or similar is needed.
 
 ## Complexity Tracking
 
-> No Constitution Check violations — section intentionally empty.
+> **Fill ONLY if Constitution Check has violations that must be justified**
+
+No unjustified violations. Decision 30's original `deploy` wire-shape break (flat →
+two-phase) was retracted (Decision 30r) once its premise was found false during
+implementation — nothing to justify here, since the final design introduces no breaking
+change for `deploy`.

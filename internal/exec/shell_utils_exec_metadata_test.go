@@ -13,7 +13,7 @@ import (
 // Decision 18).
 func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
 	called := false
-	fn := func(subCommand string) any {
+	fn := func(subCommand string, exitCode int) any {
 		called = true
 		return subCommand + "-data"
 	}
@@ -22,7 +22,7 @@ func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
 	require_ := assert.New(t)
 	require_.NotNil(extracted)
 
-	result := extracted("plan")
+	result := extracted("plan", 0)
 	require_.True(called)
 	require_.Equal("plan-data", result)
 }

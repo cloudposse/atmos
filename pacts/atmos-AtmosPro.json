@@ -363,6 +363,7 @@
             ],
             "component": "vpc",
             "errors": [],
+            "exit_code": 2,
             "has_changes": true,
             "has_errors": false,
             "outputs": {
@@ -441,6 +442,9 @@
             "match": "type"
           },
           "$.body.data.component": {
+            "match": "type"
+          },
+          "$.body.data.exit_code": {
             "match": "type"
           },
           "$.body.data.has_changes": {
@@ -1398,6 +1402,7 @@
               }
             ],
             "errors": [],
+            "exit_code": 0,
             "has_changes": true,
             "has_errors": false,
             "version": 1
@@ -1417,6 +1422,9 @@
             "match": "type"
           },
           "$.body.data.changes[*].address": {
+            "match": "type"
+          },
+          "$.body.data.exit_code": {
             "match": "type"
           },
           "$.body.data.has_changes": {
