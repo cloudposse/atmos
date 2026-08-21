@@ -62,6 +62,11 @@ In CI, bulk applies selected with `--all` or `--affected` write one aggregate Gi
 after the dependency graph completes. It lists component status and Helm release metadata in stable
 stack/component order and includes details for failures.
 
+While a cluster apply is running, Atmos reports the selected install or upgrade operation, effective
+wait policy, timeout, and elapsed-time heartbeats. Bulk output includes the component and stack on
+every line so concurrent or dependency-ordered operations remain distinguishable. Progress is written
+through the masked UI stream; chart hook container logs are not streamed automatically.
+
 ## Flags
 
 <dl>

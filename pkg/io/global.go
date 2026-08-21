@@ -1,6 +1,7 @@
 package io
 
 import (
+	"encoding/json"
 	"fmt"
 	stdio "io"
 	"os"
@@ -395,6 +396,13 @@ func RegisterSecretValue(v any) {
 		return
 	case string:
 		RegisterSecret(t)
+		var structured any
+		if json.Unmarshal([]byte(t), &structured) == nil {
+			switch structured.(type) {
+			case map[string]any, []any:
+				RegisterSecretValue(structured)
+			}
+		}
 	case map[string]any:
 		for _, child := range t {
 			RegisterSecretValue(child)

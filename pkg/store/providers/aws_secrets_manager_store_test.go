@@ -328,6 +328,29 @@ func TestSecretsManagerStore_Get_JSONStructuredRoundTrips(t *testing.T) {
 	assert.Equal(t, map[string]any{"a": float64(1), "b": "x"}, got)
 }
 
+func TestSecretsManagerStore_GetRawPreservesPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"type":"service_account","enabled":true}`},
+		{name: "plain text", payload: "example-token"},
+		{name: "quoted string", payload: `"example-token"`},
+		{name: "multiline", payload: "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakeSecretsManager()
+			fake.data["atmos/secrets/prod/api/RAW"] = tt.payload
+
+			got, err := newTestASMStore(fake).GetRaw("prod", "api", "RAW")
+			require.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
+		})
+	}
+}
+
 func TestSecretsManagerStore_Get_NilSecretString(t *testing.T) {
 	fake := newFakeSecretsManager()
 	fake.data["atmos/secrets/prod/api/K"] = "x"

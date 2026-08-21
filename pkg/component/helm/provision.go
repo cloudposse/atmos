@@ -47,7 +47,12 @@ func deliverApply(
 
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
+		progress := newHelmApplyProgress(info, spec, string(OperationApply), info.DryRun)
+		spec.Progress = progress
+		progress.start()
 		result, err := applyHelmRelease(ctx, spec, info.DryRun)
+		progress.finish(err)
+		spec.Progress = nil
 		spec.Lifecycle = result.Lifecycle
 		summary["manifest_bytes"] = len(result.Manifest)
 		summary["release"] = lifecycleSummary(result.Operation, result.Lifecycle.Policy)

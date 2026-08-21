@@ -38,6 +38,20 @@ func TestCoordinateForDeclaration_Scope(t *testing.T) {
 
 	coordOther := coordinateForDeclaration(globalDecl, "dev", "web")
 	assert.Equal(t, coord, coordOther, "every resolving scope must converge on the same global coordinate")
+
+	// Provider-specific reference templates receive the resolved coordinate, not the original
+	// component context. Global scope therefore cannot produce a different backend key per
+	// component even when a declaration contains an atmos_component expression.
+	globalReference := &Declaration{
+		Name:      "SHARED_CLIENT_SECRET",
+		Reference: "op://shared/{{ .atmos_component }}/password",
+		Scope:     ScopeGlobal,
+	}
+	referenceCoord := coordinateForDeclaration(globalReference, "prod", "api")
+	referenceCoordOther := coordinateForDeclaration(globalReference, "dev", "web")
+	assert.Equal(t, referenceCoord, referenceCoordOther)
+	assert.Empty(t, referenceCoord.Stack)
+	assert.Empty(t, referenceCoord.Component)
 }
 
 // TestTagScope_StampsAndResolvesOverride proves position-derived scope tagging plus the standard
