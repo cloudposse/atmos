@@ -12,6 +12,15 @@ type Store interface {
 	GetKey(key string) (any, error)
 }
 
+// RawStore is an optional capability for stores that decode structured values in Get.
+// `!secret ... | raw` uses this capability so an opaque JSON, PEM, or other textual secret is
+// returned byte-for-byte. Bare `!secret` and `!secret ... | path` continue to use Get and
+// preserve the store's structured-value contract.
+type RawStore interface {
+	Store
+	GetRaw(stack string, component string, key string) (string, error)
+}
+
 // DeletableStore extends Store with the ability to remove a value. Backends that support
 // deletion (SSM, ASM, Vault, Azure Key Vault, GCP Secret Manager) implement this; backends
 // that don't may return ErrDeleteNotSupported. The secrets CLI (`atmos secret delete`)

@@ -193,9 +193,19 @@ func TestGSMStore_Set(t *testing.T) {
 		key       string
 		value     any
 		locations []string
+		secret    bool
 		mockFn    func(*MockGSMClient)
 		wantErr   bool
 	}{
+		{
+			name:      "secret string is stored verbatim",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			secret:    true,
+			mockFn:    gsmClientSecretCreationMock("test-prefix_dev_usw2_app_service_config-key", `test-value`, nil, nil, nil),
+		},
 		{
 			name:      "successful set",
 			stack:     "dev-usw2",
@@ -339,6 +349,7 @@ func TestGSMStore_Set(t *testing.T) {
 				StackDelimiter: &testDelimiter,
 				Locations:      &tt.locations,
 			})
+			store.SetSecret(tt.secret)
 
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if tt.wantErr {
@@ -502,6 +513,40 @@ func TestGSMStore_Get(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
+		})
+	}
+}
+
+func TestGSMStore_GetRawPreservesPayload(t *testing.T) {
+	const versionName = "projects/test-project/secrets/test-prefix_dev_usw2_example_service_config-key/versions/latest"
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+
+	for _, tt := range []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"enabled":true,"port":8080}`},
+		{name: "plain text", payload: "example-token"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := NewMockGSMClient(ctrl)
+			mockClient.EXPECT().AccessSecretVersion(gomock.Any(), gomock.Cond(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+				return req.Name == versionName
+			})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+				Payload: &secretmanagerpb.SecretPayload{Data: []byte(tt.payload)},
+			}, nil)
+
+			s := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			got, err := s.GetRaw("dev-usw2", "example/service", "config-key")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
 		})
 	}
 }
