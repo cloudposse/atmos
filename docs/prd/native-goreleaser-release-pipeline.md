@@ -35,14 +35,17 @@ Atmos needs is available in GoReleaser OSS.
 - **Package-manager users** (`apt`/`dnf`/`apk install atmos`) depend on a Cloudsmith pipeline nobody on this
   repo can currently see, test, or fix if it breaks.
 
-### Current state (verified against the live workflows and the external repos they call)
+### Current state (pre-change behavior, as originally verified against the live workflows and the external repos they call)
 
-**What's actually broken:**
+**What was broken (the TOCTOU gap below is resolved — `build.yml`'s `sign-and-attest-release` job now
+checks out the release tag and runs `goreleaser release --clean` locally before signing/attesting the
+artifacts it just built, rather than downloading already-published ones; the remaining bullets below,
+covering the external Cloudsmith/Scoop pipelines, are still accurate):**
 
-- `build.yml`'s `sign-and-attest-release` job (`build.yml:144-231`) runs in a separate job, on a separate
-  runner, after `needs: release` — it `gh release download`s whatever GoReleaser already published, then
-  cosign-signs and SBOM-attests *that downloaded copy*. Anything able to tamper with a just-published release
-  asset in that window (compromised token, malicious release edit) gets a valid-looking signature over
+- `build.yml`'s `sign-and-attest-release` job (`build.yml:144-231`) ran in a separate job, on a separate
+  runner, after `needs: release` — it `gh release download`ed whatever GoReleaser already published, then
+  cosign-signed and SBOM-attested *that downloaded copy*. Anything able to tamper with a just-published release
+  asset in that window (compromised token, malicious release edit) got a valid-looking signature over
   tampered bytes.
 - Debian/RPM/Alpine packages (Cloudsmith, per `website/docs/quick-start/install-atmos.mdx:52-93` and
   `website/static/install.sh`'s `install_via_cloudsmith`) and the Scoop bucket are built by *something*, but
@@ -107,7 +110,7 @@ duplicates — same action, same version pin, same `prerelease == false` gate, b
 A single job, triggered directly by GoReleaser's own tag-based model rather than reacting to a release
 GitHub already created out-of-band:
 
-```
+```text
 checkout (fetch-depth: 0, needed for changelog + tag history)
   → setup-go
   → sigstore/cosign-installer

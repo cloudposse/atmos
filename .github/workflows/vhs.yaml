@@ -172,7 +172,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.head_ref || github.ref }}
-          persist-credentials: false
+          # This job's own push (via git-auto-commit-action below) needs the
+          # credentials checkout persists — GITHUB_TOKEN in the environment
+          # does not by itself configure git's push auth. Renderer jobs keep
+          # persist-credentials: false since they never push.
+          persist-credentials: true
 
       # Zero-artifact case (every leg was a no-op, or vhs failed before any
       # leg uploaded) must not fail the step — warn and let auto-commit below

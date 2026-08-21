@@ -19,7 +19,8 @@ inputs:
       JSON file listing owner/repo pairs this action cannot drift-check via
       the GitHub API for a documented, maintainer-reviewed reason (see
       allowlist.json and the README). A resolution failure for a listed
-      repo is reported as a warning, not a CI failure.
+      repo is reported as a warning only for the documented HTTP 403
+      access-block condition; other resolution failures fail CI.
     required: false
     default: '.github/actions/verify-sha-pinning/allowlist.json'
 
@@ -248,6 +249,17 @@ runs:
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
               }
               if (err.status === 403) {
+                // A rate-limit 403 isn't a per-repo access-block condition —
+                // it means this token is out of budget for every remaining
+                // lookup, allowlisted repo or not. Let it fail loudly instead
+                // of being silently absorbed by one repo's allowlist entry.
+                // Detected via the documented x-ratelimit-remaining response
+                // header (a structured API signal), never by inspecting the
+                // error's message text.
+                const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
+                if (rateLimitRemaining === '0') {
+                  throw err;
+                }
                 throw new AccessBlockedError(
                   `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
                   err

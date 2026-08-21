@@ -165,9 +165,14 @@ function validateAllowlistEntry(entry, seen) {
 
 // Downgrade eligibility — mirrors action.yml's outer catch: only a listed
 // repo AND the explicitly verified access-block condition (HTTP 403) may
-// ever be downgraded from a hard failure to 'allowlisted'.
+// ever be downgraded from a hard failure to 'allowlisted'. A rate-limit 403
+// (detected via the x-ratelimit-remaining response header, never by
+// inspecting error message text) is excluded even for a listed repo — it
+// means the token is out of budget for every remaining lookup, not that
+// this one repo is access-blocked.
 function shouldDowngrade(err, hasAllowlistEntry) {
-  return Boolean(hasAllowlistEntry) && err?.status === 403;
+  if (!hasAllowlistEntry || err?.status !== 403) return false;
+  return err?.response?.headers?.['x-ratelimit-remaining'] !== '0';
 }
 
 // ── Test cases ──────────────────────────────────────────────────
@@ -411,6 +416,18 @@ assert(shouldDowngrade({ status: 403 }, true) === true, '403 + listed repo → d
 assert(shouldDowngrade({ status: 404 }, true) === false, '404 (tag not found) + listed repo → NOT downgrade eligible, stays a failure');
 assert(shouldDowngrade(new Error('boom'), true) === false, 'status-less error + listed repo → NOT downgrade eligible');
 assert(shouldDowngrade({ status: 403 }, false) === false, '403 + unlisted repo → NOT downgrade eligible');
+assert(
+  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '0' } } }, true) === false,
+  'Rate-limited 403 (x-ratelimit-remaining: 0) + listed repo → NOT downgrade eligible, stays a failure'
+);
+assert(
+  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '42' } } }, true) === true,
+  'Non-rate-limited 403 (budget remaining) + listed repo → downgrade eligible'
+);
+assert(
+  shouldDowngrade({ status: 403, response: { headers: {} } }, true) === true,
+  '403 with no rate-limit header at all (e.g. an IP allow-list block) + listed repo → downgrade eligible'
+);
 
 // Test 15: regression — a listed repository with a nonexistent tag must not
 // be downgrade-eligible (only the documented 403 access-block condition is).
