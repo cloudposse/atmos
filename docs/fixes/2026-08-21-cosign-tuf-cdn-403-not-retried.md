@@ -102,8 +102,8 @@ the only gap was the classifier not wrapping this particular error shape.
 ## Verification
 
 1. `go test ./pkg/toolchain/verification/... -run 'TestClassifySignatureVerificationError|TestRunCosignWithRetry'`
-   — new cases pass; all existing Rekor/transport-flake/cosign-HTTP-fetch and non-retryable cases
-   (tampering, identity mismatch, unscoped 403) remain correctly classified.
+    — new cases pass; all existing Rekor/transport-flake/cosign-HTTP-fetch and non-retryable cases
+    (tampering, identity mismatch, unscoped 403) remain correctly classified.
 2. `go test ./pkg/toolchain/verification/...` — full package suite passes, no regressions.
 3. `go build ./...` — clean.
 
