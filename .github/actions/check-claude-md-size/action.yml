@@ -34,15 +34,14 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        FILE_PATTERNS: ${{ inputs.file-patterns }}
+        MAX_SIZE: ${{ inputs.max-size }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
-        FILE_PATTERNS="${{ inputs.file-patterns }}"
-        MAX_SIZE="${{ inputs.max-size }}"
-
         echo "File patterns: $FILE_PATTERNS"
 
         # Get list of changed files in PR using GitHub CLI
-        if [ -n "${{ github.event.pull_request.number }}" ]; then
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+        if [ -n "$PR_NUMBER" ]; then
           echo "Fetching changed files for PR #${PR_NUMBER}..."
           CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
         else
@@ -124,15 +123,19 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        SIZE: ${{ steps.check.outputs.size }}
+        MAX_SIZE: ${{ steps.check.outputs.max_size }}
+        OVERSIZED: ${{ steps.check.outputs.oversized_files }}
+        TOTAL_FILES: ${{ steps.check.outputs.total_files }}
+        FILE_PATTERNS: ${{ inputs.file-patterns }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
-        if [ -z "${{ github.event.pull_request.number }}" ]; then
+        if [ -z "$PR_NUMBER" ]; then
           echo "ℹ️ Not a pull request - skipping comment"
           exit 0
         fi
 
-        PR_NUMBER="${{ github.event.pull_request.number }}"
-        SIZE="${{ steps.check.outputs.size }}"
-        MAX_SIZE="${{ steps.check.outputs.max_size }}"
         EXCESS=$((SIZE - MAX_SIZE))
         EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
 
@@ -143,9 +146,6 @@ runs:
         else
           echo "No existing comment found"
         fi
-
-        OVERSIZED="${{ steps.check.outputs.oversized_files }}"
-        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
 
         # Build list of oversized files
         FILE_LIST=""
@@ -160,7 +160,7 @@ runs:
         done
 
         # Detect if we're checking CLAUDE.md or agent files
-        if echo "${{ inputs.file-patterns }}" | grep -q "CLAUDE.md"; then
+        if echo "$FILE_PATTERNS" | grep -q "CLAUDE.md"; then
           FILE_TYPE="CLAUDE.md"
           FILE_TYPE_PLURAL="CLAUDE.md files"
           ACTION_VERB="refactor the oversized CLAUDE.md file"
@@ -196,7 +196,7 @@ runs:
 
         if [ -n "$EXISTING_COMMENT" ]; then
           echo "Updating existing comment ID: $EXISTING_COMMENT..."
-          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+          gh api -X PATCH "/repos/$GITHUB_REPOSITORY/issues/comments/$EXISTING_COMMENT" \
             -f body="$COMMENT_BODY" || {
             echo "⚠️ Failed to update comment (it may have been deleted), creating new comment..."
             gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
