@@ -108,6 +108,7 @@ packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentati
 ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
+containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false

@@ -534,6 +534,14 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
 
+	// Convert Container dir to an absolute path.
+	containerBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Container.BasePath)
+	containerDirAbsPath, err := filepath.Abs(containerBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.ContainerDirAbsolutePath = containerDirAbsPath
+
 	// Convert Vendor base path to an absolute path. Consumers previously re-joined the raw
 	// (possibly still-relative) atmosConfig.BasePath at call time instead of using a
 	// precomputed absolute path -- the same bug shape #2864 fixed for the top-level
