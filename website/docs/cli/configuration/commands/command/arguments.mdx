@@ -89,10 +89,10 @@ PLAY [web] *********************************************************************
 
 ## Typed Arguments
 
-Set `type: component` or `type: stack` to tell Atmos that an argument provides the component
-name or stack name. Atmos then resolves the matching component configuration and exposes it as
-`{{ .Component.* }}`. See [`component`](/cli/configuration/commands/component) for the full
-custom component type workflow.
+Set `provides: component` or `provides: stack` to tell Atmos that an argument provides the
+component name or stack name. Atmos then resolves the matching component configuration and
+exposes it as `{{ .Component.* }}`. See [`component`](/cli/configuration/commands/component) for
+the full custom component type workflow.
 
 ```yaml
 commands:
@@ -101,7 +101,7 @@ commands:
     arguments:
       - name: component
         description: "Component name"
-        type: component              # this argument provides the component name
+        provides: component          # this argument provides the component name
         required: true
     component:
       type: script
@@ -109,5 +109,13 @@ commands:
       - 'echo "Running {{ .Component.component }} in {{ .Component.atmos_stack }}"'
 ```
 
-For flags, use [`semantic_type`](/cli/configuration/commands/flags#semantic-types) instead of
-`type` (since `type` on a flag specifies its data type).
+The same `provides:` field works on flags too — see
+[`provides`](/cli/configuration/commands/flags#provides).
+
+<details>
+<summary>Deprecated: `type: component` / `type: stack`</summary>
+
+Older configs may still use `type: component` or `type: stack` on arguments. This still works but
+is deprecated in favor of `provides:`, which uses the same field name on both arguments and flags.
+
+</details>
