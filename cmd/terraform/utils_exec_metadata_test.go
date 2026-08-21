@@ -300,8 +300,8 @@ secret_key = <sensitive>
 // rather than attempting a partial/incorrect replacement.
 func TestRedactSensitiveOutputsFromRawOutput(t *testing.T) {
 	outputs := map[string]json.RawMessage{
-		"secret_key": json.RawMessage(`{"Value":"hunter2","Type":"string","Sensitive":true}`),
-		"bucket_arn": json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
+		"secret_key":  json.RawMessage(`{"Value":"hunter2","Type":"string","Sensitive":true}`),
+		"bucket_arn":  json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
 		"secret_list": json.RawMessage(`{"Value":["a","b"],"Type":"list","Sensitive":true}`),
 	}
 
