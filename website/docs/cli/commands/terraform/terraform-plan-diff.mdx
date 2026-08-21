@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-The `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them.
+Two different Terraform plan files can represent identical infrastructure changes. The `atmos terraform plan-diff` command reveals the **semantic differences** between plans—what actually changes in your infrastructure—not just file-level noise like timestamps or resource ordering.
 </Intro>
 
 <CastPlayer title="atmos terraform plan-diff --help" src="/casts/screengrabs/atmos-terraform-plan-diff--help.cast" static chrome />
