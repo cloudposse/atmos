@@ -84,7 +84,7 @@ const BATTERIES = [
   {
     icon: RiCloudLine,
     title: 'Emulators',
-    desc: 'Run AWS, GCP, Azure, and Kubernetes emulators locally — plan and apply against real APIs with no cloud account and no bill.',
+    desc: 'Run AWS, GCP, Azure, and Kubernetes emulators locally — plan and apply against them with no cloud account and no bill.',
     tag: 'AWS · GCP · AZURE · K8S',
     to: '/cli/commands/emulator/usage',
   },
