@@ -24,6 +24,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -42,11 +43,12 @@ type ShellCommandOption func(*shellCommandConfig)
 
 // shellCommandConfig holds optional configuration for shell command execution.
 type shellCommandConfig struct {
-	stdoutCapture  io.Writer
-	stderrCapture  io.Writer
-	stdoutOverride io.Writer
-	streams        *process.Streams
-	ctx            context.Context
+	stdoutCapture   io.Writer
+	stderrCapture   io.Writer
+	stdoutOverride  io.Writer
+	metricsCallback func(*metricsprocess.ProcessMetrics)
+	streams         *process.Streams
+	ctx             context.Context
 	// processEnv replaces os.Environ() as the process environment.
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
@@ -75,6 +77,17 @@ func WithStderrCapture(w io.Writer) ShellCommandOption {
 func WithStdoutOverride(w io.Writer) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.stdoutOverride = w
+	}
+}
+
+// WithMetricsCallback returns a ShellCommandOption that receives process resource
+// metrics (CPU, memory, I/O, context switches) after the command completes.
+// The callback is invoked even when the command fails, as long as the process started.
+func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithMetricsCallback")()
+
+	return func(c *shellCommandConfig) {
+		c.metricsCallback = fn
 	}
 }
 
@@ -320,6 +333,11 @@ func ExecuteShellCommand(
 			Stderr: stderr,
 		},
 	})
+
+	// Invoke metrics callback if provided — even on error, metrics may be useful.
+	if cfg.metricsCallback != nil && result.Metrics != nil {
+		cfg.metricsCallback(result.Metrics)
+	}
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
 	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
 		return closeErr

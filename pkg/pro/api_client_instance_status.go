@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 
@@ -29,18 +28,9 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		url.QueryEscape(dto.Component))
 	log.Debug("Uploading drift status.", "url", targetURL)
 
-	// Send raw command and exit code — the server interprets them.
-	payload := map[string]interface{}{
-		"command":   dto.Command,
-		"exit_code": dto.ExitCode,
-	}
-
-	// Add last_run if we have atmos_pro_run_id or git_sha.
-	if dto.AtmosProRunID != "" || dto.GitSHA != "" {
-		payload["last_run"] = time.Now().UTC().Format(time.RFC3339)
-	}
-
-	data, err := json.Marshal(payload)
+	// Marshal the full DTO — omitempty tags ensure only populated fields are sent.
+	// This sends all fields including version/OS/arch metadata and resource metrics.
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
