@@ -805,11 +805,13 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	// Windows CI spawns a real child process over anonymous pipes (no PTY,
-	// see session_windows.go) and has been observed to take measurably
-	// longer than Unix to complete the write->echo->match round trip under
-	// sharded/parallel CI load, so both the overall context and the "wait"
-	// action's own timeout need more headroom than a local run would need.
+	// Windows CI has been observed to flake here from two compounding causes:
+	// spawning the real child process over anonymous pipes (no PTY, see
+	// session_windows.go) can itself take several seconds under
+	// sharded/parallel CI load before any scripted action even runs, and the
+	// subsequent write->echo->match round trip needs more headroom than a
+	// local run would suggest. Both the overall context and each "wait"
+	// action's own timeout need real margin.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
@@ -844,9 +846,9 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
 	// See the matching comment in TestRunSessionExecutesScriptedShellActions:
-	// Windows CI needs more headroom than Unix for the real-process write ->
-	// echo -> match round trip, both for the overall context and each "wait"
-	// action's own timeout.
+	// Windows CI needs more headroom than Unix both for spawning the real
+	// child process and for the write -> echo -> match round trip, for the
+	// overall context and each "wait" action's own timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
@@ -887,6 +889,7 @@ func TestRunSessionDefaultsNilOptions(t *testing.T) {
 	t.Setenv("SHELL", shell)
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
+	// See the matching comment in TestRunSessionExecutesScriptedShellActions.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := RunSession(ctx, nil); err != nil {
@@ -915,6 +918,7 @@ func TestRunSessionReturnsActionErrors(t *testing.T) {
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
+	// See the matching comment in TestRunSessionExecutesScriptedShellActions.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
