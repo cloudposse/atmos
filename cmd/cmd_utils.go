@@ -510,8 +510,11 @@ func createCustomCommand(
 	}
 	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 
-	// Add --identity flag to all custom commands to allow runtime override.
-	customCommand.PersistentFlags().String(customCommandKeyIdentity, "", "Identity to use for authentication (overrides identity in command config)")
+	// Add --identity flag to all custom commands to allow runtime override. Uses the shared
+	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
+	// so custom commands get the same NoOptDefVal-driven interactive-selector behavior
+	// (bare --identity) as every other Atmos command.
+	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(customCommand)
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
@@ -1587,6 +1590,10 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 	}
 }
 
+// newCustomCommandAuthManagerFn constructs the AuthManager used to authenticate a custom
+// command's --identity. Overridable in tests.
+var newCustomCommandAuthManagerFn = auth.NewAuthManager
+
 func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) auth.AuthManager {
 	if commandIdentity == "" || !hasRunnableStep {
 		return nil
@@ -1597,9 +1604,20 @@ func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIde
 	}
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	authManager, err := newCustomCommandAuthManagerFn(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	// Resolve the interactive-selection sentinel (produced when --identity is passed without a
+	// value) to a concrete identity before checking the credential cache or authenticating.
+	commandIdentity, err = auth.ResolveSelectedIdentity(authManager, commandIdentity, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
+		}
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for custom command %q: %w",
+			errUtils.ErrDefaultIdentity, commandName, err), "", "")
 	}
 
 	ctx := context.Background()

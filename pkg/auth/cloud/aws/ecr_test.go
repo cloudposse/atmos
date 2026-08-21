@@ -1,9 +1,13 @@
 package aws
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -121,6 +125,21 @@ func TestParseRegistryURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint(t *testing.T) {
+	// A pre-canceled context makes credential retrieval fail immediately
+	// (no real network/IMDS calls), exercising the same failure branch
+	// hit when no Atmos identity is configured for ambient ECR login.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := LoadDefaultAWSCredentials(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrECRAuthFailed)
+
+	hints := strings.Join(errors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "atmos aws ecr login --identity")
 }
 
 func TestIsECRRegistry(t *testing.T) {
