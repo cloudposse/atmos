@@ -12,7 +12,7 @@ require (
 	// Pinned to v0.3.1: v0.4.0+ adds a desktop-integration build guard that fails to compile
 	// under CGO_ENABLED=0 (Atmos's cross-platform build mode). Do not bump without verifying
 	// `CGO_ENABLED=0 go build .` still succeeds. See pkg/store/onepassword_store.go.
-	github.com/1password/onepassword-sdk-go v0.3.1
+	github.com/1password/onepassword-sdk-go v0.4.0
 	github.com/99designs/keyring v1.2.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
