@@ -1584,16 +1584,20 @@ type ConfigAndStacksInfo struct {
 	Command                       string
 	SubCommand                    string
 	SubCommand2                   string
-	StackSection                  AtmosSectionMapType
-	ComponentSection              AtmosSectionMapType
-	ComponentVarsSection          AtmosSectionMapType
-	ComponentSettingsSection      AtmosSectionMapType
-	ComponentOverridesSection     AtmosSectionMapType
-	ComponentProvidersSection     AtmosSectionMapType
-	ComponentHooksSection         AtmosSectionMapType
-	ComponentEnvSection           AtmosSectionMapType
-	ComponentAuthSection          AtmosSectionMapType
-	ComponentEnvList              []string
+	// InvokedSubCommand is the original subcommand as typed by the user, captured before any
+	// internal conversion (e.g., before "deploy" is normalized to "apply" by handleDeploySubcommand).
+	// When set, upload paths use this value for audit trail fidelity instead of SubCommand.
+	InvokedSubCommand         string
+	StackSection              AtmosSectionMapType
+	ComponentSection          AtmosSectionMapType
+	ComponentVarsSection      AtmosSectionMapType
+	ComponentSettingsSection  AtmosSectionMapType
+	ComponentOverridesSection AtmosSectionMapType
+	ComponentProvidersSection AtmosSectionMapType
+	ComponentHooksSection     AtmosSectionMapType
+	ComponentEnvSection       AtmosSectionMapType
+	ComponentAuthSection      AtmosSectionMapType
+	ComponentEnvList          []string
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as
