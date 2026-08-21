@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration"
+description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, the remote-state bridge for progressive migration, and moving Atlantis-driven CI to Atmos Native CI"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,6 +9,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-atlantis.md
   - references/from-component-updater.md
 ---
 
@@ -75,6 +76,7 @@ different reference:
 | Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| Atlantis runs `terraform plan`/`apply` today (with or without Atmos already)  | [from-atlantis.md](references/from-atlantis.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
@@ -164,6 +166,8 @@ those questions to the right skill:
 - **Authentication / provider credentials** → [atmos-auth](../atmos-auth/SKILL.md)
 - **Validation policies (OPA, JSON Schema)** → [atmos-validation](../atmos-validation/SKILL.md)
 - **CI/CD with affected-detection** → [atmos-ci](../atmos-ci/SKILL.md)
+- **Uses Atlantis now, wants Native CI** → read
+  [from-atlantis.md](references/from-atlantis.md) first, then use [atmos-ci](../atmos-ci/SKILL.md)
 - **Cross-component data sharing via stores** → [atmos-stores](../atmos-stores/SKILL.md)
 
 ## Anti-Patterns
@@ -189,3 +193,5 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-atlantis.md](references/from-atlantis.md) -- steps to move Atlantis-driven CI
+  (autoplan, PR comments, apply gating, locks) to Atmos Native CI
