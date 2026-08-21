@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,11 +17,13 @@ import (
 )
 
 const (
-	testEnvFakeTerraform           = "_ATMOS_TEST_FAKE_TERRAFORM"
-	testEnvFakeTerraformSelectFail = "_ATMOS_TEST_FAKE_TERRAFORM_SELECT_FAIL"
-	testEnvRunLogGroupPipeline     = "_ATMOS_TEST_RUN_LOG_GROUP_PIPELINE"
-	testEnvPipelineBackendType     = "_ATMOS_TEST_PIPELINE_BACKEND_TYPE"
-	testEnvPipelineSkipInit        = "_ATMOS_TEST_PIPELINE_SKIP_INIT"
+	testEnvFakeTerraform             = "_ATMOS_TEST_FAKE_TERRAFORM"
+	testEnvFakeTerraformSelectFail   = "_ATMOS_TEST_FAKE_TERRAFORM_SELECT_FAIL"
+	testEnvFakeTerraformSelectOutput = "_ATMOS_TEST_FAKE_TERRAFORM_SELECT_OUTPUT"
+	testEnvFakeTerraformPlanOutput   = "_ATMOS_TEST_FAKE_TERRAFORM_PLAN_OUTPUT"
+	testEnvRunLogGroupPipeline       = "_ATMOS_TEST_RUN_LOG_GROUP_PIPELINE"
+	testEnvPipelineBackendType       = "_ATMOS_TEST_PIPELINE_BACKEND_TYPE"
+	testEnvPipelineSkipInit          = "_ATMOS_TEST_PIPELINE_SKIP_INIT"
 )
 
 // TestMain is the entry point for the internal/exec test binary.
@@ -38,6 +41,9 @@ const (
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
+//	_ATMOS_TEST_EXIT_CODE=<N>        — if set to a valid integer, exit N immediately
+//	                                   (for exit-code-neutralization tests needing a
+//	                                   code other than 0/1, e.g. -detailed-exitcode's 2).
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -91,6 +97,11 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}
+	if code := os.Getenv("_ATMOS_TEST_EXIT_CODE"); code != "" {
+		if n, convErr := strconv.Atoi(code); convErr == nil {
+			os.Exit(n)
+		}
+	}
 
 	// Isolate the Terraform provider plugin cache for this package's tests.
 	// Terraform's plugin cache is NOT safe for concurrent use, and `go test ./...`
@@ -116,15 +127,31 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// runFakeTerraformForTest simulates a terraform/tofu subprocess for pipeline
+// tests. The testEnvFakeTerraformSelectOutput/testEnvFakeTerraformPlanOutput
+// env vars let a test control what each phase prints to stdout (e.g. a "No
+// changes." lookalike string on workspace select, to reproduce FR-006f's
+// original bug: incidental phase output poisoning the exec-metadata parser's
+// buffer).
 func runFakeTerraformForTest() int {
 	args := os.Args[1:]
 	fmt.Printf("fake terraform %s\n", strings.Join(args, " "))
-	if os.Getenv(testEnvFakeTerraformSelectFail) == "1" &&
-		len(args) >= 3 &&
-		args[0] == subcommandWorkspace &&
-		args[1] == "select" {
+
+	isWorkspaceSelect := len(args) >= 3 && args[0] == subcommandWorkspace && args[1] == "select"
+	if isWorkspaceSelect && os.Getenv(testEnvFakeTerraformSelectFail) == "1" {
 		fmt.Fprintf(os.Stderr, "Workspace %q doesn't exist.\n", args[2])
 		return 1
+	}
+	if isWorkspaceSelect {
+		if out := os.Getenv(testEnvFakeTerraformSelectOutput); out != "" {
+			fmt.Println(out)
+		}
+		return 0
+	}
+	if len(args) >= 1 && args[0] == "plan" {
+		if out := os.Getenv(testEnvFakeTerraformPlanOutput); out != "" {
+			fmt.Println(out)
+		}
 	}
 	return 0
 }

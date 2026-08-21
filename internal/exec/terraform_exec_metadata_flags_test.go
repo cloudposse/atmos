@@ -169,7 +169,7 @@ func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t 
 	var calls atomic.Int32
 	var gotSubCommand string
 	var gotExitCode int
-	parser := func(subCommand string, exitCode int) any {
+	parser := func(subCommand string, exitCode int, output string) any {
 		calls.Add(1)
 		gotSubCommand = subCommand
 		gotExitCode = exitCode
@@ -199,7 +199,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand(t *testing
 	info := &schema.ConfigAndStacksInfo{}
 
 	var calls atomic.Int32
-	parser := func(string, int) any {
+	parser := func(string, int, string) any {
 		calls.Add(1)
 		return "should never be reached"
 	}
@@ -220,7 +220,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T
 	info := &schema.ConfigAndStacksInfo{NodeHooks: fakeNodeHooks{}}
 
 	var calls atomic.Int32
-	parser := func(string, int) any {
+	parser := func(string, int, string) any {
 		calls.Add(1)
 		return "should never be reached"
 	}

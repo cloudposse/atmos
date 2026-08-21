@@ -204,12 +204,24 @@ func executeCommandPipeline(
 	addRegionEnvVarForImport(info)
 
 	if shouldRunMainTerraformCommand(info) {
+		// FR-006f: capture this invocation's own stdout/stderr into a buffer pair
+		// scoped to ONLY the main command, in addition to (not instead of) whatever
+		// WithStdoutCapture/WithStderrCapture already accumulate across the whole
+		// init+workspace-select+main pipeline for other consumers (e.g.
+		// cmd/terraform's capturedPlanOutput, used by CI job-summary hooks). Without
+		// this, incidental init/workspace-select output (e.g. a stray "No changes."
+		// lookalike) can poison the exec-metadata parser's extraction even though the
+		// real plan/apply's own output is correct (research.md Decision 32).
+		var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+		mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
 		// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
 		// (plan/apply/destroy/…) into its own collapsible group, separate from init
 		// and workspace setup.
 		err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
-			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
 		})
+		info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
 		if err != nil {
 			return err
 		}
@@ -237,6 +249,18 @@ func runWorkspaceSetupPhase(atmosConfig *schema.AtmosConfiguration, info *schema
 
 func shouldRunMainTerraformCommand(info *schema.ConfigAndStacksInfo) bool {
 	return info.SubCommand != subcommandWorkspace || info.SubCommand2 != ""
+}
+
+// combineExecMetadataOutput concatenates the main command's scoped stdout/stderr
+// capture for the exec-metadata parser (FR-006f), mirroring the stdout+"\n"+stderr
+// convention cmd/terraform's terraformExecMetadataParserFunc previously applied
+// when it owned buffer construction directly.
+func combineExecMetadataOutput(stdoutBuf, stderrBuf *bytes.Buffer) string {
+	combined := stdoutBuf.String()
+	if errOut := stderrBuf.String(); errOut != "" {
+		combined += "\n" + errOut
+	}
+	return combined
 }
 
 func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
@@ -455,6 +479,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	exitCode := resolveExitCode(err)
 
+	// FR-006e: record the terraform/tofu subprocess's own exit code before any
+	// CI-mode remapping or local neutralization below, so TerraformExecData.exit_code
+	// (via captureExecMetadataSync) reports the real subprocess outcome even when
+	// Atmos's own returned status is remapped/neutralized further down.
+	info.ExecMetadataRawExitCode = exitCode
+
 	// Upload status only when explicitly requested via --upload-status flag.
 	// Upload failures are logged but never cause the terraform command to fail —
 	// the exit code should reflect the plan/apply result, not telemetry.
@@ -467,6 +497,19 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// Apply CI exit code mapping: remap terraform exit codes for CI runners.
 	// This is independent of upload — it only affects what the caller sees.
 	if mappedCode := mapCIExitCode(atmosConfig, exitCode); mappedCode == 0 {
+		return nil
+	}
+
+	// FR-006e/Decision 36: -detailed-exitcode was added to this invocation solely
+	// because exec-metadata capture required it (info.ExecMetadataDetailedExitCodeAdded),
+	// not because the user explicitly passed --upload-status. The global CI-mode remap
+	// above didn't neutralize this exit code (atmosConfig.CI.Enabled is false, or its
+	// mapping doesn't cover it), so without this local, call-site-scoped neutralization,
+	// Atmos's own process exit code for `plan` would silently change from 0 to 2 in CI
+	// environments that satisfy FR-001 but haven't separately set ci.enabled. This does
+	// NOT touch atmosConfig.CI.Enabled or mapCIExitCode's own gate — those also govern
+	// annotations/SARIF/summaries/hooks CI-mode, well outside this fix's scope.
+	if info.ExecMetadataDetailedExitCodeAdded && exitCode == detailedExitCodeChangesDetected {
 		return nil
 	}
 

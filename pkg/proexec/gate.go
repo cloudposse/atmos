@@ -1,6 +1,7 @@
 package proexec
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -17,6 +18,18 @@ func gateOpen(atmosConfig *schema.AtmosConfiguration) bool {
 		return false
 	}
 	return telemetry.IsCI() && proConfigured(atmosConfig)
+}
+
+// GateOpen is gateOpen's exported form, for callers outside this package that
+// need to decide (before an invocation runs) whether exec-metadata capture
+// will be active for it — e.g. internal/exec's buildPlanSubcommandArgs uses
+// this to decide whether to add -detailed-exitcode to a `plan` invocation
+// (FR-006e, research.md Decision 35), independent of the legacy
+// --upload-status flag. Same cheap, no-network-call semantics as gateOpen.
+func GateOpen(atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(atmosConfig, "proexec.GateOpen")()
+
+	return gateOpen(atmosConfig)
 }
 
 // proConfigured reports whether Atmos Pro has usable credentials configured:

@@ -7,7 +7,6 @@ package terraform
 // single record's Data field, not sent as separate per-node records.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -292,32 +291,29 @@ func TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser(t *testing.T) {
 	require.Len(t, opts, 3, "WithStdoutCapture, WithStderrCapture, WithExecMetadataParser")
 }
 
-// TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime verifies the
-// closure terraformCaptureShellOpts wires into WithExecMetadataParser reads
-// whatever has been written into stdoutBuf/stderrBuf by the time it's
-// invoked, combining both streams and stripping ANSI before parsing, and
-// threads component/stack through to buildTerraformExecData (research.md
-// Decision 21) — mirroring how ExecuteTerraform populates the buffers during
-// execution and captureExecMetadataSync invokes the parser afterward.
-func TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime(t *testing.T) {
+// TestTerraformExecMetadataParserFunc_UsesSuppliedOutput verifies the closure
+// terraformCaptureShellOpts wires into WithExecMetadataParser parses whatever
+// output string the caller supplies at invocation time (FR-006f, research.md
+// Decision 32 — internal/exec's executeCommandPipeline captures this scoped
+// to only the main plan/apply/deploy subprocess, not read from a buffer this
+// closure owns), stripping ANSI before parsing, and threads component/stack
+// through to buildTerraformExecData (research.md Decision 21).
+func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	fixture, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	parser := terraformExecMetadataParserFunc(&stdoutBuf, &stderrBuf, "web", "plat-use2-dev")
+	parser := terraformExecMetadataParserFunc("web", "plat-use2-dev")
 
-	// Nothing written yet: a covered subcommand ("apply") with unparseable
-	// (empty) output still gets a minimal defaulted Data, not nil
-	// (research.md Decision 29) — exit_code is threaded through even here.
-	emptyResult := parser("apply", 0)
+	// Empty output: a covered subcommand ("apply") with unparseable (empty)
+	// output still gets a minimal defaulted Data, not nil (research.md
+	// Decision 29) — exit_code is threaded through even here.
+	emptyResult := parser("apply", 0, "")
 	require.NotNil(t, emptyResult)
 	emptyMap, ok := emptyResult.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 0, emptyMap["exit_code"])
 
-	stdoutBuf.WriteString(string(fixture))
-
-	result := parser("apply", 0)
+	result := parser("apply", 0, string(fixture))
 	require.NotNil(t, result)
 	asMap, ok := result.(map[string]any)
 	require.True(t, ok)

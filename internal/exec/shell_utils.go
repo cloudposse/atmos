@@ -63,8 +63,22 @@ type shellCommandConfig struct {
 	// data (FR-006) for the execution record. cmd/terraform supplies this —
 	// it can safely call pkg/ci/plugins/terraform's output parser, unlike
 	// internal/exec, which cannot import it without reintroducing a confirmed
-	// import cycle (research.md Decision 18).
-	execMetadataParser func(subCommand string, exitCode int) any
+	// import cycle (research.md Decision 18). The output parameter is the
+	// scoped exec-metadata output text executeCommandPipeline captured for
+	// just the main plan/apply/deploy subprocess (FR-006f).
+	execMetadataParser func(subCommand string, exitCode int, output string) any
+
+	// execMetadataStdoutCapture/execMetadataStderrCapture, when set, additionally
+	// tee this specific ExecuteShellCommand call's stdout/stderr into these
+	// writers, alongside (not instead of) stdoutCapture/stderrCapture. Used
+	// internally by executeCommandPipeline (via withExecMetadataOutputCapture) to
+	// scope the exec-metadata parser's input to only the final plan/apply/deploy
+	// subprocess invocation, while stdoutCapture/stderrCapture's buffers keep
+	// accumulating the whole pipeline's output for other consumers (e.g. CI
+	// job-summary hooks) that legitimately need it (FR-006f, research.md
+	// Decision 32).
+	execMetadataStdoutCapture io.Writer
+	execMetadataStderrCapture io.Writer
 }
 
 // WithInvokingCommand provides the Cobra command the user actually invoked,
@@ -99,7 +113,7 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 // supplies this closure so ExecuteTerraform's exec-metadata sync capture can
 // obtain parsed terraform plan/apply/deploy output without internal/exec
 // itself importing the CI plugin's parser (research.md Decision 18).
-func WithExecMetadataParser(fn func(subCommand string, exitCode int) any) ShellCommandOption {
+func WithExecMetadataParser(fn func(subCommand string, exitCode int, output string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
 	return func(c *shellCommandConfig) {
@@ -109,12 +123,29 @@ func WithExecMetadataParser(fn func(subCommand string, exitCode int) any) ShellC
 
 // execMetadataParserFromOpts extracts the parser closure (if any) set via
 // WithExecMetadataParser among opts.
-func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int) any {
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int, output string) any {
 	var cfg shellCommandConfig
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	return cfg.execMetadataParser
+}
+
+// withExecMetadataOutputCapture tees this specific ExecuteShellCommand call's
+// stdout/stderr into stdoutW/stderrW, in addition to whatever
+// WithStdoutCapture/WithStderrCapture already capture. Used internally by
+// executeCommandPipeline to scope the exec-metadata parser's input to only the
+// final plan/apply/deploy subprocess invocation (FR-006f), without disturbing
+// the broader stdout/stderr buffers other consumers (e.g. cmd/terraform's
+// capturedPlanOutput, used by CI job-summary hooks) rely on for the whole
+// init+workspace-select+main pipeline. Unexported — an internal
+// executeCommandPipeline concern, not part of the ShellCommandOption surface
+// cmd/terraform uses.
+func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.execMetadataStdoutCapture = stdoutW
+		c.execMetadataStderrCapture = stderrW
+	}
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -283,6 +314,9 @@ func ExecuteShellCommand(
 	if cfg.stdoutCapture != nil {
 		stdoutWriters = append(stdoutWriters, cfg.stdoutCapture)
 	}
+	if cfg.execMetadataStdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.execMetadataStdoutCapture)
+	}
 	stdout := io.MultiWriter(stdoutWriters...)
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
@@ -303,11 +337,21 @@ func ExecuteShellCommand(
 		if cfg.stderrCapture != nil {
 			stderrWriters = append(stderrWriters, cfg.stderrCapture)
 		}
+		if cfg.execMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
+		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
 		maskedStderr := ioLayer.MaskWriter(stdout)
+		extraStderrWriters := []io.Writer{maskedStderr}
 		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+			extraStderrWriters = append(extraStderrWriters, cfg.stderrCapture)
+		}
+		if cfg.execMetadataStderrCapture != nil {
+			extraStderrWriters = append(extraStderrWriters, cfg.execMetadataStderrCapture)
+		}
+		if len(extraStderrWriters) > 1 {
+			stderr = io.MultiWriter(extraStderrWriters...)
 		} else {
 			stderr = maskedStderr
 		}
@@ -320,6 +364,9 @@ func ExecuteShellCommand(
 		}
 		if cfg.stderrCapture != nil {
 			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		if cfg.execMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
 		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else {

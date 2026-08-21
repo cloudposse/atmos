@@ -1227,8 +1227,329 @@ on, since it would imply two real subprocess executions to any consumer reading 
 
 ---
 
+## Decision 31: `exit_code` sourced pre-CI-remap, `-detailed-exitcode` decoupled from `--upload-status`
+
+**Decision**: `cmd/terraform/plan.go`'s (and `apply.go`'s/`deploy.go`'s internal apply
+invocation) argument-building gains an unconditional `-detailed-exitcode` whenever
+exec-metadata capture is active — i.e. whenever `proexec.IsSyncCommand` would be true for
+this invocation — not only when the legacy `uploadStatusFlag`/`--upload-status` is set
+(`internal/exec/terraform_execute_helpers_args.go:38-40`'s existing gate is extended, not
+replaced: `--upload-status` still adds the flag for its own reasons, but exec-metadata no
+longer depends on the user having also passed that unrelated flag). Separately,
+`internal/exec/terraform_execute_helpers_exec.go`'s `executeMainTerraformCommand` captures the
+subprocess's real exit code (`resolveExitCode(err)`, line ~456) into a value threaded to
+`captureExecMetadataSync` (`internal/exec/terraform.go:243-281`) **before**
+`mapCIExitCode`'s CI-mode remap (`internal/exec/ci_exit_codes.go:12-16`) is applied to
+determine what `executeMainTerraformCommand` itself returns to its caller. Today the function
+returns `nil` once `mapCIExitCode` maps a code to "success," discarding the real code
+entirely; this decision adds a second value (the pre-remap code) alongside the existing
+`error` return, so the remap still governs Atmos's own process exit status but no longer
+erases the signal `TerraformExecData.exit_code` needs.
+
+**Rationale**: Two independent bugs converge on "`exit_code` is uninformative in production
+even when a plan/apply had real changes or errors," found by tracing a real reported payload
+(`exit_code: 0`, `resource_counts` all zero, on a `terraform plan` for a component with actual
+pending changes). First, plain `terraform plan`/`apply` (no `-detailed-exitcode`) always
+exits `0` on success regardless of whether changes were detected — Terraform's own documented
+behavior, not an Atmos bug — so without the flag, `exit_code` can never distinguish "no
+changes" from "changes, applied cleanly." Second, even with the flag, CI-mode's existing
+remap (added for a different, legitimate reason: `terraform plan -detailed-exitcode`'s exit
+code 2 for "changes detected" would otherwise make CI pipelines treat a successful,
+change-having plan as a failure) happens to also erase the signal this feature needs, because
+today's code path only tracks one exit code value end-to-end. Splitting "the code Atmos's own
+process exits with" from "the code reported in `TerraformExecData.exit_code`" resolves the
+conflict without touching CI-mode's remap behavior, which exists for good, unrelated reasons
+(FR-006 already treats these as two distinct fields — `ExecutionRecord.exit_code` vs.
+`TerraformExecData.exit_code` — this decision is what makes that distinction actually hold in
+the pre-remap-vs-post-remap sense the spec now requires, per FR-006e).
+
+**Alternatives considered**:
+- Remove `mapCIExitCode`'s remap entirely — rejected: that remap is the existing,
+  independently-justified fix for CI pipelines otherwise treating a successful "changes
+  detected" plan as a failed run; removing it would regress that behavior for every CI user,
+  not just exec-metadata's payload accuracy.
+- Always add `-detailed-exitcode` unconditionally for every `plan`/`apply` invocation
+  (CI or not) — rejected: `-detailed-exitcode`'s exit code 2 has meaning to scripts/CI
+  systems that inspect Atmos's own process exit code outside of CI mode too; scoping the
+  change to "whenever exec-metadata capture is active" (which already implies CI +
+  Pro-configured, per FR-001) avoids changing exit-code semantics for non-CI/non-Pro
+  invocations that never asked for this feature.
+- Derive `TerraformExecData.exit_code` from the parsed *text* (e.g. inferring "changes
+  detected" from `has_changes`) rather than the real subprocess exit code — rejected: this is
+  exactly the "diverge when the parser fails to extract itemized detail" problem Decision 27
+  already identified and solved by adding `exit_code` as an independent signal; deriving it
+  from the same parse that can fail would defeat that decision's purpose.
+
+---
+
+## Decision 32: Exec-metadata capture buffer scoped to only the final `plan`/`apply` subprocess
+
+**Decision**: `cmd/terraform/utils.go`'s `terraformCaptureShellOpts` (855-864) stops handing
+one long-lived `stdoutBuf`/`stderrBuf` pair through the entire `executeCommandPipeline`
+(`internal/exec/terraform_execute_helpers_exec.go:164-220`: init phase line 179, workspace
+setup line 196 via `runWorkspaceSetup`'s `wsOpts := append([]ShellCommandOption{}, opts...)`
+at line 285, main command line 211). Instead, the buffers the exec-metadata parser closure
+reads (`terraformExecMetadataParserFunc`, `cmd/terraform/utils.go:876-884`) are reset/
+re-created immediately before `executeMainTerraformCommand` runs, so they contain only that
+invocation's own stdout/stderr — never `terraform init`'s or `terraform workspace select`'s
+output concatenated ahead of it.
+
+**Rationale**: A real production payload showed `resource_counts` all-zero and
+`has_changes: false` for a plan that had genuine pending changes. Root cause: `pkg/ci/plugins/
+terraform.ParsePlanOutput`'s `noChangesRe` check (`parser.go:389-395`, matching
+`No changes\.|Your infrastructure matches the configuration` unanchored, anywhere in the
+input) short-circuits and returns before reaching the real `Plan: N to add, ...` summary line,
+whenever that phrase appears *anywhere* in the combined blob — including from `terraform
+init`'s or `terraform workspace select`'s own incidental output, which today is concatenated
+ahead of the actual plan's output in the same buffer. This is a genuine design gap distinct
+from Decision 12's original buffer-sharing choice: Decision 12 correctly decoupled capture
+from `ciMode` so the buffer is always populated, but did not anticipate that multiple
+subprocess phases writing into the *same* buffer would let one phase's output corrupt
+another's parse. Scoping the buffer to one subprocess invocation is the minimal fix that
+preserves Decision 12/18's existing capture mechanism (`WithStdoutCapture`/
+`WithStderrCapture`) while eliminating cross-phase contamination.
+
+**Alternatives considered**:
+- Anchor/harden `noChangesRe` to only match if it's the last non-whitespace content in the
+  buffer (i.e. "no changes" as the terminal state of the whole blob) — rejected as a
+  standalone fix: it's a narrower patch to one regex, but the same shared-buffer design would
+  still let *any* upstream phase's output corrupt *any* other regex in `ParsePlanOutput`
+  (e.g. a stray line matching `planSummaryRe` from init/workspace-select output, however
+  unlikely) — scoping the buffer itself is the fix that removes the whole class of bug, not
+  just this one instance of it.
+- Keep concatenation but have the parser search only the text *after* the last occurrence of
+  a recognizable "terraform plan/apply started" marker — rejected: terraform's output has no
+  reliable, version-stable marker for "this is where the real plan/apply command's own output
+  begins" that isn't itself fragile regex matching; resetting the buffer at the Go call-site
+  boundary (where Atmos already knows exactly when the main command starts) is a structural
+  guarantee, not a heuristic.
+
+---
+
+## Decision 33 (RETRACTED — see below): `-json` streamed log format replaces regex text parsing, shared with Native CI
+
+**Retraction** (2026-08-21, decided immediately after this decision was recorded): The user
+opted to keep extraction as the existing regex-based `ParsePlanOutput`/`ParseApplyOutput`
+parser — identical to what Native CI already does today — rather than adopt `-json` streaming.
+This decision (and Decision 34, its dependent renderer) is retracted; spec.md's FR-006g/FR-006h
+are correspondingly marked "Retracted" with a matching Clarifications correction entry. Kept
+here for the record per this document's established retraction convention (see Decision 30).
+The two real bugs this was bundled with — `exit_code` reliability (Decision 31) and buffer
+scoping (Decision 32) — remain in scope and are unaffected: Decision 32's buffer-scoping fix,
+on its own, already resolves the reported all-zero `resource_counts` symptom, since the regex
+parser working correctly was never the problem — parsing the wrong (combined multi-phase) text
+was.
+
+**Original decision** (retracted, kept here for the record): `plan`/`apply` (and `deploy`'s internal `apply`) are invoked with terraform's
+`-json` flag whenever exec-metadata capture or Native CI annotation processing is active,
+producing terraform's documented line-delimited JSON UI-message stream (each line a JSON
+object with `"@level"`/`"@message"`/`"type"` fields; per-resource `"type":"planned_change"`
+messages during planning, a final `"type":"change_summary"` message carrying the authoritative
+create/update/delete/replace counts, `"type":"diagnostic"` messages for warnings/errors,
+`"type":"outputs"` for output values, `"type":"apply_start"`/`"apply_complete"`/
+`"apply_errored"` per resource during apply). A new shared parser,
+`pkg/ci/plugins/terraform.ParsePlanApplyJSON` (or equivalently extended from the existing
+`ParsePlanJSON`'s neighborhood in `parser.go`), consumes this stream using the exact
+`bufio.Scanner`-over-line-delimited-JSON pattern **already proven in this same file** by
+`ParseTestJSON` (`parser.go:784-812`, parsing `terraform test -json`'s equivalent streamed
+format) — not a new parsing paradigm for this codebase, an extension of one it already uses
+successfully for one `-json`-emitting subcommand to the other two. This new parser supersedes
+`ParsePlanOutput`/`ParseApplyOutput`'s regex extraction (`parser.go:359-498`) as the primary
+extraction path for both callers: Native CI's own annotations (`pkg/ci/plugins/terraform/
+plugin.go:114`, `handlers.go:341,818`) and this feature's `TerraformExecData`
+(`parseTerraformOutputMirror`, `cmd/terraform/utils.go:630-654`) — one parser, one accuracy
+guarantee, not two implementations that can drift.
+
+**Reconciling with the existing, unused `ParsePlanJSON`** (`parser.go:110-134`): that function
+parses `terraform show -json <planfile>` — a single JSON document describing a *materialized
+plan file* via the `github.com/hashicorp/terraform-json` (`tfjson`) library — not the streamed
+`-json` log format this decision adopts. The two are genuinely different terraform outputs
+(`show -json` requires a `-out=planfile` plan artifact and a separate `terraform show`
+invocation after the fact; `plan -json`/`apply -json` streams UI events live from the single
+already-running subprocess, no second invocation or on-disk plan file needed). `ParsePlanJSON`
+is **not** the right starting point for this decision — adopting it would mean adding
+`-out=<tmpfile>` to every plan invocation, a second `terraform show -json` subprocess call
+per component, and temp-file lifecycle management, all avoidable by reading the already-
+running process's own `-json` stdout stream directly (the same tee/capture mechanism
+Decisions 12/18/32 already establish). `ParsePlanJSON` remains in the codebase unchanged (it
+may still have value for a future feature that already has a plan file on disk for other
+reasons) but is not wired into this feature or Native CI by this decision.
+
+**Rationale**: SC-007 requires "100% of the created/updated/deleted/replaced resource counts
+and output values visible in the plan's own output are also present in its execution record."
+Regex extraction over human-readable CLI text (`planSummaryRe`, `resourceActionRe`, etc.) is
+structurally unable to guarantee this — it depends on terraform's console formatting staying
+exactly matchable, breaks silently on provider-wrapped output or any future terraform
+console-format change, and (per Decision 32's own finding) is vulnerable to cross-phase output
+contamination even once correctly scoped. Terraform's `-json` format is a documented, versioned
+machine-readable contract specifically designed for tools like this to consume, immune to
+console-formatting drift. Making this a single shared parser (rather than one for Native CI
+and a separate one for exec-metadata) also fixes Native CI's own annotation accuracy for the
+same class of bug, since both currently depend on the same fragile regex parser.
+
+**Alternatives considered**:
+- Keep regex parsing, treat SC-007's "100%" as aspirational — rejected: the spec was
+  explicitly amended (this session) to make SC-007 a mechanism-backed guarantee, not an
+  aspiration; the whole point of this decision is to make that claim true.
+- Hybrid: try `-json` parsing first, fall back to regex parsing of the human-readable text if
+  JSON parsing fails — considered, but rejected as the *primary* design per YAGNI (constitution
+  Simplicity principle): once `-json` is always requested for these invocations, there is no
+  legitimate case where terraform emits malformed JSON on its own `-json` stream (a genuinely
+  crashed/no-output subprocess is already covered by Decision 29's "still attach minimal
+  `Data`" path, keyed off exit code, not by falling back to a second parser). A fallback would
+  be dead code kept "just in case," which the constitution's Simplicity principle disfavors
+  without a concrete failure mode driving it.
+- Wire in `ParsePlanJSON` via `-out=<tmpfile>` + a follow-up `terraform show -json` call —
+  rejected per the reconciliation above: adds a second subprocess invocation and temp-file
+  lifecycle per component for no benefit over reading the already-captured `-json` stdout
+  stream from the single invocation that already runs.
+
+---
+
+## Decision 34 (RETRACTED — see Decision 33's retraction note): Human-readable renderer reconstructs terraform's console output from the JSON stream
+
+**Retraction**: Retracted alongside Decision 33, which this decision depends on entirely (there
+is no JSON message stream to render once extraction stays regex-based). Kept here for the
+record per this document's established retraction convention (see Decision 30).
+
+**Original decision** (retracted, kept here for the record): A new renderer function (`pkg/ci/plugins/terraform`, alongside the Decision 33
+parser) converts the parsed `-json` message stream back into text equivalent to what
+terraform's default (non-`-json`) console output would have shown — the resource-by-resource
+plan diff, the `Plan: N to add, M to change, K to destroy.` summary line, `Outputs:` sections,
+and `Warning:`/`Error:` diagnostic blocks — reconstructed from the corresponding
+`planned_change`/`change_summary`/`outputs`/`diagnostic` JSON messages (Decision 33). This
+rendered text, not raw JSON, is what (a) is written to the CI console/log group in place of
+terraform's now-suppressed native output, and (b) populates any human-readable log/diagnostic
+text in the exec-metadata payload (`TerraformExecData`'s `warnings`/`errors` blocks continue
+to be human-readable strings, now sourced from rendering `diagnostic` messages instead of
+`ExtractWarningBlocks`' regex scan over console text).
+
+**Rationale**: FR-006h requires this explicitly — `-json` suppresses terraform's normal
+console output entirely, so switching extraction to `-json` (Decision 33) would silently
+regress CI log readability (users currently see terraform's familiar colored plan/apply
+output in CI logs; Native CI's job-summary feature also depends on that human-readable text
+today) unless something reconstructs it. This keeps Decision 33's accuracy improvement from
+trading away an existing, valued behavior.
+
+**Alternatives considered**:
+- Run terraform twice — once normally (for human console output) and once with `-json` (for
+  structured extraction) — rejected: doubles subprocess invocation cost and runtime for every
+  `plan`/`apply`, and risks the two runs observing different state (e.g. a provider with
+  non-deterministic read-time drift) for no benefit over rendering the one JSON stream back to
+  text.
+- Show raw JSON in CI logs instead of rendering it — rejected: directly regresses CI log
+  readability, the exact problem FR-006h exists to prevent; raw JSON lines are not what any
+  current Native CI user expects to see in a job's console output.
+- Skip human-readable reconstruction for the exec-metadata payload's `warnings`/`errors`
+  fields specifically (only render for CI console output, leave payload fields as structured
+  JSON) — rejected: FR-006h's own text requires human-readable text for "any human-readable
+  log or diagnostic text included in the exec-metadata payload," and `warnings`/`errors` are
+  specified (Decision 20, FR-006) as string lists, not structured diagnostic objects; changing
+  their shape would be an unrelated breaking wire-shape change this decision doesn't need to
+  make.
+
+---
+
+## Decision 35: `-detailed-exitcode` scoped to `plan` only, not `apply`/`deploy`
+
+**Decision**: `-detailed-exitcode` (Decision 31/FR-006e) is added only to the `plan`
+invocation. `apply`/`deploy`'s internal `apply` invocation does NOT receive it and keeps
+its current plain 0 (success)/1 (error) exit-code semantics. `TerraformExecData.exit_code`
+for `apply`/`deploy` is still captured pre-CI-remap (Decision 31's general guarantee
+still applies to all three subcommands), but its value space stays 0/1, never 2 — there
+is no version-detection/fallback logic needed since the flag is simply never added to
+`apply` in the first place.
+
+**Rationale**: `-detailed-exitcode` support on `terraform apply`/`destroy` only landed in
+Terraform 1.5.0 (2023) — OpenTofu supports it too, but Atmos supports arbitrary pinned
+terraform/tofu binary versions per `atmos.yaml` (`components.terraform.command`/version
+pinning), including versions predating 1.5. Adding an unrecognized flag to `apply` on an
+older pinned binary would hard-fail the invocation outright ("flag provided but not
+defined"), turning a metadata-accuracy fix into a functional regression for anyone on an
+older binary. `plan` has supported `-detailed-exitcode` since early Terraform versions,
+so no such risk exists there. Additionally, `apply`'s exit code never signaled
+"changed vs. unchanged" even before this feature — `has_changes`/`has_errors` for
+`apply`/`deploy` were always sourced from parsing the subprocess's own output text (e.g.
+"Apply complete! Resources: N added...", via `ParseApplyOutput`), not from exit-code
+value, so dropping `-detailed-exitcode` from `apply`/`deploy`'s scope loses nothing this
+feature already relied on there.
+
+**Alternatives considered**:
+- Add `-detailed-exitcode` to `apply`/`deploy` too, guarded by a terraform/tofu version
+  check before adding the flag — rejected: requires a version-detection mechanism this
+  codebase doesn't currently have for terraform/tofu binaries (only Atmos's own version is
+  tracked), for a field (`apply`'s `exit_code`) that gains no new semantic value from
+  having a 3-way range instead of 2-way, since `has_changes` already comes from output
+  parsing for `apply`. The complexity isn't justified by the payoff.
+- Add `-detailed-exitcode` to `apply`/`deploy` unconditionally, accepting the version risk
+  — rejected outright per this repo's cross-platform/compatibility conventions; a
+  correctness fix for one field must not risk breaking `apply` itself on supported older
+  binaries.
+
+---
+
+## Decision 36: Exit-code neutralization is a local fix, not a global `ci.enabled` flip
+
+**Decision**: FR-006e's guarantee that Atmos's own process exit code for `plan` is
+unaffected by adding `-detailed-exitcode` is implemented as a **local** exit-2-to-0
+neutralization at the call site that added the flag for exec-metadata purposes
+(`executeMainTerraformCommand`, gated by "was `-detailed-exitcode` added because
+exec-metadata capture required it, not because the user's own `ci.enabled` config already
+covers it") — **not** by force-setting the global `atmosConfig.CI.Enabled` switch to
+`true` whenever FR-001's CI-detection gate is true.
+
+**Rationale**: Investigation found FR-001's CI-detection gate
+(`pkg/proexec/gate.go`'s `gateOpen`, using `telemetry.IsCI()`) and the CI-mode exit-code
+remap's gate (`internal/exec/ci_exit_codes.go`'s `mapCIExitCode`, gated by
+`atmosConfig.CI.Enabled`) are **not the same mechanism and do not coincide today**:
+
+- `telemetry.IsCI()` is broad, automatic, environment-variable-based CI-provider
+  detection (`GITHUB_ACTIONS`, `GITLAB_CI`, bare `CI=true`, etc. — see
+  `pkg/telemetry/ci.go`'s `ciProvidersEnvVarsExists` table) — always-on, no opt-in
+  required.
+- `atmosConfig.CI.Enabled` is bound **only** from an explicit `ci.enabled: true` entry in
+  `atmos.yaml` (a `mapstructure:"ci"`-tagged config field, `pkg/schema/schema.go`) — no
+  flag or env-var binding sets it directly. The one place it's ever force-set in code
+  (`cmd/root.go`'s `applyCIGitCloneBootstrap`) is for an unrelated feature (CI git-clone
+  bootstrap), not general CI detection.
+- This divergence is already known and intentional in this codebase: `cmd/ci/status.go`
+  explicitly detects the mismatch (`cipkg.IsCI() && !atmosConfig.CI.Enabled`) and *errors*,
+  telling the user to opt in via `ci.enabled: true` — the codebase treats "detected in CI"
+  and "`ci.enabled` set" as deliberately separate concepts, not a bug to unify.
+- `atmosConfig.CI.Enabled` (`pkg/ci.Enabled`) is also the master switch for CI
+  annotations (`pkg/ci.AnnotationsEnabled`), SARIF result uploads
+  (`pkg/ci.ResultsEnabled`), container run summaries
+  (`pkg/runner/step/container_summary.go`, `pkg/component/container/summary.go`), and
+  hooks' CI-mode behavior (`pkg/hooks/hooks.go`). Force-enabling it as a side effect of
+  this exit-code fix would silently turn all of those on for any CI environment matching
+  FR-001, which is well outside this fix's intended blast radius and would be a surprising,
+  undocumented behavior change unrelated to exec-metadata.
+
+Because most real CI environments satisfying FR-001 do not also have `ci.enabled: true`
+set, this divergence is not a hypothetical edge case — it is the common case. Without a
+fix, adding `-detailed-exitcode` to `plan` under FR-001's gate would, in that common case,
+leave `mapCIExitCode` inactive and let terraform's real exit 2 propagate straight through
+to Atmos's own process exit code. The local-neutralization approach closes this gap
+without touching the global switch or any of its other-feature side effects.
+
+**Alternatives considered**:
+- Widen `mapCIExitCode`'s gate to `atmosConfig.CI.Enabled || telemetry.IsCI()` — rejected:
+  this widens the SAME global switch that also gates annotations/SARIF/summaries/hooks, so
+  it has the identical unwanted-side-effect problem as force-setting `CI.Enabled` directly,
+  just phrased as an OR-condition instead of an assignment.
+- Force-set `atmosConfig.CI.Enabled = true` whenever FR-001's gate is true (the option this
+  decision rejects) — rejected per the blast-radius reasoning above.
+- Narrow FR-006e's `-detailed-exitcode`-addition trigger to only fire when
+  `atmosConfig.CI.Enabled` is ALSO already true (considered and rejected as Option C in the
+  2026-08-21 clarification session that produced this decision) — rejected: this would
+  leave `TerraformExecData.exit_code` back at today's unreliable 0-only behavior for the
+  common case (CI-detected but `ci.enabled` not explicitly set), reintroducing the original
+  bug FR-006e exists to fix for most real users.
+
+---
+
 ## Resolved NEEDS CLARIFICATION Items
 
 All ambiguities were resolved during the `/speckit-clarify` sessions (2026-08-11,
-2026-08-18, 2026-08-19, 2026-08-20 — four separate sessions) before planning began. No NEEDS
-CLARIFICATION markers remain in this plan or the spec.
+2026-08-18, 2026-08-19, 2026-08-20, 2026-08-21 — five separate sessions) before planning
+began. No NEEDS CLARIFICATION markers remain in this plan or the spec.

@@ -48,8 +48,11 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
-	logFieldComponent         = "component"
-	dirPermissions            = 0o755
+	// Terraform's -detailed-exitcode documents this as "succeeded, there is a
+	// diff", distinct from 0 (no changes) and 1 (error).
+	detailedExitCodeChangesDetected = 2
+	logFieldComponent               = "component"
+	dirPermissions                  = 0o755
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
@@ -236,7 +239,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // to stay under the linter's argument-count limit.
 type execMetadataSyncParams struct {
 	Cmd    *cobra.Command
-	Parser func(subCommand string, exitCode int) any
+	Parser func(subCommand string, exitCode int, output string) any
 	Err    error
 }
 
@@ -256,6 +259,19 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		exitCode = 1
 	}
 
+	// FR-006e: TerraformExecData.exit_code must report the terraform/tofu subprocess's
+	// real, pre-CI-remap exit code (info.ExecMetadataRawExitCode, set by
+	// executeMainTerraformCommand), not the post-remap/neutralized exitCode above —
+	// that value is reserved for the base envelope's own exit_code (FR-003), which
+	// is unaffected by this. Falls back to exitCode when the raw field was never
+	// populated (e.g. the pipeline failed before the main command ran at all, or a
+	// test invokes captureExecMetadataSync directly without going through
+	// executeMainTerraformCommand).
+	rawExitCode := info.ExecMetadataRawExitCode
+	if rawExitCode == 0 && exitCode != 0 {
+		rawExitCode = exitCode
+	}
+
 	var args []string
 	if info.ComponentFromArg != "" {
 		args = []string{info.ComponentFromArg}
@@ -271,7 +287,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 
 	var data any
 	if params.Parser != nil {
-		data = params.Parser(subCommand, exitCode)
+		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
 	}
 
 	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}

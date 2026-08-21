@@ -858,28 +858,25 @@ func terraformCaptureShellOpts(component, stack string) (opts []e.ShellCommandOp
 	opts = []e.ShellCommandOption{
 		e.WithStdoutCapture(stdoutBuf),
 		e.WithStderrCapture(stderrBuf),
-		e.WithExecMetadataParser(terraformExecMetadataParserFunc(stdoutBuf, stderrBuf, component, stack)),
+		e.WithExecMetadataParser(terraformExecMetadataParserFunc(component, stack)),
 	}
 	return opts, stdoutBuf, stderrBuf
 }
 
 // terraformExecMetadataParserFunc builds the closure passed to
-// WithExecMetadataParser, reading whatever stdoutBuf/stderrBuf contain at
-// call time (by the time captureExecMetadataSync invokes it,
-// executeCommandPipeline has already finished writing into them). Split out
-// from terraformCaptureShellOpts so it's directly unit-testable without
-// reaching into e.ShellCommandOption's private fields. The exitCode
-// parameter is supplied by the caller at invocation time
-// (captureExecMetadataSync already computes it from the command's own
-// error, research.md Decision 27) — not captured here, since it isn't
-// known yet when this closure is created.
-func terraformExecMetadataParserFunc(stdoutBuf, stderrBuf *bytes.Buffer, component, stack string) func(subCommand string, exitCode int) any {
-	return func(subCommand string, exitCode int) any {
-		combined := stdoutBuf.String()
-		if errOut := stderrBuf.String(); errOut != "" {
-			combined += "\n" + errOut
-		}
-		return buildTerraformExecData(subCommand, ansi.Strip(combined), component, stack, exitCode)
+// WithExecMetadataParser. The output parameter is supplied by the caller at
+// invocation time — internal/exec's executeCommandPipeline captures it scoped
+// to only the final plan/apply/deploy subprocess invocation (FR-006f,
+// research.md Decision 32), not the combined init+workspace-select+main
+// buffer stdoutBuf/stderrBuf (above) accumulate for other consumers. Split
+// out from terraformCaptureShellOpts so it's directly unit-testable. The
+// exitCode parameter is likewise supplied by the caller at invocation time
+// (captureExecMetadataSync already computes it from
+// info.ExecMetadataRawExitCode, research.md Decision 27) — not captured
+// here, since neither value is known when this closure is created.
+func terraformExecMetadataParserFunc(component, stack string) func(subCommand string, exitCode int, output string) any {
+	return func(subCommand string, exitCode int, output string) any {
+		return buildTerraformExecData(subCommand, ansi.Strip(output), component, stack, exitCode)
 	}
 }
 

@@ -111,6 +111,20 @@ chunkable) — as of research.md Decision 16, both are folded into the single `D
   when empty (research.md Decision 26) — `buildTerraformExecData` MUST initialize these as
   non-nil zero-length slices before the map literal is built, not pass a possibly-nil slice
   straight through from `terraformResourceChanges`/`result.Warnings`/`result.Errors`.
+- **Provenance amendments (research.md Decisions 31-32/35-36, 2026-08-21 sessions)**:
+  `exit_code` MUST be captured pre-CI-remap (Decision 31) — not the value `mapCIExitCode`
+  substitutes for Atmos's own process exit code. `-detailed-exitcode` is added to `plan`
+  only, never to `apply`/`deploy`'s internal `apply` invocation (Decision 35 — version-
+  support risk on older pinned terraform/tofu binaries), so `exit_code`'s value space is
+  0/1/2 for `plan` but stays plain 0/1 for `apply`/`deploy`. Adding `-detailed-exitcode` to
+  `plan` MUST NOT change Atmos's own process exit code (Decision 36 — a local
+  neutralization independent of the global `ci.enabled` switch, not a widening of that
+  switch's gate). `resource_counts`/`outputs`/`changes`/
+  `warnings`/`errors`/`has_changes`/`has_errors` MUST be extracted from output scoped to only
+  that invocation's own subprocess (Decision 32), never a buffer shared with `terraform init`/
+  `terraform workspace select`. Extraction stays regex-based (`ParsePlanOutput`/
+  `ParseApplyOutput`, same as Native CI) — no shape change to `TerraformExecData` itself, only
+  a correctness fix to how its fields are populated and what text they're populated from.
 
 All portions are nested together in the single `Data` value (e.g.
 `{"version": 1, "resource_counts": {...}, "outputs": {...}, "warnings": [], "changes":
