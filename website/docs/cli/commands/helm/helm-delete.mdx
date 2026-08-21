@@ -12,6 +12,10 @@ import Intro from "@site/src/components/Intro";
   Deleting a release that does not exist is a no-op.
 </Intro>
 
+Atmos reports the effective delete wait policy when the operation starts, emits elapsed-time
+heartbeats while Helm is waiting, and prints a terminal success or failure status. Bulk output
+identifies the component and stack on every line.
+
 ## Usage
 
 ```shell

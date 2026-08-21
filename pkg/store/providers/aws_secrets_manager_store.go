@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -25,6 +26,7 @@ type SecretsManagerStore struct {
 	stackDelimiter *string
 	region         string
 	endpoint       string
+	secret         bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -59,6 +61,7 @@ var (
 	_ store.DeletableStore     = (*SecretsManagerStore)(nil)
 	_ store.StatusStore        = (*SecretsManagerStore)(nil)
 	_ store.ListableStore      = (*SecretsManagerStore)(nil)
+	_ store.SecretAwareStore   = (*SecretsManagerStore)(nil)
 )
 
 func init() {
@@ -214,7 +217,7 @@ func (s *SecretsManagerStore) Set(stack string, component string, key string, va
 
 	ctx := context.TODO()
 
-	jsonValue, err := marshalSecretsManagerValue(value)
+	jsonValue, err := marshalSecretsManagerValue(value, s.secret)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
@@ -232,14 +235,23 @@ func (s *SecretsManagerStore) Set(stack string, component string, key string, va
 // A string that already holds valid JSON object or array is passed through verbatim
 // to avoid double-encoding it as a quoted JSON string; everything else is marshaled
 // to JSON.
-func marshalSecretsManagerValue(value any) ([]byte, error) {
+func marshalSecretsManagerValue(value any, rawStrings bool) ([]byte, error) {
 	if str, ok := value.(string); ok {
+		if rawStrings {
+			return []byte(str), nil
+		}
 		trimmed := strings.TrimSpace(str)
 		if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid([]byte(trimmed)) {
 			return []byte(trimmed), nil
 		}
 	}
 	return json.Marshal(value)
+}
+
+// SetSecret implements SecretAwareStore. Secret string values are written verbatim so
+// `atmos secret set` round-trips through `!secret ... | raw`; structured values remain JSON.
+func (s *SecretsManagerStore) SetSecret(secret bool) {
+	s.secret = secret
 }
 
 // putOrCreate updates an existing secret value, creating the secret if it does not yet exist.
@@ -270,20 +282,36 @@ func (s *SecretsManagerStore) putOrCreate(ctx context.Context, secretID, strValu
 // Get retrieves a value for an Atmos component in a stack. An empty stack and/or component is
 // permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SecretsManagerStore) Get(stack string, component string, key string) (any, error) {
+	raw, err := s.GetRaw(stack, component, key)
+	if err != nil {
+		return nil, err
+	}
+	var result any
+	//nolint:nilerr // Non-JSON secrets are returned as the raw string.
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return raw, nil
+	}
+	return result, nil
+}
+
+// GetRaw retrieves the original Secrets Manager string without JSON decoding.
+func (s *SecretsManagerStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.SecretsManagerStore.GetRaw")()
+
 	if key == "" {
-		return nil, store.ErrEmptyKey
+		return "", store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
-	return s.getByID(secretID)
+	return s.getRawByID(secretID)
 }
 
 // GetKey retrieves a value by its raw secret id (optionally prefixed).
@@ -303,24 +331,31 @@ func (s *SecretsManagerStore) GetKey(key string) (any, error) {
 }
 
 func (s *SecretsManagerStore) getByID(secretID string) (any, error) {
+	raw, err := s.getRawByID(secretID)
+	if err != nil {
+		return nil, err
+	}
+	var result any
+	//nolint:nilerr // Non-JSON secrets are returned as the raw string.
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return raw, nil
+	}
+	return result, nil
+}
+
+func (s *SecretsManagerStore) getRawByID(secretID string) (string, error) {
 	ctx := context.TODO()
 	output, err := s.client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(secretID),
 	})
 	if err != nil {
 		// Use %w for the underlying error so callers (e.g. Has) can detect ResourceNotFound.
-		return nil, fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
+		return "", fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
 	}
 	if output.SecretString == nil {
-		return nil, fmt.Errorf("%w '%s': empty secret string", store.ErrGetSecret, secretID)
+		return "", fmt.Errorf("%w '%s': empty secret string", store.ErrGetSecret, secretID)
 	}
-
-	var result any
-	//nolint:nilerr // Non-JSON secrets are returned as the raw string.
-	if err := json.Unmarshal([]byte(*output.SecretString), &result); err != nil {
-		return *output.SecretString, nil
-	}
-	return result, nil
+	return *output.SecretString, nil
 }
 
 // Delete removes a secret (with no recovery window so the name can be reused immediately).

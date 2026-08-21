@@ -96,7 +96,7 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(content)
+	_, err = f.WriteString(MaskPublishedContent(content))
 	if err != nil {
 		return fmt.Errorf("%w: failed to write summary: %w", errUtils.ErrCISummaryWriteFailed, err)
 	}
