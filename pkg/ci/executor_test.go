@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -853,49 +854,6 @@ func TestExecute_HandlerError_DoesNotPropagateToExecute(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestDetectStoreFromEnv(t *testing.T) {
-	t.Run("no env vars returns nil", func(t *testing.T) {
-		// Clear relevant env vars.
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
-		t.Setenv("GITHUB_ACTIONS", "")
-
-		result := detectStoreFromEnv()
-		assert.Nil(t, result)
-	})
-
-	t.Run("S3 bucket configured", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
-		t.Setenv("ATMOS_PLANFILE_PREFIX", "plans/")
-		t.Setenv("AWS_REGION", "us-east-1")
-		t.Setenv("GITHUB_ACTIONS", "")
-
-		result := detectStoreFromEnv()
-		require.NotNil(t, result)
-		assert.Equal(t, "aws/s3", result.Type)
-		assert.Equal(t, "my-bucket", result.Options["bucket"])
-		assert.Equal(t, "plans/", result.Options["prefix"])
-		assert.Equal(t, "us-east-1", result.Options["region"])
-	})
-
-	t.Run("GitHub Actions detected", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
-		t.Setenv("GITHUB_ACTIONS", "true")
-
-		result := detectStoreFromEnv()
-		require.NotNil(t, result)
-		assert.Equal(t, "github/artifacts", result.Type)
-	})
-
-	t.Run("S3 takes precedence over GitHub", func(t *testing.T) {
-		t.Setenv("ATMOS_PLANFILE_BUCKET", "bucket")
-		t.Setenv("GITHUB_ACTIONS", "true")
-
-		result := detectStoreFromEnv()
-		require.NotNil(t, result)
-		assert.Equal(t, "aws/s3", result.Type)
-	})
-}
-
 func TestCreatePlanfileStore(t *testing.T) {
 	t.Run("defaults to local store", func(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
@@ -920,6 +878,96 @@ func TestCreatePlanfileStore(t *testing.T) {
 		assert.NotNil(t, store)
 		assert.Equal(t, "local/dir", store.Name())
 	})
+
+	t.Run("priority store wins over environment detection", func(t *testing.T) {
+		// Regression test: a store configured via `priority` used to be ignored,
+		// so GitHub Actions (or ATMOS_PLANFILE_BUCKET) silently took over.
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "env-bucket")
+		t.Setenv("GITHUB_ACTIONS", "true")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: planfileStoreConfig("", []string{"plans"}, map[string]schema.PlanfileStoreSpec{
+				"plans": {Type: "local/dir", Options: map[string]any{"path": t.TempDir()}},
+			}),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, store)
+		assert.Equal(t, "local/dir", store.Name())
+	})
+
+	t.Run("priority falls through to the next store when one cannot initialize", func(t *testing.T) {
+		// The GitHub Artifacts backend needs a token, so outside a token-carrying
+		// environment the next entry in the priority list is used.
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: planfileStoreConfig("", []string{"github", "plans"}, map[string]schema.PlanfileStoreSpec{
+				"github": {Type: "github/artifacts"},
+				"plans":  {Type: "local/dir", Options: map[string]any{"path": t.TempDir()}},
+			}),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, store)
+		assert.Equal(t, "local/dir", store.Name())
+	})
+
+	t.Run("errors when no configured store can initialize", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: planfileStoreConfig("", []string{"github"}, map[string]schema.PlanfileStoreSpec{
+				"github": {Type: "github/artifacts"},
+			}),
+		})
+		require.ErrorIs(t, err, errUtils.ErrPlanfileStoreUnavailable)
+		assert.Nil(t, store)
+	})
+
+	t.Run("unknown priority store errors instead of silently switching stores", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "true")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: planfileStoreConfig("", []string{"s3"}, map[string]schema.PlanfileStoreSpec{
+				"plans": {Type: "local/dir"},
+			}),
+		})
+		require.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+		assert.Nil(t, store)
+	})
+
+	t.Run("default store is used", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "true")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: planfileStoreConfig("plans", nil, map[string]schema.PlanfileStoreSpec{
+				"plans": {Type: "local/dir", Options: map[string]any{"path": t.TempDir()}},
+			}),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, store)
+		assert.Equal(t, "local/dir", store.Name())
+	})
+}
+
+// planfileStoreConfig builds an Atmos configuration with planfile storage settings.
+func planfileStoreConfig(defaultStore string, priority []string, stores map[string]schema.PlanfileStoreSpec) *schema.AtmosConfiguration {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+		Default:  defaultStore,
+		Priority: priority,
+		Stores:   stores,
+	}
+	return atmosConfig
 }
 
 func TestBuildHookContext(t *testing.T) {

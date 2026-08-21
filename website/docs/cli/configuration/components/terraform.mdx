@@ -184,10 +184,16 @@ components:
       <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
 
       <dt>`planfiles.default`</dt>
-      <dd>Name of the store to use when no priority list is set.</dd>
+      <dd>Name of the store to use. It names a single store, so it wins over `priority` when both are set.</dd>
 
       <dt>`planfiles.priority`</dt>
-      <dd>Ordered list of store names to try in turn for upload and download.</dd>
+      <dd>
+        Ordered list of store names (or store types) tried in turn. Atmos uses the first one that can be
+        initialized in the current environment — `github` is skipped without a GitHub token, `aws/s3` without
+        credentials — and that store then handles both upload and download. A name that is neither a defined
+        store nor a store type is a configuration error, so a typo fails loudly instead of quietly selecting
+        another backend. See [store selection](/ci/planfile-storage#store-selection).
+      </dd>
 
       <dt>`planfiles.verify`</dt>
       <dd>
