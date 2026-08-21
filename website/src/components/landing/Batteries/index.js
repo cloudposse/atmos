@@ -77,8 +77,8 @@ const BATTERIES = [
   {
     icon: RiTerminalBoxLine,
     title: 'Workflows & Automation',
-    desc: 'Run, automate, and chain anything — 25+ step types and custom commands orchestrate tasks across every component.',
-    tag: '25+ STEP TYPES · CUSTOM COMMANDS',
+    desc: 'Run, automate, and chain anything — 35+ step types and custom commands orchestrate tasks across every component.',
+    tag: '35+ STEP TYPES · CUSTOM COMMANDS',
     to: '/workflows',
   },
   {
