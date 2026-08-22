@@ -217,13 +217,13 @@ func TestBuildTerraformExecData_UnparseableOutputStillAttachesMinimalData(t *tes
 
 // TestMaskSensitiveOutputs covers FR-010a/research.md Decision 19: a
 // Sensitive:true entry's Value is replaced with pkg/io.MaskReplacement while
-// Type/Sensitive pass through unchanged; a Sensitive:false entry's Value
+// Sensitive passes through unchanged; a Sensitive:false entry's Value
 // passes through unchanged; a malformed/undecodable entry defaults to masked
 // (fail-safe), never forwarding raw, undecoded bytes.
 func TestMaskSensitiveOutputs(t *testing.T) {
 	outputs := map[string]json.RawMessage{
-		"secret_key": json.RawMessage(`{"Value":"top-secret","Type":"string","Sensitive":true}`),
-		"bucket_arn": json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
+		"secret_key": json.RawMessage(`{"Value":"top-secret","Sensitive":true}`),
+		"bucket_arn": json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Sensitive":false}`),
 		"malformed":  json.RawMessage(`not-json`),
 	}
 
@@ -232,7 +232,7 @@ func TestMaskSensitiveOutputs(t *testing.T) {
 	secret, ok := result["secret_key"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, iolib.MaskReplacement, secret["value"])
-	assert.Equal(t, "string", secret["type"])
+	assert.NotContains(t, secret, "type")
 	assert.Equal(t, true, secret["sensitive"])
 
 	bucket, ok := result["bucket_arn"].(map[string]any)
@@ -249,15 +249,12 @@ func TestMaskSensitiveOutputs(t *testing.T) {
 // TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm is the
 // end-to-end regression guard for the actual safety property that matters:
 // no real secret value ever reaches the exec-metadata Data payload for a
-// Terraform-sensitive output, regardless of whether the upstream parser
-// correctly flags it Sensitive (see the known-limitation note on
-// pkg/ci/plugins/terraform's extractApplyOutputs — the regex console parser
-// never sets Sensitive: true, because Terraform's own console text already
-// replaces a sensitive output's real value with "<sensitive>" before it's
-// ever captured). Even with that inaccurate flag, this test proves the
-// value attached to Data.outputs is Terraform's own safe placeholder text,
-// never a real secret — "we should not upload sensitive data in any case"
-// holds in practice.
+// Terraform-sensitive output: extractApplyOutputs detects Terraform's own
+// literal "<sensitive>" placeholder text (the only value ever present for a
+// sensitive output in apply console output) and flags the entry
+// Sensitive: true, so both the outputs map's value and the raw logs text end
+// up carrying only the shared MaskReplacement placeholder, never Terraform's
+// own distinct "<sensitive>" string and never a real secret.
 func TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm(t *testing.T) {
 	output := `aws_instance.web: Creating...
 aws_instance.web: Creation complete after 35s [id=i-12345678]
@@ -280,16 +277,15 @@ secret_key = <sensitive>
 	require.Contains(t, outputs, "secret_key")
 	secret, ok := outputs["secret_key"].(map[string]any)
 	require.True(t, ok)
-	// Known limitation: sensitive stays false (see extractApplyOutputs'
-	// doc comment) — but the value itself is still never a real secret.
-	assert.Equal(t, false, secret["sensitive"])
-	assert.Equal(t, "<sensitive>", secret["value"], "must be Terraform's own placeholder, never a real secret value")
+	assert.Equal(t, true, secret["sensitive"])
+	assert.Equal(t, iolib.MaskReplacement, secret["value"])
 
 	logs, ok := asMap["logs"].(string)
 	require.True(t, ok)
 	decodedLogs, err := base64.StdEncoding.DecodeString(logs)
 	require.NoError(t, err)
-	assert.Contains(t, string(decodedLogs), "<sensitive>", "raw log text must also carry only Terraform's own placeholder")
+	assert.NotContains(t, string(decodedLogs), "<sensitive>", "Terraform's own placeholder must not leak into logs unmasked")
+	assert.Contains(t, string(decodedLogs), iolib.MaskReplacement, "raw log text must carry the shared masking placeholder")
 }
 
 // TestRedactSensitiveOutputsFromRawOutput covers FR-010a's extension to the
@@ -300,9 +296,9 @@ secret_key = <sensitive>
 // rather than attempting a partial/incorrect replacement.
 func TestRedactSensitiveOutputsFromRawOutput(t *testing.T) {
 	outputs := map[string]json.RawMessage{
-		"secret_key":  json.RawMessage(`{"Value":"hunter2","Type":"string","Sensitive":true}`),
-		"bucket_arn":  json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Type":"string","Sensitive":false}`),
-		"secret_list": json.RawMessage(`{"Value":["a","b"],"Type":"list","Sensitive":true}`),
+		"secret_key":  json.RawMessage(`{"Value":"hunter2","Sensitive":true}`),
+		"bucket_arn":  json.RawMessage(`{"Value":"arn:aws:s3:::prod-bucket","Sensitive":false}`),
+		"secret_list": json.RawMessage(`{"Value":["a","b"],"Sensitive":true}`),
 	}
 
 	text := `+ password = "hunter2"
@@ -319,12 +315,11 @@ func TestRedactSensitiveOutputsFromRawOutput(t *testing.T) {
 // end-to-end regression guard confirming buildTerraformExecData's logs field
 // is populated via redactSensitiveOutputsFromRawOutput then encodeLogs (not
 // the bare output string) on the parse-succeeded path. This fixture has no
-// Sensitive:true outputs (citerraform's regex-based extractApplyOutputs
-// never marks any output Sensitive — see the note on
-// redactSensitiveOutputsFromRawOutput), so this only proves non-sensitive
-// content survives redaction+encoding round-trip unchanged;
-// TestRedactSensitiveOutputsFromRawOutput covers the actual redaction
-// behavior directly against the helper.
+// sensitive outputs, so this only proves non-sensitive content survives
+// redaction+encoding round-trip unchanged; TestRedactSensitiveOutputsFromRawOutput
+// covers the actual redaction behavior directly against the helper, and
+// TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm covers the
+// sensitive-output case end-to-end.
 func TestBuildTerraformExecData_LogsWiredThroughRedactionAndEncoding(t *testing.T) {
 	data, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)

@@ -682,21 +682,24 @@ func terraformResourceChanges(data *terraformOutputDataMirror) []execNodeResult 
 const terraformExecDataVersion = 1
 
 // terraformOutputMirror locally mirrors the JSON shape of a single
-// plugin.TerraformOutput entry ({Value, Type, Sensitive}) so
-// maskSensitiveOutputs can decode each Outputs map entry without importing
-// pkg/ci/internal/plugin directly (same import-cycle rationale as
-// terraformOutputDataMirror).
+// plugin.TerraformOutput entry ({Value, Sensitive}) so maskSensitiveOutputs
+// can decode each Outputs map entry without importing pkg/ci/internal/plugin
+// directly (same import-cycle rationale as terraformOutputDataMirror). Type
+// is deliberately not mirrored here: citerraform's regex-based
+// extractApplyOutputs (the only source of Outputs on this feature's apply
+// path) never populates it — apply console text carries no type information
+// — so it would always serialize as an empty string; omitting the field
+// entirely is more honest than shipping a permanently-blank one.
 type terraformOutputMirror struct {
-	Value     any    `json:"Value"`
-	Type      string `json:"Type"`
-	Sensitive bool   `json:"Sensitive"`
+	Value     any  `json:"Value"`
+	Sensitive bool `json:"Sensitive"`
 }
 
 // maskSensitiveOutputs masks any output Terraform itself marks sensitive
 // with pkg/io.MaskReplacement, independent of and prior to the separate
 // Gitleaks-pattern masking pkg/proexec/envelope.go's maskedDataJSON applies
 // to the whole Data blob afterward (FR-010a, research.md Decision 19). A
-// Sensitive:true entry's Value is replaced; Type/Sensitive and every
+// Sensitive:true entry's Value is replaced; Sensitive and every
 // non-sensitive entry's Value pass through unchanged. An entry that fails to
 // decode into the expected shape defaults to masked (fail-safe), consistent
 // with FR-010's "exclude/mask on doubt" posture.
@@ -715,7 +718,6 @@ func maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any {
 		}
 		result[key] = map[string]any{
 			"value":     value,
-			"type":      out.Type,
 			"sensitive": out.Sensitive,
 		}
 	}
@@ -733,19 +735,14 @@ func maskSensitiveOutputs(outputs map[string]json.RawMessage) map[string]any {
 // (maskSensitiveOutputs), and there is no decoded value here to redact.
 //
 // NOTE: the production parser this function's caller feeds from
-// (pkg/ci/plugins/terraform's regex-based extractApplyOutputs) never sets
-// Sensitive: true on any entry it produces — Terraform's own human-readable
-// console output already prints "<sensitive>" in place of a sensitive
-// output's real value, so extractApplyOutputs has no real value to detect
-// sensitivity from or redact in the first place. This function and
-// maskSensitiveOutputs both still exist and run per FR-010a's requirement
-// (defense-in-depth against any future/alternate output source that does
-// carry a genuine Sensitive flag with a real value), but with today's
-// regex-based extraction they are effectively a no-op in practice — not a
-// bug in this function, but a limitation inherited from the shared parser
-// that predates this feature and is out of scope to change here (see
-// research.md Decisions 33/34's retraction of a JSON-stream parser rewrite
-// for the same shared-parser risk/blast-radius reasoning).
+// (pkg/ci/plugins/terraform's regex-based extractApplyOutputs) sets
+// Sensitive: true from Terraform's own literal "<sensitive>" placeholder
+// text — the only value ever present for a sensitive output in apply
+// console output, since Terraform never prints the real value there. So for
+// this feature's apply path, the "value" this function redacts out of text
+// is that same placeholder, not a real secret; the redaction still runs so
+// Terraform's own placeholder text doesn't leak verbatim next to the
+// masking layer used everywhere else in Data.
 func redactSensitiveOutputsFromRawOutput(text string, outputs map[string]json.RawMessage) string {
 	for _, raw := range outputs {
 		var out terraformOutputMirror

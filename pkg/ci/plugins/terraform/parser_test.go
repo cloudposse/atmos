@@ -621,9 +621,10 @@ func TestParseApplyOutput(t *testing.T) {
 		create         int
 		change         int
 		destroy        int
-		wantCreatedRes []string
-		wantUpdatedRes []string
-		wantDeletedRes []string
+		wantCreatedRes  []string
+		wantUpdatedRes  []string
+		wantDeletedRes  []string
+		wantReplacedRes []string
 	}{
 		{
 			name: "apply complete with changes",
@@ -701,6 +702,22 @@ Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 			destroy:        0,
 			wantCreatedRes: []string{"aws_instance.web"},
 		},
+		{
+			name: "apply with replaced resource (destroy then create of same address)",
+			output: `
+random_id.id: Destroying... [id=5ScO2D-3YxE]
+random_id.id: Destruction complete after 0s
+random_id.id: Creating...
+random_id.id: Creation complete after 0s [id=lZlJAXQo6DA]
+
+Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
+`,
+			hasChanges:      true,
+			create:          1,
+			change:          0,
+			destroy:         1,
+			wantReplacedRes: []string{"random_id.id"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -724,6 +741,11 @@ Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 				}
 				if len(tt.wantDeletedRes) > 0 {
 					assert.ElementsMatch(t, tt.wantDeletedRes, data.DeletedResources, "DeletedResources mismatch")
+				}
+				if len(tt.wantReplacedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantReplacedRes, data.ReplacedResources, "ReplacedResources mismatch")
+					assert.Empty(t, data.CreatedResources, "replaced address must not remain in CreatedResources")
+					assert.Empty(t, data.DeletedResources, "replaced address must not remain in DeletedResources")
 				}
 			}
 		})
@@ -846,23 +868,19 @@ public_ip = "54.123.45.67"
 	}
 }
 
-// TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue documents a
-// known, deliberately-not-fixed limitation (specs/002-pro-exec-metadata,
-// 2026-08-21 session): extractApplyOutputs never sets Sensitive: true on any
-// entry it produces, because it only ever sees Terraform's own
-// human-readable console text — and Terraform itself already replaces a
-// sensitive output's real value with the literal placeholder "<sensitive>"
-// before printing it, so there is no real value here to detect sensitivity
-// from or leak in the first place. This test is the regression guard for
-// the actual safety property that matters ("we should not upload sensitive
-// data in any case"): even though the Sensitive flag is inaccurate (always
-// false) for a genuinely sensitive output, Value is Terraform's own safe
-// placeholder text, never the real secret — the same guarantee
-// cmd/terraform's downstream maskSensitiveOutputs/buildTerraformExecData
-// pipeline relies on. If Terraform ever changed to print a sensitive
-// output's real value in its console text, this test would need a
-// corresponding fix in extractApplyOutputs to detect and redact it —
-// nothing downstream currently does that detection.
+// TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue is the
+// regression guard for the actual safety property that matters ("we should
+// not upload sensitive data in any case") and for correctly flagging it:
+// extractApplyOutputs only ever sees Terraform's own human-readable console
+// text, and Terraform itself already replaces a sensitive output's real
+// value with the literal placeholder "<sensitive>" before printing it — so
+// Value is always that safe placeholder, never the real secret, and that
+// same literal placeholder is itself the signal extractApplyOutputs uses to
+// set Sensitive: true (there is no real value to inspect, but none is
+// needed: the placeholder text is unambiguous). If Terraform ever changed to
+// print a sensitive output's real value in its console text, this test
+// would need a corresponding fix in extractApplyOutputs to detect and
+// redact it instead.
 func TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue(t *testing.T) {
 	output := `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 
@@ -877,10 +895,11 @@ secret_key = <sensitive>
 	require.Contains(t, got, "secret_key")
 	secret := got["secret_key"]
 	assert.Equal(t, "<sensitive>", secret.Value, "Terraform's own placeholder, never the real secret value")
-	assert.False(t, secret.Sensitive, "known limitation: the regex console parser never sets Sensitive true — see comment above")
+	assert.True(t, secret.Sensitive, "the <sensitive> placeholder must be flagged Sensitive: true")
 
 	require.Contains(t, got, "instance_id")
 	assert.Equal(t, "i-12345678", got["instance_id"].Value, "non-sensitive output must still pass through unaffected")
+	assert.False(t, got["instance_id"].Sensitive, "non-sensitive output must not be flagged Sensitive: true")
 }
 
 func TestParseApplyOutput_WithOutputs(t *testing.T) {

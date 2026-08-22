@@ -206,31 +206,30 @@ result via `wrapComponentsData`/`stripComponentVersion` into the same unified sh
 multi-component path produces.
 
 **`Outputs` masking (research.md Decision 19, FR-010a)**: Each entry in `Outputs` is
-`{value, type, sensitive}`. Before `buildTerraformExecData` returns, a `maskSensitiveOutputs`
-pass replaces `value` with `pkg/io.MaskReplacement` (`"<MASKED>"`) for any entry where
-`sensitive` is `true` (or which fails to decode — treated as sensitive by default), leaving
-`type`/`sensitive` and all non-sensitive entries' `value` untouched. This is independent of,
-and runs strictly before, `pkg/proexec/envelope.go`'s existing Gitleaks-pattern masking pass
-over the whole marshaled `Data` blob — both layers always execute; the Terraform-`sensitive`
-layer exists because a sensitive-flagged value need not match any Gitleaks-recognizable
-secret pattern. Since Decision 37/38's restructure, every `components[]` entry — whether from
-a single-component or a multi-component invocation — is built by the same
-`buildTerraformExecData` call and so carries its own masked `Outputs`; this is no longer a
-single-component-only concern.
+`{value, sensitive}` — no `type` field. `type` is omitted rather than shipped as a
+permanently-blank string: on this feature's apply path, `Outputs` is only ever populated by
+`pkg/ci/plugins/terraform.extractApplyOutputs` (the regex-based console parser), which has no
+type information available in apply console text and so never sets it. Before
+`buildTerraformExecData` returns, a `maskSensitiveOutputs` pass replaces `value` with
+`pkg/io.MaskReplacement` (`"<MASKED>"`) for any entry where `sensitive` is `true` (or which
+fails to decode — treated as sensitive by default), leaving `sensitive` and all non-sensitive
+entries' `value` untouched. This is independent of, and runs strictly before,
+`pkg/proexec/envelope.go`'s existing Gitleaks-pattern masking pass over the whole marshaled
+`Data` blob — both layers always execute; the Terraform-`sensitive` layer exists because a
+sensitive-flagged value need not match any Gitleaks-recognizable secret pattern. Since
+Decision 37/38's restructure, every `components[]` entry — whether from a single-component or
+a multi-component invocation — is built by the same `buildTerraformExecData` call and so
+carries its own masked `Outputs`; this is no longer a single-component-only concern.
 
-**Known limitation (spec.md FR-010a, 2026-08-21 clarification, accepted — not a defect)**:
-`maskSensitiveOutputs`'s `sensitive`-driven redaction depends on
-`pkg/ci/plugins/terraform.extractApplyOutputs` (the regex-based console parser) correctly
-setting `Sensitive: true` — it never does, since it only ever sees Terraform's own
-human-readable console text, and Terraform already replaces a sensitive output's real value
-with the literal placeholder `<sensitive>` before printing it. So `maskSensitiveOutputs`'s
-`sensitive: true` branch is currently unreachable against real production output; the
-no-real-secret-uploaded property still holds (regression-tested by
-`TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue` and
-`TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm`) because Terraform's own
-console behavior never emits the real value, not because of this masking layer. Fixing
-`extractApplyOutputs`'s sensitivity detection is out of scope for this feature (it is shared
-with Native CI and deliberately not touched here).
+**Sensitive-output detection**: `extractApplyOutputs` sets `Sensitive: true` whenever an
+output's parsed value is exactly Terraform's own literal placeholder text `<sensitive>` — the
+only value Terraform ever prints for a sensitive output in apply console text (it never prints
+the real value there), so the placeholder itself is a reliable signal. `maskSensitiveOutputs`
+then replaces that placeholder with the shared `pkg/io.MaskReplacement` value, so a sensitive
+output's `value` in `Outputs` and in the redacted `logs` field never shows Terraform's own
+distinct `<sensitive>` string, only the one masking placeholder used throughout `Data`.
+Regression-tested by `TestExtractApplyOutputs_SensitiveOutputNeverExposesRealValue` and
+`TestBuildTerraformExecData_SensitiveOutputNeverUploadedInAnyForm`.
 
 ### AffectedStacksExecData (`Data` shape for `describe affected`, research.md Decision 22)
 
