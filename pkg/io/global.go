@@ -385,9 +385,10 @@ func ContainsSecret(value string) bool {
 }
 
 // RegisterSecretValue registers every secret-bearing representation of a value with the
-// masker, not only plain strings. Scalars are registered via their string form; maps and
-// slices are walked so nested string leaves (e.g. a `password` field of an object output)
-// are masked too. Shared by the secrets resolver and sensitive-Terraform-output handling.
+// masker, not only plain strings. Direct scalars are registered via their string form;
+// maps and slices register only nested string leaves so common structured metadata such
+// as booleans and ports do not mask unrelated output. Shared by the secrets resolver and
+// sensitive-Terraform-output handling.
 func RegisterSecretValue(v any) {
 	defer perf.Track(nil, "io.RegisterSecretValue")()
 
@@ -400,20 +401,29 @@ func RegisterSecretValue(v any) {
 		if json.Unmarshal([]byte(t), &structured) == nil {
 			switch structured.(type) {
 			case map[string]any, []any:
-				RegisterSecretValue(structured)
+				registerStructuredSecretStrings(structured)
 			}
 		}
-	case map[string]any:
-		for _, child := range t {
-			RegisterSecretValue(child)
-		}
-	case []any:
-		for _, child := range t {
-			RegisterSecretValue(child)
-		}
+	case map[string]any, []any:
+		registerStructuredSecretStrings(t)
 	default:
 		if s := fmt.Sprintf("%v", t); s != "" {
 			RegisterSecret(s)
+		}
+	}
+}
+
+func registerStructuredSecretStrings(v any) {
+	switch t := v.(type) {
+	case string:
+		RegisterSecret(t)
+	case map[string]any:
+		for _, child := range t {
+			registerStructuredSecretStrings(child)
+		}
+	case []any:
+		for _, child := range t {
+			registerStructuredSecretStrings(child)
 		}
 	}
 }

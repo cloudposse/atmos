@@ -125,6 +125,7 @@ func TestHelmOperationProgressEmitsHeartbeat(t *testing.T) {
 	progress.output = capture.output()
 
 	progress.start()
+	t.Cleanup(func() { progress.finish(nil) })
 	progress.resolved(releaseOperationInstall, releaseLifecycleResolution{Policy: effectiveReleasePolicy{
 		Operation:    releaseOperationInstall,
 		WaitStrategy: kube.StatusWatcherStrategy,
