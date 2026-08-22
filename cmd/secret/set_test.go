@@ -182,6 +182,7 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 }
 
 func TestFindGlobalSetContext(t *testing.T) {
+	enumerationErr := errors.New("stack enumeration failed")
 	sharedSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
 	componentReferenceSectionA := secretDeclarationSection("SHARED_TOKEN", map[string]any{
 		"store":     "example-secrets",
@@ -201,12 +202,14 @@ func TestFindGlobalSetContext(t *testing.T) {
 		expectedComponent string
 		expectedType      string
 		expectedErr       error
+		expectedCause     error
 	}{
 		{
 			name:           "enumeration error",
-			enumerationErr: errors.New("stack enumeration failed"),
+			enumerationErr: enumerationErr,
 			scope:          secretScope{Stack: "dev"},
 			expectedErr:    errUtils.ErrRequiredFlagNotProvided,
+			expectedCause:  enumerationErr,
 		},
 		{
 			name: "no matching declaration",
@@ -280,6 +283,9 @@ func TestFindGlobalSetContext(t *testing.T) {
 			component, componentType, err := findGlobalSetContext(tt.scope, "SHARED_TOKEN")
 			if tt.expectedErr != nil {
 				require.ErrorIs(t, err, tt.expectedErr)
+				if tt.expectedCause != nil {
+					require.ErrorIs(t, err, tt.expectedCause)
+				}
 				return
 			}
 			require.NoError(t, err)
