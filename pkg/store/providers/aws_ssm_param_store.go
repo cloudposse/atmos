@@ -456,6 +456,9 @@ func (s *SSMStore) GetRaw(stack string, component string, key string) (string, e
 	if err != nil {
 		return "", fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
+	if output == nil || output.Parameter == nil || output.Parameter.Value == nil {
+		return "", fmt.Errorf("%w: incomplete response for %q", store.ErrGetParameter, paramName)
+	}
 
 	return *output.Parameter.Value, nil
 }
