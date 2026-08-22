@@ -614,13 +614,13 @@ Error: Reference to undeclared resource
 
 func TestParseApplyOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		output         string
-		hasChanges     bool
-		hasErrors      bool
-		create         int
-		change         int
-		destroy        int
+		name            string
+		output          string
+		hasChanges      bool
+		hasErrors       bool
+		create          int
+		change          int
+		destroy         int
 		wantCreatedRes  []string
 		wantUpdatedRes  []string
 		wantDeletedRes  []string
