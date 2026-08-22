@@ -352,6 +352,9 @@ func ParseSecret(input string) (SecretArgs, error) {
 	}
 
 	result := SecretArgs{Name: unquote(tokens[0].value)}
+	if result.Name == "" {
+		return SecretArgs{}, parseError(tokens[0], "secret name must not be empty")
+	}
 	for index := 1; index < len(tokens); {
 		if tokens[index].typeName != tokenPipe || index+1 >= len(tokens) {
 			return SecretArgs{}, parseError(tokens[index], "expected option delimiter")
