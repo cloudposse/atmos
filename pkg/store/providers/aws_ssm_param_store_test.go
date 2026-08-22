@@ -469,6 +469,7 @@ func TestSSMStore_Get(t *testing.T) {
 		mockSetup   func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		want        interface{}
 		wantErr     bool
+		wantErrIs   error
 	}{
 		{
 			name:      "successful_get",
@@ -530,6 +531,39 @@ func TestSSMStore_Get(t *testing.T) {
 				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("aws error"))
 			},
 			wantErr: true,
+		},
+		{
+			name:      "successful_response_with_nil_output",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return((*ssm.GetParameterOutput)(nil), nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+		{
+			name:      "successful_response_with_nil_parameter",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(&ssm.GetParameterOutput{}, nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+		{
+			name:      "successful_response_with_nil_value",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{}}, nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
 		},
 		{
 			// A stack-scoped secret coordinate omits the component segment.
@@ -887,6 +921,9 @@ func TestSSMStore_Get(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SSMStore.Get() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if tt.wantErrIs != nil {
+				require.ErrorIs(t, err, tt.wantErrIs)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("SSMStore.Get() = %v, want %v", got, tt.want)

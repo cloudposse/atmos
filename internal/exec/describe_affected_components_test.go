@@ -656,6 +656,59 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
 }
 
+func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := helmAtmosConfig()
+	atmosConfig.BasePath = tempDir
+
+	componentFolder := "shared-chart"
+	componentPath := filepath.Join(tempDir, "components", "helm", componentFolder)
+	valuesFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	valuesRef, err := filepath.Rel(componentPath, valuesFile)
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name         string
+		valuesFiles  any
+		changedFile  string
+		wantAffected bool
+	}{
+		{name: "relative list", valuesFiles: []any{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "typed relative list", valuesFiles: []string{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "scalar", valuesFiles: valuesRef, changedFile: valuesFile, wantAffected: true},
+		{name: "absolute", valuesFiles: []any{valuesFile}, changedFile: valuesFile, wantAffected: true},
+		{name: "unrelated", valuesFiles: []string{valuesRef}, changedFile: filepath.Join(tempDir, "config", "helm", "other-values.yaml")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			identical := map[string]any{
+				cfg.ComponentSectionName: componentFolder,
+				sectionNameChart:         ".",
+				sectionNameValuesF:       tt.valuesFiles,
+			}
+			helmSection := map[string]any{helmTestComponent: identical}
+			remoteStacks := helmRemoteStacksWith(identical)
+			filesIndex := newChangedFilesIndex(atmosConfig, []string{tt.changedFile}, tempDir)
+
+			affected, err := processHelmComponentsIndexed(
+				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+				atmosConfig, filesIndex, newComponentPathPatternCache(),
+				false, false, false,
+			)
+			require.NoError(t, err)
+
+			if !tt.wantAffected {
+				assert.Empty(t, affected)
+				return
+			}
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, helmTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackValuesFile)
+		})
+	}
+}
+
 func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
 	atmosConfig := helmAtmosConfig()
 	remoteStacks := helmRemoteStacksWith(map[string]any{

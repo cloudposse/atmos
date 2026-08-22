@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/keyring"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -144,6 +145,29 @@ func (s *KeychainStore) Get(stack string, component string, key string) (any, er
 		return nil, err
 	}
 	return s.get(composed)
+}
+
+// GetRaw returns the original textual value represented by the keychain entry. Values written
+// as strings are unquoted; structured values remain in their JSON representation.
+func (s *KeychainStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.KeychainStore.GetRaw")()
+
+	composed, err := s.composeKey(stack, component, key)
+	if err != nil {
+		return "", err
+	}
+	raw, err := s.kr.Get(composed)
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return "", fmt.Errorf(errWrapFormatWithID, store.ErrKeychainNotFound, composed, err)
+		}
+		return "", fmt.Errorf(errWrapFormatWithID, store.ErrKeychainRead, composed, err)
+	}
+	var stringValue *string
+	if err := json.Unmarshal([]byte(raw), &stringValue); err == nil && stringValue != nil {
+		return *stringValue, nil
+	}
+	return raw, nil
 }
 
 // GetKey retrieves a value directly by its composed key, without stack/component context.

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -264,6 +266,38 @@ func TestMasker_Mask(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMasker_MasksIndentedMultilineLiteral(t *testing.T) {
+	const secret = "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----"
+
+	for _, spaces := range []int{2, 4, 6} {
+		t.Run(fmt.Sprintf("%d spaces", spaces), func(t *testing.T) {
+			m := newMasker(nil)
+			m.RegisterValue(secret)
+			indent := strings.Repeat(" ", spaces)
+			input := "value: |-\n" + indent + strings.ReplaceAll(secret, "\n", "\n"+indent) + "\n"
+
+			masked := m.Mask(input)
+			assert.NotContains(t, masked, "BEGIN PRIVATE KEY")
+			assert.NotContains(t, masked, "AAAA")
+			assert.NotContains(t, masked, "BBBB")
+			assert.Contains(t, masked, MaskReplacement)
+		})
+	}
+}
+
+func TestMasker_MasksFoldedLongLiteral(t *testing.T) {
+	const secret = "alpha bravo charlie delta echo foxtrot golf hotel"
+
+	m := newMasker(nil)
+	m.RegisterValue(secret)
+	input := "value: >-\n  alpha bravo charlie delta\n  echo foxtrot golf hotel\n"
+
+	masked := m.Mask(input)
+	assert.NotContains(t, masked, "alpha bravo")
+	assert.NotContains(t, masked, "echo foxtrot")
+	assert.Contains(t, masked, MaskReplacement)
 }
 
 func TestMasker_Clear(t *testing.T) {

@@ -14,11 +14,13 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // memoryActionContext builds an actionContext backed by Helm's in-memory storage
@@ -199,6 +201,7 @@ func TestApplyReleaseUsesLifecycleTimeoutAndWaitContext(t *testing.T) {
 	elapsed := time.Since(started)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
 	assert.Equal(t, releaseOperationUpgrade, result.Operation)
 	assert.Less(t, elapsed, time.Second, "upgrade must return at the lifecycle deadline")
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
@@ -212,4 +215,67 @@ func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	assert.Equal(t, parent, ctx)
 	_, hasDeadline := ctx.Deadline()
 	assert.False(t, hasDeadline)
+}
+
+func TestUpgradeReleaseHistoryRetention(t *testing.T) {
+	const revisions = cfg.HelmDefaultMaxHistory + 3
+	tests := []struct {
+		name          string
+		releaseName   string
+		maxHistory    int
+		override      bool
+		expectedCount int
+	}{
+		{
+			name:          "default bounded history",
+			releaseName:   "history",
+			expectedCount: cfg.HelmDefaultMaxHistory,
+		},
+		{
+			name:          "explicit unlimited history",
+			releaseName:   "unlimited-history",
+			maxHistory:    0,
+			override:      true,
+			expectedCount: revisions,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, tt.releaseName)
+			if tt.override {
+				maxHistory := tt.maxHistory
+				spec.Release.History.Max = &maxHistory
+			}
+
+			for revision := 0; revision < revisions; revision++ {
+				spec.Values["replicaCount"] = revision + 1
+				_, err := applyRelease(context.Background(), spec, false)
+				require.NoError(t, err)
+			}
+
+			history, err := actx.cfg.Releases.History(spec.ReleaseName)
+			require.NoError(t, err)
+			assert.Len(t, history, tt.expectedCount)
+			expected := make([]int, tt.expectedCount)
+			firstRevision := revisions - tt.expectedCount + 1
+			for i := range expected {
+				expected[i] = firstRevision + i
+			}
+			assert.Equal(t, expected, releaseVersions(t, history))
+		})
+	}
+}
+
+func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
+	t.Helper()
+	versions := make([]int, len(history))
+	for i, item := range history {
+		typed, ok := item.(*release.Release)
+		require.True(t, ok)
+		versions[i] = typed.Version
+	}
+	return versions
 }

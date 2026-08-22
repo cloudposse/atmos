@@ -1,0 +1,29 @@
+{{- if .Values.hooks.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-hook-order
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    # Retain the completed Job so lifecycle integration tests can distinguish
+    # a disabled hook from a hook that ran successfully and self-deleted.
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: verify-weighted-configmap
+          image: "{{ .Values.jobImage.repository }}:{{ .Values.jobImage.tag }}"
+          command: ["/bin/sh", "-c", "test -f /hook-order/order"]
+          volumeMounts:
+            - name: hook-order
+              mountPath: /hook-order
+      volumes:
+        - name: hook-order
+          configMap:
+            name: {{ printf "%s-hook-order" .Release.Name }}
+{{- end }}
