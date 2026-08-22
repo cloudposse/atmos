@@ -126,17 +126,34 @@ on a concrete component. Atmos first deep-merges that complete tree, then
 overlays the selected `install`, `upgrade`, or `delete` section. Explicit command
 flags have the highest precedence.
 
-| Field | Default | Operations | Behavior |
-| --- | --- | --- | --- |
-| `release.wait.strategy` | `hookOnly` | install, upgrade, delete | `hookOnly`, `watcher`, or Helm 3-compatible `legacy`. |
-| `release.wait.jobs` | `false` | install, upgrade | Wait for ordinary Jobs. Requires `watcher` or `legacy`; hook Jobs are already handled by Helm hooks. |
-| `release.timeout` | `0s` during migration | install, upgrade, delete | Release-wide operation timeout. Each operation can override it. Explicit `0s` remains unbounded. |
-| `release.history.max` | `10` | upgrade | Revisions retained. Set `0` for unlimited history. |
-| `release.chart_hooks` | `true` | install, upgrade, delete | Enable Helm chart hooks. This does not control Atmos `hooks:`. |
-| `release.install.crds` | `create` | install | Create or skip CRDs from the chart on first install. |
-| `release.install.on_failure` | `keep` | install | `uninstall` removes a failed first install; `keep` preserves partial state. |
-| `release.upgrade.on_failure` | `keep` | upgrade | `rollback` restores the prior release; `keep` preserves failed state. |
-| `release.upgrade.cleanup_on_failure` | `false` | upgrade | Independently remove resources newly created by a failed upgrade. |
+<dl>
+  <dt>`release.wait.strategy`</dt>
+  <dd><strong>Default:</strong> <code>hookOnly</code>. <strong>Operations:</strong> install, upgrade, delete. Select <code>hookOnly</code>, <code>watcher</code>, or Helm 3-compatible <code>legacy</code>.</dd>
+
+  <dt>`release.wait.jobs`</dt>
+  <dd><strong>Default:</strong> <code>false</code>. <strong>Operations:</strong> install, upgrade. Wait for ordinary Jobs. Requires <code>watcher</code> or <code>legacy</code>; hook Jobs are already handled by Helm hooks.</dd>
+
+  <dt>`release.timeout`</dt>
+  <dd><strong>Default:</strong> <code>0s</code> during migration. <strong>Operations:</strong> install, upgrade, delete. Set the release-wide operation timeout. Each operation can override it; explicit <code>0s</code> remains unbounded.</dd>
+
+  <dt>`release.history.max`</dt>
+  <dd><strong>Default:</strong> <code>10</code>. <strong>Operation:</strong> upgrade. Set the number of revisions retained; use <code>0</code> for unlimited history.</dd>
+
+  <dt>`release.chart_hooks`</dt>
+  <dd><strong>Default:</strong> <code>true</code>. <strong>Operations:</strong> install, upgrade, delete. Enable Helm chart hooks. This does not control Atmos <code>hooks:</code>.</dd>
+
+  <dt>`release.install.crds`</dt>
+  <dd><strong>Default:</strong> <code>create</code>. <strong>Operation:</strong> install. Create or skip CRDs from the chart on first install.</dd>
+
+  <dt>`release.install.on_failure`</dt>
+  <dd><strong>Default:</strong> <code>keep</code>. <strong>Operation:</strong> install. <code>uninstall</code> removes a failed first install; <code>keep</code> preserves partial state.</dd>
+
+  <dt>`release.upgrade.on_failure`</dt>
+  <dd><strong>Default:</strong> <code>keep</code>. <strong>Operation:</strong> upgrade. <code>rollback</code> restores the prior release; <code>keep</code> preserves failed state.</dd>
+
+  <dt>`release.upgrade.cleanup_on_failure`</dt>
+  <dd><strong>Default:</strong> <code>false</code>. <strong>Operation:</strong> upgrade. Independently remove resources newly created by a failed upgrade.</dd>
+</dl>
 
 `release.install.timeout`, `release.upgrade.timeout`, and
 `release.delete.timeout` override the release-wide timeout only for that action.
