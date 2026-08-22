@@ -86,7 +86,10 @@ func retrieveAndMask(atmosConfig *schema.AtmosConfiguration, provider providers.
 		// A default replaces a missing value, not an unsupported retrieval capability. In
 		// particular, `raw | default` must not silently turn a structured-only backend into a
 		// successful lookup.
-		if opts.Default != nil && !errors.Is(err, providers.ErrRawNotSupported) {
+		if errors.Is(err, providers.ErrRawNotSupported) {
+			return nil, fmt.Errorf("%w: %q", err, name)
+		}
+		if opts.Default != nil {
 			return *opts.Default, nil
 		}
 		return nil, fmt.Errorf("%w: %q: %w", ErrSecretMissing, name, err)

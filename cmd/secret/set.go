@@ -122,7 +122,10 @@ func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
 func findGlobalSetContext(scope secretScope, name string) (string, string, error) {
 	entries, _, err := enumerateScopesFn(secretScope{Stack: scope.Stack, ComponentType: scope.ComponentType})
 	if err != nil {
-		return "", "", componentRequiredForSet(name, fmt.Sprintf("the global declaration could not be verified: %v", err))
+		return "", "", errors.Join(
+			componentRequiredForSet(name, fmt.Sprintf("the global declaration could not be verified: %v", err)),
+			err,
+		)
 	}
 	var selected *secrets.Declaration
 	var component, componentType string
@@ -147,8 +150,8 @@ func findGlobalSetContext(scope secretScope, name string) (string, string, error
 		if selected != nil && decl != *selected {
 			return "", "", componentRequiredForSet(name, "global declarations differ between components")
 		}
-		copy := decl
-		selected = &copy
+		selectedDecl := decl
+		selected = &selectedDecl
 		if component == "" {
 			component, componentType = entry.Component, entry.ComponentType
 		}

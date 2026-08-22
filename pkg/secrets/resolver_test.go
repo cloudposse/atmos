@@ -170,6 +170,7 @@ func TestResolve_RawDefaultDoesNotHideUnsupportedCapability(t *testing.T) {
 
 	_, err := Resolve(cfg, `!secret DATADOG_API_KEY | raw | default "fallback"`, "prod", info)
 	require.ErrorIs(t, err, providers.ErrRawNotSupported)
+	require.NotErrorIs(t, err, ErrSecretMissing)
 }
 
 func TestResolve_RawDefaultUsesFallbackOnMissing(t *testing.T) {
@@ -206,6 +207,7 @@ func TestParseSecretArgs(t *testing.T) {
 		name            string
 		input           string
 		expectedName    string
+		expectedPath    string
 		expectedRaw     bool
 		expectedDefault *string
 		expectedErr     error
@@ -217,6 +219,7 @@ func TestParseSecretArgs(t *testing.T) {
 			expectedRaw:     true,
 			expectedDefault: &defaultValue,
 		},
+		{name: "path expression", input: `!secret DB_CONFIG | path ".host"`, expectedName: "DB_CONFIG", expectedPath: ".host"},
 		{name: "compact raw", input: `!secret DB_CONFIG |raw`, expectedName: "DB_CONFIG", expectedRaw: true},
 		{name: "raw path conflict", input: `!secret DB_CONFIG | raw | path ".host"`, expectedErr: ErrInvalidSecretArgs},
 		{name: "empty name", input: "!secret ", expectedErr: ErrEmptyName},
@@ -231,6 +234,7 @@ func TestParseSecretArgs(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedName, name)
+			assert.Equal(t, tt.expectedPath, opts.Path)
 			assert.Equal(t, tt.expectedRaw, opts.Raw)
 			assert.Equal(t, tt.expectedDefault, opts.Default)
 		})

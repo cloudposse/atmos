@@ -413,6 +413,8 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 
 // GetRaw retrieves the exact decrypted parameter string without JSON decoding.
 func (s *SSMStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.SSMStore.GetRaw")()
+
 	if key == "" {
 		return "", store.ErrEmptyKey
 	}
