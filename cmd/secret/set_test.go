@@ -58,6 +58,55 @@ func TestRunSecretSet_Inline(t *testing.T) {
 	assert.Equal(t, "v1", svc.setCalls[0].value)
 }
 
+func TestRunSecretSet_ConfirmsOverwrite(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: true}}
+	installService(t, svc, nil)
+	titles := overrideConfirmAction(t, true, nil)
+
+	err := runSecretSubcommand(t, "set", "API_KEY=v2", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+
+	assert.True(t, svc.statusVerify)
+	assert.Equal(t, []string{"Secret `API_KEY` is already set. Update (rotate) it?"}, *titles)
+	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "v2", svc.setCalls[0].value)
+}
+
+func TestRunSecretSet_DeclinesOverwrite(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: true}}
+	installService(t, svc, nil)
+	overrideConfirmAction(t, false, nil)
+
+	err := runSecretSubcommand(t, "set", "API_KEY=v2", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+	assert.Empty(t, svc.setCalls)
+}
+
+func TestRunSecretSet_ForceSkipsOverwriteConfirmation(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: true}}
+	installService(t, svc, nil)
+	overrideConfirmAction(t, false, errors.New("confirmation must not run"))
+
+	err := runSecretSubcommand(t, "set", "API_KEY=v2", "--force", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "v2", svc.setCalls[0].value)
+}
+
+func TestRunSecretSet_StatusError(t *testing.T) {
+	statusErr := errors.New("backend status failed")
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Err: statusErr}}
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "set", "API_KEY=v2", "--stack", "dev", "--component", "api")
+	require.ErrorIs(t, err, statusErr)
+	assert.Empty(t, svc.setCalls)
+}
+
 // TestRunSecretSet_SharedScopes proves a component context can set inherited stack/global
 // declarations; the service resolves the backend coordinate from the declaration scope.
 func TestRunSecretSet_SharedScopes(t *testing.T) {
