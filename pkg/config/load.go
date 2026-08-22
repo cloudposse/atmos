@@ -61,34 +61,25 @@ var (
 // osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
 var osGetwd = os.Getwd
 
-// mergedConfigFiles tracks all config files merged during a LoadConfig call.
-// This is used to extract case-sensitive map keys from all sources, not just the main config.
-// The slice is reset at the start of each LoadConfig call.
-//
-// NOTE: This package-level state assumes sequential (non-concurrent) calls to LoadConfig.
-// LoadConfig is NOT safe for concurrent use. If concurrent config loading becomes necessary,
-// this should be refactored to pass state through a context or options struct.
-var mergedConfigFiles []string
-
 // resetMergedConfigFiles clears the tracked config files. Call at start of LoadConfig.
+//
+// Backed by the mutex-guarded mergedFiles tracker (global_viper.go): LoadConfig
+// can run concurrently across DAG-scheduler worker goroutines (pkg/scheduler),
+// one call per graph node, so this can no longer be a bare package-level slice.
 func resetMergedConfigFiles() {
-	mergedConfigFiles = nil
+	mergedFiles.reset()
 }
 
 // trackMergedConfigFile records a config file path for case-sensitive key extraction.
 func trackMergedConfigFile(path string) {
-	if path != "" && !slices.Contains(mergedConfigFiles, path) {
-		mergedConfigFiles = append(mergedConfigFiles, path)
-	}
+	mergedFiles.track(path)
 }
 
 // LoadedConfigFiles returns the physical config files merged during the most
 // recent LoadConfig call. Embedded defaults and runtime/env overrides are not
 // included.
 func LoadedConfigFiles() []string {
-	files := make([]string, len(mergedConfigFiles))
-	copy(files, mergedConfigFiles)
-	return files
+	return mergedFiles.snapshot()
 }
 
 const (
@@ -336,9 +327,7 @@ func getConfigSelectionFromFlagsOrEnv() ConfigSelection {
 // counts as "set"). Instead, we check whether GetStringSlice returns a non-empty
 // value and always fall back to os.Args / env var parsing when it does not.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
-	globalViper := viper.GetViper()
-
-	profiles := globalViper.GetStringSlice(profileKey)
+	profiles := GlobalViper().GetStringSlice(profileKey)
 	_, envSet := os.LookupEnv("ATMOS_PROFILE")
 
 	// Environment variable path - needs special parsing for Viper quirks.
@@ -409,7 +398,7 @@ func resolveProfileSelectionSentinel(tempConfig *schema.AtmosConfiguration, prof
 
 	// Write back to the global Viper singleton so other same-process readers of the raw
 	// --profile flag/env see the resolved names, not the sentinel, on subsequent reads.
-	viper.GetViper().Set(profileKey, resolved)
+	GlobalViper().Set(profileKey, resolved)
 
 	log.Debug("Interactive profile selection resolved", "preselected", preselected, "resolved", resolved)
 
@@ -645,7 +634,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// equivalent env binding) is ever added, this sync will silently shadow
 	// it. Either drop this sync at that point or guard with IsSet().
 	if atmosConfig.Profiles.BasePath != "" {
-		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
+		GlobalViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
 	// Sync vendor.update.* and vendor.ci.* from the loaded atmos.yaml into the global viper for
@@ -675,51 +664,50 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 // struct/map at a parent key -- because viper's dotted-path Get only reliably resolves through
 // values it previously stored itself as nested maps, not arbitrary Go structs.
 func bridgeVendorUpdaterConfig(atmosConfig *schema.AtmosConfiguration) {
-	v := viper.GetViper()
 	update := atmosConfig.Vendor.Update
 	if update.Execution.Mode != "" {
-		v.Set("vendor.update.execution.mode", update.Execution.Mode)
+		GlobalViper().Set("vendor.update.execution.mode", update.Execution.Mode)
 	}
 	if update.Batching.Mode != "" {
-		v.Set("vendor.update.batching.mode", update.Batching.Mode)
+		GlobalViper().Set("vendor.update.batching.mode", update.Batching.Mode)
 	}
 	for name, group := range update.Groups {
 		prefix := "vendor.update.groups." + name
-		v.Set(prefix+".include", group.Include)
-		v.Set(prefix+".exclude", group.Exclude)
+		GlobalViper().Set(prefix+".include", group.Include)
+		GlobalViper().Set(prefix+".exclude", group.Exclude)
 	}
 
 	pr := atmosConfig.Vendor.CI.PullRequest
 	if pr.Provider != "" {
-		v.Set("vendor.ci.pull_request.provider", pr.Provider)
+		GlobalViper().Set("vendor.ci.pull_request.provider", pr.Provider)
 	}
 	if pr.BaseBranch != "" {
-		v.Set("vendor.ci.pull_request.base_branch", pr.BaseBranch)
+		GlobalViper().Set("vendor.ci.pull_request.base_branch", pr.BaseBranch)
 	}
 	if pr.BranchPrefix != "" {
-		v.Set("vendor.ci.pull_request.branch_prefix", pr.BranchPrefix)
+		GlobalViper().Set("vendor.ci.pull_request.branch_prefix", pr.BranchPrefix)
 	}
 	if pr.Title != "" {
-		v.Set("vendor.ci.pull_request.title", pr.Title)
+		GlobalViper().Set("vendor.ci.pull_request.title", pr.Title)
 	}
 	if pr.Body != "" {
-		v.Set("vendor.ci.pull_request.body", pr.Body)
+		GlobalViper().Set("vendor.ci.pull_request.body", pr.Body)
 	}
 	if len(pr.Labels) > 0 {
-		v.Set("vendor.ci.pull_request.labels", pr.Labels)
+		GlobalViper().Set("vendor.ci.pull_request.labels", pr.Labels)
 	}
 	if pr.Draft {
-		v.Set("vendor.ci.pull_request.draft", pr.Draft)
+		GlobalViper().Set("vendor.ci.pull_request.draft", pr.Draft)
 	}
 	if len(pr.Reviewers) > 0 {
-		v.Set("vendor.ci.pull_request.reviewers", pr.Reviewers)
+		GlobalViper().Set("vendor.ci.pull_request.reviewers", pr.Reviewers)
 	}
 	if len(pr.Assignees) > 0 {
-		v.Set("vendor.ci.pull_request.assignees", pr.Assignees)
+		GlobalViper().Set("vendor.ci.pull_request.assignees", pr.Assignees)
 	}
 
 	if atmosConfig.Vendor.CI.Summary.Enabled != nil {
-		v.Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)
+		GlobalViper().Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)
 	}
 }
 
@@ -2280,8 +2268,9 @@ var caseSensitivePaths = []string{
 // collectConfigFilesForCasePreservation gathers all config files to process for case preservation.
 // It combines tracked merged files with the main config file (if not already tracked).
 func collectConfigFilesForCasePreservation(mainConfig string) []string {
-	filesToProcess := make([]string, 0, len(mergedConfigFiles)+1)
-	filesToProcess = append(filesToProcess, mergedConfigFiles...)
+	tracked := mergedFiles.snapshot()
+	filesToProcess := make([]string, 0, len(tracked)+1)
+	filesToProcess = append(filesToProcess, tracked...)
 
 	// Include the main config file if it wasn't already tracked.
 	if mainConfig != "" && !slices.Contains(filesToProcess, mainConfig) {
