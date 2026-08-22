@@ -148,6 +148,15 @@ never an exact literal, since it is freshly generated per invocation.
 separately numbered interaction here, since it is the identical wire shape as interaction 9
 with a longer list, not a distinct contract.
 
+**`apply` examples**: `command: "atmos terraform apply"` is additionally exercised, by value
+rather than by shape, in `TestPact_UploadExecMetadata_Apply` (success) and
+`TestPact_UploadExecMetadata_ApplyFailure` (`has_errors: true`, populated `errors`,
+`resource_counts` all zero, `changes`/`warnings` empty) — again not separately numbered
+interactions, since the wire shape is identical to interaction 9's; these exist as concrete,
+by-example regression coverage for `command` and for the failure-shaped fixture, alongside
+`TestBuildTerraformExecData_ApplyFailure` (`cmd/terraform/utils_exec_metadata_test.go`)'s
+unit-level coverage of the same case.
+
 ---
 
 ### 10. UploadExecMetadata — blob-URL `Data` (batched/out-of-band mode)

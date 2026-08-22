@@ -344,6 +344,190 @@
       }
     },
     {
+      "description": "a request to upload apply command-execution metadata with inline data",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "atmos terraform apply",
+          "data": {
+            "components": [
+              {
+                "changes": [
+                  {
+                    "action": "created",
+                    "address": "aws_s3_bucket.example"
+                  }
+                ],
+                "component": "vpc",
+                "errors": [],
+                "exit_code": 0,
+                "has_changes": true,
+                "has_errors": false,
+                "logs": "QXBwbHkgY29tcGxldGUhIFJlc291cmNlczogMiBhZGRlZCwgMSBjaGFuZ2VkLCAwIGRlc3Ryb3llZC4=",
+                "outputs": {
+                  "bucket_arn": {
+                    "sensitive": false,
+                    "type": "string",
+                    "value": "arn:aws:s3:::prod-bucket"
+                  }
+                },
+                "resource_counts": {
+                  "change": 1,
+                  "create": 2,
+                  "destroy": 0,
+                  "replace": 0
+                },
+                "stack": "plat-use2-dev",
+                "warnings": []
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "22f2a2f2-789a-4b2c-9d2e-2345678901bc",
+          "exit_code": 0,
+          "flags": [],
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 400,
+            "user_cpu_time_ms": 3200,
+            "wall_time_ms": 5678
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.components": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes[*].action": {
+            "match": "type"
+          },
+          "$.body.data.components[*].changes[*].address": {
+            "match": "type"
+          },
+          "$.body.data.components[*].component": {
+            "match": "type"
+          },
+          "$.body.data.components[*].exit_code": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_changes": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_errors": {
+            "match": "type"
+          },
+          "$.body.data.components[*].logs": {
+            "match": "type"
+          },
+          "$.body.data.components[*].outputs.bucket_arn.sensitive": {
+            "match": "type"
+          },
+          "$.body.data.components[*].outputs.bucket_arn.type": {
+            "match": "type"
+          },
+          "$.body.data.components[*].outputs.bucket_arn.value": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.change": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.create": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.destroy": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.components[*].stack": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to upload command-execution metadata with inline data",
       "providerState": "workspace exists and accepts execution metadata",
       "request": {
@@ -1062,6 +1246,169 @@
       }
     },
     {
+      "description": "a request to upload failed apply command-execution metadata",
+      "providerState": "workspace exists and accepts execution metadata",
+      "request": {
+        "body": {
+          "args": [],
+          "atmos_arch": "amd64",
+          "atmos_os": "linux",
+          "atmos_pro_run_id": "run-12345",
+          "atmos_version": "1.2.3",
+          "command": "atmos terraform apply",
+          "data": {
+            "components": [
+              {
+                "changes": [],
+                "component": "vpc",
+                "errors": [
+                  "Error: creating S3 Bucket: AccessDenied"
+                ],
+                "exit_code": 1,
+                "has_changes": false,
+                "has_errors": true,
+                "logs": "RXJyb3I6IGNyZWF0aW5nIFMzIEJ1Y2tldDogQWNjZXNzRGVuaWVk",
+                "outputs": {},
+                "resource_counts": {
+                  "change": 0,
+                  "create": 0,
+                  "destroy": 0,
+                  "replace": 0
+                },
+                "stack": "plat-use2-dev",
+                "warnings": []
+              }
+            ],
+            "version": 1
+          },
+          "execution_id": "33f3b3f3-89ab-4c3d-ae3f-3456789012cd",
+          "exit_code": 1,
+          "flags": [],
+          "git_sha": "abc123def456",
+          "metrics": {
+            "system_cpu_time_ms": 60,
+            "user_cpu_time_ms": 500,
+            "wall_time_ms": 890
+          },
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.atmos_arch": {
+            "match": "type"
+          },
+          "$.body.atmos_os": {
+            "match": "type"
+          },
+          "$.body.atmos_pro_run_id": {
+            "match": "type"
+          },
+          "$.body.atmos_version": {
+            "match": "type"
+          },
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.data.components": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].component": {
+            "match": "type"
+          },
+          "$.body.data.components[*].errors": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].errors[*]": {
+            "match": "type"
+          },
+          "$.body.data.components[*].exit_code": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_changes": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_errors": {
+            "match": "type"
+          },
+          "$.body.data.components[*].logs": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.change": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.create": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.destroy": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.components[*].stack": {
+            "match": "type"
+          },
+          "$.body.execution_id": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.body.git_sha": {
+            "match": "type"
+          },
+          "$.body.metrics.system_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.user_cpu_time_ms": {
+            "match": "type"
+          },
+          "$.body.metrics.wall_time_ms": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/atmos/exec"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to upload instance drift status",
       "providerState": "workspace exists and instance exists for owner/repo",
       "request": {
@@ -1582,16 +1929,31 @@
       "request": {
         "body": {
           "data": {
-            "changes": [
+            "components": [
               {
-                "action": "created",
-                "address": "aws_s3_bucket.example"
+                "changes": [
+                  {
+                    "action": "created",
+                    "address": "aws_s3_bucket.example"
+                  }
+                ],
+                "component": "vpc",
+                "errors": [],
+                "exit_code": 2,
+                "has_changes": true,
+                "has_errors": false,
+                "logs": "UGxhbjogMiB0byBhZGQsIDEgdG8gY2hhbmdlLCAwIHRvIGRlc3Ryb3ku",
+                "outputs": {},
+                "resource_counts": {
+                  "change": 1,
+                  "create": 2,
+                  "destroy": 0,
+                  "replace": 0
+                },
+                "stack": "plat-use2-dev",
+                "warnings": []
               }
             ],
-            "errors": [],
-            "exit_code": 0,
-            "has_changes": true,
-            "has_errors": false,
             "version": 1
           },
           "execution_id": "d5d3a4d2-3456-4c3d-ae3f-34567890abcd"
@@ -1601,23 +1963,48 @@
           "Content-Type": "application/json"
         },
         "matchingRules": {
-          "$.body.data.changes": {
+          "$.body.data.components": {
             "match": "type",
             "min": 1
           },
-          "$.body.data.changes[*].action": {
+          "$.body.data.components[*].changes": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.data.components[*].changes[*].action": {
             "match": "type"
           },
-          "$.body.data.changes[*].address": {
+          "$.body.data.components[*].changes[*].address": {
             "match": "type"
           },
-          "$.body.data.exit_code": {
+          "$.body.data.components[*].component": {
             "match": "type"
           },
-          "$.body.data.has_changes": {
+          "$.body.data.components[*].exit_code": {
             "match": "type"
           },
-          "$.body.data.has_errors": {
+          "$.body.data.components[*].has_changes": {
+            "match": "type"
+          },
+          "$.body.data.components[*].has_errors": {
+            "match": "type"
+          },
+          "$.body.data.components[*].logs": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.change": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.create": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.destroy": {
+            "match": "type"
+          },
+          "$.body.data.components[*].resource_counts.replace": {
+            "match": "type"
+          },
+          "$.body.data.components[*].stack": {
             "match": "type"
           },
           "$.body.execution_id": {

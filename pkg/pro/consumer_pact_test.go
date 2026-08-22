@@ -531,6 +531,259 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestPact_UploadExecMetadata_Apply verifies the consumer contract for
+// POST /api/v1/atmos/exec with a populated `data` field for `terraform apply`.
+// `TerraformExecData`'s wire shape is shared, unconditionally, across
+// `plan`/`apply`/`deploy` (research.md Decisions 37/38, spec.md FR-006a,
+// specs/002-pro-exec-metadata/contracts/interactions.md interaction 9) — this
+// is not a distinct contract from TestPact_UploadExecMetadata, just an
+// explicit `command: "atmos terraform apply"` example exercising a
+// successful-apply-shaped fixture (subprocess exit_code 0 — apply has no
+// `-detailed-exitcode` convention the way `plan` does, so 0 covers both
+// "succeeded" and "succeeded with changes applied").
+func TestPact_UploadExecMetadata_Apply(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload apply command-execution metadata with inline data").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like("22f2a2f2-789a-4b2c-9d2e-2345678901bc"),
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("atmos terraform apply"),
+					"args":             []interface{}{},
+					"flags":            []interface{}{},
+					"exit_code":        matchers.Like(0),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(5678),
+						"user_cpu_time_ms":   matchers.Like(3200),
+						"system_cpu_time_ms": matchers.Like(400),
+					},
+					"data": body{
+						"version": 1,
+						"components": matchers.EachLike(body{
+							"resource_counts": body{
+								"create":  matchers.Like(2),
+								"change":  matchers.Like(1),
+								"replace": matchers.Like(0),
+								"destroy": matchers.Like(0),
+							},
+							"outputs": body{
+								"bucket_arn": body{
+									"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
+									"type":      matchers.Like("string"),
+									"sensitive": matchers.Like(false),
+								},
+							},
+							"warnings": []interface{}{},
+							"changes": matchers.EachLike(body{
+								"action":  matchers.Like("created"),
+								"address": matchers.Like("aws_s3_bucket.example"),
+							}, 1),
+							"has_changes": matchers.Like(true),
+							"has_errors":  matchers.Like(false),
+							"errors":      []interface{}{},
+							"exit_code":   matchers.Like(0),
+							"component":   matchers.Like("vpc"),
+							"stack":       matchers.Like("plat-use2-dev"),
+							"logs":        matchers.Like(base64.StdEncoding.EncodeToString([]byte("Apply complete! Resources: 2 added, 1 changed, 0 destroyed."))),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"components": []map[string]any{
+					{
+						"resource_counts": map[string]any{
+							"create":  2,
+							"change":  1,
+							"replace": 0,
+							"destroy": 0,
+						},
+						"outputs": map[string]any{
+							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
+						},
+						"warnings": []string{},
+						"changes": []map[string]any{
+							{"action": "created", "address": "aws_s3_bucket.example"},
+						},
+						"has_changes": true,
+						"has_errors":  false,
+						"errors":      []string{},
+						"exit_code":   0,
+						"component":   "vpc",
+						"stack":       "plat-use2-dev",
+						"logs":        base64.StdEncoding.EncodeToString([]byte("Apply complete! Resources: 2 added, 1 changed, 0 destroyed.")),
+					},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "22f2a2f2-789a-4b2c-9d2e-2345678901bc",
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "atmos terraform apply",
+				Args:          []string{},
+				Flags:         []string{},
+				ExitCode:      0,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      5678,
+					UserCPUTimeMS:   3200,
+					SystemCPUTimeMS: 400,
+				},
+				Data: data,
+			})
+		})
+	require.NoError(t, err)
+}
+
+// TestPact_UploadExecMetadata_ApplyFailure verifies the consumer contract for
+// POST /api/v1/atmos/exec with a `terraform apply` failure-shaped `data`
+// payload — `has_errors: true` with populated `errors`, mirroring
+// `TestBuildTerraformExecData_ApplyFailure` (cmd/terraform/utils_exec_metadata_test.go)
+// at the contract level so a provider-side error-handling regression on the
+// apply failure path is caught here too.
+func TestPact_UploadExecMetadata_ApplyFailure(t *testing.T) {
+	mockProvider := newHTTPMockProvider(t)
+
+	err := mockProvider.
+		AddInteraction().
+		Given("workspace exists and accepts execution metadata").
+		UponReceiving("a request to upload failed apply command-execution metadata").
+		WithRequest("POST", "/api/v1/atmos/exec", func(b *consumer.V2RequestBuilder) {
+			b.Header("Authorization", matchers.Like("Bearer test-token")).
+				Header("Content-Type", matchers.S("application/json")).
+				JSONBody(body{
+					"execution_id":     matchers.Like("33f3b3f3-89ab-4c3d-ae3f-3456789012cd"),
+					"atmos_pro_run_id": matchers.Like("run-12345"),
+					"atmos_version":    matchers.Like("1.2.3"),
+					"atmos_os":         matchers.Like("linux"),
+					"atmos_arch":       matchers.Like("amd64"),
+					"command":          matchers.Like("atmos terraform apply"),
+					"args":             []interface{}{},
+					"flags":            []interface{}{},
+					"exit_code":        matchers.Like(1),
+					"git_sha":          matchers.Like("abc123def456"),
+					"repo_url":         matchers.Like("https://github.com/org/repo"),
+					"repo_name":        matchers.Like("repo"),
+					"repo_owner":       matchers.Like("org"),
+					"repo_host":        matchers.Like("github.com"),
+					"metrics": body{
+						"wall_time_ms":       matchers.Like(890),
+						"user_cpu_time_ms":   matchers.Like(500),
+						"system_cpu_time_ms": matchers.Like(60),
+					},
+					"data": body{
+						"version": 1,
+						"components": matchers.EachLike(body{
+							"resource_counts": body{
+								"create":  matchers.Like(0),
+								"change":  matchers.Like(0),
+								"replace": matchers.Like(0),
+								"destroy": matchers.Like(0),
+							},
+							"outputs":     body{},
+							"warnings":    []interface{}{},
+							"changes":     []interface{}{},
+							"has_changes": matchers.Like(false),
+							"has_errors":  matchers.Like(true),
+							"errors":      matchers.EachLike(matchers.Like("Error: creating S3 Bucket: AccessDenied"), 1),
+							"exit_code":   matchers.Like(1),
+							"component":   matchers.Like("vpc"),
+							"stack":       matchers.Like("plat-use2-dev"),
+							"logs":        matchers.Like(base64.StdEncoding.EncodeToString([]byte("Error: creating S3 Bucket: AccessDenied"))),
+						}, 1),
+					},
+				})
+		}).
+		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {
+			b.JSONBody(body{
+				"success": matchers.Like(true),
+			})
+		}).
+		ExecuteTest(t, func(config consumer.MockServerConfig) error {
+			client := newPactClient(config)
+			data, err := json.Marshal(map[string]any{
+				"version": 1,
+				"components": []map[string]any{
+					{
+						"resource_counts": map[string]any{
+							"create":  0,
+							"change":  0,
+							"replace": 0,
+							"destroy": 0,
+						},
+						"outputs":     map[string]any{},
+						"warnings":    []string{},
+						"changes":     []map[string]any{},
+						"has_changes": false,
+						"has_errors":  true,
+						"errors":      []string{"Error: creating S3 Bucket: AccessDenied"},
+						"exit_code":   1,
+						"component":   "vpc",
+						"stack":       "plat-use2-dev",
+						"logs":        base64.StdEncoding.EncodeToString([]byte("Error: creating S3 Bucket: AccessDenied")),
+					},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return client.UploadExecMetadata(&dtos.ExecUploadRequest{
+				ExecutionID:   "33f3b3f3-89ab-4c3d-ae3f-3456789012cd",
+				AtmosProRunID: "run-12345",
+				AtmosVersion:  "1.2.3",
+				AtmosOS:       "linux",
+				AtmosArch:     "amd64",
+				Command:       "atmos terraform apply",
+				Args:          []string{},
+				Flags:         []string{},
+				ExitCode:      1,
+				GitSHA:        "abc123def456",
+				RepoURL:       "https://github.com/org/repo",
+				RepoName:      "repo",
+				RepoOwner:     "org",
+				RepoHost:      "github.com",
+				Metrics: dtos.ResourceUsageMetrics{
+					WallTimeMS:      890,
+					UserCPUTimeMS:   500,
+					SystemCPUTimeMS: 60,
+				},
+				Data: data,
+			})
+		})
+	require.NoError(t, err)
+}
+
 // TestPact_UploadExecMetadata_NoData verifies the consumer contract for
 // POST /api/v1/atmos/exec when the invoking command has no structured-data
 // extension (e.g. a non-terraform command) — `data` is absent entirely,
@@ -622,16 +875,33 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 				Header("Content-Type", matchers.S("application/json")).
 				JSONBody(body{
 					"execution_id": matchers.Like(executionID),
+					// Same {"version": 1, "components": [TerraformExecData, ...]}
+					// wrapper as the inline case (interaction 9) — the blob-URL path
+					// uploads the identical structured Data verbatim out-of-band, it
+					// never reshapes it (research.md Decisions 37/38).
 					"data": body{
 						"version": 1,
-						"changes": matchers.EachLike(body{
-							"action":  matchers.Like("created"),
-							"address": matchers.Like("aws_s3_bucket.example"),
+						"components": matchers.EachLike(body{
+							"resource_counts": body{
+								"create":  matchers.Like(2),
+								"change":  matchers.Like(1),
+								"replace": matchers.Like(0),
+								"destroy": matchers.Like(0),
+							},
+							"outputs":  body{},
+							"warnings": []interface{}{},
+							"changes": matchers.EachLike(body{
+								"action":  matchers.Like("created"),
+								"address": matchers.Like("aws_s3_bucket.example"),
+							}, 1),
+							"has_changes": matchers.Like(true),
+							"has_errors":  matchers.Like(false),
+							"errors":      []interface{}{},
+							"exit_code":   matchers.Like(2),
+							"component":   matchers.Like("vpc"),
+							"stack":       matchers.Like("plat-use2-dev"),
+							"logs":        matchers.Like(base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 1 to change, 0 to destroy."))),
 						}, 1),
-						"has_changes": matchers.Like(true),
-						"has_errors":  matchers.Like(false),
-						"errors":      []interface{}{},
-						"exit_code":   matchers.Like(0),
 					},
 				})
 		}).
@@ -681,13 +951,28 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 
 			data, err := json.Marshal(map[string]any{
 				"version": 1,
-				"changes": []map[string]any{
-					{"action": "created", "address": "aws_s3_bucket.example"},
+				"components": []map[string]any{
+					{
+						"resource_counts": map[string]any{
+							"create":  2,
+							"change":  1,
+							"replace": 0,
+							"destroy": 0,
+						},
+						"outputs":  map[string]any{},
+						"warnings": []string{},
+						"changes": []map[string]any{
+							{"action": "created", "address": "aws_s3_bucket.example"},
+						},
+						"has_changes": true,
+						"has_errors":  false,
+						"errors":      []string{},
+						"exit_code":   2,
+						"component":   "vpc",
+						"stack":       "plat-use2-dev",
+						"logs":        base64.StdEncoding.EncodeToString([]byte("Plan: 2 to add, 1 to change, 0 to destroy.")),
+					},
 				},
-				"has_changes": true,
-				"has_errors":  false,
-				"errors":      []string{},
-				"exit_code":   0,
 			})
 			if err != nil {
 				return err
