@@ -4982,6 +4982,26 @@
       "type": "object",
       "description": "ErrorsConfig contains configuration for error handling."
     },
+    "ExecSettings": {
+      "properties": {
+        "sync_timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "SyncTimeoutSeconds bounds how long a synchronous command (terraform\nplan/apply, describe affected) waits for its execution-record upload to\nbe confirmed. Defaults to 10 seconds when unset/zero; values below 10\nare clamped up to 10 rather than allowed to shorten the default."
+        }
+      },
+      "type": "object",
+      "description": "ExecSettings contains configuration for command-execution metadata upload\n(POST /v1/atmos/exec). This only lengthens the default synchronous-upload\nwait timeout; it is not an opt-out/opt-in switch (see FR-008a)."
+    },
     "GitAuthConfig": {
       "properties": {
         "identity": {
@@ -8041,6 +8061,20 @@
             }
           ],
           "description": "GitSTS holds global defaults for the github/sts auth integration."
+        },
+        "exec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Exec holds settings for the command-execution metadata upload feature."
         }
       },
       "type": "object",

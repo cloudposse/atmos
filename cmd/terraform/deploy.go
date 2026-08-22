@@ -1,12 +1,9 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -77,12 +74,16 @@ This ensures that the changes defined in your Terraform configuration are applie
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
+		// component/stack for the exec-metadata Data payload (research.md
+		// Decision 21) — the multi-component --affected/--all path never
+		// reaches captureExecMetadataSync's single-component parser closure
+		// (gated out by its existing info.NodeHooks == nil check), so an
+		// empty component here (no positional arg) is expected, not an error.
+		var execComponent string
+		if len(args) > 0 {
+			execComponent = args[0]
 		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 

@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/proexec"
+	// Import backend provisioner to register S3 provisioner.
+	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
-
-	// Import backend provisioner to register S3 provisioner.
-	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 )
 
 const (
@@ -46,8 +48,11 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
-	logFieldComponent         = "component"
-	dirPermissions            = 0o755
+	// Terraform's -detailed-exitcode documents this as "succeeded, there is a
+	// diff", distinct from 0 (no changes) and 1 (error).
+	detailedExitCodeChangesDetected = 2
+	logFieldComponent               = "component"
+	dirPermissions                  = 0o755
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
@@ -89,6 +94,13 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 // Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
+
+	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
+	// handleDeploySubcommand rewrites "deploy" to "apply" in place so
+	// downstream terraform invocation logic can treat them uniformly). The
+	// exec-metadata record must report the command the user actually typed,
+	// not its internal apply-equivalent rewrite.
+	originalSubCommand := info.SubCommand
 
 	log.Debug(
 		"ExecuteTerraform entry",
@@ -187,7 +199,101 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		// any preflight snapshot so a dependent graph node reads the current outputs.
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 	}
+
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
+		Cmd:    invokingCommandFromOpts(opts...),
+		Parser: execMetadataParserFromOpts(opts...),
+		Err:    err,
+	})
+
 	return err
+}
+
+// captureExecMetadataSync reports an execution record to Atmos Pro for the
+// synchronous allowlist (terraform plan/apply/deploy), blocking briefly per
+// proexec.CaptureSync's own configurable timeout. No-op for every other
+// terraform subcommand. SubCommand must be the subcommand the user actually
+// invoked (captured before handleDeploySubcommand's in-place "deploy" ->
+// "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
+// misattributed to `apply`.
+//
+// Multi-component invocations (info.NodeHooks != nil, wired by
+// cmd/terraform/utils.go's wirePerComponentHook for --affected/--all/query
+// runs) are skipped here: this function fires once per graph node, but
+// FR-006a requires exactly one execution record for the whole invocation.
+// Cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
+// identity/outcome instead and fires a single aggregate CaptureSync call
+// after the graph run completes (research.md Decisions 11/17).
+//
+// Structured plugin.TerraformOutputData enrichment described for User Story 3
+// is obtained via parser, a closure supplied by cmd/terraform through
+// WithExecMetadataParser (research.md Decision 18) — internal/exec never
+// imports pkg/ci/plugins/terraform directly, since pkg/ci/internal/plugin is
+// only importable from within the pkg/ci tree and, independently,
+// pkg/ci/plugins/terraform itself imports internal/exec (a confirmed import
+// cycle). Parser is nil for callers that don't wire one (e.g. tests), in
+// which case data is reported as nil, same as before this data was wired.
+// ExecMetadataSyncParams bundles the invoking Cobra command, the optional
+// structured-output parser, and the command's own error — the three values
+// captureExecMetadataSync needs beyond atmosConfig/subCommand/info, grouped
+// to stay under the linter's argument-count limit.
+type execMetadataSyncParams struct {
+	Cmd    *cobra.Command
+	Parser func(subCommand string, exitCode int, output string) any
+	Err    error
+}
+
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, params execMetadataSyncParams) {
+	commandPath := "atmos terraform " + subCommand
+	if !proexec.IsSyncCommand(commandPath) {
+		return
+	}
+
+	if info.NodeHooks != nil {
+		log.Debug("Skipping per-node exec-metadata sync capture: part of a multi-component run.", "component", info.ComponentFromArg)
+		return
+	}
+
+	exitCode := errUtils.GetExitCode(params.Err)
+	if params.Err != nil && exitCode == 0 {
+		exitCode = 1
+	}
+
+	// FR-006e: TerraformExecData.exit_code must report the terraform/tofu subprocess's
+	// real, pre-CI-remap exit code (info.ExecMetadataRawExitCode, set by
+	// executeMainTerraformCommand), not the post-remap/neutralized exitCode above —
+	// that value is reserved for the base envelope's own exit_code (FR-003), which
+	// is unaffected by this. Falls back to exitCode when the raw field was never
+	// populated (e.g. the pipeline failed before the main command ran at all, or a
+	// test invokes captureExecMetadataSync directly without going through
+	// executeMainTerraformCommand).
+	rawExitCode := info.ExecMetadataRawExitCode
+	if rawExitCode == 0 && exitCode != 0 {
+		rawExitCode = exitCode
+	}
+
+	var args []string
+	if info.ComponentFromArg != "" {
+		args = []string{info.ComponentFromArg}
+	}
+
+	// Flags MUST be sourced from the invoking Cobra command's own record of
+	// explicitly-set flags, not info.AdditionalArgsAndFlags — that field is a
+	// pass-through-args collection that never contains atmos-recognized flags
+	// like -s/--stack and has --upload-status stripped out of it before this
+	// call runs, so it structurally cannot represent "the flags actually
+	// passed" (research.md Decision 14).
+	flags := proexec.FlagsFromCommand(params.Cmd)
+
+	var data any
+	if params.Parser != nil {
+		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
+	}
+
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
+	}
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.

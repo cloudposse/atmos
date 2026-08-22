@@ -132,6 +132,15 @@ settings:
     - **Default:** `4194304` (4 MB)
   </dd>
 
+  <dt>`settings.pro.exec.sync_timeout_seconds`</dt>
+  <dd>
+    How long (in seconds) Atmos waits for command-execution metadata delivery to Atmos Pro to be confirmed for the small set of commands that report synchronously (`terraform plan`, `terraform apply`, `describe affected`). Execution-metadata upload only happens automatically when Atmos detects it is running in CI **and** Atmos Pro is configured — there is no separate opt-in/opt-out flag. This setting only *lengthens* the wait: values below the 10-second default are clamped up to 10 seconds rather than allowed to shorten it. All other commands report asynchronously with a short, fixed, non-configurable best-effort flush and never block on this setting.
+
+    - **Type:** `integer`
+    - **Default:** `10`
+    - **Environment Variable:** `ATMOS_PRO_EXEC_SYNC_TIMEOUT_SECONDS`
+  </dd>
+
   <dt>`settings.pro.github_oidc.request_url`</dt>
   <dd>
     GitHub Actions OIDC token request URL. Automatically set in GitHub Actions via the `ACTIONS_ID_TOKEN_REQUEST_URL` environment variable.
@@ -164,6 +173,9 @@ settings:
 
   <dt>`ATMOS_PRO_RUN_ID`</dt>
   <dd>CI/CD run identifier. Set automatically in CI environments for tracking.</dd>
+
+  <dt>`ATMOS_PRO_EXEC_SYNC_TIMEOUT_SECONDS`</dt>
+  <dd>Wait ceiling for synchronous command-execution metadata delivery. Maps to `settings.pro.exec.sync_timeout_seconds`.</dd>
 </dl>
 
 ## Authentication

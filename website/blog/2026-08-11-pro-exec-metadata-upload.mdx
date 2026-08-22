@@ -1,0 +1,60 @@
+---
+slug: pro-exec-metadata-upload
+title: "See Every Atmos Command That Ran in CI, Without Parsing a Single Log"
+authors: [goruha]
+tags: [atmos-pro, feature]
+---
+
+A pipeline runs a dozen Atmos commands across a dozen jobs. Something looks off — a plan
+that should have shown changes didn't, a command that used to take seconds now takes
+minutes. The only way to find out what actually happened is to open each CI job, scroll
+through raw log output, and reconstruct the timeline by hand. There was no automatic
+record of what ran, how long it took, or how much it cost.
+
+<!--truncate-->
+
+## The Problem
+
+CI logs are the system of record for infrastructure changes, but they're not built for
+review. Finding "which command ran against which stack, and did it succeed" means
+opening job after job and reading output meant for a terminal, not a dashboard. Resource
+usage — how long a command actually took, how much memory it needed — was never
+captured at all, so slow pipelines were diagnosed by guesswork.
+
+## The Fix
+
+When Atmos runs in a recognized CI environment with Atmos Pro configured, it now reports
+a lightweight execution record for every command automatically — no extra setup beyond
+what you already have. The record covers the Atmos version, the command and its exit
+code, and how long it took to run.
+
+Most commands report this in the background and never slow anything down. `terraform
+plan`, `terraform apply`, and `describe affected` wait briefly to confirm the record
+made it to Atmos Pro before the command finishes, so a pipeline never reports success for
+a run Atmos Pro never saw — and if delivery is slow or fails, the command still
+completes; it only logs a warning.
+
+## How to Use It
+
+There's nothing to turn on. If Atmos Pro is already configured and Atmos is running in
+CI, execution records start flowing immediately.
+
+The only knob is how long a critical command (`terraform plan`, `terraform apply`,
+`describe affected`) is willing to wait for Atmos Pro to confirm it received the record
+before moving on — 10 seconds by default:
+
+```yaml
+settings:
+  pro:
+    exec:
+      sync_timeout_seconds: 20
+```
+
+Raise it if your network to Atmos Pro is slow; the default already covers most setups.
+
+## Get Involved
+
+This is the foundation for richer execution history in Atmos Pro — itemized resource
+changes from `terraform plan`/`apply` are next. Tell us what you'd want to see in an
+execution's timeline. Open an issue or start a discussion at
+[github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

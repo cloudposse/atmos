@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -478,6 +479,28 @@ func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 	return defaultInstanceColumns, nil
 }
 
+// buildUploadInstances converts schema.Instance to dtos.UploadInstance at the upload boundary.
+// UploadInstance is an allowlist — only fields Atmos Pro needs are included.
+// Sensitive data (vars, env, backend) never leaves this boundary. Shared by the
+// --upload path (POST /api/v1/instances) and the exec-metadata Data hand-off
+// for Pro-integrated invocations that did not pass --upload.
+func buildUploadInstances(instances []schema.Instance) []dtos.UploadInstance {
+	uploadInstances := make([]dtos.UploadInstance, len(instances))
+	for i, inst := range instances {
+		if metadataDisabledPro(inst.Settings, inst.Metadata) {
+			log.Debug("Overriding pro.enabled to false for upload: metadata.enabled is false",
+				KeyComponent, inst.Component, KeyStack, inst.Stack)
+		}
+		uploadInstances[i] = dtos.UploadInstance{
+			Component:     inst.Component,
+			Stack:         inst.Stack,
+			ComponentType: inst.ComponentType,
+			Settings:      extractProSettings(inst.Settings, inst.Metadata),
+		}
+	}
+	return uploadInstances
+}
+
 // uploadInstancesWithDeps uploads instances to Atmos Pro API using injected dependencies.
 // This function is testable via mocks. Use uploadInstances() for production code.
 func uploadInstancesWithDeps(
@@ -517,21 +540,7 @@ func uploadInstancesWithDeps(
 	}
 
 	// Convert schema.Instance to dtos.UploadInstance at the upload boundary.
-	// UploadInstance is an allowlist — only fields Atmos Pro needs are included.
-	// Sensitive data (vars, env, backend) never leaves this boundary.
-	uploadInstances := make([]dtos.UploadInstance, len(instances))
-	for i, inst := range instances {
-		if metadataDisabledPro(inst.Settings, inst.Metadata) {
-			log.Debug("Overriding pro.enabled to false for upload: metadata.enabled is false",
-				KeyComponent, inst.Component, KeyStack, inst.Stack)
-		}
-		uploadInstances[i] = dtos.UploadInstance{
-			Component:     inst.Component,
-			Stack:         inst.Stack,
-			ComponentType: inst.ComponentType,
-			Settings:      extractProSettings(inst.Settings, inst.Metadata),
-		}
-	}
+	uploadInstances := buildUploadInstances(instances)
 
 	req := dtos.InstancesUploadRequest{
 		RepoURL:   repoInfo.RepoUrl,
@@ -540,6 +549,14 @@ func uploadInstancesWithDeps(
 		RepoHost:  repoInfo.RepoHost,
 		Instances: uploadInstances,
 	}
+
+	// Attach the same instance list to this command's exec-metadata
+	// execution record, so Atmos Pro gets it without a separate lookup
+	// against POST /api/v1/instances (FR-006c, research.md Decision 23).
+	// This only fires here, inside the --upload branch — a plain
+	// `list instances` (no --upload) never computes uploadInstances at all,
+	// so it never reaches this call.
+	proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))
 
 	err = apiClient.UploadInstances(&req)
 	if err != nil {
@@ -996,6 +1013,12 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if uploadErr := uploadInstances(instances); uploadErr != nil {
 			return uploadErr
 		}
+	} else if proexec.GateOpen(&atmosConfig) {
+		// Atmos Pro integration is active (CI detected, Pro credentials configured) even
+		// though --upload was not passed: still attach the instance list to this
+		// invocation's exec-metadata Data, without calling POST /api/v1/instances
+		// (spec.md 2026-08-22 Clarifications, superseding the prior --upload-only gating).
+		proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", buildUploadInstances(instances)))
 	}
 
 	return nil

@@ -67,10 +67,15 @@ repos:
       # Keep local commits aligned with the affected-file validation job.
       # Pre-commit must not compile Atmos: use an already installed binary.
       # Exclude Go to match CI's raw-string limitation.
+      # specs/** is also passed explicitly here (not just via atmos.yaml's
+      # validate.editorconfig.exclude): the pinned ATMOS_BOOTSTRAP_VERSION
+      # release silently drops atmos.yaml's exclude list in the aggregate
+      # `validate --affected` path (only later/unreleased builds merge it),
+      # so relying on atmos.yaml alone re-flags specs/ on this pinned binary.
       - id: atmos-validate-editorconfig
         name: Validate EditorConfig
         description: Validate affected non-Go files against EditorConfig rules
-        entry: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format rich
+        entry: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --format rich
         language: system
         pass_filenames: false
         always_run: true

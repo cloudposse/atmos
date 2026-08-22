@@ -25,6 +25,12 @@ const testJSONMaxLine = 4 * 1024 * 1024
 // `test -json` stream) to the seconds used by JUnit `time` attributes.
 const millisecondsPerSecond = 1000.0
 
+// sensitiveOutputPlaceholder is the literal text Terraform/OpenTofu prints in
+// place of a sensitive-flagged output's real value in apply console output
+// (e.g. `secret_key = <sensitive>`), used by extractApplyOutputs to detect
+// sensitivity directly from console text, since the real value never appears.
+const sensitiveOutputPlaceholder = "<sensitive>"
+
 const (
 	testEventDiagnostic = "diagnostic"
 	testEventFile       = "test_file"
@@ -486,6 +492,14 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 		}
 	}
 
+	// A replacement prints as a destroy followed by a create of the same
+	// address (there is no single "Replacing..." progress line), so without
+	// this step a replaced resource would double-report as both created and
+	// deleted instead of matching the single "replaced" action the plan phase
+	// reports for the same address. Reconcile before ResourceCounts/summary
+	// parsing so downstream consumers see one action per address, same as plan.
+	reconcileApplyReplacements(data)
+
 	// Extract outputs from apply stdout (e.g., 'key = "value"' lines after "Outputs:").
 	// This avoids needing to run `terraform output` separately, which would require
 	// backend credentials that may not be available in PostRunE context.
@@ -495,6 +509,43 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	data.Warnings = ExtractWarningBlocks(output)
 
 	return result
+}
+
+// reconcileApplyReplacements moves any resource address present in both
+// CreatedResources and DeletedResources into ReplacedResources, removing it
+// from the other two lists. Terraform/OpenTofu apply progress output has no
+// distinct "replaced" verb — a replacement is always logged as a destroy of
+// the old instance followed by a create of the new one — so without this
+// step the same address would appear under two separate actions instead of
+// the single "replaced" action the plan phase reports for it.
+func reconcileApplyReplacements(data *plugin.TerraformOutputData) {
+	deleted := make(map[string]bool, len(data.DeletedResources))
+	for _, addr := range data.DeletedResources {
+		deleted[addr] = true
+	}
+
+	replaced := make(map[string]bool)
+	createdOnly := make([]string, 0, len(data.CreatedResources))
+	for _, addr := range data.CreatedResources {
+		if deleted[addr] {
+			if !replaced[addr] {
+				data.ReplacedResources = append(data.ReplacedResources, addr)
+				replaced[addr] = true
+			}
+			continue
+		}
+		createdOnly = append(createdOnly, addr)
+	}
+	data.CreatedResources = createdOnly
+
+	deletedOnly := make([]string, 0, len(data.DeletedResources))
+	for _, addr := range data.DeletedResources {
+		if replaced[addr] {
+			continue
+		}
+		deletedOnly = append(deletedOnly, addr)
+	}
+	data.DeletedResources = deletedOnly
 }
 
 // ParseDestroyOutput parses terraform destroy stdout.
@@ -602,8 +653,14 @@ func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
 			value = value[1 : len(value)-1]
 		}
 
+		// Terraform prints the literal placeholder "<sensitive>" (unquoted, no
+		// real value ever reaches this text) in place of a sensitive-flagged
+		// output's value, so that literal is itself a reliable signal to flag
+		// Sensitive: true here — unlike most fields in this regex-based
+		// parser, this one doesn't need the real value to detect sensitivity.
 		outputs[key] = plugin.TerraformOutput{
-			Value: value,
+			Value:     value,
+			Sensitive: value == sensitiveOutputPlaceholder,
 		}
 	}
 

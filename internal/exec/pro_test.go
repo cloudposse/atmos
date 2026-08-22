@@ -49,6 +49,19 @@ func (m *MockProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.Unloc
 	return args.Get(0).(dtos.UnlockStackResponse), args.Error(1)
 }
 
+func (m *MockProAPIClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error {
+	args := m.Called(dto)
+	return args.Error(0)
+}
+
+func (m *MockProAPIClient) UploadExecData(dto *dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error) {
+	args := m.Called(dto)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*dtos.ExecDataUploadResponse), args.Error(1)
+}
+
 // MockGitRepo is a mock implementation of the git repository.
 type MockGitRepo struct {
 	mock.Mock

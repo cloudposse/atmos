@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -35,8 +36,23 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 	// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by Atmos.
 	info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
-	if uploadStatusFlag && !slices.Contains(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+	// FR-006e: add -detailed-exitcode whenever exec-metadata capture is active for
+	// this plan invocation, independent of the legacy --upload-status flag, so
+	// TerraformExecData.exit_code (FR-006) can report the real subprocess outcome
+	// instead of always 0. If the flag was already present (user-passed, or added
+	// below via uploadStatusFlag), nothing more is added. When it's added solely
+	// because of exec-metadata capture (not --upload-status), info is flagged so
+	// executeMainTerraformCommand can locally neutralize the resulting exit code 2
+	// for Atmos's own returned status (research.md Decision 36) — --upload-status's
+	// own pre-existing exit-2 propagation behavior is left untouched.
+	switch {
+	case slices.Contains(info.AdditionalArgsAndFlags, detailedExitCodeFlag):
+		// Already present; nothing to add.
+	case uploadStatusFlag:
 		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
+	case proexec.GateOpen(atmosConfig):
+		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
+		info.ExecMetadataDetailedExitCodeAdded = true
 	}
 
 	return allArgsAndFlags
