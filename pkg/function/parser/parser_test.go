@@ -217,6 +217,7 @@ func TestParseSecret(t *testing.T) {
 		},
 		{name: "empty input", input: "", wantErr: true},
 		{name: "empty name", input: "| raw", wantErr: true},
+		{name: "empty quoted name", input: `"" | raw`, wantErr: true},
 		{name: "missing delimiter", input: "SERVICE_CONFIG raw", wantErr: true},
 		{name: "raw with value", input: "SERVICE_CONFIG | raw value", wantErr: true},
 		{name: "path without value", input: "SERVICE_CONFIG | path", wantErr: true},
