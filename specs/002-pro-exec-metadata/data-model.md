@@ -248,17 +248,23 @@ regardless of whether `--upload` was passed, since `affected` is always computed
 ### InstancesExecData (`Data` shape for `atmos list instances`, research.md Decision 23)
 
 `Data = proexec.VersionedData(1, "instances", req.Instances)`, i.e. `{"version": 1,
-"instances": [dtos.UploadInstance, ...]}` — present **only** when the invocation's `--upload`
-flag was passed (the `[]UploadInstance` list is not built otherwise, and this shape MUST NOT
-force that computation just to populate `Data`). Each `UploadInstance` entry carries
+"instances": [dtos.UploadInstance, ...]}` — present when the invocation's `--upload` flag was
+passed **OR** Atmos Pro integration is active for the invocation (`proexec.GateOpen(atmosConfig)`
+— CI detected AND Pro credentials configured — independent of `--upload`; spec.md 2026-08-22
+session, superseding this shape's prior `--upload`-only gating). When `--upload` fired, this
+reuses the `[]UploadInstance` list already built for `POST /api/v1/instances`; when only
+`GateOpen` holds, the list MUST be computed for this purpose alone (the corresponding
+`POST /api/v1/instances` call still does not happen). Only when NEITHER condition holds is the
+`[]UploadInstance` list left unbuilt and `Data` absent. Each `UploadInstance` entry carries
 `component`, `stack`, `component_type`, and `settings` — the same fields already sent to
 `POST /api/v1/instances`. Populated via a new `proexec.SetPendingAsyncData` hand-off (since
 `list instances` is not sync-allowlisted — FR-007 — and the generic async hook,
 `cmd/root.go`'s `proexec.CaptureAsync`, has no command-specific knowledge of its own): called
-inside `ExecuteListInstancesCmd`'s existing `--upload` branch, immediately after
-`req.Instances` is built; read and cleared by `CaptureAsync` when it assembles that
-invocation's `ExecRecordInput`, so a value never leaks into a later invocation within the same
-process.
+inside `ExecuteListInstancesCmd`, either in the existing `--upload` branch immediately after
+`req.Instances` is built, or in a new `!upload && proexec.GateOpen(&atmosConfig)` branch that
+builds the equivalent `[]dtos.UploadInstance` list without calling `POST /api/v1/instances`;
+read and cleared by `CaptureAsync` when it assembles that invocation's `ExecRecordInput`, so a
+value never leaks into a later invocation within the same process.
 
 ### ExecUploadResponse
 
@@ -276,8 +282,8 @@ process.
 | `terraform apply` | Sync | Warn-and-continue (does not fail the apply) | `TerraformOutputData` |
 | `terraform deploy` | Sync | Warn-and-continue (does not fail the deploy) | `TerraformOutputData` |
 | `describe affected` | Sync | Warn-and-continue | `AffectedStacksExecData` — unconditional (research.md Decision 22) |
-| `atmos list instances` (`--upload` passed) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `InstancesExecData` — via `SetPendingAsyncData` (research.md Decision 23) |
-| All other commands (incl. `list instances` without `--upload`) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `nil` |
+| `atmos list instances` (`--upload` passed OR Pro integration active) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `InstancesExecData` — via `SetPendingAsyncData` (research.md Decision 23; spec.md 2026-08-22) |
+| All other commands (incl. `list instances` with neither `--upload` nor Pro integration active) | Async (fire-and-forget, bounded flush) | N/A — never affects exit code | `nil` |
 
 The specific fail-vs-warn choice per synchronous command (FR-008) defaults to
 **warn-and-continue** for all four sync commands — a delivery outage must never turn

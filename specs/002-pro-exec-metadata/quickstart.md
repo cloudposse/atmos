@@ -125,11 +125,17 @@ This supplements the existing "Pact Contract Testing" README section
   shaped `{"version": 1, "stacks": [...]}` — not `null` — even though `--upload` was not
   passed, since the affected-stacks list is already computed for every invocation regardless.
 
-16. **(research.md Decision 23)** Run `atmos list instances --upload` (with the CI event/repo
-  preconditions `--upload` requires) and confirm the logged request body's `data` field is
-  `{"version": 1, "instances": [...]}`. Then run `atmos list instances` **without** `--upload`
-  and confirm `data` is absent/`null` — this is the regression check for FR-006c's "MUST NOT
-  compute the instance list solely to populate this field" requirement.
+16. **(research.md Decision 23, gating updated by spec.md's 2026-08-22 Clarifications session)**
+  Run `atmos list instances --upload` (with the CI event/repo preconditions `--upload`
+  requires) and confirm the logged request body's `data` field is `{"version": 1, "instances":
+  [...]}`. Then run `atmos list instances` **without** `--upload`, still with Atmos Pro
+  integration active (CI detected, Pro credentials configured — `proexec.GateOpen` true), and
+  confirm `data` is still `{"version": 1, "instances": [...]}` — Pro-integration-active alone
+  now also populates it, per FR-006c. Finally, run `atmos list instances` with **neither**
+  `--upload` nor Pro integration active (e.g. not in CI, or Pro not configured) and confirm
+  `data` is absent/`null` — this is the regression check for FR-006c's "MUST NOT compute the
+  instance list solely to populate this field" requirement, now scoped to the case where
+  neither condition holds.
 
 17. **(research.md Decision 24)** Inspect the logged request bodies from steps 11 (terraform),
   15 (`describe affected`), and 16 (`list instances`) together and confirm each `data.version`
@@ -179,7 +185,7 @@ confirm the logic is exercised by `go test` without needing a live Pro backend:
 | 13 | `has_changes`/`has_errors`/`errors` accurate | `TestBuildTerraformExecData_ApplySuccess`, `TestBuildTerraformExecData_ApplyFailure` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
 | 14 | `component`/`stack` present/omitted correctly | `TestBuildTerraformExecData_EmptyComponentStackOmitted`, `TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser`, `TestTerraformExecMetadataParserFunc_ReadsBuffersAtCallTime` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
 | 15 | `describe affected` `data` unconditional | `TestExecuteInner_ReturnsAffected`, `TestExecute_AttachesAffectedAsStructuredData` (`internal/exec/describe_affected_upload_test.go`), `TestPact_UploadExecMetadata_DescribeAffected`(`_BlobURL`) |
-| 16 | `list instances` `data` gated on `--upload` | `TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata` (`pkg/list/list_instances_upload_test.go`), `TestCaptureAsync_UsesAndClearsPendingAsyncData` (`pkg/proexec/async_test.go`), `TestPact_UploadExecMetadata_ListInstances`(`_BlobURL`) |
+| 16 | `list instances` `data` gated on `--upload` OR Pro-integration-active | `TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata` (`pkg/list/list_instances_upload_test.go`), `TestCaptureAsync_UsesAndClearsPendingAsyncData` (`pkg/proexec/async_test.go`), `TestPact_UploadExecMetadata_ListInstances`(`_BlobURL`), `TestExecuteListInstancesCmd_ProGateWithoutUpload`/`TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData` (`pkg/list/list_instances_coverage_test.go`, spec.md 2026-08-22) |
 | 17 | `version: 1` present on every shape, absent from envelope | `TestVersionedData_*` (`pkg/proexec/envelope_test.go`); every `TestPact_UploadExecMetadata*` case asserts `version` as an exact-literal `1` |
 | 18 | `changes`/`warnings`/`errors` are `[]`, never `null`, when empty | `TestBuildTerraformExecData_EmptyListsAreNotNull` (`cmd/terraform/utils_exec_metadata_test.go`), `TestPact_UploadExecMetadata` |
 | 19 | `exit_code` present, distinct from envelope `exit_code`, per-component in multi-component runs | `TestBuildTerraformExecData_ExitCode`, `TestTerraformNodeHooks_RecordExecResultAccumulates` (per-node `ExitCode` already covered), `TestPact_UploadExecMetadata` |

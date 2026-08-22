@@ -951,17 +951,27 @@ construction around line 544), calls
 list is already built for `UploadInstances` — never outside that branch, so a plain
 `atmos list instances` (no `--upload`) triggers zero extra computation.
 
+> **Superseded 2026-08-22 (spec.md Clarifications, same date)**: the gating above is no longer
+> `--upload`-only. `ExecuteListInstancesCmd` MUST also call
+> `proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", instances))` — building the
+> equivalent `[]dtos.UploadInstance` list without calling `POST /api/v1/instances` — when
+> `!opts.Upload && proexec.GateOpen(&atmosConfig)` (Atmos Pro integration active: CI detected AND
+> Pro credentials configured, per `pkg/proexec/gate.go`). A plain `atmos list instances` still
+> triggers zero extra computation only when *neither* `--upload` nor `GateOpen` holds — e.g. an
+> interactive, non-CI, or Pro-unconfigured invocation. This changes the "never outside that
+> branch" sentence above: the hand-off now fires from two branches, not one.
+
 **Rationale**: `list instances` has no exec-metadata wiring at all today (confirmed: no
 `proexec` import in `pkg/list/list_instances.go`) — it relies entirely on the generic async
 default path, `cmd/root.go`'s `proexec.CaptureAsync(cmd, err)`, which is deliberately
 command-agnostic (it only ever sees a `*cobra.Command` and an `error`, per
 `commandArgsAndFlags`) and so always builds `Data: nil`. FR-006c requires `list instances` to
-attach its own `Data`, gated on `--upload` — but there is no existing mechanism for a
-non-sync-allowlisted command to hand data to that generic hook. `SetPendingAsyncData` is the
-smallest addition that closes this gap: it reuses an already-proven pattern in the exact same
-file (`currentAtmosConfig`) rather than introducing a new one (e.g. a `context.Context` value
-threaded through Cobra's command tree, or a `cmd.Annotations` string-only side-channel that
-can't hold a typed `any` payload cleanly).
+attach its own `Data`, gated on `--upload` OR Pro-integration-active (2026-08-22) — but there is
+no existing mechanism for a non-sync-allowlisted command to hand data to that generic hook.
+`SetPendingAsyncData` is the smallest addition that closes this gap: it reuses an already-proven
+pattern in the exact same file (`currentAtmosConfig`) rather than introducing a new one (e.g. a
+`context.Context` value threaded through Cobra's command tree, or a `cmd.Annotations`
+string-only side-channel that can't hold a typed `any` payload cleanly).
 
 **Alternatives considered**:
 - Have `list_instances.go` call a `proexec` capture function directly, bypassing the generic
