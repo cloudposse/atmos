@@ -664,50 +664,52 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 // struct/map at a parent key -- because viper's dotted-path Get only reliably resolves through
 // values it previously stored itself as nested maps, not arbitrary Go structs.
 func bridgeVendorUpdaterConfig(atmosConfig *schema.AtmosConfiguration) {
+	v := GlobalViper()
+
 	update := atmosConfig.Vendor.Update
 	if update.Execution.Mode != "" {
-		GlobalViper().Set("vendor.update.execution.mode", update.Execution.Mode)
+		v.Set("vendor.update.execution.mode", update.Execution.Mode)
 	}
 	if update.Batching.Mode != "" {
-		GlobalViper().Set("vendor.update.batching.mode", update.Batching.Mode)
+		v.Set("vendor.update.batching.mode", update.Batching.Mode)
 	}
 	for name, group := range update.Groups {
 		prefix := "vendor.update.groups." + name
-		GlobalViper().Set(prefix+".include", group.Include)
-		GlobalViper().Set(prefix+".exclude", group.Exclude)
+		v.Set(prefix+".include", group.Include)
+		v.Set(prefix+".exclude", group.Exclude)
 	}
 
 	pr := atmosConfig.Vendor.CI.PullRequest
 	if pr.Provider != "" {
-		GlobalViper().Set("vendor.ci.pull_request.provider", pr.Provider)
+		v.Set("vendor.ci.pull_request.provider", pr.Provider)
 	}
 	if pr.BaseBranch != "" {
-		GlobalViper().Set("vendor.ci.pull_request.base_branch", pr.BaseBranch)
+		v.Set("vendor.ci.pull_request.base_branch", pr.BaseBranch)
 	}
 	if pr.BranchPrefix != "" {
-		GlobalViper().Set("vendor.ci.pull_request.branch_prefix", pr.BranchPrefix)
+		v.Set("vendor.ci.pull_request.branch_prefix", pr.BranchPrefix)
 	}
 	if pr.Title != "" {
-		GlobalViper().Set("vendor.ci.pull_request.title", pr.Title)
+		v.Set("vendor.ci.pull_request.title", pr.Title)
 	}
 	if pr.Body != "" {
-		GlobalViper().Set("vendor.ci.pull_request.body", pr.Body)
+		v.Set("vendor.ci.pull_request.body", pr.Body)
 	}
 	if len(pr.Labels) > 0 {
-		GlobalViper().Set("vendor.ci.pull_request.labels", pr.Labels)
+		v.Set("vendor.ci.pull_request.labels", pr.Labels)
 	}
 	if pr.Draft {
-		GlobalViper().Set("vendor.ci.pull_request.draft", pr.Draft)
+		v.Set("vendor.ci.pull_request.draft", pr.Draft)
 	}
 	if len(pr.Reviewers) > 0 {
-		GlobalViper().Set("vendor.ci.pull_request.reviewers", pr.Reviewers)
+		v.Set("vendor.ci.pull_request.reviewers", pr.Reviewers)
 	}
 	if len(pr.Assignees) > 0 {
-		GlobalViper().Set("vendor.ci.pull_request.assignees", pr.Assignees)
+		v.Set("vendor.ci.pull_request.assignees", pr.Assignees)
 	}
 
 	if atmosConfig.Vendor.CI.Summary.Enabled != nil {
-		GlobalViper().Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)
+		v.Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)
 	}
 }
 
