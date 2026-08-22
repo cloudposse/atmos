@@ -56,6 +56,29 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	force, _ := cmd.Flags().GetBool("force")
+	if !force {
+		for _, st := range svc.Status(true) {
+			if st.Declaration.Name != target.name {
+				continue
+			}
+			if st.Err != nil {
+				return st.Err
+			}
+			if st.Initialized {
+				confirmed, confirmErr := confirmActionFn(fmt.Sprintf("Secret `%s` is already set. Update (rotate) it?", target.name))
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !confirmed {
+					ui.Warning("Aborted")
+					return nil
+				}
+			}
+			break
+		}
+	}
+
 	useStdin, _ := cmd.Flags().GetBool("stdin")
 	resolvedValue, err := resolveSetValue(target.value, target.hasValue, useStdin)
 	if err != nil {
