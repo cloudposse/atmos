@@ -932,6 +932,55 @@ func TestSSMStore_Get(t *testing.T) {
 	}
 }
 
+func TestSSMStore_GetRaw(t *testing.T) {
+	tests := []struct {
+		name      string
+		output    *ssm.GetParameterOutput
+		want      string
+		wantErrIs error
+	}{
+		{
+			name: "returns_exact_raw_value",
+			output: &ssm.GetParameterOutput{Parameter: &types.Parameter{
+				Value: aws.String(`{"key":"value"}`),
+			}},
+			want: `{"key":"value"}`,
+		},
+		{name: "nil_output", wantErrIs: storepkg.ErrGetParameter},
+		{name: "nil_parameter", output: &ssm.GetParameterOutput{}, wantErrIs: storepkg.ErrGetParameter},
+		{
+			name:      "nil_value",
+			output:    &ssm.GetParameterOutput{Parameter: &types.Parameter{}},
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			client := NewMockSSMClient(ctrl)
+			stackDelimiter := "/"
+			client.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
+				Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+				WithDecryption: aws.Bool(true),
+			}).Return(tt.output, nil)
+
+			store := &SSMStore{
+				client:         client,
+				prefix:         "/test-prefix",
+				stackDelimiter: &stackDelimiter,
+			}
+			got, err := store.GetRaw("dev/usw2/app", "service", "config-key")
+			if tt.wantErrIs != nil {
+				require.ErrorIs(t, err, tt.wantErrIs)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestNewSSMStore(t *testing.T) {
 	// Check for AWS profile precondition
 	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
