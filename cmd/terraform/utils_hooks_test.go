@@ -885,6 +885,68 @@ func TestTerraformCIModeEnabledSources(t *testing.T) {
 
 		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
 	})
+
+	// Regression: an explicit --ci=false must be authoritative and win over
+	// ATMOS_CI/CI env vars (via Viper) and native CI-provider detection alike
+	// -- e.g. a user forcing human-readable output on a CI runner. Before this
+	// fix, terraformCIModeEnabled only special-cased an explicit --ci=true,
+	// silently re-enabling CI mode whenever Viper or native detection said true.
+	t.Run("explicit --ci=false wins over viper ci=true", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+		viper.Set("ci", true)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "false"))
+
+		assert.False(t, terraformCIModeEnabled(cmd))
+	})
+
+	t.Run("explicit --ci=false wins over native GitHub Actions detection", func(t *testing.T) {
+		withGitHubActionsDetection(t)
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "false"))
+
+		assert.False(t, terraformCIModeEnabled(cmd))
+	})
+}
+
+// TestResolveCIMode covers resolveCIMode directly: an explicitly set --ci
+// flag (true or false) must be authoritative, falling back to Viper
+// (ATMOS_CI/CI env vars) only when the flag was never explicitly set.
+func TestResolveCIMode(t *testing.T) {
+	t.Run("nil flags falls back to viper", func(t *testing.T) {
+		resetViperCI(t)
+		viper.Set("ci", true)
+
+		assert.True(t, resolveCIMode(nil))
+	})
+
+	t.Run("flag never set falls back to viper", func(t *testing.T) {
+		resetViperCI(t)
+		viper.Set("ci", true)
+		cmd := newHookTestCmd()
+
+		assert.True(t, resolveCIMode(cmd.Flags()))
+	})
+
+	t.Run("explicit --ci=true wins regardless of viper", func(t *testing.T) {
+		resetViperCI(t)
+		viper.Set("ci", false)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		assert.True(t, resolveCIMode(cmd.Flags()))
+	})
+
+	t.Run("explicit --ci=false wins over viper ci=true", func(t *testing.T) {
+		resetViperCI(t)
+		viper.Set("ci", true)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "false"))
+
+		assert.False(t, resolveCIMode(cmd.Flags()))
+	})
 }
 
 func TestTerraformPlanCIResultHandler(t *testing.T) {

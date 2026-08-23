@@ -61,18 +61,11 @@ func GlobalViper() *SafeViper {
 	return globalViper
 }
 
-// mergedFilesTracker tracks the config files merged during the most recent
-// LoadConfig call, guarded by its own mutex since LoadConfig can run
-// concurrently across DAG-scheduler worker goroutines (pkg/scheduler).
+// mergedFilesTracker tracks the config files merged during a single LoadConfig
+// call, guarded by its own mutex.
 type mergedFilesTracker struct {
 	mu    sync.Mutex
 	files []string
-}
-
-func (t *mergedFilesTracker) reset() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.files = nil
 }
 
 func (t *mergedFilesTracker) track(path string) {
@@ -91,4 +84,92 @@ func (t *mergedFilesTracker) snapshot() []string {
 	return out
 }
 
-var mergedFiles = &mergedFilesTracker{}
+// mergedFilesRegistry correlates each concurrent LoadConfig call's tracked
+// config files with the local *viper.Viper instance that call created ("v" in
+// load.go). That pointer already flows through every merge/case-preservation
+// helper LoadConfig calls (mergeConfig, mergeConfigFile,
+// collectConfigFilesForCasePreservation, ...), so using its identity as the
+// correlation key gives each concurrent LoadConfig call an isolated tracker
+// without threading a brand-new parameter through that entire call graph.
+//
+// A mutex alone does not provide this: it prevents concurrent map writes, but
+// a single shared tracker still lets one LoadConfig call's reset()/track()
+// calls interleave with another's, so a call can snapshot a different call's
+// files. Keying by the call's own *viper.Viper instance gives each concurrent
+// LoadConfig call its own tracker instead.
+//
+// Entries are removed by finish, called via defer immediately after start, so
+// a later LoadConfig call can never observe a finished call's tracker even if
+// Go reuses the same address after garbage collection -- the entry is gone
+// before the old v could become collectible.
+type mergedFilesRegistry struct {
+	mu       sync.Mutex
+	trackers map[*viper.Viper]*mergedFilesTracker
+}
+
+func (r *mergedFilesRegistry) start(v *viper.Viper) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.trackers[v] = &mergedFilesTracker{}
+}
+
+func (r *mergedFilesRegistry) track(v *viper.Viper, path string) {
+	r.mu.Lock()
+	tracker := r.trackers[v]
+	r.mu.Unlock()
+	if tracker != nil {
+		tracker.track(path)
+	}
+}
+
+func (r *mergedFilesRegistry) snapshot(v *viper.Viper) []string {
+	r.mu.Lock()
+	tracker := r.trackers[v]
+	r.mu.Unlock()
+	if tracker == nil {
+		return nil
+	}
+	return tracker.snapshot()
+}
+
+// finish removes v's tracker from the registry and returns its final
+// snapshot. Safe to call on a v that was never started (returns nil).
+func (r *mergedFilesRegistry) finish(v *viper.Viper) []string {
+	r.mu.Lock()
+	tracker, ok := r.trackers[v]
+	delete(r.trackers, v)
+	r.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return tracker.snapshot()
+}
+
+var mergedFilesReg = &mergedFilesRegistry{trackers: make(map[*viper.Viper]*mergedFilesTracker)}
+
+// lastLoadedFilesHolder holds the most recently completed LoadConfig call's
+// tracked files, guarded by its own mutex. Backs the exported LoadedConfigFiles
+// API, whose only consumer (`atmos config list`, cmd/config/list.go) runs a
+// single LoadConfig call and reads the result immediately afterward -- it is
+// never invoked concurrently with itself, so "last completed call" is a
+// well-defined answer for it, unlike the per-call registry above.
+type lastLoadedFilesHolder struct {
+	mu    sync.Mutex
+	files []string
+}
+
+func (h *lastLoadedFilesHolder) set(files []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.files = files
+}
+
+func (h *lastLoadedFilesHolder) get() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]string, len(h.files))
+	copy(out, h.files)
+	return out
+}
+
+var lastLoadedFiles = &lastLoadedFilesHolder{}

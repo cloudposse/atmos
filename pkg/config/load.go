@@ -61,25 +61,34 @@ var (
 // osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
 var osGetwd = os.Getwd
 
-// resetMergedConfigFiles clears the tracked config files. Call at start of LoadConfig.
+// resetMergedConfigFiles registers a fresh, empty file tracker for v. Call at
+// the start of LoadConfig, immediately after v is created.
 //
-// Backed by the mutex-guarded mergedFiles tracker (global_viper.go): LoadConfig
-// can run concurrently across DAG-scheduler worker goroutines (pkg/scheduler),
-// one call per graph node, so this can no longer be a bare package-level slice.
-func resetMergedConfigFiles() {
-	mergedFiles.reset()
+// Backed by the mutex-guarded mergedFilesReg registry (global_viper.go),
+// keyed by v's identity: LoadConfig can run concurrently across
+// DAG-scheduler worker goroutines (pkg/scheduler), one call per graph node,
+// so tracked files can no longer live in a single shared slice or tracker --
+// each call's v gets its own.
+func resetMergedConfigFiles(v *viper.Viper) {
+	mergedFilesReg.start(v)
 }
 
-// trackMergedConfigFile records a config file path for case-sensitive key extraction.
-func trackMergedConfigFile(path string) {
-	mergedFiles.track(path)
+// trackMergedConfigFile records a config file path, merged while loading v,
+// for case-sensitive key extraction.
+func trackMergedConfigFile(v *viper.Viper, path string) {
+	mergedFilesReg.track(v, path)
 }
 
 // LoadedConfigFiles returns the physical config files merged during the most
-// recent LoadConfig call. Embedded defaults and runtime/env overrides are not
-// included.
+// recently completed LoadConfig call. Embedded defaults and runtime/env
+// overrides are not included.
+//
+// Only meaningful for callers that run a single LoadConfig call and read the
+// result immediately afterward (e.g. `atmos config list`) -- it is not safe
+// to correlate with a specific concurrent LoadConfig call. Concurrent callers
+// needing a specific call's files should use collectConfigFilesForCasePreservation(v, ...).
 func LoadedConfigFiles() []string {
-	return mergedFiles.snapshot()
+	return lastLoadedFiles.get()
 }
 
 const (
@@ -416,10 +425,17 @@ func resolveProfileSelectionSentinel(tempConfig *schema.AtmosConfiguration, prof
 // NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
 // This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	// Reset merged config file tracker at start of each LoadConfig call.
-	resetMergedConfigFiles()
-
 	v := viper.New()
+
+	// Register a fresh merged-file tracker for this call's v, and publish its
+	// final contents to LoadedConfigFiles()'s single-caller cache on return.
+	// Deferred immediately so every exit path (error or success) cleans up the
+	// registry entry -- see mergedFilesRegistry's doc comment in global_viper.go.
+	resetMergedConfigFiles(v)
+	defer func() {
+		lastLoadedFiles.set(mergedFilesReg.finish(v))
+	}()
+
 	var atmosConfig schema.AtmosConfiguration
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
@@ -1471,7 +1487,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	configFilePath := tempViper.ConfigFileUsed()
-	trackMergedConfigFile(configFilePath)
+	trackMergedConfigFile(v, configFilePath)
 
 	// Read the config file's content
 	content, err := readConfigFileContent(configFilePath)
@@ -1919,7 +1935,7 @@ func mergeConfigFile(
 	}
 
 	// Track this file for case-sensitive key extraction.
-	trackMergedConfigFile(path)
+	trackMergedConfigFile(v, path)
 
 	// Save existing commands before merge.
 	existingCommands := v.Get(commandsKey)
@@ -2268,9 +2284,10 @@ var caseSensitivePaths = []string{
 }
 
 // collectConfigFilesForCasePreservation gathers all config files to process for case preservation.
-// It combines tracked merged files with the main config file (if not already tracked).
-func collectConfigFilesForCasePreservation(mainConfig string) []string {
-	tracked := mergedFiles.snapshot()
+// It combines the files tracked for v's LoadConfig call with the main config
+// file (if not already tracked).
+func collectConfigFilesForCasePreservation(v *viper.Viper, mainConfig string) []string {
+	tracked := mergedFilesReg.snapshot(v)
 	filesToProcess := make([]string, 0, len(tracked)+1)
 	filesToProcess = append(filesToProcess, tracked...)
 
@@ -2477,7 +2494,7 @@ func commandEnvValueCommand(value map[string]any) (any, bool) {
 // It processes all merged config files (main config + imports) with later files taking precedence.
 // This function operates on a best-effort basis - errors are logged but don't fail config loading.
 func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
-	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
+	filesToProcess := collectConfigFilesForCasePreservation(v, v.ConfigFileUsed())
 	if len(filesToProcess) == 0 {
 		return
 	}
@@ -2516,7 +2533,7 @@ func caseSensitiveEnvFromViper(v *viper.Viper) map[string]string {
 	}
 
 	caseMaps := casemap.New()
-	for _, configFile := range collectConfigFilesForCasePreservation(v.ConfigFileUsed()) {
+	for _, configFile := range collectConfigFilesForCasePreservation(v, v.ConfigFileUsed()) {
 		mergeCaseMapsFromFile(configFile, caseMaps)
 	}
 	envCase := caseMaps.Get(envKey)
@@ -2712,7 +2729,7 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 	defer perf.Track(atmosConfig, "config.fixAuthIdentities")()
 
 	// Get list of all config files that were merged.
-	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
+	filesToProcess := collectConfigFilesForCasePreservation(v, v.ConfigFileUsed())
 	if len(filesToProcess) == 0 {
 		return nil
 	}
