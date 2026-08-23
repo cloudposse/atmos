@@ -1,6 +1,8 @@
 package workdir
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -121,21 +123,42 @@ const (
 	WorkdirReprovisionedKey = "_workdir_reprovisioned"
 )
 
+// workdirHashLength is the number of hex characters kept from the sha256 hash used to
+// disambiguate two different (stack, component) pairs whose sanitized display prefixes
+// collide (see workdirPathHash). 8 hex characters is 32 bits: a collision is only possible
+// between the rare pairs that already share a sanitized prefix (see
+// sanitizeComponentNameForPath), and createWorkdirDirectory's identity check (see
+// verifyWorkdirIdentity) fails closed rather than silently reusing another identity's workdir
+// in the vanishingly unlikely event one occurs.
+const workdirHashLength = 8
+
 // BuildPath constructs the canonical workdir path for a component instance and validates
 // that it stays contained within basePath. It uses atmos_component (the instance name) from
 // componentConfig when available, falling back to the provided component name. This ensures
 // all provisioners (workdir, source, JIT) use the same directory for a given component
-// instance. "/" and "\" in the resolved component name are encoded (see
-// escapeComponentNameForPath) rather than left as real path segments; stack instead only has
-// its "."/".." path segments rejected (see validateStackForPath) -- a real "/" elsewhere in
-// stack, e.g. "deploy/test", is a supported nesting convention and is left alone, becoming a
-// real subdirectory exactly as it always has. The final path is verified to fall within
-// basePath (see containWithinBase) -- component and stack names can both originate from
-// user-controlled YAML, and either could otherwise resolve outside basePath (or alias another
-// stack's workdir) via filepath.Join's implicit Clean(). Returns errUtils.ErrPathTraversal if
-// stack contains a "."/".." segment or the resolved path escapes basePath.
+// instance.
 //
-// Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
+// The final path segment is "<stack>-<sanitized-component>-<hash>": sanitized-component is a
+// purely cosmetic, lossy rendering of the resolved component name (see
+// sanitizeComponentNameForPath) -- "/" and "\" become "-", nothing else changes -- and hash is
+// a short content hash of stack+component (see workdirPathHash) that guarantees uniqueness
+// even when two different component names sanitize to the same display prefix.
+//
+// Component name is kept to a single path segment rather than a real nested directory even
+// when it contains "/" (unlike stack -- see validateStackForPath) so every workdir sits at the
+// same fixed depth under basePath regardless of a component's own naming: some components use
+// a relative Terraform module `source` (e.g. `../../account-map/modules/...`) that assumes a
+// fixed number of ".." hops from the component's own directory, and a workdir whose depth
+// varied based on an unrelated component-naming choice would silently break that for exactly
+// the components whose name happens to contain "/".
+//
+// The final path is verified to fall within basePath (see containWithinBase) -- component and
+// stack names can both originate from user-controlled YAML, and either could otherwise resolve
+// outside basePath (or alias another stack's workdir) via filepath.Join's implicit Clean().
+// Returns errUtils.ErrPathTraversal if stack contains a "."/".." segment or the resolved path
+// escapes basePath.
+//
+// Path format: <basePath>/.workdir/<componentType>/<stack>-<sanitized-component>-<hash>.
 func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) (string, error) {
 	defer perf.Track(nil, "workdir.BuildPath")()
 
@@ -143,50 +166,42 @@ func BuildPath(basePath, componentType, component, stack string, componentConfig
 		return "", err
 	}
 
-	workdirComponent := resolveWorkdirComponentName(component, componentConfig)
-	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
+	rawComponent := resolveWorkdirComponentName(component, componentConfig)
+	workdirName := fmt.Sprintf("%s-%s-%s", stack, sanitizeComponentNameForPath(rawComponent), workdirPathHash(stack, rawComponent))
 	rawPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
 
 	// containWithinBase is kept as a defense-in-depth check against typeRoot
 	// (itself always safely nested under basePath, since componentType is a
 	// fixed, trusted caller-supplied constant such as "terraform", not
 	// user-controlled input) even though rejecting "."/".." segments in
-	// stack and escaping workdirComponent above should already make escape
-	// impossible -- it costs nothing and protects against a future change
-	// to either guard reintroducing a real traversal segment.
+	// stack and stripping "/"/"\" out of the component's sanitized prefix
+	// above should already make escape impossible -- it costs nothing and
+	// protects against a future change to either guard reintroducing a real
+	// traversal segment.
 	typeRoot := filepath.Join(basePath, WorkdirPath, componentType)
 
 	return containWithinBase(rawPath, typeRoot)
 }
 
 // resolveWorkdirComponentName resolves the instance-name override (atmos_component) from
-// componentConfig, falling back to component, then escapes the result for use as a single
-// filesystem path segment.
+// componentConfig, falling back to component. The returned value is intentionally
+// unsanitized -- BuildPath is responsible for turning it into a safe, unique path segment (see
+// sanitizeComponentNameForPath and workdirPathHash) -- so this function only decides which name
+// wins, not how it gets encoded.
 //
-// A nested component name (e.g. "ecs/cluster") must not add an extra path segment:
-// filepath.Join would otherwise turn it into a real subdirectory, making the workdir one level
-// deeper than a flat component's at the same stack. That silently changes how many ".." a
-// relative backend path (or any other path computed relative to the workdir) needs to reach
-// the same ancestor, so equivalent components would write state under different roots solely
-// because one component name contains "/". Mirror the same sanitization already used for
-// backend template context (see internal/exec/terraform_generate_backends.go).
-//
-// "\" is sanitized unconditionally (not just on Windows): it is Windows' real path separator,
-// so a crafted or copy-pasted component name containing it (e.g. "..\\..\\evil") would
-// otherwise let filepath.Join/Clean treat it as real ".."-traversal segments there, escaping
-// the intended workdir root. Stripping it on every platform also keeps a given component
-// name's encoded workdir segment deterministic regardless of which OS Atmos runs on.
+// A nested or otherwise separator-bearing name (e.g. "ecs/cluster") must not add an extra path
+// segment or otherwise change the workdir's depth under basePath -- see BuildPath's doc comment
+// for why that matters.
 func resolveWorkdirComponentName(component string, componentConfig map[string]any) string {
 	// Use atmos_component (instance name) for path isolation.
 	// When metadata.component differs from the instance name (e.g., inherited components),
 	// atmos_component contains the unique instance name while component/metadata.component
 	// contains the shared base name.
-	workdirComponent := component
 	if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
-		workdirComponent = atmosComponent
+		return atmosComponent
 	}
 
-	return escapeComponentNameForPath(workdirComponent)
+	return component
 }
 
 // validateStackForPath rejects a stack name containing a "." or ".." path segment, an empty
@@ -267,42 +282,29 @@ func validateStackForPath(stack string) error {
 	return nil
 }
 
-// escapeComponentNameForPath injectively encodes name so it can be used as a single
-// filesystem path segment without colliding with any other name. Every "-" is escaped to
-// "-h" *before* "/" is encoded to "-s" and "\" to "-b" -- each of the three special
-// characters gets its own two-character token, so "-" never appears unescaped in the output.
-// Every "-" in an encoded name is therefore unambiguously the start of a two-character escape
-// token, and no two distinct inputs can ever encode to the same output: e.g. "app/local",
-// "app-local", "app--local", and `app\local` all encode to four distinct segments
-// ("app-slocal", "app-hlocal", "app-h-hlocal", "app-blocal"). A single "/" -> "-" substitution
-// (or "/" -> "--", or mapping "/" and "\" to the same code) does not have this property --
-// each of those would let two distinct component names collide on one workdir, and therefore
-// share its files, metadata, and Terraform state.
-//
-// "/" and "\" get distinct codes rather than sharing one: earlier revisions of this function
-// aliased them on the theory that doing so was necessary to keep a *single* component name's
-// encoding identical regardless of which OS Atmos runs on. That's not actually true --
-// encoding happens in this Go loop, never delegated to the OS-dependent path/filepath
-// package, so a given name's encoded output is already fully deterministic across OSes
-// whether or not "/" and "\" share a code. Giving them distinct codes costs nothing and
-// closes the collision between two real (if unusual) component names differing only in which
-// separator they use.
-func escapeComponentNameForPath(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-	for _, r := range name {
-		switch r {
-		case '-':
-			b.WriteString("-h")
-		case '/':
-			b.WriteString("-s")
-		case '\\':
-			b.WriteString("-b")
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+// sanitizeComponentNameForPath produces a purely cosmetic, lossy rendering of name for use in
+// a workdir directory name: "/" and "\" become "-", every other character (including "-"
+// itself) passes through unchanged. Unlike the injective character-escaping scheme this
+// replaced, the result is not reversible and is not relied on for uniqueness -- two different
+// inputs can sanitize to the same output (e.g. "eks-ingress/1" and the unrelated literal
+// "eks-ingress-1" both become "eks-ingress-1"). Uniqueness comes entirely from
+// workdirPathHash, computed from the unsanitized name, so a colliding display prefix does not
+// produce a colliding path.
+func sanitizeComponentNameForPath(name string) string {
+	replacer := strings.NewReplacer("/", "-", `\`, "-")
+	return replacer.Replace(name)
+}
+
+// workdirPathHash returns a short, deterministic hex hash suffix that disambiguates two
+// different (stack, component) pairs whose sanitized display prefixes collide (see
+// sanitizeComponentNameForPath). The stack and component arguments are joined with an
+// explicit "\x00" separator before hashing -- never exposed in the visible directory name --
+// so the hash input itself is unambiguous even though the visible "-" join is not: stack
+// "dev-a" + component "b" and stack "dev" + component "a-b" hash differently despite
+// producing the identical visible prefix "dev-a-b".
+func workdirPathHash(stack, component string) string {
+	sum := sha256.Sum256([]byte(stack + "\x00" + component))
+	return hex.EncodeToString(sum[:])[:workdirHashLength]
 }
 
 // containWithinBase verifies that path, once absolutized, is contained within base (equal to

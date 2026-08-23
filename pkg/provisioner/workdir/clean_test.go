@@ -19,7 +19,7 @@ func TestCleanWorkdir_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create workdir structure using stack-component naming.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", expectedWorkdirName("dev", "vpc"))
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
 
@@ -174,7 +174,7 @@ func TestClean_WithComponent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create workdir using stack-component naming.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", expectedWorkdirName("dev", "vpc"))
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
@@ -255,7 +255,7 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", expectedWorkdirName("dev", "vpc"))
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Make parent non-writable to cause RemoveAll to fail.
@@ -345,7 +345,7 @@ func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", expectedWorkdirName("dev", "vpc"))
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Make parent non-writable to cause removal to fail.

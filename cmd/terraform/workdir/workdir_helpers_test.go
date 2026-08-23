@@ -90,8 +90,11 @@ func TestDefaultWorkdirManager_ListWorkdirs_NoWorkdirs(t *testing.T) {
 func TestDefaultWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// GetWorkdirInfo resolves the same way internally -- the fixture must exist at whatever
+	// path BuildPath actually computes for this component/stack.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -112,7 +115,7 @@ func TestDefaultWorkdirManager_GetWorkdirInfo(t *testing.T) {
 
 	info, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "dev-vpc", info.Name)
+	assert.Equal(t, filepath.Base(workdirPath), info.Name)
 	assert.Equal(t, "vpc", info.Component)
 	assert.Equal(t, "dev", info.Stack)
 	assert.Equal(t, "components/terraform/vpc", info.Source)
@@ -132,8 +135,10 @@ func TestDefaultWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 func TestDefaultWorkdirManager_DescribeWorkdir(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// DescribeWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -161,15 +166,17 @@ func TestDefaultWorkdirManager_DescribeWorkdir(t *testing.T) {
 	assert.Contains(t, manifest, "vpc:")
 	assert.Contains(t, manifest, "metadata:")
 	assert.Contains(t, manifest, "workdir:")
-	assert.Contains(t, manifest, "name: dev-vpc")
+	assert.Contains(t, manifest, "name: "+filepath.Base(workdirPath))
 	assert.Contains(t, manifest, "source: components/terraform/vpc")
 }
 
 func TestDefaultWorkdirManager_CleanWorkdir(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// CleanWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create a file in the workdir.
@@ -178,7 +185,7 @@ func TestDefaultWorkdirManager_CleanWorkdir(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
+	err = manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify workdir is removed.
@@ -492,8 +499,10 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_RemoveAllError(t *testing.T) {
 func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "prod-s3")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// DescribeWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "s3", "prod", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -521,7 +530,7 @@ func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	assert.Contains(t, manifest, "s3:")
 	assert.Contains(t, manifest, "metadata:")
 	assert.Contains(t, manifest, "workdir:")
-	assert.Contains(t, manifest, "name: prod-s3")
+	assert.Contains(t, manifest, "name: "+filepath.Base(workdirPath))
 	assert.Contains(t, manifest, "source: components/terraform/s3")
 	assert.Contains(t, manifest, "content_hash: sha256:abc123")
 	assert.Contains(t, manifest, "2024-06-15")
