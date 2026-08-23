@@ -107,10 +107,10 @@ component with no special characters — unlike before, when the two schemes
 happened to agree whenever the name had nothing to escape):
 
 1. the original pre-escaping `"%s-%s"` formula (`legacyWorkdirName`,
-   unchanged)
+    unchanged)
 2. the now-retired hyphen-encoded formula (`legacyHyphenEncodedWorkdirName`,
-   a frozen copy of the old `escapeComponentNameForPath` body, kept solely
-   to locate old directories — never called from the new creation path)
+    a frozen copy of the old `escapeComponentNameForPath` body, kept solely
+    to locate old directories — never called from the new creation path)
 
 Both candidates share the same exists-check → identity-verify → rename
 logic (`migrateFromLegacyPath`), reusing the existing
