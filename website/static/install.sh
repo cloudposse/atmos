@@ -10,6 +10,14 @@ command_exists() {
 	command -v "$@" >/dev/null 2>&1
 }
 
+# Retry flags shared by every curl call in this script: transient network
+# blips (connection resets, timeouts) shouldn't fail the whole install.
+# --retry-all-errors (curl 7.71+, 2020) is needed because plain --retry only
+# retries a narrower default set of conditions that doesn't cover every
+# transient failure (e.g. curl error 35, "Recv failure: Connection was
+# reset").
+curl_retry_flags=(--retry 3 --retry-delay 2 --retry-all-errors)
+
 # Function to run a command with root privileges if needed, using sudo when available.
 maybe_sudo() {
 	if [ "$(id -u)" -eq 0 ]; then
@@ -48,7 +56,7 @@ detect_package_manager() {
 # Function for CloudSmith package registry installation
 install_via_cloudsmith() {
 	local package_manager=$(detect_package_manager)
-	curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | maybe_sudo bash
+	curl "${curl_retry_flags[@]}" -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | maybe_sudo bash
 	case $package_manager in
 		alpine)
 			echo "Using apk installation method..."
@@ -79,7 +87,7 @@ install_via_binary_download() {
 	if [ -n "${ATMOS_VERSION:-}" ]; then
 		release="${ATMOS_VERSION#v}"
 	else
-		latest_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
+		latest_url=$(curl "${curl_retry_flags[@]}" -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
 		release="${latest_url##*/}"
 		release="${release#v}"
 	fi
@@ -108,9 +116,9 @@ install_via_binary_download() {
 	fi
 
 	binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
-	curl -fsSL "${binary_url}" -o "$output"
+	curl "${curl_retry_flags[@]}" -fsSL "${binary_url}" -o "$output"
 	checksums_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_SHA256SUMS"
-	expected_sha="$(curl -fsSL "$checksums_url" | awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}')"
+	expected_sha="$(curl "${curl_retry_flags[@]}" -fsSL "$checksums_url" | awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}')"
 	if [ -z "$expected_sha" ]; then
 		echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
 		exit 1
