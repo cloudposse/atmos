@@ -51,8 +51,8 @@ func FuzzProcessTmpl(f *testing.F) {
 // not just the absence of panics, without trying to predict the "right"
 // answer for arbitrary mutated input the fuzzer generates on its own.
 var knownIsGolangTemplateResults = map[string]struct {
-	wantDefault bool // IsGolangTemplate(nil, str) — default "{{"/"}}" delimiters
-	wantCustom  bool // IsGolangTemplate(customDelimiterAtmosConfig(), str) — "[["/"]]" delimiters
+	wantDefault bool // IsGolangTemplate(nil, str) — default "{{"/"}}" delimiters.
+	wantCustom  bool // IsGolangTemplate(customDelimiterAtmosConfig(), str) — "[["/"]]" delimiters.
 }{
 	"{{ .Foo }}":                {wantDefault: true, wantCustom: false},
 	"[[ .Foo ]]":                {wantDefault: false, wantCustom: true},
