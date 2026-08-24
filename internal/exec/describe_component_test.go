@@ -469,6 +469,9 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b")
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
+	// `catalog/overrides` (with its `retry` override) is imported after `catalog/c1`,
+	// so it must not apply — same file-scoping rule as the `vars` override above.
+	assert.NotContains(t, y, "retry:")
 
 	// `test3`
 	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -487,6 +490,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-overridden")
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
+	// `catalog/overrides` (with its `retry` override) is imported before `catalog/c1`,
+	// so the retry policy from the mixin-style overrides file must apply here — the
+	// same mechanism documented for sharing a `retry` policy via a mixin.
+	assert.Contains(t, y, "max_attempts: 5")
+	assert.Contains(t, y, "- /GOAWAY/")
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
