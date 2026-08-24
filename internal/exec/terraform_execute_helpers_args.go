@@ -5,17 +5,85 @@ package exec
 // independently testable.
 
 import (
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// hasCompatFlag reports whether flag (exact match, or a "flag=value" prefix) is
+// already present in additional — meaning the user typed it explicitly on the CLI
+// (as a raw compat pass-through flag). When true, Atmos must not also inject a
+// declarative flags default for it; the user's explicit value always wins.
+func hasCompatFlag(additional []string, flag string) bool {
+	return slices.Contains(additional, flag) ||
+		slices.ContainsFunc(additional, func(s string) bool { return strings.HasPrefix(s, flag+"=") })
+}
+
+// appendLockTimeoutFlag appends -lock-timeout when info.Flags.LockTimeout is set
+// and the user didn't already type -lock-timeout on the CLI. Returns an error if
+// the configured value isn't a valid Go duration.
+func appendLockTimeoutFlag(info *schema.ConfigAndStacksInfo, args []string) ([]string, error) {
+	if info.Flags.LockTimeout == "" || hasCompatFlag(info.AdditionalArgsAndFlags, lockTimeoutFlag) {
+		return args, nil
+	}
+	if _, err := time.ParseDuration(info.Flags.LockTimeout); err != nil {
+		return nil, fmt.Errorf("%w: invalid 'flags.lock_timeout' value %q: %w", errUtils.ErrInvalidComponentFlags, info.Flags.LockTimeout, err)
+	}
+	return append(args, lockTimeoutFlag, info.Flags.LockTimeout), nil
+}
+
+// appendLockFlag appends -lock when info.Flags.Lock is explicitly set (non-nil)
+// and the user didn't already type -lock on the CLI.
+func appendLockFlag(info *schema.ConfigAndStacksInfo, args []string) []string {
+	if info.Flags.Lock == nil || hasCompatFlag(info.AdditionalArgsAndFlags, lockFlag) {
+		return args
+	}
+	return append(args, lockFlag+"="+strconv.FormatBool(*info.Flags.Lock))
+}
+
+// appendParallelismFlag appends -parallelism when info.Flags.Parallelism is
+// explicitly set (non-nil) and the user didn't already type -parallelism on the CLI.
+func appendParallelismFlag(info *schema.ConfigAndStacksInfo, args []string) []string {
+	if info.Flags.Parallelism == nil || hasCompatFlag(info.AdditionalArgsAndFlags, parallelismFlag) {
+		return args
+	}
+	return append(args, parallelismFlag, strconv.Itoa(*info.Flags.Parallelism))
+}
+
+// appendRefreshFlag appends -refresh when info.Flags.Refresh is explicitly set
+// (non-nil) and the user didn't already type -refresh on the CLI. Callers MUST
+// NOT call this for `apply <planfile>` — terraform rejects -refresh when applying
+// a saved plan — nor for the `refresh` subcommand itself, which has no -refresh flag.
+func appendRefreshFlag(info *schema.ConfigAndStacksInfo, args []string) []string {
+	if info.Flags.Refresh == nil || hasCompatFlag(info.AdditionalArgsAndFlags, refreshFlag) {
+		return args
+	}
+	return append(args, refreshFlag+"="+strconv.FormatBool(*info.Flags.Refresh))
+}
+
+// appendCompactWarningsFlag appends -compact-warnings when info.Flags.CompactWarnings
+// is true and the user didn't already type -compact-warnings on the CLI. Unlike
+// Lock/Refresh/Parallelism, CompactWarnings' terraform default is already false, so a
+// plain bool is unambiguous — no need to distinguish "unset" from "false".
+func appendCompactWarningsFlag(info *schema.ConfigAndStacksInfo, args []string) []string {
+	if !info.Flags.CompactWarnings || hasCompatFlag(info.AdditionalArgsAndFlags, compactWarningsFlag) {
+		return args
+	}
+	return append(args, compactWarningsFlag)
+}
+
 // buildPlanSubcommandArgs extends allArgsAndFlags for the `terraform plan` subcommand.
-// It adds the varfile, optionally the planfile, and handles the upload-status flag.
+// It adds the varfile, optionally the planfile, handles the upload-status flag, and
+// injects declarative flags defaults (lock-timeout, lock, parallelism, refresh,
+// compact-warnings) — all of which `terraform plan` supports.
 // The uploadStatusFlag is resolved by the caller (buildTerraformCommandArgs) and passed in.
 func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFlag avoids computing it twice.
 	atmosConfig *schema.AtmosConfiguration,
@@ -23,7 +91,7 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 	allArgsAndFlags []string,
 	varFile, planFile string,
 	uploadStatusFlag bool,
-) []string {
+) ([]string, error) {
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, outFlag) &&
@@ -39,21 +107,100 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
 	}
 
-	return allArgsAndFlags
+	var err error
+	allArgsAndFlags, err = appendLockTimeoutFlag(info, allArgsAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	allArgsAndFlags = appendLockFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendParallelismFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendRefreshFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendCompactWarningsFlag(info, allArgsAndFlags)
+
+	return allArgsAndFlags, nil
 }
 
 // buildApplySubcommandArgs extends allArgsAndFlags for the `terraform apply` subcommand.
-// When not consuming a pre-built plan, it appends the varfile.
+// When not consuming a pre-built plan, it appends the varfile and injects all five
+// declarative flags defaults. When consuming a pre-built plan (info.UseTerraformPlan),
+// terraform only accepts a subset of flags — notably NOT -refresh — so -refresh is
+// deliberately excluded in that case.
 func buildApplySubcommandArgs(
 	info *schema.ConfigAndStacksInfo,
 	allArgsAndFlags []string,
 	varFile string,
-) []string {
+) ([]string, error) {
 	if !info.UseTerraformPlan {
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 	}
 
-	return allArgsAndFlags
+	var err error
+	allArgsAndFlags, err = appendLockTimeoutFlag(info, allArgsAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	allArgsAndFlags = appendLockFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendParallelismFlag(info, allArgsAndFlags)
+	if !info.UseTerraformPlan {
+		// terraform rejects -refresh when applying a saved plan.
+		allArgsAndFlags = appendRefreshFlag(info, allArgsAndFlags)
+	}
+	allArgsAndFlags = appendCompactWarningsFlag(info, allArgsAndFlags)
+
+	return allArgsAndFlags, nil
+}
+
+// buildDestroySubcommandArgs extends allArgsAndFlags for the `terraform destroy`
+// subcommand: varfile plus all five declarative flags defaults (destroy supports the
+// same flag set as plan/apply).
+func buildDestroySubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
+
+	var err error
+	allArgsAndFlags, err = appendLockTimeoutFlag(info, allArgsAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	allArgsAndFlags = appendLockFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendParallelismFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendRefreshFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendCompactWarningsFlag(info, allArgsAndFlags)
+
+	return allArgsAndFlags, nil
+}
+
+// buildRefreshSubcommandArgs extends allArgsAndFlags for the `terraform refresh`
+// subcommand: varfile plus lock-timeout, lock, parallelism, compact-warnings. There is
+// no -refresh flag on `terraform refresh` itself (refresh IS what this subcommand does).
+func buildRefreshSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
+
+	var err error
+	allArgsAndFlags, err = appendLockTimeoutFlag(info, allArgsAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	allArgsAndFlags = appendLockFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendParallelismFlag(info, allArgsAndFlags)
+	allArgsAndFlags = appendCompactWarningsFlag(info, allArgsAndFlags)
+
+	return allArgsAndFlags, nil
+}
+
+// buildImportSubcommandArgs extends allArgsAndFlags for the `terraform import`
+// subcommand: varfile plus only lock-timeout and lock — `terraform import` does not
+// support -parallelism, -refresh, or -compact-warnings.
+func buildImportSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
+
+	var err error
+	allArgsAndFlags, err = appendLockTimeoutFlag(info, allArgsAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	allArgsAndFlags = appendLockFlag(info, allArgsAndFlags)
+
+	return allArgsAndFlags, nil
 }
 
 // appendApplyPlanFileArg appends the plan-file positional argument to allArgsAndFlags
@@ -150,13 +297,37 @@ func buildTerraformCommandArgs(
 
 	switch info.SubCommand {
 	case "plan":
-		allArgsAndFlags = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
+		allArgsAndFlags, err = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
+		if err != nil {
+			return nil, false, err
+		}
 
-	case "destroy", "import", "refresh", "test":
+	case "destroy":
+		allArgsAndFlags, err = buildDestroySubcommandArgs(info, allArgsAndFlags, varFile)
+		if err != nil {
+			return nil, false, err
+		}
+
+	case "refresh":
+		allArgsAndFlags, err = buildRefreshSubcommandArgs(info, allArgsAndFlags, varFile)
+		if err != nil {
+			return nil, false, err
+		}
+
+	case "import":
+		allArgsAndFlags, err = buildImportSubcommandArgs(info, allArgsAndFlags, varFile)
+		if err != nil {
+			return nil, false, err
+		}
+
+	case "test":
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	case subcommandApply:
-		allArgsAndFlags = buildApplySubcommandArgs(info, allArgsAndFlags, varFile)
+		allArgsAndFlags, err = buildApplySubcommandArgs(info, allArgsAndFlags, varFile)
+		if err != nil {
+			return nil, false, err
+		}
 
 	case subcommandInit:
 		allArgsAndFlags, err = buildInitSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, componentPath, opts...)

@@ -489,6 +489,58 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 	})
 }
 
+// TestProcessEnvVars_TerraformFlags covers the 5 ATMOS_COMPONENTS_TERRAFORM_FLAGS_*
+// env vars, including pointer-vs-nil semantics for Lock/Parallelism/Refresh (an unset
+// env var must leave the field nil, not default it to false/0).
+func TestProcessEnvVars_TerraformFlags(t *testing.T) {
+	t.Run("all five env vars set", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", "5m")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "false")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "4")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "false")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "true")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, "5m", config.Components.Terraform.Flags.LockTimeout)
+		require.NotNil(t, config.Components.Terraform.Flags.Lock)
+		assert.False(t, *config.Components.Terraform.Flags.Lock)
+		require.NotNil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Equal(t, 4, *config.Components.Terraform.Flags.Parallelism)
+		require.NotNil(t, config.Components.Terraform.Flags.Refresh)
+		assert.False(t, *config.Components.Terraform.Flags.Refresh)
+		assert.True(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
+
+	t.Run("unset env vars leave pointer fields nil, not false/zero", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Empty(t, config.Components.Terraform.Flags.LockTimeout)
+		assert.Nil(t, config.Components.Terraform.Flags.Lock)
+		assert.Nil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Nil(t, config.Components.Terraform.Flags.Refresh)
+		assert.False(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
+
+	t.Run("invalid parallelism value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "not-a-number")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid lock value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+}
+
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/stack-templates-2"
 

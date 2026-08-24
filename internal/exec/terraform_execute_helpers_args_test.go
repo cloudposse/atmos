@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -317,8 +318,9 @@ func TestBuildPlanSubcommandArgs_BasicPlan(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
 	assert.Contains(t, args, outFlag)
@@ -330,8 +332,9 @@ func TestBuildPlanSubcommandArgs_SkipPlanfile(t *testing.T) {
 	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, outFlag)
 }
 
@@ -342,8 +345,9 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 		AdditionalArgsAndFlags: []string{"--upload-status"},
 	}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", true)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", true)
 
+	require.NoError(t, err)
 	assert.Contains(t, args, detailedExitCodeFlag)
 	// Upload status flag should be removed from additional args.
 	assert.NotContains(t, info.AdditionalArgsAndFlags, "--upload-status")
@@ -356,8 +360,9 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: false}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
+	require.NoError(t, err)
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
 }
@@ -365,9 +370,191 @@ func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: true}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, varFileFlag)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// terraform CLI execution flags (lock_timeout, lock, parallelism, refresh, compact_warnings)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func fullTerraformFlags() schema.TerraformFlags {
+	return schema.TerraformFlags{
+		LockTimeout:     "5m",
+		Lock:            boolPtr(false),
+		Parallelism:     intPtr(4),
+		Refresh:         boolPtr(false),
+		CompactWarnings: true,
+	}
+}
+
+func TestBuildTerraformCommandArgs_Flags_Plan_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "5m")
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "4")
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_ApplyWithoutPlan_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: false, Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "-refresh=false")
+}
+
+func TestBuildTerraformCommandArgs_Flags_ApplyWithPlan_ExcludesRefresh(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: true, Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "auto.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// terraform rejects -refresh when applying a saved plan.
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, "-refresh=true")
+	// But lock-timeout/lock/parallelism/compact-warnings are still valid there.
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Destroy_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "destroy", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Refresh_ExcludesRefreshFlag(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "refresh", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// terraform refresh has no -refresh flag (refresh IS what it does).
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, "-refresh=true")
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Import_OnlyLockAndLockTimeout(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "import", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	// import does not support parallelism, refresh, or compact-warnings.
+	assert.NotContains(t, args, parallelismFlag)
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Test_NoneInjected(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "test", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json"}, args)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Unset_NothingInjected(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, lockTimeoutFlag)
+	assert.NotContains(t, args, lockFlag+"=true")
+	assert.NotContains(t, args, lockFlag+"=false")
+	assert.NotContains(t, args, parallelismFlag)
+	assert.NotContains(t, args, refreshFlag+"=true")
+	assert.NotContains(t, args, refreshFlag+"=false")
+	assert.NotContains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_CLITypedFlagWins_NoDuplicate(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		Flags:                  fullTerraformFlags(),
+		AdditionalArgsAndFlags: []string{lockTimeoutFlag, "30s", lockFlag + "=true"},
+	}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// Only the user-typed value should appear, not the declarative default.
+	lockTimeoutCount := 0
+	for _, a := range args {
+		if a == lockTimeoutFlag {
+			lockTimeoutCount++
+		}
+	}
+	assert.Equal(t, 1, lockTimeoutCount, "should not inject a duplicate -lock-timeout")
+	assert.Contains(t, args, "30s")
+	assert.NotContains(t, args, "5m")
+	assert.Contains(t, args, lockFlag+"=true")
+	assert.NotContains(t, args, lockFlag+"=false")
+	// parallelism/refresh/compact-warnings weren't typed on the CLI, so the
+	// declarative defaults still apply for those.
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "plan",
+		Flags:      schema.TerraformFlags{LockTimeout: "not-a-duration"},
+	}
+	componentPath := "/tmp/my-component"
+
+	_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

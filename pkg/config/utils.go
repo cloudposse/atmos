@@ -313,6 +313,63 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
 	}
 
+	// This function reads 40+ ATMOS_* env vars by direct os.Getenv into atmosConfig fields
+	// (see ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE etc. above) — that established
+	// pattern predates the forbidigo os.Getenv ban and is grandfathered in as existing code.
+	// viper.BindEnv is not an option either: it's restricted to pkg/flags/ and test files
+	// (see .golangci.yml). Follow the same NO_PAGER precedent in config.go for new additions
+	// to this function until it's migrated wholesale to the newer flags infrastructure.
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsLockTimeout := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT")
+	if len(componentsTerraformFlagsLockTimeout) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", componentsTerraformFlagsLockTimeout)
+		atmosConfig.Components.Terraform.Flags.LockTimeout = componentsTerraformFlagsLockTimeout
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsLock := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK")
+	if len(componentsTerraformFlagsLock) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", componentsTerraformFlagsLock)
+		componentsTerraformFlagsLockBool, err := strconv.ParseBool(componentsTerraformFlagsLock)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Flags.Lock = &componentsTerraformFlagsLockBool
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsParallelism := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM")
+	if len(componentsTerraformFlagsParallelism) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", componentsTerraformFlagsParallelism)
+		componentsTerraformFlagsParallelismInt, err := strconv.Atoi(componentsTerraformFlagsParallelism)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Flags.Parallelism = &componentsTerraformFlagsParallelismInt
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsRefresh := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH")
+	if len(componentsTerraformFlagsRefresh) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", componentsTerraformFlagsRefresh)
+		componentsTerraformFlagsRefreshBool, err := strconv.ParseBool(componentsTerraformFlagsRefresh)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Flags.Refresh = &componentsTerraformFlagsRefreshBool
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsCompactWarnings := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS")
+	if len(componentsTerraformFlagsCompactWarnings) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", componentsTerraformFlagsCompactWarnings)
+		componentsTerraformFlagsCompactWarningsBool, err := strconv.ParseBool(componentsTerraformFlagsCompactWarnings)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Flags.CompactWarnings = componentsTerraformFlagsCompactWarningsBool
+	}
+
 	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
 	if len(componentsHelmfileCommand) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_COMMAND", componentsHelmfileCommand)
