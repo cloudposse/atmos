@@ -63,6 +63,19 @@ func (s *SafeViper) IsSet(key string) bool {
 	return viper.GetViper().IsSet(key)
 }
 
+// ViperReader exposes only *viper.Viper's read methods. SafeViper.View passes
+// this (not *viper.Viper) to its callback, so the callback cannot call a
+// mutator like Set while holding only the read lock -- doing so would race
+// against another concurrent View call's reads, or against SafeViper.Set's
+// write lock, defeating the whole point of View. Extend with more read
+// methods as callers need them; never add a mutator here.
+type ViperReader interface {
+	IsSet(key string) bool
+	GetBool(key string) bool
+	GetString(key string) string
+	GetStringSlice(key string) []string
+}
+
 // View executes fn with a read lock held on the global Viper singleton,
 // giving fn a consistent snapshot for the whole call. Use this instead of
 // separate Set/GetBool/IsSet calls whenever a decision combines more than one
@@ -70,9 +83,7 @@ func (s *SafeViper) IsSet(key string) bool {
 // each individual SafeViper method locks and unlocks independently, so a
 // concurrent Set() between two separate calls could let the decision combine
 // one snapshot's presence result with a different snapshot's value.
-// The callback must only call methods on the *viper.Viper it receives, not
-// GlobalViper()'s own methods, which would deadlock re-acquiring this lock.
-func (s *SafeViper) View(fn func(v *viper.Viper)) {
+func (s *SafeViper) View(fn func(v ViperReader)) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	fn(viper.GetViper())

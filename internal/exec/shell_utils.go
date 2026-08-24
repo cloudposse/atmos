@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -139,7 +138,7 @@ func WithEnvironment(env []string) ShellCommandOption {
 // never be made from a torn read.
 func resolveMaskingDisabled(atmosConfig *schema.AtmosConfiguration) bool {
 	disableMasking := false
-	cfg.GlobalViper().View(func(v *viper.Viper) {
+	cfg.GlobalViper().View(func(v cfg.ViperReader) {
 		if v.IsSet("mask") {
 			disableMasking = !v.GetBool("mask")
 		} else if v.IsSet("settings.terminal.mask.enabled") {

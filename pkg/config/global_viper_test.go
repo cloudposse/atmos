@@ -26,7 +26,7 @@ func TestSafeViperView_IsAtomic(t *testing.T) {
 
 	var observedInsideView bool
 	go func() {
-		GlobalViper().View(func(v *viper.Viper) {
+		GlobalViper().View(func(v ViperReader) {
 			close(viewEntered)
 			<-releaseView
 			// If Set() below had been allowed to interleave, this would
@@ -85,7 +85,7 @@ func TestSafeViperView_ConsistentSnapshotUnderConcurrentWriters(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			GlobalViper().View(func(v *viper.Viper) {
+			GlobalViper().View(func(v ViperReader) {
 				// Reading the same key twice inside one View call must
 				// always agree with itself -- proving the lock is held for
 				// the whole callback, not re-acquired per method call.
