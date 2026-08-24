@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -324,7 +325,7 @@ func isTransientRepoCopyError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
 	// Windows-only error text for ERROR_LOCK_VIOLATION / ERROR_SHARING_VIOLATION
@@ -343,29 +344,52 @@ func isTransientRepoCopyError(err error) bool {
 }
 
 func TestIsTransientRepoCopyError(t *testing.T) {
-	t.Run("nil-error-is-not-transient", func(t *testing.T) {
-		assert.False(t, isTransientRepoCopyError(nil))
-	})
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error is not transient",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "not-exist error is transient",
+			err:  os.ErrNotExist,
+			want: true,
+		},
+		{
+			name: "wrapped not-exist error is transient",
+			// os.IsNotExist does not reliably unwrap; errors.Is does. This case
+			// guards against a regression back to os.IsNotExist.
+			err:  fmt.Errorf("copy failed: %w", os.ErrNotExist),
+			want: true,
+		},
+		{
+			name: "windows lock violation is transient",
+			// Exact error text observed on Windows CI (ERROR_LOCK_VIOLATION).
+			err:  errors.New(`read ..\..\tests\fixtures\scenarios\hooks-test\components\terraform\hook-and-store\terraform.tfstate.d\test-component2\terraform.tfstate: The process cannot access the file because another process has locked a portion of the file.`),
+			want: true,
+		},
+		{
+			name: "windows sharing violation is transient",
+			// ERROR_SHARING_VIOLATION wording, distinct from the lock-violation text above.
+			err:  errors.New(`open foo.txt: The process cannot access the file because it is being used by another process.`),
+			want: true,
+		},
+		{
+			name: "unrelated error is not transient",
+			err:  errors.New("permission denied"),
+			want: false,
+		},
+	}
 
-	t.Run("not-exist-error-is-transient", func(t *testing.T) {
-		assert.True(t, isTransientRepoCopyError(os.ErrNotExist))
-	})
-
-	t.Run("windows-lock-violation-is-transient", func(t *testing.T) {
-		// Exact error text observed on Windows CI (ERROR_LOCK_VIOLATION).
-		err := errors.New(`read ..\..\tests\fixtures\scenarios\hooks-test\components\terraform\hook-and-store\terraform.tfstate.d\test-component2\terraform.tfstate: The process cannot access the file because another process has locked a portion of the file.`)
-		assert.True(t, isTransientRepoCopyError(err))
-	})
-
-	t.Run("windows-sharing-violation-is-transient", func(t *testing.T) {
-		// ERROR_SHARING_VIOLATION wording, distinct from the lock-violation text above.
-		err := errors.New(`open foo.txt: The process cannot access the file because it is being used by another process.`)
-		assert.True(t, isTransientRepoCopyError(err))
-	})
-
-	t.Run("unrelated-error-is-not-transient", func(t *testing.T) {
-		assert.False(t, isTransientRepoCopyError(errors.New("permission denied")))
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isTransientRepoCopyError(tt.err))
+		})
+	}
 }
 
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
