@@ -1607,10 +1607,35 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
+			logMissingFileDiag(t, file)
 			success = false
 		}
 	}
 	return success
+}
+
+// logMissingFileDiag is a TEMPORARY diagnostic aid for the Windows-only silent vendor-pull
+// failure (https://github.com/cloudposse/atmos/pull/2958): pkg/vendoring/install's own
+// instrumentation proves the file exists on disk at every checkpoint through the end of the
+// installing process, so this checks what the *test harness's own process* sees at the moment of
+// the file_exists assertion -- its CWD, the resolved absolute path, and (if the file is genuinely
+// absent) the parent directory's actual listing. Remove once root-caused.
+func logMissingFileDiag(t *testing.T, file string) {
+	t.Helper()
+	cwd, cwdErr := os.Getwd()
+	abs, absErr := filepath.Abs(file)
+	t.Errorf("VENDOR_DIAG_MISSING file=%q cwd=%q cwdErr=%v abs=%q absErr=%v", file, cwd, cwdErr, abs, absErr)
+	parent := filepath.Dir(file)
+	entries, readErr := os.ReadDir(parent)
+	if readErr != nil {
+		t.Errorf("VENDOR_DIAG_MISSING parent=%q readDirErr=%v", parent, readErr)
+		return
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	t.Errorf("VENDOR_DIAG_MISSING parent=%q entries=%v", parent, names)
 }
 
 func verifyFileNotExists(t *testing.T, files []string) bool {
