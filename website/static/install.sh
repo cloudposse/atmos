@@ -82,9 +82,13 @@ install_via_cloudsmith() {
 	# complete one.
 	local setup_script
 	setup_script=$(mktemp 2>/dev/null || mktemp -t atmos-cloudsmith-setup)
+	# Clean up on any exit path (download failure, setup-script failure,
+	# interruption), not just the success path below.
+	trap 'rm -f "$setup_script"' EXIT
 	curl "${curl_retry_flags[@]}" -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" -o "$setup_script"
 	maybe_sudo bash "$setup_script"
 	rm -f "$setup_script"
+	trap - EXIT
 
 	case $package_manager in
 		alpine)
@@ -149,9 +153,13 @@ install_via_binary_download() {
 	# truncated-then-repeated (corrupted) checksum data instead of the
 	# complete file.
 	checksums_file=$(mktemp 2>/dev/null || mktemp -t atmos-checksums)
+	# Clean up on any exit path (download failure, parsing error,
+	# interruption), not just the success path below.
+	trap 'rm -f "$checksums_file"' EXIT
 	curl "${curl_retry_flags[@]}" -fsSL "$checksums_url" -o "$checksums_file"
 	expected_sha="$(awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}' "$checksums_file")"
 	rm -f "$checksums_file"
+	trap - EXIT
 	if [ -z "$expected_sha" ]; then
 		echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
 		exit 1
