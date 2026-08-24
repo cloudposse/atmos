@@ -116,15 +116,31 @@ func extractPlanFile(args []string) string {
 		}
 	}
 
-	// Check for positional planfile (last arg that looks like a file).
+	// Check for a positional planfile. Terraform's apply accepts any filename for a
+	// saved plan (the ".tfplan" convention is not required), so any non-flag final
+	// argument qualifies — except one that looks like Terraform configuration or
+	// variables source (.tf, .tf.json, .tfvars, .tfvars.json), which Terraform
+	// itself warns against using as a plan-file name because it would otherwise be
+	// parsed as config source rather than a saved plan.
 	if len(args) > 1 {
 		lastArg := args[len(args)-1]
-		if !strings.HasPrefix(lastArg, "-") && strings.HasSuffix(lastArg, ".tfplan") {
+		if !strings.HasPrefix(lastArg, "-") && !looksLikeTerraformConfigFile(lastArg) {
 			return lastArg
 		}
 	}
 
 	return ""
+}
+
+// looksLikeTerraformConfigFile reports whether name has an extension Terraform
+// treats as configuration or variables source, rather than a saved plan file.
+func looksLikeTerraformConfigFile(name string) bool {
+	for _, ext := range []string{".tf", ".tf.json", ".tfvars", ".tfvars.json"} {
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPlanArgs(args []string, planFile string) []string {

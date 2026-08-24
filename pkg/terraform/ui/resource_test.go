@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -314,7 +315,7 @@ func TestResourceTracker_Concurrency(t *testing.T) {
 		go func(n int) {
 			rt.HandleMessage(&PlannedChangeMessage{
 				Change: PlannedChange{
-					Resource: ResourceAddr{Addr: "aws_instance.test_" + string(rune('0'+n%10))},
+					Resource: ResourceAddr{Addr: fmt.Sprintf("aws_instance.test_%d", n)},
 					Action:   "create",
 				},
 			})
@@ -335,8 +336,9 @@ func TestResourceTracker_Concurrency(t *testing.T) {
 		<-done
 	}
 
-	// Verify we have some resources.
-	assert.Greater(t, rt.GetTotalCount(), 0)
+	// Verify every concurrent write landed: 50 unique addresses, no dropped updates.
+	assert.Equal(t, 50, rt.GetTotalCount())
+	require.Len(t, rt.GetResources(), 50)
 }
 
 func TestResourceTracker_HandleApplyStart_UnplannedResource(t *testing.T) {

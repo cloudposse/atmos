@@ -102,6 +102,10 @@ func populateTreeNodes(tree *DependencyTree, plan *tfjson.Plan) {
 // resourceChangeAction determines the action for a resource change, handling composite
 // actions like replace (delete+create).
 func resourceChangeAction(rc *tfjson.ResourceChange) string {
+	if rc.Change == nil {
+		return noOpAction
+	}
+
 	switch {
 	case len(rc.Change.Actions) == 2:
 		// Composite action: Terraform can emit ["delete", "create"] or ["create", "delete"]

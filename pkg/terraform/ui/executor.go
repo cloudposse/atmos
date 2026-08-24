@@ -528,7 +528,7 @@ func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestr
 
 	if showTwoPhasePlanTree(ctx, opts, planFile) {
 		// No changes to apply - show current outputs and exit.
-		fetchAndDisplayOutputs(opts.Command, opts.WorkingDir)
+		fetchAndDisplayOutputs(opts.Command, opts.WorkingDir, opts.Env)
 		return nil
 	}
 
@@ -584,7 +584,7 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 		if add == 0 && change == 0 && remove == 0 {
 			// No changes to apply - show badge, outputs, and exit.
 			ui.Write(RenderChangeSummaryBadges(add, change, remove))
-			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir)
+			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir, opts.Env)
 			return nil
 		}
 		// Display the dependency tree and badge summary.

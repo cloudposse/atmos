@@ -31,10 +31,14 @@ func displayOutputs(tracker *ResourceTracker) {
 
 // fetchAndDisplayOutputs fetches outputs using terraform output -json and displays them.
 // This is used when there are no changes to apply but we still want to show current outputs.
-func fetchAndDisplayOutputs(command, workingDir string) {
+// The env parameter is the component's effective environment (credentials, TF_VAR_*,
+// backend config) assembled by the caller; without it the subprocess falls back to the
+// Atmos process's own ambient environment, which can lack the credentials the component needs.
+func fetchAndDisplayOutputs(command, workingDir string, env []string) {
 	// Run terraform output -json to get current outputs.
 	cmd := exec.Command(command, "output", "-json")
 	cmd.Dir = workingDir
+	cmd.Env = env
 
 	outputBytes, err := cmd.Output()
 	if err != nil {

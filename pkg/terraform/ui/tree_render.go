@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -128,8 +129,26 @@ func resolveRenderConfig(config *RenderConfig) *RenderConfig {
 		resolved.ShowAttributeBar = config.ShowAttributeBar
 		resolved.Compact = config.Compact
 		resolved.MaxLines = config.MaxLines
+
+		overrideStyle(&resolved.CreateStyle, &config.CreateStyle)
+		overrideStyle(&resolved.UpdateStyle, &config.UpdateStyle)
+		overrideStyle(&resolved.DeleteStyle, &config.DeleteStyle)
+		overrideStyle(&resolved.DimStyle, &config.DimStyle)
+		overrideStyle(&resolved.TreeStyle, &config.TreeStyle)
+		overrideStyle(&resolved.BarStyle, &config.BarStyle)
 	}
 	return resolved
+}
+
+// overrideStyle replaces *dst with *caller in place when caller is non-zero.
+//
+// A lipgloss.Style isn't comparable with == (it embeds a func field).
+// Its String() method renders the style's own unset text value, so it always returns "" no matter which properties are set (Foreground, Bold, and so on), which makes it useless for a zero check.
+// Comparing the struct via reflect.DeepEqual against the Go zero value works instead.
+func overrideStyle(dst, caller *lipgloss.Style) {
+	if !reflect.DeepEqual(*caller, lipgloss.Style{}) {
+		*dst = *caller
+	}
 }
 
 // diffStyles bundles the create/delete styles used when rendering a line-by-line diff.
@@ -263,8 +282,10 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 	config = resolveRenderConfig(config)
 
 	// Calculate base indent for attributes (aligned with tree structure).
-	// Base indent: 5 spaces (for "  ●  ") + prefix length + 4 (for "├── ").
-	baseIndent := strings.Repeat(spaceChar, 5+len(prefix)+4)
+	// Base indent: 5 spaces (for "  ●  ") + prefix display width + 4 (for "├── ").
+	// Use display width, not byte length: prefix carries multi-byte box-drawing
+	// characters (e.g. "│", 3 bytes / 1 cell) that would otherwise overcount.
+	baseIndent := strings.Repeat(spaceChar, 5+lipgloss.Width(prefix)+4)
 
 	// Build attribute bar if enabled.
 	var attrBar string

@@ -9,6 +9,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestResolveRenderConfig_NilUsesDefaults(t *testing.T) {
+	resolved := resolveRenderConfig(nil)
+	assert.NotEqual(t, lipgloss.Style{}, resolved.CreateStyle, "default CreateStyle should be non-zero")
+	assert.NotEqual(t, lipgloss.Style{}, resolved.DeleteStyle, "default DeleteStyle should be non-zero")
+}
+
+// TestResolveRenderConfig_HonorsCallerStyles is a regression test for resolveRenderConfig, which previously discarded any style the caller set on RenderConfig, contradicting its own documented contract that styles are populated with defaults when not explicitly set.
+func TestResolveRenderConfig_HonorsCallerStyles(t *testing.T) {
+	customCreate := lipgloss.NewStyle().Bold(true)
+	resolved := resolveRenderConfig(&RenderConfig{CreateStyle: customCreate})
+
+	assert.Equal(t, customCreate, resolved.CreateStyle, "caller-provided CreateStyle must be honored")
+
+	// Styles the caller left at zero value still fall back to defaults.
+	defaults := resolveRenderConfig(nil)
+	assert.Equal(t, defaults.DeleteStyle, resolved.DeleteStyle, "unset DeleteStyle should still use the default")
+}
+
 func TestColorizedActionSymbol(t *testing.T) {
 	tests := []struct {
 		action   string

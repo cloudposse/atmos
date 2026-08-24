@@ -31,7 +31,10 @@ type streamingExecRequest struct {
 // when streaming is disabled or unsupported (non-TTY, CI, or the TUI reports
 // ErrStreamingNotSupported). The request's shellOpts are forwarded to every
 // ExecuteShellCommand call (e.g. the retry wrapper's stdout/stderr capture) — the TUI
-// executors have no equivalent, so they run without them.
+// executors have no equivalent, so they run without them. When the component has retry
+// conditions configured, streaming is skipped entirely and the shell path always runs:
+// executeShellCommandWithRetry matches conditions against output captured via shellOpts,
+// and the TUI never populates that capture buffer, so retries would silently never fire.
 //
 // The request's gatePhase and subCommand are usually the same value, except for
 // workspace select/new: those gate on the "init" phase (workspace setup is part of the
@@ -51,7 +54,8 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		)
 	}
 
-	if !tfui.ShouldUseStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled, req.gatePhase) {
+	retryActive := info.ComponentRetrySection != nil && len(info.ComponentRetrySection.Conditions) > 0
+	if retryActive || !tfui.ShouldUseStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled, req.gatePhase) {
 		return runShell()
 	}
 
@@ -67,7 +71,8 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		DryRun:     info.DryRun,
 	}
 
-	err := dispatchStreamingExecutor(req.subCommand, info.DryRun, execOpts)
+	ctx := shellCommandContext(req.shellOpts...)
+	err := dispatchStreamingExecutor(ctx, req.subCommand, info.DryRun, execOpts)
 	if errors.Is(err, errUtils.ErrStreamingNotSupported) {
 		log.Debug("Streaming UI not supported, falling back to regular execution")
 		return runShell()
@@ -78,19 +83,21 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 // dispatchStreamingExecutor routes to the tfui.Execute* variant matching subCommand.
 // Workspace select/new share the init spinner (ExecuteInit) since they have no
 // dedicated TUI phase of their own. Dry runs always use the plain Execute path, which
-// short-circuits without touching the terminal.
-func dispatchStreamingExecutor(subCommand string, dryRun bool, execOpts *tfui.ExecuteOptions) error {
+// short-circuits without touching the terminal. The caller's cancellation (e.g. a
+// shell-option deadline) flows through ctx, so a cancelled/timed-out caller can stop a
+// running streaming Terraform process instead of leaving it orphaned.
+func dispatchStreamingExecutor(ctx context.Context, subCommand string, dryRun bool, execOpts *tfui.ExecuteOptions) error {
 	if !dryRun {
 		switch subCommand {
 		case subcommandApply:
-			return tfui.ExecuteApply(context.Background(), execOpts)
+			return tfui.ExecuteApply(ctx, execOpts)
 		case "destroy":
-			return tfui.ExecuteDestroy(context.Background(), execOpts)
+			return tfui.ExecuteDestroy(ctx, execOpts)
 		case "plan":
-			return tfui.ExecutePlan(context.Background(), execOpts)
+			return tfui.ExecutePlan(ctx, execOpts)
 		case subcommandInit, subcommandWorkspace:
-			return tfui.ExecuteInit(context.Background(), execOpts)
+			return tfui.ExecuteInit(ctx, execOpts)
 		}
 	}
-	return tfui.Execute(context.Background(), execOpts)
+	return tfui.Execute(ctx, execOpts)
 }

@@ -157,7 +157,7 @@ The streaming executor captures and propagates these codes via `errUtils.ExitCod
 | `apply` | ✓ |
 | `deploy` | ✓ (Atmos-specific apply wrapper) |
 | `init` | ✓ |
-| `refresh` | ✓ |
+| `refresh` | ✗ (no `-json` streaming support in Terraform's `refresh`) |
 | `destroy` | ✓ (via apply -destroy) |
 
 ## Implementation Details

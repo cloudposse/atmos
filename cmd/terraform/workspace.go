@@ -89,7 +89,7 @@ func newWorkspacePassthroughSubcommand(name, short string) *cobra.Command {
 				return err
 			}
 
-			opts, err := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v, leaf)
 			if err != nil {
 				return err
 			}

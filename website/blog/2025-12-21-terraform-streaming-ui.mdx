@@ -11,7 +11,7 @@ Say goodbye to overwhelming Terraform output. The new streaming UI mode transfor
 
 ## What Changed
 
-We've added an optional streaming UI mode for Terraform commands (`plan`, `apply`, `deploy`, `init`, `refresh`) that displays real-time resource status with visual indicators, progress tracking, interactive confirmations, and condensed completion summaries.
+We've added an optional streaming UI mode for Terraform commands (`plan`, `apply`, `deploy`, `init`, `destroy`) that displays real-time resource status with visual indicators, progress tracking, interactive confirmations, and condensed completion summaries.
 
 ### Real-Time Progress Display
 
@@ -141,7 +141,8 @@ This means your existing scripts and CI pipelines continue to work without modif
 | `apply` | ✓ |
 | `deploy` | ✓ |
 | `init` | ✓ |
-| `refresh` | ✓ |
+| `destroy` | ✓ |
+| `refresh` | ✗ (no `-json` streaming support in Terraform's `refresh`) |
 
 ## Technical Details
 
@@ -153,7 +154,7 @@ The implementation uses Terraform's machine-readable JSON output format (`-json`
 4. Displays interactive confirmation prompts using the `huh` library
 5. Preserves exit codes (critical for `plan -detailed-exitcode`)
 
-This is a pure Go implementation using charmbracelet/bubbletea with no external dependencies or CGO requirements.
+This is a pure Go implementation using charmbracelet/bubbletea and huh, requiring no external binaries or CGO.
 
 ## Learn More
 

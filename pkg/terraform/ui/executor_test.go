@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -224,8 +225,11 @@ func TestExtractPlanFile(t *testing.T) {
 		{"--planfile with separate value", []string{"apply", "--planfile", "plan.tfplan"}, "plan.tfplan"},
 		{"--planfile with equals", []string{"apply", "--planfile=plan.tfplan"}, "plan.tfplan"},
 		{"positional planfile", []string{"apply", "myplan.tfplan"}, "myplan.tfplan"},
+		{"positional planfile without .tfplan suffix", []string{"apply", "tfplan"}, "tfplan"},
+		{"positional planfile with arbitrary name", []string{"apply", "my-saved-plan"}, "my-saved-plan"},
 		{"no planfile", []string{"apply", "-auto-approve"}, ""},
-		{"positional non-tfplan file", []string{"apply", "config.tf"}, ""},
+		{"positional Terraform config file is not a planfile", []string{"apply", "config.tf"}, ""},
+		{"positional tfvars file is not a planfile", []string{"apply", "extra.tfvars"}, ""},
 		{"empty args", []string{}, ""},
 		{"single arg apply only", []string{"apply"}, ""},
 	}
@@ -239,6 +243,7 @@ func TestExtractPlanFile(t *testing.T) {
 }
 
 func TestBuildPlanArgs(t *testing.T) {
+	planFile := filepath.Join("tmp", "plan.tfplan")
 	tests := []struct {
 		name     string
 		args     []string
@@ -248,20 +253,20 @@ func TestBuildPlanArgs(t *testing.T) {
 		{
 			name:     "basic apply to plan",
 			args:     []string{"apply", "-var", "foo=bar"},
-			planFile: "/tmp/plan.tfplan",
-			expected: []string{"plan", "-var", "foo=bar", "-out=/tmp/plan.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-var", "foo=bar", "-out=" + planFile},
 		},
 		{
 			name:     "strips auto-approve",
 			args:     []string{"apply", "-auto-approve", "-var", "x=1"},
-			planFile: "/tmp/plan.tfplan",
-			expected: []string{"plan", "-var", "x=1", "-out=/tmp/plan.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-var", "x=1", "-out=" + planFile},
 		},
 		{
 			name:     "apply only",
 			args:     []string{"apply"},
-			planFile: "/tmp/plan.tfplan",
-			expected: []string{"plan", "-out=/tmp/plan.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-out=" + planFile},
 		},
 	}
 
@@ -274,13 +279,15 @@ func TestBuildPlanArgs(t *testing.T) {
 }
 
 func TestBuildApplyArgs(t *testing.T) {
+	planFile := filepath.Join("tmp", "plan.tfplan")
+	otherPlanFile := filepath.Join("var", "tmp", "my-plan.tfplan")
 	tests := []struct {
 		name     string
 		planFile string
 		expected []string
 	}{
-		{"basic planfile", "/tmp/plan.tfplan", []string{"apply", "/tmp/plan.tfplan"}},
-		{"different path", "/var/tmp/my-plan.tfplan", []string{"apply", "/var/tmp/my-plan.tfplan"}},
+		{"basic planfile", planFile, []string{"apply", planFile}},
+		{"different path", otherPlanFile, []string{"apply", otherPlanFile}},
 	}
 
 	for _, tt := range tests {
@@ -292,6 +299,7 @@ func TestBuildApplyArgs(t *testing.T) {
 }
 
 func TestBuildDestroyPlanArgs(t *testing.T) {
+	planFile := filepath.Join("tmp", "destroy.tfplan")
 	tests := []struct {
 		name     string
 		args     []string
@@ -301,20 +309,20 @@ func TestBuildDestroyPlanArgs(t *testing.T) {
 		{
 			name:     "basic destroy to plan",
 			args:     []string{"destroy", "-var", "foo=bar"},
-			planFile: "/tmp/destroy.tfplan",
-			expected: []string{"plan", "-destroy", "-var", "foo=bar", "-out=/tmp/destroy.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-destroy", "-var", "foo=bar", "-out=" + planFile},
 		},
 		{
 			name:     "strips auto-approve",
 			args:     []string{"destroy", "-auto-approve"},
-			planFile: "/tmp/destroy.tfplan",
-			expected: []string{"plan", "-destroy", "-out=/tmp/destroy.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-destroy", "-out=" + planFile},
 		},
 		{
 			name:     "destroy only",
 			args:     []string{"destroy"},
-			planFile: "/tmp/destroy.tfplan",
-			expected: []string{"plan", "-destroy", "-out=/tmp/destroy.tfplan"},
+			planFile: planFile,
+			expected: []string{"plan", "-destroy", "-out=" + planFile},
 		},
 	}
 
