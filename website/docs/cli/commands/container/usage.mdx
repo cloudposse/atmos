@@ -103,10 +103,11 @@ abstract base components can carry shared `build`/`run` defaults.
 
 ### Path resolution
 
-Relative `build.context`, `build.dockerfile`, and `run.mounts[].source` values resolve against the
-container component's own directory — the same `components.container.base_path` +
-`component:`/`metadata.component` mechanism used by Terraform, Helmfile, Kubernetes, and Helm
-components, **not** the directory `atmos` happens to be invoked from:
+Relative `build.context` and `run.mounts[].source` values resolve against the container component's
+own directory — the same `components.container.base_path` + `component:`/`metadata.component`
+mechanism used by Terraform, Helmfile, Kubernetes, and Helm components, **not** the directory `atmos`
+happens to be invoked from. A relative `build.dockerfile` then resolves against the resulting
+`build.context` (the Docker/Compose convention), not against the component directory directly:
 
 ```yaml
 # atmos.yaml
@@ -122,7 +123,7 @@ components:
       component: api   # resolves to <base_path>/api, independent of the `atmos` invocation's CWD
       build:
         context: app        # <base_path>/api/app
-        dockerfile: Dockerfile  # <base_path>/api/app/Dockerfile
+        dockerfile: docker/Dockerfile.prod  # <base_path>/api/app/docker/Dockerfile.prod (relative to build.context, not <base_path>/api)
 ```
 
 Container components also support the same JIT `source:` provisioning as other component types — a
