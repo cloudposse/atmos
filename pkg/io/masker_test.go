@@ -300,6 +300,34 @@ func TestMasker_MasksFoldedLongLiteral(t *testing.T) {
 	assert.Contains(t, masked, MaskReplacement)
 }
 
+func TestMasker_FoldedLiteralPreservesWhitespaceCardinality(t *testing.T) {
+	tests := []struct {
+		name   string
+		secret string
+		input  string
+	}{
+		{
+			name:   "spaces",
+			secret: "alpha  bravo charlie delta echo foxtrot golf hotel",
+			input:  "alpha bravo charlie delta echo foxtrot golf hotel",
+		},
+		{
+			name:   "tabs",
+			secret: "alpha\t\tbravo charlie delta echo foxtrot golf hotel",
+			input:  "alpha\tbravo charlie delta echo foxtrot golf hotel",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMasker(nil)
+			m.RegisterValue(tt.secret)
+
+			assert.Equal(t, tt.input, m.Mask(tt.input))
+		})
+	}
+}
+
 func TestMasker_Clear(t *testing.T) {
 	cfg := &Config{DisableMasking: false}
 	m := newMasker(cfg)
