@@ -129,6 +129,7 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 	if err := lockfile.Record(ctx, atmosConfig, recordTarget, recordOpts); err != nil {
 		return fmt.Errorf("%w: %w", ErrRecordVendorLock, err)
 	}
+	logVendorDiagDir("after-record:"+p.name, p.targetPath)
 	return nil
 }
 
