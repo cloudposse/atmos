@@ -2137,6 +2137,9 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 			},
+			Helm: schema.Helm{
+				BasePath: "components/helm",
+			},
 		},
 	}
 
@@ -2190,6 +2193,21 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 		changedFiles := []string{packerFile}
 
 		changed, err := isComponentFolderChanged("image", cfg.PackerComponentType, atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.True(t, changed)
+	})
+
+	t.Run("helm component changed", func(t *testing.T) {
+		helmPath := filepath.Join(tempDir, "components/helm/nginx-ingress")
+		err := os.MkdirAll(helmPath, 0o755)
+		require.NoError(t, err)
+		helmFile := filepath.Join(helmPath, "values.yaml")
+		err = os.WriteFile(helmFile, []byte("replicas: 3"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{helmFile}
+
+		changed, err := isComponentFolderChanged("nginx-ingress", cfg.HelmComponentType, atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
 	})
