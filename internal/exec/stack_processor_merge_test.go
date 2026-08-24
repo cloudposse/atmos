@@ -879,6 +879,39 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		assert.Equal(t, []any{"/Bad Gateway/"}, got["conditions"])
 	})
 
+	t.Run("global-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalComponentRetry: map[string]any{
+				"max_attempts": 5,
+				"conditions":   []any{"/Bad Gateway/"},
+			},
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		got, ok := comp[cfg.RetrySectionName].(map[string]any)
+		require.True(t, ok, "retry section must be present and a map")
+		assert.EqualValues(t, 5, got["max_attempts"])
+		assert.Equal(t, []any{"/Bad Gateway/"}, got["conditions"])
+	})
+
+	t.Run("base-overrides-global-scalar", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:        cfg.TerraformComponentType,
+			Component:            "vpc",
+			AtmosConfig:          atmosCfg,
+			GlobalComponentRetry: map[string]any{"max_attempts": 1},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"max_attempts": 3}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		assert.EqualValues(t, 3, got["max_attempts"], "base component must override global scalar")
+	})
+
 	t.Run("component-overrides-base-scalar", func(t *testing.T) {
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
@@ -899,6 +932,9 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
+			// Lowest-precedence layer, set on a key every other layer also sets, so a
+			// regression that lets global win would flip this assertion.
+			GlobalComponentRetry: map[string]any{"max_attempts": 0, "initial_delay": "1s"},
 		}
 		res := minimalComponentResult()
 		res.BaseComponentRetry = map[string]any{"max_attempts": 1, "backoff_strategy": "constant"}
@@ -907,8 +943,9 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
-		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win")
+		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win over global/base/component")
 		assert.Equal(t, "exponential", got["backoff_strategy"])
+		assert.Equal(t, "1s", got["initial_delay"], "global-only key not set anywhere else must still flow through")
 	})
 
 	t.Run("conditions-list-replaces-by-default", func(t *testing.T) {

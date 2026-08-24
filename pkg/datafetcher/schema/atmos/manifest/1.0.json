@@ -44,6 +44,9 @@
     "metadata": {
       "$ref": "#/definitions/global_metadata"
     },
+    "retry": {
+      "$ref": "#/definitions/retry"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },

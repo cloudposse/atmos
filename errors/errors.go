@@ -642,6 +642,7 @@ var (
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
 	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
 	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
+	ErrInvalidGlobalRetrySection        = errors.New("invalid retry section")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
