@@ -3,6 +3,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,6 +23,11 @@ const gitCmd = "git"
 // dirPerm is the permission mode used for the isolated cache/tmp directory
 // created below.
 const dirPerm = 0o755
+
+// worktreeHashLen is the number of hex characters of the worktree-root
+// SHA-256 kept in the per-worktree cache directory name — enough to never
+// collide across worktrees while keeping paths short.
+const worktreeHashLen = 12
 
 // stagedPatch bundles the staged-changes patch file path and the affected
 // package list returned by buildStagedPatchAndPackages.
@@ -66,6 +73,10 @@ func runGolangciLintPrecommit(root, binPath string) error {
 	return sh.RunWithV(env, binPath, args...)
 }
 
+// userCacheDirFunc resolves the OS user-cache root; a package var so tests
+// can point it at a temp dir without touching real HOME/XDG_CACHE_HOME.
+var userCacheDirFunc = os.UserCacheDir
+
 // setWorktreeIsolationEnv computes the per-worktree GOLANGCI_LINT_CACHE/temp
 // directory overrides that keep parallel worktree lints from serializing on
 // golangci-lint's machine-global single-instance lock file (a fixed path
@@ -78,19 +89,32 @@ func runGolangciLintPrecommit(root, binPath string) error {
 // Windows and checks TMP/TEMP/USERPROFILE instead, so the bash version's
 // isolation silently didn't apply there. This is a deliberate behavior fix,
 // not just a port.
+//
+// The cache/tmp dirs default to a location under the OS user-cache
+// directory, keyed by a hash of the worktree root, rather than inside the
+// worktree itself. Placing them in-worktree (the original design) put their
+// constant churn under any filesystem watcher (git fsmonitor, Conductor's
+// watchexec) watching the worktree tree, which at scale (dozens of parallel
+// worktrees) saturates the watcher and makes every git command stall for
+// seconds; see docs/fixes/2026-08-24-fsmonitor-worktree-saturation.md.
 func setWorktreeIsolationEnv(root string) (map[string]string, error) {
 	env := map[string]string{}
 	if os.Getenv("ATMOS_LINT_SHARED_CACHE") == "1" {
 		return env, nil
 	}
 
+	lintCacheRoot, err := worktreeLintCacheRoot(root)
+	if err != nil {
+		return nil, err
+	}
+
 	cacheDir := os.Getenv("GOLANGCI_LINT_CACHE")
 	if cacheDir == "" {
-		cacheDir = filepath.Join(root, ".golangci-cache")
+		cacheDir = filepath.Join(lintCacheRoot, "cache")
 	}
 	env["GOLANGCI_LINT_CACHE"] = cacheDir
 
-	tmpDir := filepath.Join(root, ".golangci-tmp")
+	tmpDir := filepath.Join(lintCacheRoot, "tmp")
 	if err := os.MkdirAll(tmpDir, dirPerm); err != nil {
 		return nil, fmt.Errorf("mage: mkdir %s: %w", tmpDir, err)
 	}
@@ -100,6 +124,23 @@ func setWorktreeIsolationEnv(root string) (map[string]string, error) {
 		env["TEMP"] = tmpDir
 	}
 	return env, nil
+}
+
+// worktreeLintCacheRoot returns "<user-cache-dir>/atmos-lint/<hash>", where
+// hash identifies the worktree by its absolute path so concurrent worktrees
+// never collide.
+func worktreeLintCacheRoot(root string) (string, error) {
+	base, err := userCacheDirFunc()
+	if err != nil {
+		return "", fmt.Errorf("mage: resolve user cache dir: %w", err)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("mage: resolve absolute worktree root %s: %w", root, err)
+	}
+	sum := sha256.Sum256([]byte(absRoot))
+	hash := hex.EncodeToString(sum[:])[:worktreeHashLen]
+	return filepath.Join(base, "atmos-lint", hash), nil
 }
 
 // golangciLintArgs assembles the shared `run` args: config, optional
