@@ -2,12 +2,13 @@ package scaffold
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -909,14 +910,8 @@ func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing
 	}
 	require.NoError(t, executeTemplateGeneration(&cfg, dir, opts, scaffoldUI))
 
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "init"))
-	// Disable commit signing: dev machines with a GPG/1Password signing agent
-	// configured globally can hang or fail here otherwise.
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "commit.gpgsign", "false"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.email", "test@example.com"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.name", "Test"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "add", "."))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "commit", "-m", "initial"))
+	scaffoldGitInit(t, dir)
+	scaffoldGitCommitAll(t, dir, "initial")
 
 	readmePath := filepath.Join(dir, "README.md")
 	original, err := os.ReadFile(readmePath)
@@ -988,11 +983,7 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 
 	// The user customizes and commits a line the template will never touch again.
 	require.NoError(t, os.WriteFile(valuesPath, []byte("app: svc-x\nrunner: self-hosted\n"), 0o600))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "commit.gpgsign", "false"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.email", "test@example.com"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.name", "Test"))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "add", "."))
-	require.NoError(t, scaffoldRunGitCommand(t, dir, "commit", "-m", "customize runner"))
+	scaffoldGitCommitAll(t, dir, "customize runner")
 
 	// The template changes an unrelated line.
 	cfg.Files[0].Content = "appName: {{ .Config.service }}\nrunner: ubuntu-latest\n"
@@ -1016,19 +1007,36 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 	assert.Contains(t, string(merged), "runner: self-hosted", "the user's committed customization must survive --update")
 }
 
-// scaffoldRunGitCommand runs git in dir for test setup, skipping the test if git is unavailable.
-func scaffoldRunGitCommand(t *testing.T, dir string, args ...string) error {
+// scaffoldGitInit initializes dir as a git repository using go-git (no
+// external git binary), mirroring the idiom in
+// pkg/generator/gitinit.go's InitGitRepository. Setup failures fail the test
+// loudly via require.NoError rather than skipping, since go-git has no
+// external binary dependency that can be "unavailable".
+func scaffoldGitInit(t *testing.T, dir string) {
 	t.Helper()
-	if _, lookErr := exec.LookPath("git"); lookErr != nil {
-		t.Skip("git binary not found on PATH")
-	}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git %v failed: %w: %s", args, err, string(out))
-	}
-	return nil
+	_, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+}
+
+// scaffoldGitCommitAll opens the git repository at dir, stages all files,
+// and creates a commit with the given message, using go-git. Unlike a real
+// `git commit`, go-git's Commit never shells out to gpg, so no
+// commit.gpgsign workaround is needed.
+func scaffoldGitCommitAll(t *testing.T, dir, message string) {
+	t.Helper()
+	repo, err := git.PlainOpen(dir)
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
 }
 
 func TestSelectGenerateTemplate_ConfigHit(t *testing.T) {
