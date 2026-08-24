@@ -114,8 +114,20 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
-		if update {
-			baseRef = defaultBaseRef(baseRef, target)
+		// Only pre-resolve here when target is already the real, final
+		// target directory (i.e. it was given positionally). When target is
+		// "" the interactive flow still has to prompt for one -- see
+		// executeTemplateWithoutTargetDir, which resolves the base ref
+		// itself once the actual directory is known. Resolving against ""
+		// here would read .atmos/scaffold/metadata.yaml from the wrong
+		// (empty/cwd) path and permanently overwrite baseRef with "HEAD",
+		// discarding any pin at the directory the user goes on to pick.
+		if update && target != "" {
+			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
+			if err != nil {
+				return err
+			}
+			baseRef = resolvedBaseRef
 		}
 		dryRun := v.GetBool("dry-run")
 		sourceOverride := v.GetString("scaffold-source-override")
@@ -625,7 +637,11 @@ func executeTemplateGeneration(
 	// Target directory provided, use normal Execute.
 	scaffoldUI.SetSkipHooks(opts.skipHooks)
 	err := scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
-	if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
+	offer, retryBaseRef, offerErr := shouldOfferScaffoldUpdate(err, opts, targetDir)
+	if offerErr != nil {
+		return offerErr
+	}
+	if offer {
 		if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
 			err = scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
 		}
@@ -639,17 +655,25 @@ func executeTemplateGeneration(
 // shouldOfferScaffoldUpdate mirrors cmd/init's shouldOfferUpdate: offer a
 // 3-way-merge update instead of failing outright on a non-empty target
 // directory, only when not already using --force/--update, not in dry-run,
-// and a real terminal is available to prompt on. Returns the base ref to
-// retry with (the caller's --base-ref, defaulting to HEAD) alongside the
-// decision.
-func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions) (bool, string) {
+// and a real terminal is available to prompt on. TargetDir must be the
+// actual, final target directory generation just ran against (not
+// opts.targetDir, which is the raw positional arg and can be "" when the
+// interactive flow picked the real directory itself -- see
+// executeTemplateWithoutTargetDir). Returns the base ref to retry with (the
+// caller's --base-ref, defaulting to HEAD or a pinned metadata ref) alongside
+// the decision.
+func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions, targetDir string) (offer bool, baseRef string, resolveErr error) {
 	if err == nil || opts.force || opts.update || !opts.interactive || opts.dryRun {
-		return false, ""
+		return false, "", nil
 	}
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
-		return false, ""
+		return false, "", nil
 	}
-	return true, defaultBaseRef(opts.baseRef, opts.targetDir)
+	resolvedBaseRef, resolveErr := defaultBaseRef(opts.baseRef, targetDir)
+	if resolveErr != nil {
+		return false, "", resolveErr
+	}
+	return true, resolvedBaseRef, nil
 }
 
 // defaultBaseRef fills in the 3-way-merge base ref when the caller didn't
@@ -665,14 +689,27 @@ func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions) (bool, 
 // silently sets up no git storage (ExecuteWithDelimiters only calls
 // SetupGitStorage when baseRef is non-empty), and every file fails with an
 // opaque "three-way merge failed".
-func defaultBaseRef(baseRef, targetDir string) string {
+//
+// A genuinely unreadable metadata file (corrupt YAML, permission denied --
+// anything other than the file simply not existing yet) is surfaced as an
+// error instead of silently falling back to "HEAD": swallowing it would
+// defeat the whole point of the pin, quietly re-introducing the original
+// silent-overwrite bug the very first time the pin file itself is damaged.
+// The storage.MetadataStorage.Load method returns (nil, nil) specifically
+// when the file is absent, so that case alone still falls through to the
+// HEAD/pin logic below.
+func defaultBaseRef(baseRef, targetDir string) (string, error) {
 	if baseRef != "" {
-		return baseRef
+		return baseRef, nil
 	}
-	if metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetDir)).Load(); err == nil && metadata != nil && metadata.BaseRef != "" {
-		return metadata.BaseRef
+	metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetDir)).Load()
+	if err != nil {
+		return "", fmt.Errorf("resolve default --base-ref from %s: %w", targetDir, err)
 	}
-	return "HEAD"
+	if metadata != nil && metadata.BaseRef != "" {
+		return metadata.BaseRef, nil
+	}
+	return "HEAD", nil
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
@@ -687,7 +724,12 @@ func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates
 		}
 		// No-op when headSHA is empty (targetDir was already a git repo; see
 		// gen.PinInitialBaseRef).
-		return gen.PinInitialBaseRef(targetDir, headSHA, selectedConfig.Name, selectedConfig.Version, selectedConfig.Source)
+		return gen.PinInitialBaseRef(
+			targetDir, headSHA,
+			gen.WithTemplateName(selectedConfig.Name),
+			gen.WithTemplateVersion(selectedConfig.Version),
+			gen.WithSource(selectedConfig.Source),
+		)
 	}
 	return nil
 }
@@ -791,13 +833,26 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 
 // collectDryRunFiles computes the rendered output paths a real (non-dry-run)
 // generation would write for selectedConfig+mergedValues. It mirrors real
-// generation's own file-selection rules exactly (pkg/generator/ui's
-// executeWithSetup file loop and processSingleFileEntry) so the preview can
-// never list or count more -- or fewer -- files than a real run would
-// produce: the scaffold.yaml manifest itself and directory entries are
-// skipped, and each remaining file is gated by its spec.files[].when
+// generation's own file-selection rules (pkg/generator/ui's executeWithSetup
+// file loop, processFileEntry, and processSingleFileEntry) as closely as a
+// plain path list can: the scaffold.yaml manifest itself and directory
+// entries are skipped, each remaining file is gated by its spec.files[].when
 // condition (a file with no declared spec entry always passes, since
-// FileSpec's zero-value When evaluates to true).
+// FileSpec's zero-value When evaluates to true), and spec.files[].target --
+// when set -- overrides the rendered path exactly like real generation's
+// FileOutputPath does.
+//
+// Known gap: spec.files[].matrix is NOT expanded here. Real generation turns
+// one matrix-enabled file into zero-or-more outputs (one per surviving
+// row -- see processMatrixedFileEntry/processMatrixRow), but this preview
+// still lists it as exactly one path (its Target/Path template, unexpanded
+// with no matrix values bound). For templates using matrix, the dry-run
+// preview under- or over-counts relative to the real run. Tracked as a
+// follow-up in docs/fixes/2026-08-24-scaffold-update-git-dryrun-fixes.md;
+// fixing it correctly means exporting a "plan without writing" helper from
+// pkg/generator/ui that reuses engine.ExpandMatrix + processMatrixRow's
+// per-row When/path logic, rather than re-implementing matrix expansion a
+// second time here.
 func collectDryRunFiles(processor *engine.Processor, selectedConfig *templates.Configuration, scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) []string {
 	var fileSpecs map[string]config.FileSpec
 	if scaffoldConfig != nil {
@@ -815,7 +870,8 @@ func collectDryRunFiles(processor *engine.Processor, selectedConfig *templates.C
 			continue
 		}
 
-		paths = append(paths, renderFilePath(processor, file.Path, scaffoldConfig, mergedValues))
+		outputTemplate := generatorUI.FileOutputPath(file, spec)
+		paths = append(paths, renderFilePath(processor, outputTemplate, scaffoldConfig, mergedValues))
 	}
 	return paths
 }
@@ -852,13 +908,23 @@ func executeTemplateWithoutTargetDir(
 	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
 		scaffoldUI.SetSkipHooks(opts.skipHooks)
-		targetDir, err := scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, opts.useDefaults, opts.baseRef, opts.templateValues)
-		if offer, retryBaseRef := shouldOfferScaffoldUpdate(err, opts); offer {
-			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
-				return scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
+
+		targetDir, baseRef, templateValues, useDefaults, err := resolveInteractiveBaseRef(selectedConfig, opts, scaffoldUI)
+		if err != nil {
+			return targetDir, err
+		}
+
+		finalTargetDir, err := scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, opts.update, useDefaults, baseRef, templateValues)
+		offer, retryBaseRef, offerErr := shouldOfferScaffoldUpdate(err, opts, finalTargetDir)
+		if offerErr != nil {
+			return finalTargetDir, offerErr
+		}
+		if offer {
+			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(finalTargetDir); cErr == nil && confirmed {
+				return scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, finalTargetDir, opts.force, true, useDefaults, retryBaseRef, templateValues)
 			}
 		}
-		return targetDir, err
+		return finalTargetDir, err
 	}
 
 	// Without a terminal (or in dry-run mode) the target cannot be prompted for.
@@ -869,6 +935,42 @@ func executeTemplateWithoutTargetDir(
 		WithContext("dry_run", opts.dryRun).
 		WithExitCode(2).
 		Err()
+}
+
+// resolveInteractiveBaseRef resolves the --update merge base ref for the
+// no-positional-target interactive flow. --base-ref's default (the pinned
+// ref from .atmos/scaffold/metadata.yaml, see defaultBaseRef) can only be
+// looked up once the real target directory is known, but in this flow that
+// directory doesn't exist until the interactive prompt below picks one --
+// so for --update, resolve the target directory first (scaffoldUI.
+// ResolveTargetPath runs the same prompt/setup-form logic
+// ExecuteWithInteractiveFlowAndBaseRefResult would, and is a no-op once
+// targetDir is non-empty), then resolve the base ref against it, and finally
+// hand both back to the caller's ExecuteWithInteractiveFlowAndBaseRefResult
+// call -- which skips prompting again since targetDir is already set.
+//
+// Without --update the base ref is unused (ExecuteWithDelimiters only sets
+// up git storage when update is true), so this is a no-op passthrough that
+// still lets the interactive flow prompt for the target itself.
+func resolveInteractiveBaseRef(
+	selectedConfig *templates.Configuration,
+	opts *scaffoldGenerateOptions,
+	scaffoldUI ScaffoldUI,
+) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, err error) {
+	if !opts.update {
+		return "", opts.baseRef, opts.templateValues, opts.useDefaults, nil
+	}
+
+	targetDir, templateValues, useDefaults, err = scaffoldUI.ResolveTargetPath(selectedConfig, "", opts.update, opts.useDefaults, opts.templateValues)
+	if err != nil {
+		return targetDir, "", nil, false, err
+	}
+
+	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)
+	if err != nil {
+		return targetDir, "", nil, false, err
+	}
+	return targetDir, baseRef, templateValues, useDefaults, nil
 }
 
 // executeScaffoldList lists all available scaffold templates (embedded and configured).

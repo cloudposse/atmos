@@ -414,6 +414,39 @@ spec:
 	assert.ElementsMatch(t, []string{"required.yml", "optional.yml"}, paths)
 }
 
+// TestCollectDryRunFiles_HonorsTargetOverride reproduces the bug where the
+// dry-run preview always rendered a discovered file's own Path, ignoring
+// spec.files[].target -- which overrides the output path in real generation
+// (pkg/generator/ui's FileOutputPath/processFileEntry). Without this, a
+// template using target to relocate a file previewed the wrong path.
+func TestCollectDryRunFiles_HonorsTargetOverride(t *testing.T) {
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: retargeted
+spec:
+  fields:
+    - name: service_name
+      type: input
+      default: demo
+  files:
+    - path: values.yaml.tmpl
+      target: "deploy/{{ .Config.service_name }}/values.yaml"
+`)
+	require.NoError(t, err)
+
+	cfg := &templates.Configuration{
+		Files: []templates.File{
+			{Path: config.ScaffoldConfigFileName, Content: "n/a"},
+			{Path: "values.yaml.tmpl", Content: "a: b"},
+		},
+	}
+
+	paths := collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"service_name": "demo"})
+
+	assert.Equal(t, []string{"deploy/demo/values.yaml"}, paths)
+}
+
 func TestPrintFilePath_WithoutTargetDir(t *testing.T) {
 	printFilePath("", "relative/file.txt")
 }
@@ -669,11 +702,60 @@ func TestShouldOfferScaffoldUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			offer, baseRef := shouldOfferScaffoldUpdate(tt.err, tt.opts)
+			// A fresh, never-written directory: shouldOfferScaffoldUpdate must
+			// resolve against the *actual* target passed in, not any stale
+			// opts.targetDir (see TestShouldOfferScaffoldUpdate_UsesActualTargetDir
+			// for the regression this guards against).
+			offer, baseRef, err := shouldOfferScaffoldUpdate(tt.err, tt.opts, t.TempDir())
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOffer, offer)
 			assert.Equal(t, tt.wantBaseRef, baseRef)
 		})
 	}
+}
+
+// TestShouldOfferScaffoldUpdate_UsesActualTargetDir reproduces the interactive
+// retry-offer half of the bug described in defaultBaseRef's doc comment:
+// opts.targetDir is the raw positional CLI arg, which is "" when the user ran
+// `atmos scaffold generate --update` with no target and the interactive flow
+// picked the real directory itself. ShouldOfferScaffoldUpdate must resolve
+// the retry base ref against the caller-supplied targetDir parameter (the
+// real, resolved directory), not opts.targetDir.
+func TestShouldOfferScaffoldUpdate_UsesActualTargetDir(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewScaffoldMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	// opts.targetDir left empty on purpose: it mirrors the raw positional arg
+	// in the no-target interactive scenario, and must be ignored in favor of
+	// the targetDir parameter below.
+	opts := &scaffoldGenerateOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferScaffoldUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Equal(t, "pinned-at-real-dir", baseRef)
+}
+
+// TestShouldOfferScaffoldUpdate_PropagatesMetadataLoadError verifies a
+// corrupt/unreadable metadata file surfaces as an error from
+// shouldOfferScaffoldUpdate rather than silently resolving to "HEAD".
+func TestShouldOfferScaffoldUpdate_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.ScaffoldMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &scaffoldGenerateOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferScaffoldUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
 }
 
 // TestDefaultBaseRef pins two behaviors:
@@ -685,8 +767,13 @@ func TestShouldOfferScaffoldUpdate(t *testing.T) {
 //     file with an opaque "three-way merge failed" even on a completely
 //     unmodified, freshly re-run directory.
 func TestDefaultBaseRef(t *testing.T) {
-	assert.Equal(t, "HEAD", defaultBaseRef("", t.TempDir()))
-	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3", t.TempDir()))
+	headRef, err := defaultBaseRef("", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", headRef)
+
+	explicitRef, err := defaultBaseRef("v1.2.3", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", explicitRef)
 }
 
 // TestDefaultBaseRef_PrefersPinnedMetadata reproduces the fix for the bug
@@ -701,9 +788,35 @@ func TestDefaultBaseRef_PrefersPinnedMetadata(t *testing.T) {
 	metadata := storage.NewScaffoldMetadata("demo", "1.0.0", "embedded", "abc123pinned", nil)
 	require.NoError(t, storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Save(metadata))
 
-	assert.Equal(t, "abc123pinned", defaultBaseRef("", dir))
+	pinnedRef, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123pinned", pinnedRef)
+
 	// An explicit --base-ref still overrides the pin.
-	assert.Equal(t, "v9.9.9", defaultBaseRef("v9.9.9", dir))
+	explicitRef, err := defaultBaseRef("v9.9.9", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", explicitRef)
+}
+
+// TestDefaultBaseRef_PropagatesUnreadableMetadataError reproduces the bug
+// where any metadata.Load() error (not just "file doesn't exist") was
+// silently swallowed and defaultBaseRef fell back to "HEAD" regardless --
+// defeating the pin fix, since a corrupt pin file would silently
+// re-introduce the original silent-overwrite bug (diffing against live HEAD)
+// instead of surfacing the problem. The storage.MetadataStorage.Load method
+// returns (nil, nil) only when the file is genuinely absent (os.IsNotExist);
+// any other failure (corrupt YAML here) must propagate as an error.
+func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.ScaffoldMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	resolved, err := defaultBaseRef("", dir)
+
+	require.Error(t, err)
+	assert.Empty(t, resolved)
+	assert.NotEqual(t, "HEAD", resolved, "a corrupt metadata file must not silently fall back to HEAD")
 }
 
 // TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory covers the
@@ -814,10 +927,12 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 	// Mirrors the RunE handler: resolve --base-ref's default (empty here,
 	// exactly like a real `--update` invocation with no --base-ref flag) the
 	// same way the CLI does, before calling into executeTemplateGeneration.
+	resolvedBaseRef, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
 	updateOpts := &scaffoldGenerateOptions{
 		useDefaults:    true,
 		update:         true,
-		baseRef:        defaultBaseRef("", dir),
+		baseRef:        resolvedBaseRef,
 		templateValues: map[string]interface{}{"service": "svc-x"},
 	}
 	require.NoError(t, executeTemplateGeneration(cfg, dir, updateOpts, scaffoldUI))

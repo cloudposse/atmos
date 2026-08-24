@@ -106,10 +106,14 @@ func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.Fil
 	return specByPath
 }
 
-// fileOutputPath resolves the output path template for one discovered file:
+// FileOutputPath resolves the output path template for one discovered file:
 // spec.Target when set, otherwise the file's own discovered Path. See
-// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)".
-func fileOutputPath(file tmpl.File, spec config.FileSpec) string {
+// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)". Exported
+// (alongside FileSpecByPath/ResolveDelimiters) so callers that need to plan
+// output paths without running generation -- e.g. cmd/scaffold's dry-run
+// preview -- resolve Target the same way real generation does instead of
+// duplicating this one-line rule.
+func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 	if spec.Target != "" {
 		return spec.Target
 	}
@@ -507,6 +511,25 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 	return targetPath, nil
 }
 
+// ResolveTargetPath determines the target path to generate into, prompting
+// interactively (and reconciling any values pre-collected during that
+// prompt) when the caller did not already provide one. It is exported so
+// callers that need the final target directory *before* calling one of the
+// ExecuteWithInteractiveFlow* variants (for example to resolve a --update
+// base ref against the real target rather than the empty path available
+// before the interactive prompt runs) can resolve it themselves first --
+// passing the result back in as targetPath short-circuits the prompt on the
+// subsequent Execute* call, since resolveTargetPath is a no-op once
+// targetPath is non-empty.
+func (ui *InitUI) ResolveTargetPath(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) (string, map[string]interface{}, bool, error) {
+	return ui.resolveTargetPath(embedsConfig, targetPath, update, useDefaults, cmdTemplateValues)
+}
+
 // resolveTargetPath determines the target path to generate into, prompting
 // interactively (and reconciling any values pre-collected during that
 // prompt) when the caller did not already provide one.
@@ -896,7 +919,7 @@ func (ui *InitUI) processFileEntry(
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (successCount, errorCount int, failedPaths []string, err error) {
-	outputTemplate := fileOutputPath(file, spec)
+	outputTemplate := FileOutputPath(file, spec)
 
 	if len(spec.Matrix) == 0 {
 		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)

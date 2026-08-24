@@ -60,6 +60,47 @@ func InitGitRepository(opts InitGitOptions) (skipped bool, headSHA string, err e
 	return false, commitHash.String(), nil
 }
 
+// pinOptions holds PinInitialBaseRef's optional metadata fields. Grouping
+// TemplateName/TemplateVersion/Source behind functional options (rather than
+// three same-typed positional string parameters) rules out accidentally
+// swapping them at a call site, matching this package's existing options
+// pattern (see options.go's Option/WriterOption).
+type pinOptions struct {
+	templateName    string
+	templateVersion string
+	source          string
+}
+
+// PinOption is a functional option for PinInitialBaseRef.
+type PinOption func(*pinOptions)
+
+// WithTemplateName sets the template name recorded in the pinned metadata.
+func WithTemplateName(name string) PinOption {
+	defer perf.Track(nil, "generator.WithTemplateName")()
+
+	return func(o *pinOptions) {
+		o.templateName = name
+	}
+}
+
+// WithTemplateVersion sets the template version recorded in the pinned metadata.
+func WithTemplateVersion(version string) PinOption {
+	defer perf.Track(nil, "generator.WithTemplateVersion")()
+
+	return func(o *pinOptions) {
+		o.templateVersion = version
+	}
+}
+
+// WithSource sets the template source recorded in the pinned metadata.
+func WithSource(source string) PinOption {
+	defer perf.Track(nil, "generator.WithSource")()
+
+	return func(o *pinOptions) {
+		o.source = source
+	}
+}
+
 // PinInitialBaseRef persists headSHA (the initial commit created by
 // InitGitRepository) as targetPath's frozen scaffold base ref, in
 // .atmos/scaffold/metadata.yaml. A later `--update` with no explicit
@@ -70,17 +111,27 @@ func InitGitRepository(opts InitGitOptions) (skipped bool, headSHA string, err e
 // indistinguishable from the unmodified base by the time --update runs, and
 // the merge silently lets the freshly rendered template overwrite it.
 //
+// TargetPath and headSHA are the operation's actual subject (what to pin,
+// and where) and stay positional; the template's own descriptive metadata
+// (name/version/source) is optional configuration, passed via
+// WithTemplateName/WithTemplateVersion/WithSource.
+//
 // No-op when headSHA is empty (InitGitRepository returned skipped=true,
 // meaning targetPath was already inside a git repository and no commit --
 // containing verified pristine content -- was created for atmos to pin).
-func PinInitialBaseRef(targetPath, headSHA, templateName, templateVersion, source string) error {
+func PinInitialBaseRef(targetPath, headSHA string, opts ...PinOption) error {
 	defer perf.Track(nil, "generator.PinInitialBaseRef")()
 
 	if headSHA == "" {
 		return nil
 	}
 
-	metadata := storage.NewScaffoldMetadata(templateName, templateVersion, source, headSHA, nil)
+	var pinOpts pinOptions
+	for _, opt := range opts {
+		opt(&pinOpts)
+	}
+
+	metadata := storage.NewScaffoldMetadata(pinOpts.templateName, pinOpts.templateVersion, pinOpts.source, headSHA, nil)
 	if err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetPath)).Save(metadata); err != nil {
 		return fmt.Errorf("%w: pin initial scaffold base ref: %w", errUtils.ErrMetadataSave, err)
 	}

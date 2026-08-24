@@ -132,3 +132,87 @@ there still falls back to live `HEAD` -- unchanged from before this fix, not a r
 - The `--no-git` / bring-your-own-git-repo case for bug 1 remains unfixed (see Scope note
   above) -- would need a content-hash-based snapshot independent of git history to close.
   Not tracked with an issue.
+- Dry-run's `spec.files[].matrix` expansion gap, see below -- tracked here, not with an
+  issue.
+
+## CodeRabbit follow-up round (PR #2989, commit `c27b6e5ec4`)
+
+CodeRabbit left five substantive review threads against this fix once it was pushed as
+PR #2989. Four were valid and are now fixed on this branch; one was investigated and
+determined to be a pre-existing, repo-wide test pattern, not a defect introduced by this
+PR.
+
+1. **Base ref resolved before interactive target selection (`cmd/scaffold/scaffold.go`) --
+    fixed.** `atmos scaffold generate --update` with no positional target used to resolve
+    `defaultBaseRef` against the empty/cwd target *before* the interactive flow picked the
+    real directory, so any pin at the real directory was silently discarded in favor of
+    `HEAD`. A new `resolveInteractiveBaseRef` helper (and `ScaffoldUI.ResolveTargetPath`,
+    exported alongside the existing `Execute*` methods so callers can resolve the real target
+    directory first without prompting twice) now resolves the target directory before
+    resolving the base ref against it. `shouldOfferScaffoldUpdate` similarly now takes the
+    actual resolved `targetDir` as a parameter instead of reading the stale
+    `opts.targetDir`. Regression tests: `TestExecuteTemplateWithoutTargetDir_UpdateResolvesBaseRefAfterInteractiveTarget`,
+    `TestExecuteTemplateWithoutTargetDir_NoUpdateSkipsTargetResolution`,
+    `TestShouldOfferScaffoldUpdate_UsesActualTargetDir` (`cmd/scaffold/scaffold_mock_test.go`,
+    `cmd/scaffold/scaffold_coverage_test.go`).
+2. **New tests depend on an external `git` binary
+    (`cmd/scaffold/scaffold_coverage_test.go`, `pkg/generator/source/resolver_test.go`) --
+    determined stale, not fixed.** Verified against `653e596ec6^` (the commit immediately
+    before this fix landed): both `scaffoldRunGitCommand` (`cmd/scaffold`) and `requireGit`
+    (`pkg/generator/source`) already existed and already used the same
+    `exec.LookPath("git")`-and-skip pattern before this PR touched either file. This is an
+    established, repo-wide convention predating the PR, not a regression it introduced --
+    left as-is rather than a heavy-lift rewrite to remove the external dependency
+    repo-wide.
+3. **Unreadable metadata treated as absent (`cmd/scaffold/scaffold.go`'s `defaultBaseRef`)
+    -- fixed.** `defaultBaseRef` used to fall back to `"HEAD"` on *any* `Load()` error,
+    including a corrupt/unreadable metadata file, defeating the whole point of bug 1's pin --
+    a damaged pin file would silently re-introduce the original silent-overwrite bug instead
+    of surfacing the problem. `storage.MetadataStorage.Load()`'s actual contract returns
+    `(nil, nil)` specifically when the file is absent; `defaultBaseRef` now propagates any
+    other `Load()` error instead of swallowing it, which changes its signature to
+    `(string, error)` (both call sites -- `shouldOfferScaffoldUpdate` and
+    `resolveInteractiveBaseRef` -- updated to propagate the error). Regression tests:
+    `TestDefaultBaseRef_PropagatesUnreadableMetadataError`,
+    `TestShouldOfferScaffoldUpdate_PropagatesMetadataLoadError`
+    (`cmd/scaffold/scaffold_coverage_test.go`).
+4. **`Target`/`Matrix` not expanded before printing dry-run paths
+    (`cmd/scaffold/scaffold.go`'s `collectDryRunFiles`) -- partially fixed, matrix expansion
+    scoped out as a follow-up.** `collectDryRunFiles` always rendered a discovered file's own
+    `Path`, ignoring `spec.files[].target` (a straight path override) entirely and never
+    expanding `spec.files[].matrix` (one file into zero-or-more real outputs, per
+    `pkg/generator/ui`'s `processMatrixedFileEntry`/`processMatrixRow`). This fix handles
+    `Target`: `pkg/generator/ui`'s previously unexported `fileOutputPath` is now exported as
+    `FileOutputPath` (alongside the existing `FileSpecByPath`/`ResolveDelimiters` exports for
+    the same reason) and `collectDryRunFiles` calls it instead of always using `file.Path`.
+    **Matrix expansion is explicitly not implemented** -- a template using `spec.files[].
+    matrix` still previews exactly one unexpanded path (its `Target`/`Path` template with no
+    matrix values bound), under- or over-counting relative to what a real run produces. This
+    is documented directly in `collectDryRunFiles`'s doc comment as a known gap, plus here:
+    the correct fix reuses `engine.ExpandMatrix` + `processMatrixRow`'s per-row `when`/path
+    logic via a new exported "plan output paths for this file" helper from
+    `pkg/generator/ui`, rather than re-implementing matrix expansion a second time in
+    `cmd/scaffold`; not attempted in this round because it's a genuine heavy lift on top of
+    four other fixes, and no issue has been filed for it (none requested). Regression test:
+    `TestCollectDryRunFiles_HonorsTargetOverride` (`cmd/scaffold/scaffold_coverage_test.go`);
+    no test claims matrix expansion works, matching the gap above.
+5. **Positional metadata arguments on `PinInitialBaseRef` (`pkg/generator/gitinit.go`) --
+    fixed.** `PinInitialBaseRef(targetPath, headSHA, templateName, templateVersion, source
+    string) error` had three same-typed trailing string parameters, inviting an
+    accidental-swap bug at the call site. `templateName`/`templateVersion`/`source` are now
+    passed via functional options (`WithTemplateName`/`WithTemplateVersion`/`WithSource`,
+    backed by a new unexported `pinOptions` struct and `PinOption` type, matching this
+    package's existing options pattern in `options.go`); `targetPath`/`headSHA` stay
+    positional since they're the operation's actual subject, not configuration. The one call
+    site (`cmd/scaffold/scaffold.go`'s `maybeInitGeneratedGitRepository`) was updated.
+    Regression test: `TestPinInitialBaseRef_NoOptionsStillWritesBaseRef`
+    (`pkg/generator/gitinit_test.go`), confirming the options are genuinely optional.
+
+### Validation (CodeRabbit follow-up round)
+
+- `go build ./...` -- clean.
+- `go vet ./...` -- clean.
+- `go test -count=1 ./cmd/scaffold/... ./pkg/generator/...` -- all pass.
+- `gofumpt -l` over every touched file -- clean (two files needed a `gofumpt -w` pass for
+  multi-line call-argument formatting `gofmt` alone wouldn't have caught).
+- `./build/atmos lint --changed` (patch-scoped against `origin/main`) -- 0 issues.

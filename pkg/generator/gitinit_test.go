@@ -63,19 +63,47 @@ func TestInitialCommitMessage_NoVersion(t *testing.T) {
 func TestPinInitialBaseRef_WritesMetadata(t *testing.T) {
 	dir := t.TempDir()
 
-	require.NoError(t, PinInitialBaseRef(dir, "abc123", "basic", "1.0.0", "embedded"))
+	require.NoError(t, PinInitialBaseRef(
+		dir, "abc123",
+		WithTemplateName("basic"),
+		WithTemplateVersion("1.0.0"),
+		WithSource("embedded"),
+	))
 
 	metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Load()
 	require.NoError(t, err)
 	require.NotNil(t, metadata)
 	assert.Equal(t, "abc123", metadata.BaseRef)
 	assert.Equal(t, "basic", metadata.Template.Name)
+	assert.Equal(t, "1.0.0", metadata.Template.Version)
+	assert.Equal(t, "embedded", metadata.Template.Source)
 }
 
 func TestPinInitialBaseRef_NoopWhenSkipped(t *testing.T) {
 	dir := t.TempDir()
 
-	require.NoError(t, PinInitialBaseRef(dir, "", "basic", "1.0.0", "embedded"))
+	require.NoError(t, PinInitialBaseRef(
+		dir, "",
+		WithTemplateName("basic"),
+		WithTemplateVersion("1.0.0"),
+		WithSource("embedded"),
+	))
 
 	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir))
+}
+
+// TestPinInitialBaseRef_NoOptionsStillWritesBaseRef verifies PinInitialBaseRef
+// works correctly with no options at all (all pinOptions fields left at their
+// zero value) -- confirming the functional options are genuinely optional,
+// not silently required for the pin itself to succeed.
+func TestPinInitialBaseRef_NoOptionsStillWritesBaseRef(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, PinInitialBaseRef(dir, "def456"))
+
+	metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.Equal(t, "def456", metadata.BaseRef)
+	assert.Empty(t, metadata.Template.Name)
 }
