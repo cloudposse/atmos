@@ -370,19 +370,19 @@ this design, not a prerequisite of it**. Implementation of `aws/cloudformation` 
 waiting for any part of that framework. Three rules keep the two from contradicting:
 
 1. **Narrow seam**: packaging calls a small upload interface defined in this package (upload
-   content, get back an S3 URL + digest), implemented in Phase 1 by the `pkg/ci/artifact` `aws/s3`
-   store. When `pkg/artifact` lands, an adapter satisfies the same seam — a transport swap, not a
-   redesign.
+    content, get back an S3 URL + digest), implemented in Phase 1 by the `pkg/ci/artifact` `aws/s3`
+    store. When `pkg/artifact` lands, an adapter satisfies the same seam — a transport swap, not a
+    redesign.
 2. **No vocabulary squatting**: this component type introduces no `artifact:`/`repositories:`
-   config namespace, no `publish`/`mirror`/`pull` verbs, and no artifact-kind registry of its own.
-   Its packaging destination is declared inline on the `kind: aws/s3` provision target
-   (`bucket`/`prefix`) — the target-kind string deliberately matches the artifacts PRD's `aws/s3`
-   repository kind and the stores `aws/ssm`-style vocabulary — with an optional
-   `repository: <name>` reference added only after `artifact.repositories` exists.
+    config namespace, no `publish`/`mirror`/`pull` verbs, and no artifact-kind registry of its own.
+    Its packaging destination is declared inline on the `kind: aws/s3` provision target
+    (`bucket`/`prefix`) — the target-kind string deliberately matches the artifacts PRD's `aws/s3`
+    repository kind and the stores `aws/ssm`-style vocabulary — with an optional
+    `repository: <name>` reference added only after `artifact.repositories` exists.
 3. **Deferred integrations stay deferred**: the `kind: artifact` provision target (below) and the
-   `cloudformation/template` artifact kind — which lets air-gap bundles carry CloudFormation
-   deployments the same way they carry images, tool packages, and vendored sources — activate when
-   the artifacts framework merges, and appear in none of this PRD's phases.
+    `cloudformation/template` artifact kind — which lets air-gap bundles carry CloudFormation
+    deployments the same way they carry images, tool packages, and vendored sources — activate when
+    the artifacts framework merges, and appear in none of this PRD's phases.
 
 **Future `kind: artifact` provision target.** Once `artifact.repositories.<name>` exists (Artifacts
 PRD), a third delivery target kind falls out naturally:
@@ -568,12 +568,12 @@ versa.
 Two type-specific sites are **not** free and join the wiring checklist:
 
 1. `findComponentSectionInCachedStacks` (`internal/exec/describe_dependents.go:664-677`) scans only
-   the `terraform` and `helmfile` sections when resolving a dependency's component config — a CFN
-   dependency resolves to nothing. Add the `aws/cloudformation` section, or (preferred, since
-   `helm`/`kubernetes`/`ansible` are missing here too) generalize the scan over registered types.
+    the `terraform` and `helmfile` sections when resolving a dependency's component config — a CFN
+    dependency resolves to nothing. Add the `aws/cloudformation` section, or (preferred, since
+    `helm`/`kubernetes`/`ansible` are missing here too) generalize the scan over registered types.
 2. The `describe affected` deleted-component lists (`describe_affected_deleted.go`) already
-   captured in [`describe affected` Wiring](#describe-affected-wiring) — dependents of a deleted
-   CFN component are only detected once those lists include the type.
+    captured in [`describe affected` Wiring](#describe-affected-wiring) — dependents of a deleted
+    CFN component are only detected once those lists include the type.
 
 (The `if e.StackComponentType == "terraform"` branch at `describe_dependents.go:416` is
 terraform-specific enrichment, not a gap — CFN needs no equivalent.)
@@ -725,52 +725,52 @@ section-whitelist plumbing, `describe affected` wiring, and the atmos.yaml base-
 ### Core Registry & Describe/List Wiring
 
 1. **`pkg/config/const.go`** — `CloudFormationComponentType = "aws/cloudformation"` +
-   `CloudFormationSectionName` constants (plus per-section constants for `template`, `parameters`,
-   `capabilities`, `stack_policy`, following `ChartSectionName`/`ValuesSectionName`).
+    `CloudFormationSectionName` constants (plus per-section constants for `template`, `parameters`,
+    `capabilities`, `stack_policy`, following `ChartSectionName`/`ValuesSectionName`).
 2. **`pkg/component/aws/cloudformation/`** — the `ComponentProvider` implementation itself, plus its
-   blank-import registration in **`cmd/root.go:38-45`** alongside the existing
-   `_ "github.com/cloudposse/atmos/pkg/component/helm"`-style imports.
+    blank-import registration in **`cmd/root.go:38-45`** alongside the existing
+    `_ "github.com/cloudposse/atmos/pkg/component/helm"`-style imports.
 3. **`internal/exec/describe_stacks_component_processor.go`** — add an entry to the `typeEntries`
-   slice at `:317-334` (`applyMetadataInheritance: true`, matching the `helm`/`kubernetes` entries),
-   **and** add the type to `hasStackExplicitComponents` (`:1238-1247`) — otherwise a stack containing
-   only `aws/cloudformation` components is filtered out of `describe stacks` as "empty."
+    slice at `:317-334` (`applyMetadataInheritance: true`, matching the `helm`/`kubernetes` entries),
+    **and** add the type to `hasStackExplicitComponents` (`:1238-1247`) — otherwise a stack containing
+    only `aws/cloudformation` components is filtered out of `describe stacks` as "empty."
 4. **`internal/exec/describe_stacks.go`** — `getComponentBasePath()` switch (`:460-484`). Note:
-   `helm`/`kubernetes` are *not* currently wired here (a pre-existing gap — their `component_path`
-   renders empty in `describe stacks` output). CloudFormation likely *should* get a real `case`, since
-   a template path is as meaningful a "base path" for CFN as a root module path is for Terraform.
-   Fixing this for CFN without also fixing it for Helm/Kubernetes is an acceptable, explicitly-scoped
-   choice — it does not depend on the older gap being closed.
+    `helm`/`kubernetes` are *not* currently wired here (a pre-existing gap — their `component_path`
+    renders empty in `describe stacks` output). CloudFormation likely *should* get a real `case`, since
+    a template path is as meaningful a "base path" for CFN as a root module path is for Terraform.
+    Fixing this for CFN without also fixing it for Helm/Kubernetes is an acceptable, explicitly-scoped
+    choice — it does not depend on the older gap being closed.
 5. **`internal/exec/describe_component.go`** — two sites: `detectComponentType()`'s auto-detect
-   ordered slice (`:507-516`; without it, `atmos describe component <name>` auto-detection silently
-   fails for CFN components), **and** `FilterComputedFields`'s hard section whitelist (`:638-666`,
-   applied under the default `describe.component.filter: schema` mode) — without the latter,
-   `template`/`parameters`/`capabilities`/`stack_policy` are stripped from
-   `atmos describe component` output even after surviving stack processing.
+    ordered slice (`:507-516`; without it, `atmos describe component <name>` auto-detection silently
+    fails for CFN components), **and** `FilterComputedFields`'s hard section whitelist (`:638-666`,
+    applied under the default `describe.component.filter: schema` mode) — without the latter,
+    `template`/`parameters`/`capabilities`/`stack_policy` are stripped from
+    `atmos describe component` output even after surviving stack processing.
 6. **`pkg/list/extract/components.go`** — three separate hardcoded per-type lists, in `Components()`
-   (`:49-53`), `UniqueComponents()` (via `extractUniqueComponentType`, `:307-331`), and
-   `ComponentsForStack()` (via `extractComponentType`, `:452-456`/`:63`). `helm`/`kubernetes`/
-   `emulator` are *also* absent from all three today (`atmos list components` currently omits them
-   entirely). This PRD's implementation should add `aws/cloudformation` to all three and, since the
-   fix is adjacent and small, backfill the missing types in the same change — otherwise open a tracked
-   follow-up issue per the Follow-up Tracking mandate rather than silently inheriting the gap.
+    (`:49-53`), `UniqueComponents()` (via `extractUniqueComponentType`, `:307-331`), and
+    `ComponentsForStack()` (via `extractComponentType`, `:452-456`/`:63`). `helm`/`kubernetes`/
+    `emulator` are *also* absent from all three today (`atmos list components` currently omits them
+    entirely). This PRD's implementation should add `aws/cloudformation` to all three and, since the
+    fix is adjacent and small, backfill the missing types in the same change — otherwise open a tracked
+    follow-up issue per the Follow-up Tracking mandate rather than silently inheriting the gap.
 7. **Secondary ad hoc lists** that don't even include every *current* native type yet — all still
-   hardcoded to `[terraform, helmfile, packer]` only:
-   - `cmd/list/sources.go:424`
-   - `pkg/utils/component_reverse_path_utils.go:51`
-   - `cmd/vendor/selector.go:188`
-   - `internal/exec/vendor_component_utils.go:274`
-   - `pkg/vendoring/resolve.go:362`, plus its hard gate `validateComponentType`
-     (`pkg/vendoring/resolve.go:47-54`) which *errors* on any other type — see
-     [Source Provisioning & Vendoring](#source-provisioning--vendoring)
+    hardcoded to `[terraform, helmfile, packer]` only:
+    - `cmd/list/sources.go:424`
+    - `pkg/utils/component_reverse_path_utils.go:51`
+    - `cmd/vendor/selector.go:188`
+    - `internal/exec/vendor_component_utils.go:274`
+    - `pkg/vendoring/resolve.go:362`, plus its hard gate `validateComponentType`
+      (`pkg/vendoring/resolve.go:47-54`) which *errors* on any other type — see
+      [Source Provisioning & Vendoring](#source-provisioning--vendoring)
 
-   These predate `ansible`/`container`/`kubernetes`/`helm` too. Decision for implementation: either
-   fix these for `aws/cloudformation` (and, ideally, backfill the other missing native types in the
-   same pass) or open one tracked follow-up issue covering all of them — do not add
-   `aws/cloudformation`-only patches that leave the lists further out of sync with reality.
+    These predate `ansible`/`container`/`kubernetes`/`helm` too. Decision for implementation: either
+    fix these for `aws/cloudformation` (and, ideally, backfill the other missing native types in the
+    same pass) or open one tracked follow-up issue covering all of them — do not add
+    `aws/cloudformation`-only patches that leave the lists further out of sync with reality.
 8. **`internal/exec/describe_dependents.go:664-677`** — `findComponentSectionInCachedStacks` scans
-   only `terraform`/`helmfile` sections; without the CFN section (or a generalized scan), CFN
-   components can't be resolved as dependencies. See
-   [Dependencies & DAG Ordering](#dependencies--dag-ordering).
+    only `terraform`/`helmfile` sections; without the CFN section (or a generalized scan), CFN
+    components can't be resolved as dependencies. See
+    [Dependencies & DAG Ordering](#dependencies--dag-ordering).
 
 ### Section-Whitelist Plumbing
 
@@ -781,24 +781,24 @@ unless plumbed through all of the following (helm's `chart`/`values` wiring is t
 site):
 
 1. `internal/exec/stack_processor_process_stacks.go` — the `builtInTypes` map (`:1250-1256`), a
-   per-type processing block, and the `allComponents[...]` assignment (`:1185-1242`).
+    per-type processing block, and the `allComponents[...]` assignment (`:1185-1242`).
 2. `internal/exec/stack_processor_process_stacks_helpers_extraction.go` — a type-specific
-   section-key bag mirroring `helmComponentSectionKeys` (`:324-334`) and its extraction block
-   (`:275-310`).
+    section-key bag mirroring `helmComponentSectionKeys` (`:324-334`) and its extraction block
+    (`:275-310`).
 3. Same file — the capability predicates: **`supportsComponentHooks` (`:349`) and
-   `supportsSourceProvision` (`:370`) must include the type or `hooks:`/`source:`/`provision:` are
-   silently dropped**; evaluate `supportsGenerate`/`supportsPlugins` (`:348-377`) explicitly and
-   record the choice.
+    `supportsSourceProvision` (`:370`) must include the type or `hooks:`/`source:`/`provision:` are
+    silently dropped**; evaluate `supportsGenerate`/`supportsPlugins` (`:348-377`) explicitly and
+    record the choice.
 4. `internal/exec/stack_processor_process_stacks_helpers.go` — `ComponentProcessorResult`
-   `Component<X>`/`BaseComponent<X>` fields (`:72-104`).
+    `Component<X>`/`BaseComponent<X>` fields (`:72-104`).
 5. `internal/exec/stack_processor_process_stacks_helpers_inheritance.go` — inheritance propagation
-   (`:236-240`).
+    (`:236-240`).
 6. `internal/exec/stack_processor_utils.go` — base-component extraction in
-   `processBaseComponentConfigInternal` (`:2325-2336`, `:2572`, `:2819-2823`).
+    `processBaseComponentConfigInternal` (`:2325-2336`, `:2572`, `:2819-2823`).
 7. `internal/exec/stack_processor_cache.go` — deep-copy of the new sections for the stack-processor
-   cache (`:132-160`).
+    cache (`:132-160`).
 8. `internal/exec/stack_processor_merge.go` — merge + write-back into the component map
-   (`:654-688`, the site that makes `:529` stop dropping the sections).
+    (`:654-688`, the site that makes `:529` stop dropping the sections).
 
 `describe stacks` output itself is pass-through (`addSectionsToComponentEntry` copies every key) —
 the bottleneck is entirely these upstream sites plus `FilterComputedFields` (item 5 above).
@@ -809,19 +809,19 @@ the bottleneck is entirely these upstream sites plus `FilterComputedFields` (ite
 wiring, three sites of which **hard-error on unknown component types**:
 
 1. `internal/exec/describe_affected_utils_parallel.go` — per-type dispatch over the
-   `components.<type>` sections (terraform/helmfile/packer/kubernetes/helm each have a branch).
+    `components.<type>` sections (terraform/helmfile/packer/kubernetes/helm each have a branch).
 2. `internal/exec/describe_affected_components.go` — a `process<Type>ComponentsIndexed` function per
-   type (kubernetes `:527-616` / helm `:655-732` are the SDK-native references).
+    type (kubernetes `:527-616` / helm `:655-732` are the SDK-native references).
 3. `internal/exec/describe_affected_changed_files_index.go:177-191` — `getRelevantFiles` base-path
-   switch (an unknown type silently falls back to scanning *all* files).
+    switch (an unknown type silently falls back to scanning *all* files).
 4. `internal/exec/describe_affected_pattern_cache.go:56-68` — base-path switch that returns
-   `ErrUnsupportedComponentType` for unknown types.
+    `ErrUnsupportedComponentType` for unknown types.
 5. `internal/exec/describe_affected_utils_2.go:337-348` — `isComponentFolderChanged` switch, also
-   erroring (and currently missing even `helm`).
+    erroring (and currently missing even `helm`).
 6. `internal/exec/describe_affected_deleted.go:101,167,281` — deleted-component detection, hardcoded
-   `[terraform, helmfile, packer]`.
+    `[terraform, helmfile, packer]`.
 7. `internal/exec/describe_affected_utils_optimized.go:65` — the terraform-only optimized path must
-   at minimum not mis-handle stacks containing CFN components.
+    at minimum not mis-handle stacks containing CFN components.
 
 ### atmos.yaml Base-Path Chain
 
@@ -830,10 +830,10 @@ not sufficient — `components.aws/cloudformation.base_path` must be plumbed thr
 
 1. `Components.GetComponentConfig`'s per-type switch (`pkg/schema/schema.go:1262-1282`).
 2. A `<Type>DirAbsolutePath` field on `AtmosConfiguration` (`pkg/schema/schema.go:133-134`) and its
-   computation (`pkg/config/config.go:527,535`).
+    computation (`pkg/config/config.go:527,535`).
 3. The central path resolver `pkg/utils/component_path_utils.go:204-239` — **errors on unknown
-   types**, and derives `ATMOS_COMPONENTS_<TYPE>_BASE_PATH` env-var names from the type string (the
-   `/`-mangling decision from [Naming & Registry Precedent](#naming--registry-precedent) lands here).
+    types**, and derives `ATMOS_COMPONENTS_<TYPE>_BASE_PATH` env-var names from the type string (the
+    `/`-mangling decision from [Naming & Registry Precedent](#naming--registry-precedent) lands here).
 4. `pkg/provisioner/source/source.go:375-377` — source-provisioner base-path switch.
 5. `pkg/hooks/command_engine.go:782-784` — hooks-engine base-path switch.
 6. `internal/exec/stack_processor_process_stacks.go:1136,1194` — stack-processor base-path lookup.
@@ -867,21 +867,21 @@ registered as a field on `type Components struct` alongside `Terraform`, `Helmfi
 JSON Schema — **four files**, not one:
 
 1. `pkg/datafetcher/schema/stacks/stack-config/1.0.json` gains an
-   `aws_cloudformation_component_manifest` definition, modeled directly on `helm_component_manifest`
-   — type-specific properties (`template`, `stack_name`, `parameters`, `capabilities`, `tags`,
-   `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`,
-   `timeout_in_minutes`) plus the shared cross-type sections
-   (`vars`/`env`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
-   with `additionalProperties: false`.
+    `aws_cloudformation_component_manifest` definition, modeled directly on `helm_component_manifest`
+    — type-specific properties (`template`, `stack_name`, `parameters`, `capabilities`, `tags`,
+    `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`,
+    `timeout_in_minutes`) plus the shared cross-type sections
+    (`vars`/`env`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
+    with `additionalProperties: false`.
 2. `pkg/datafetcher/schema/atmos/manifest/1.0.json` — the parallel manifest schema carries its own
-   copies of every per-type definition; a parity test
-   (`pkg/datafetcher/schema_condition_validation_test.go:190`) fails when a definition is added to
-   `stack-config/1.0.json` but omitted here.
+    copies of every per-type definition; a parity test
+    (`pkg/datafetcher/schema_condition_validation_test.go:190`) fails when a definition is added to
+    `stack-config/1.0.json` but omitted here.
 3. `pkg/datafetcher/schema/atmos/config/1.0.json` — the atmos.yaml schema is **generated from the Go
-   structs** (`pkg/config/schema/`); adding the `AwsCloudFormation` field to `Components` requires
-   regenerating this committed artifact via `go generate`, never hand-editing it.
+    structs** (`pkg/config/schema/`); adding the `AwsCloudFormation` field to `Components` requires
+    regenerating this committed artifact via `go generate`, never hand-editing it.
 4. `tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` — the hand-maintained test
-   fixture copy of the manifest schema.
+    fixture copy of the manifest schema.
 
 (`pkg/datafetcher/schema/vendor/package/1.0.json` does *not* enumerate component types — vendoring's
 type restriction lives in Go, `pkg/vendoring/resolve.go:47-54`.)
