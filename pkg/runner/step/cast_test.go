@@ -2122,7 +2122,11 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// The parent deadline must exceed the "wait" step's own 10s timeout below (with startup
+	// margin): waitForOutput races the step's own timer against ctx.Done() (see
+	// pkg/asciicast/session.go), so a shorter parent deadline would silently cap the wait at
+	// this context's timeout instead of the step's configured one.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, &schema.WorkflowStep{
