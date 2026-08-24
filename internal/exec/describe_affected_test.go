@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -283,14 +284,19 @@ func shouldSkipRepoCopyPath(src string) bool {
 }
 
 // copyRepoWithRetry copies the live repository at src into dest, retrying a few times
-// if the copy fails because a source file vanished mid-copy. The source is the actual
-// checked-out repository, which can have transient files appear and disappear under
-// .git/objects/pack while git performs routine background housekeeping (e.g. an
-// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
-// them within milliseconds). The otiai10/copy directory walk stats every entry it
-// lists, so it can observe one of these files mid-flight and fail the whole copy with
-// "no such file or directory". Retrying a moment later almost always succeeds, since
-// the transient file is long gone by the next attempt.
+// on known-transient copy failures. The source is the actual checked-out repository,
+// which can have transient files appear and disappear under .git/objects/pack while
+// git performs routine background housekeeping (e.g. an automatic repack writes
+// tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes them within
+// milliseconds). The otiai10/copy directory walk stats every entry it lists, so it can
+// observe one of these files mid-flight and fail the whole copy with "no such file or
+// directory". Separately, on Windows, some of the shared fixture files under src (e.g.
+// a component's terraform.tfstate) can be open in another concurrently running test at
+// the exact moment this copy walks it -- Windows enforces mandatory file locking far
+// more strictly than Unix, so the walk's read fails outright with "The process cannot
+// access the file because another process has locked a portion of the file" instead of
+// racing cleanly. Retrying a moment later almost always succeeds in both cases, since
+// the transient file (or lock) is long gone by the next attempt.
 func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	t.Helper()
 
@@ -298,7 +304,7 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err = cp.Copy(src, dest, *opts)
-		if err == nil || !os.IsNotExist(err) {
+		if err == nil || !isTransientRepoCopyError(err) {
 			return err
 		}
 		if attempt == maxAttempts {
@@ -309,6 +315,57 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return err
+}
+
+// isTransientRepoCopyError reports whether a copyRepoWithRetry failure is a known
+// transient condition worth retrying, rather than a genuine failure to surface
+// immediately. See copyRepoWithRetry's doc comment for the two known causes.
+func isTransientRepoCopyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if os.IsNotExist(err) {
+		return true
+	}
+	// Windows-only error text for ERROR_LOCK_VIOLATION / ERROR_SHARING_VIOLATION
+	// surfacing through a plain file read during the copy walk.
+	lower := strings.ToLower(err.Error())
+	transientPatterns := []string{
+		"another process has locked a portion of the file",
+		"being used by another process",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestIsTransientRepoCopyError(t *testing.T) {
+	t.Run("nil-error-is-not-transient", func(t *testing.T) {
+		assert.False(t, isTransientRepoCopyError(nil))
+	})
+
+	t.Run("not-exist-error-is-transient", func(t *testing.T) {
+		assert.True(t, isTransientRepoCopyError(os.ErrNotExist))
+	})
+
+	t.Run("windows-lock-violation-is-transient", func(t *testing.T) {
+		// Exact error text observed on Windows CI (ERROR_LOCK_VIOLATION).
+		err := errors.New(`read ..\..\tests\fixtures\scenarios\hooks-test\components\terraform\hook-and-store\terraform.tfstate.d\test-component2\terraform.tfstate: The process cannot access the file because another process has locked a portion of the file.`)
+		assert.True(t, isTransientRepoCopyError(err))
+	})
+
+	t.Run("windows-sharing-violation-is-transient", func(t *testing.T) {
+		// ERROR_SHARING_VIOLATION wording, distinct from the lock-violation text above.
+		err := errors.New(`open foo.txt: The process cannot access the file because it is being used by another process.`)
+		assert.True(t, isTransientRepoCopyError(err))
+	})
+
+	t.Run("unrelated-error-is-not-transient", func(t *testing.T) {
+		assert.False(t, isTransientRepoCopyError(errors.New("permission denied")))
+	})
 }
 
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
