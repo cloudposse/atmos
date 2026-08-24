@@ -273,6 +273,31 @@ func TestDefaultEnvironmentSetup_ComponentEnvOverridesParent(t *testing.T) {
 	assert.Equal(t, "component-value", val, "component env should override parent env")
 }
 
+// TestDefaultEnvironmentSetup_ComponentCLIArgsFiltered verifies command-specific
+// arguments configured for the main Terraform command do not reach terraform-exec's
+// internal output command. Terraform-exec rejects these environment variables.
+func TestDefaultEnvironmentSetup_ComponentCLIArgsFiltered(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	config := &ComponentConfig{
+		Env: map[string]any{
+			"ALLOWED_VAR":       "allowed-value",
+			"TF_CLI_ARGS":       "-no-color",
+			"TF_CLI_ARGS_apply": "-lock-timeout=5m",
+			"TF_CLI_ARGS_plan":  "-compact-warnings",
+			"TF_VAR_region":     "us-east-1",
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "allowed-value", result["ALLOWED_VAR"])
+	assert.Equal(t, "us-east-1", result["TF_VAR_region"])
+	assert.NotContains(t, result, "TF_CLI_ARGS")
+	assert.NotContains(t, result, "TF_CLI_ARGS_apply")
+	assert.NotContains(t, result, "TF_CLI_ARGS_plan")
+}
+
 // TestDefaultEnvironmentSetup_PassVars is a regression test for issue #1412:
 // when components.terraform.init.pass_vars is enabled, the component's vars must
 // be exported as TF_VAR_* so the internal `terraform init` run while resolving
