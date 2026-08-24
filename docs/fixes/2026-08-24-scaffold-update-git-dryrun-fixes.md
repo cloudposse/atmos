@@ -8,15 +8,15 @@ Three bugs reported by a client evaluating `atmos scaffold` (`[EXPERIMENTAL]`) a
 `v1.226.0`:
 
 1. `scaffold generate --update` could silently discard a customization the user had
-   already committed to the generated project, as long as the template's own change
-   landed on a different line.
+    already committed to the generated project, as long as the template's own change
+    landed on a different line.
 2. A `.git` directory present in a template source (a template directory that was itself
-   cloned, or a `git::` remote source fetched into a fresh temp dir) was copied wholesale
-   into generated output.
+    cloned, or a `git::` remote source fetched into a fresh temp dir) was copied wholesale
+    into generated output.
 3. `--dry-run` could list/count more files than a real (non-dry-run) generation actually
-   produces: directory entries were counted as files, `spec.files[].when: false` was
-   ignored, and file paths using a template's custom `spec.delimiters` rendered raw and
-   unsubstituted.
+    produces: directory entries were counted as files, `spec.files[].when: false` was
+    ignored, and file paths using a template's custom `spec.delimiters` rendered raw and
+    unsubstituted.
 
 A fourth reported bug (hardcoded `{{ }}` delimiters in three call sites: `ProcessTemplate`,
 `validateRenderedPath`, `mergeFile`) is explicitly out of scope for this fix — the client
