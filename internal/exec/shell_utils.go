@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -128,6 +129,26 @@ func WithEnvironment(env []string) ShellCommandOption {
 	}
 }
 
+// resolveMaskingDisabled decides whether output masking should be disabled.
+// The --mask/ATMOS_MASK flag/env override wins when set, otherwise
+// settings.terminal.mask.enabled (from atmos.yaml) applies. The presence
+// check (IsSet) and value read (GetBool) run together under one
+// cfg.GlobalViper().View call so a concurrent LoadConfig Set() between the
+// two can never combine one snapshot's presence result with a different
+// snapshot's value -- masking is security-sensitive, so this decision must
+// never be made from a torn read.
+func resolveMaskingDisabled(atmosConfig *schema.AtmosConfiguration) bool {
+	disableMasking := false
+	cfg.GlobalViper().View(func(v *viper.Viper) {
+		if v.IsSet("mask") {
+			disableMasking = !v.GetBool("mask")
+		} else if v.IsSet("settings.terminal.mask.enabled") {
+			disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
+		}
+	})
+	return disableMasking
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -141,14 +162,8 @@ func ExecuteShellCommand(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
-	disableMasking := false
-	if cfg.GlobalViper().IsSet("mask") {
-		disableMasking = !cfg.GlobalViper().GetBool("mask")
-	} else if cfg.GlobalViper().IsSet("settings.terminal.mask.enabled") {
-		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
-	}
 	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
-		DisableMasking: disableMasking,
+		DisableMasking: resolveMaskingDisabled(&atmosConfig),
 		AtmosConfig:    atmosConfig,
 	})
 

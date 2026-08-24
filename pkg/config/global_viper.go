@@ -63,6 +63,21 @@ func (s *SafeViper) IsSet(key string) bool {
 	return viper.GetViper().IsSet(key)
 }
 
+// View executes fn with a read lock held on the global Viper singleton,
+// giving fn a consistent snapshot for the whole call. Use this instead of
+// separate Set/GetBool/IsSet calls whenever a decision combines more than one
+// read (e.g. an IsSet presence check followed by a GetBool value read):
+// each individual SafeViper method locks and unlocks independently, so a
+// concurrent Set() between two separate calls could let the decision combine
+// one snapshot's presence result with a different snapshot's value.
+// The callback must only call methods on the *viper.Viper it receives, not
+// GlobalViper()'s own methods, which would deadlock re-acquiring this lock.
+func (s *SafeViper) View(fn func(v *viper.Viper)) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fn(viper.GetViper())
+}
+
 var globalViper = &SafeViper{}
 
 // GlobalViper returns the mutex-guarded wrapper around the process-wide global
