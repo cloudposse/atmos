@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -237,6 +238,33 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
+// `git::` scaffold source (no subdir, mirroring the client's exact repro) must not copy
+// the fetched clone's own `.git` directory (objects, refs, hooks, and a `config` pointing
+// at the template's source repo) into the loaded template's file list -- it isn't part of
+// the template's content.
+func TestResolve_RemoteGitExcludesGitDirectory(t *testing.T) {
+	requireGit(t)
+
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "?ref=main"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git template files must still be loaded")
+
+	for _, f := range cfg.Files {
+		assert.NotEqual(t, ".git", f.Path, "loaded configuration must not include the .git directory itself")
+		assert.False(t, strings.HasPrefix(f.Path, ".git/"), "loaded configuration must not include files under .git/, got %q", f.Path)
+	}
 }
 
 // zipArchive builds an in-memory ZIP archive containing the given files.

@@ -91,12 +91,14 @@ func toEngineFile(file tmpl.File) engine.File {
 	}
 }
 
-// fileSpecByPath indexes a scaffold config's spec.files overlay by declared
+// FileSpecByPath indexes a scaffold config's spec.files overlay by declared
 // path, for O(1) lookup during the file-generation loop. Files not listed in
 // the overlay generate unconditionally with no Target/Matrix override --
 // FileSpec's zero-value When already evaluates to true (see
-// condition.Condition.Evaluate).
-func fileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
+// condition.Condition.Evaluate). Exported so the `--dry-run` preview
+// (cmd/scaffold) can gate its file list with the exact same spec.When
+// evaluation real generation uses, instead of a second, divergent copy.
+func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
 	specByPath := make(map[string]config.FileSpec, len(scaffoldConfig.Spec.Files))
 	for _, f := range scaffoldConfig.Spec.Files {
 		specByPath[f.Path] = f
@@ -122,15 +124,15 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// resolveDelimiters determines the delimiters to use. A scaffold config's own
+// ResolveDelimiters determines the delimiters to use. A scaffold config's own
 // declared delimiters always win: callers (Execute/ExecuteWithBaseRef) pass a
 // generic "{{"/"}}"  default through regardless of what the scaffold actually
 // declares, so treating that default as an explicit override would silently
 // ignore scaffold.yaml's spec.delimiters (e.g. "[[" / "]]") -- this is exactly
 // what engine.extractDelimiters already does for per-file rendering via
-// ProcessFile, which resolveDelimiters must match so the README summary
+// ProcessFile, which ResolveDelimiters must match so the README summary
 // renders with the same delimiters as every other generated file.
-func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
+func ResolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
 	if scaffoldConfig != nil && len(scaffoldConfig.Spec.Delimiters) == 2 {
 		return scaffoldConfig.Spec.Delimiters
 	}
@@ -684,7 +686,7 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 //nolint:revive // function-length: file processing loop with error handling
 func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Resolve delimiters, falling back to defaults when none are provided.
-	activeDelimiters := resolveDelimiters(delimiters, nil)
+	activeDelimiters := ResolveDelimiters(delimiters, nil)
 	delimitersConfig := delimitersAsScaffoldConfig(activeDelimiters)
 
 	// For now, use the existing processFile method but this should be refactored
@@ -1238,8 +1240,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
-	activeDelimiters := resolveDelimiters(delimiters, scaffoldConfig)
-	fileSpecs := fileSpecByPath(scaffoldConfig)
+	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
+	fileSpecs := FileSpecByPath(scaffoldConfig)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
@@ -1259,7 +1261,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 		spec := fileSpecs[file.Path]
 		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
-			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths,
+		)
 		successCount += entrySuccess
 		errorCount += entryErrors
 		failedFiles = append(failedFiles, entryFailedPaths...)
@@ -1308,7 +1311,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Only render README if all files were successful.
 	if embedsConfig.README != "" {
 		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
-		delimiters = resolveDelimiters(delimiters, scaffoldConfig)
+		delimiters = ResolveDelimiters(delimiters, scaffoldConfig)
 
 		// Process README template with rich configuration.
 		processedContent, err := ui.processor.ProcessTemplateWithDelimiters(embedsConfig.README, targetPath, scaffoldConfig, mergedValues, delimiters)
@@ -1347,7 +1350,7 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 // to nothing.
 func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string, values map[string]interface{}) error {
 	// Resolve delimiters, falling back to defaults.
-	activeDelimiters := resolveDelimiters(delimiters, nil)
+	activeDelimiters := ResolveDelimiters(delimiters, nil)
 
 	// Process README template with the active delimiters and values.
 	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, values, activeDelimiters)

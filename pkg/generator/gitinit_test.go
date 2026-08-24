@@ -8,24 +8,28 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
 func TestInitGitRepository_CreatesInitialCommit(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# demo\n"), 0o600))
 
-	skipped, err := InitGitRepository(InitGitOptions{
+	skipped, headSHA, err := InitGitRepository(InitGitOptions{
 		TargetPath:      dir,
 		TemplateName:    "basic",
 		TemplateVersion: "1.0.0",
 	})
 	require.NoError(t, err)
 	assert.False(t, skipped)
+	require.NotEmpty(t, headSHA)
 
 	repo, err := git.PlainOpen(dir)
 	require.NoError(t, err)
 	head, err := repo.Head()
 	require.NoError(t, err)
+	assert.Equal(t, head.Hash().String(), headSHA, "returned headSHA must match the actual commit created")
 	commit, err := repo.CommitObject(head.Hash())
 	require.NoError(t, err)
 	assert.Equal(t, "Initial commit from atmos init (basic@1.0.0)", commit.Message)
@@ -44,13 +48,34 @@ func TestInitGitRepository_SkipsInsideExistingRepo(t *testing.T) {
 	child := filepath.Join(root, "generated")
 	require.NoError(t, os.MkdirAll(child, 0o755))
 
-	skipped, err := InitGitRepository(InitGitOptions{TargetPath: child, TemplateName: "basic"})
+	skipped, headSHA, err := InitGitRepository(InitGitOptions{TargetPath: child, TemplateName: "basic"})
 	require.NoError(t, err)
 	assert.True(t, skipped)
+	assert.Empty(t, headSHA, "no commit was created, so there is nothing to pin")
 	_, statErr := os.Stat(filepath.Join(child, ".git"))
 	assert.True(t, os.IsNotExist(statErr), "nested target should not get its own .git")
 }
 
 func TestInitialCommitMessage_NoVersion(t *testing.T) {
 	assert.Equal(t, "Initial commit from atmos init (basic)", initialCommitMessage("basic", ""))
+}
+
+func TestPinInitialBaseRef_WritesMetadata(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, PinInitialBaseRef(dir, "abc123", "basic", "1.0.0", "embedded"))
+
+	metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.Equal(t, "abc123", metadata.BaseRef)
+	assert.Equal(t, "basic", metadata.Template.Name)
+}
+
+func TestPinInitialBaseRef_NoopWhenSkipped(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, PinInitialBaseRef(dir, "", "basic", "1.0.0", "embedded"))
+
+	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir))
 }

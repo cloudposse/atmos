@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
@@ -23,7 +24,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -112,7 +115,7 @@ If no target directory is specified, you will be prompted for one.`,
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
 		if update {
-			baseRef = defaultBaseRef(baseRef)
+			baseRef = defaultBaseRef(baseRef, target)
 		}
 		dryRun := v.GetBool("dry-run")
 		sourceOverride := v.GetString("scaffold-source-override")
@@ -646,30 +649,45 @@ func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions) (bool, 
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
 		return false, ""
 	}
-	return true, defaultBaseRef(opts.baseRef)
+	return true, defaultBaseRef(opts.baseRef, opts.targetDir)
 }
 
-// defaultBaseRef fills in HEAD as the 3-way-merge base ref when the caller
-// didn't supply one. Without this, --update silently sets up no git storage
-// at all (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
-// non-empty) and every file fails with an opaque "three-way merge failed" --
-// HEAD is the obvious default since `atmos init/scaffold --git` always
-// creates an initial commit.
-func defaultBaseRef(baseRef string) string {
-	if baseRef == "" {
-		return "HEAD"
+// defaultBaseRef fills in the 3-way-merge base ref when the caller didn't
+// supply --base-ref explicitly (which always wins when set). It prefers the
+// ref pinned at targetDir by gen.PinInitialBaseRef -- the commit that
+// actually contains this project's pristine generated content -- over live
+// HEAD. Without a pin, --update always diffs against whatever HEAD happens
+// to be by the time it runs; once a customization is committed, that makes
+// it indistinguishable from the unmodified base, and the merge silently lets
+// the freshly rendered template overwrite it. Falling back to plain "HEAD"
+// (pre-fix scaffolds with no pin, or a non-git target) still fixes the
+// original bug this guarded against: with no baseRef at all, --update
+// silently sets up no git storage (ExecuteWithDelimiters only calls
+// SetupGitStorage when baseRef is non-empty), and every file fails with an
+// opaque "three-way merge failed".
+func defaultBaseRef(baseRef, targetDir string) string {
+	if baseRef != "" {
+		return baseRef
 	}
-	return baseRef
+	if metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetDir)).Load(); err == nil && metadata != nil && metadata.BaseRef != "" {
+		return metadata.BaseRef
+	}
+	return "HEAD"
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
 	if opts.git && !opts.dryRun {
-		_, err := gen.InitGitRepository(gen.InitGitOptions{
+		_, headSHA, err := gen.InitGitRepository(gen.InitGitOptions{
 			TargetPath:      targetDir,
 			TemplateName:    selectedConfig.Name,
 			TemplateVersion: selectedConfig.Version,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		// No-op when headSHA is empty (targetDir was already a git repo; see
+		// gen.PinInitialBaseRef).
+		return gen.PinInitialBaseRef(targetDir, headSHA, selectedConfig.Name, selectedConfig.Version, selectedConfig.Source)
 	}
 	return nil
 }
@@ -682,12 +700,12 @@ func renderDryRunPreview(
 ) error {
 	renderDryRunHeader(selectedConfig, targetDir)
 
-	mergedValues, err := loadDryRunValues(selectedConfig, templateVars)
+	mergedValues, scaffoldConfig, err := loadDryRunValues(selectedConfig, templateVars)
 	if err != nil {
 		return err
 	}
 
-	renderDryRunFileList(selectedConfig, targetDir, mergedValues)
+	renderDryRunFileList(selectedConfig, targetDir, scaffoldConfig, mergedValues)
 	return nil
 }
 
@@ -701,8 +719,12 @@ func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir strin
 	atmosui.Writef("Target directory: %s\n\n", targetDir)
 }
 
-// loadDryRunValues loads configuration values for dry-run preview using defaults.
-func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[string]interface{}) (map[string]interface{}, error) {
+// loadDryRunValues loads configuration values for dry-run preview using
+// defaults. It also returns the parsed *config.ScaffoldConfig (nil when the
+// template declares no scaffold.yaml) so the caller can render file paths
+// and gate the file list with the exact same delimiters/spec.files.when
+// real generation uses.
+func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[string]interface{}) (map[string]interface{}, *config.ScaffoldConfig, error) {
 	// Create a copy to avoid mutating the caller's map.
 	mergedValues := make(map[string]interface{}, len(templateVars))
 	for k, v := range templateVars {
@@ -710,17 +732,17 @@ func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[
 	}
 
 	if !templates.HasScaffoldConfig(selectedConfig.Files) {
-		return mergedValues, nil
+		return mergedValues, nil, nil
 	}
 
 	scaffoldConfigFile := findScaffoldConfigFile(selectedConfig.Files)
 	if scaffoldConfigFile == nil {
-		return mergedValues, nil
+		return mergedValues, nil, nil
 	}
 
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+		return nil, nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
 			WithCause(err).
 			WithExplanation("Failed to load scaffold configuration for dry-run preview").
 			WithHint("Check the `scaffold.yaml` syntax in your template").
@@ -737,7 +759,7 @@ func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[
 		}
 	}
 
-	return mergedValues, nil
+	return mergedValues, scaffoldConfig, nil
 }
 
 // findScaffoldConfigFile finds the scaffold.yaml file in the configuration files.
@@ -751,7 +773,7 @@ func findScaffoldConfigFile(files []templates.File) *templates.File {
 }
 
 // renderDryRunFileList renders the list of files that would be generated.
-func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, mergedValues map[string]interface{}) {
+func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) {
 	atmosui.Write("Files that would be generated:\n\n")
 
 	// Reuse the same template processor that real generation uses so dry-run
@@ -759,25 +781,52 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 	// template functions exactly as the generated paths will.
 	processor := engine.NewProcessor()
 
-	fileCount := 0
+	paths := collectDryRunFiles(processor, selectedConfig, scaffoldConfig, mergedValues)
+	for _, renderedPath := range paths {
+		printFilePath(targetDir, renderedPath)
+	}
+
+	atmosui.Writef("\nTotal: %d files would be generated\n", len(paths))
+}
+
+// collectDryRunFiles computes the rendered output paths a real (non-dry-run)
+// generation would write for selectedConfig+mergedValues. It mirrors real
+// generation's own file-selection rules exactly (pkg/generator/ui's
+// executeWithSetup file loop and processSingleFileEntry) so the preview can
+// never list or count more -- or fewer -- files than a real run would
+// produce: the scaffold.yaml manifest itself and directory entries are
+// skipped, and each remaining file is gated by its spec.files[].when
+// condition (a file with no declared spec entry always passes, since
+// FileSpec's zero-value When evaluates to true).
+func collectDryRunFiles(processor *engine.Processor, selectedConfig *templates.Configuration, scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) []string {
+	var fileSpecs map[string]config.FileSpec
+	if scaffoldConfig != nil {
+		fileSpecs = generatorUI.FileSpecByPath(scaffoldConfig)
+	}
+
+	var paths []string
 	for _, file := range selectedConfig.Files {
-		if file.Path == config.ScaffoldConfigFileName {
+		if file.Path == config.ScaffoldConfigFileName || file.IsDirectory {
 			continue
 		}
 
-		renderedPath := renderFilePath(processor, file.Path, mergedValues)
-		printFilePath(targetDir, renderedPath)
-		fileCount++
-	}
+		spec := fileSpecs[file.Path]
+		if !spec.When.Evaluate(condition.Context{Answers: mergedValues}) {
+			continue
+		}
 
-	atmosui.Writef("\nTotal: %d files would be generated\n", fileCount)
+		paths = append(paths, renderFilePath(processor, file.Path, scaffoldConfig, mergedValues))
+	}
+	return paths
 }
 
 // renderFilePath renders a file path template using the generation engine so the
-// dry-run preview matches the paths produced during real generation. On any
-// templating error it falls back to the raw path, since a preview must not fail.
-func renderFilePath(processor *engine.Processor, path string, values map[string]interface{}) string {
-	rendered, err := processor.ProcessTemplate(path, path, nil, values)
+// dry-run preview matches the paths produced during real generation, including a
+// template's own declared spec.delimiters. On any templating error it falls back
+// to the raw path, since a preview must not fail.
+func renderFilePath(processor *engine.Processor, path string, scaffoldConfig *config.ScaffoldConfig, values map[string]interface{}) string {
+	delimiters := generatorUI.ResolveDelimiters(nil, scaffoldConfig)
+	rendered, err := processor.ProcessTemplateWithDelimiters(path, path, nil, values, delimiters)
 	if err != nil {
 		return path
 	}

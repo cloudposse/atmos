@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
@@ -78,7 +79,7 @@ spec:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			values, err := loadDryRunValues(tt.config, tt.vars)
+			values, _, err := loadDryRunValues(tt.config, tt.vars)
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -87,6 +88,39 @@ spec:
 			}
 		})
 	}
+}
+
+// TestLoadDryRunValues_ReturnsScaffoldConfig verifies loadDryRunValues also
+// hands back the parsed *config.ScaffoldConfig (not just the merged values),
+// so the dry-run preview can gate/render files with it exactly like real
+// generation does. Nil when the template declares no scaffold.yaml at all.
+func TestLoadDryRunValues_ReturnsScaffoldConfig(t *testing.T) {
+	withConfig := &templates.Configuration{
+		Files: []templates.File{
+			{
+				Path: config.ScaffoldConfigFileName,
+				Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test
+spec:
+  fields:
+    - name: project_name
+      type: string
+      default: default-name
+`,
+			},
+		},
+	}
+	_, scaffoldConfig, err := loadDryRunValues(withConfig, map[string]interface{}{})
+	require.NoError(t, err)
+	require.NotNil(t, scaffoldConfig)
+	assert.Equal(t, "test", scaffoldConfig.Metadata.Name)
+
+	withoutConfig := &templates.Configuration{Files: []templates.File{{Path: "test.txt"}}}
+	_, scaffoldConfig, err = loadDryRunValues(withoutConfig, map[string]interface{}{})
+	require.NoError(t, err)
+	assert.Nil(t, scaffoldConfig)
 }
 
 // TestFindScaffoldConfigFile tests finding scaffold config in file list.
@@ -179,10 +213,33 @@ func TestRenderFilePath(t *testing.T) {
 	processor := engine.NewProcessor()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := renderFilePath(processor, tt.path, tt.values)
+			result := renderFilePath(processor, tt.path, nil, tt.values)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestRenderFilePath_CustomDelimiters reproduces the dry-run bug where a file
+// path using a template's declared spec.delimiters (e.g. "[[" / "]]" instead
+// of the Go-template default "{{" / "}}") renders raw and unsubstituted in
+// the `--dry-run` preview, even though real generation renders it correctly.
+func TestRenderFilePath_CustomDelimiters(t *testing.T) {
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: custom-delims
+spec:
+  delimiters: ["[[", "]]"]
+  fields:
+    - name: service
+      type: input
+      default: svc-default
+`)
+	require.NoError(t, err)
+
+	processor := engine.NewProcessor()
+	result := renderFilePath(processor, "cmd/[[ .Config.service ]]/main.go", scaffoldConfig, map[string]interface{}{"service": "svc-x"})
+	assert.Equal(t, "cmd/svc-x/main.go", result)
 }
 
 // TestResolveTargetDirectory tests target directory resolution.
@@ -303,6 +360,58 @@ spec:
 
 	err := renderDryRunPreview(cfg, t.TempDir(), map[string]interface{}{"project_name": "demo-project"})
 	require.NoError(t, err)
+}
+
+// TestCollectDryRunFiles_ExcludesDirectories reproduces the bug where a
+// directory entry in the template's file tree (IsDirectory: true) was
+// counted and listed as a generated file by the dry-run preview, even though
+// real generation (pkg/generator/ui) skips directory entries outright -- the
+// engine creates parent directories implicitly while writing each real file.
+func TestCollectDryRunFiles_ExcludesDirectories(t *testing.T) {
+	cfg := &templates.Configuration{
+		Files: []templates.File{
+			{Path: "deploy", IsDirectory: true},
+			{Path: "deploy/values.yaml", Content: "a: b"},
+		},
+	}
+
+	paths := collectDryRunFiles(engine.NewProcessor(), cfg, nil, map[string]interface{}{})
+	assert.Equal(t, []string{"deploy/values.yaml"}, paths)
+}
+
+// TestCollectDryRunFiles_RespectsWhenCondition reproduces the bug where a
+// file gated by a false spec.files[].when condition was still listed/counted
+// by the dry-run preview, even though real generation
+// (pkg/generator/ui's processSingleFileEntry) would skip it.
+func TestCollectDryRunFiles_RespectsWhenCondition(t *testing.T) {
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: conditional
+spec:
+  fields:
+    - name: include_optional
+      type: confirm
+      default: false
+  files:
+    - path: optional.yml
+      when: "answers.include_optional == true"
+`)
+	require.NoError(t, err)
+
+	cfg := &templates.Configuration{
+		Files: []templates.File{
+			{Path: config.ScaffoldConfigFileName, Content: "n/a"},
+			{Path: "required.yml", Content: "a: b"},
+			{Path: "optional.yml", Content: "c: d"},
+		},
+	}
+
+	paths := collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"include_optional": false})
+	assert.Equal(t, []string{"required.yml"}, paths)
+
+	paths = collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"include_optional": true})
+	assert.ElementsMatch(t, []string{"required.yml", "optional.yml"}, paths)
 }
 
 func TestPrintFilePath_WithoutTargetDir(t *testing.T) {
@@ -567,14 +676,34 @@ func TestShouldOfferScaffoldUpdate(t *testing.T) {
 	}
 }
 
-// TestDefaultBaseRef pins the fix for a real bug: `atmos scaffold generate
-// <template> <dir> --update` with no --base-ref silently set up no git
-// storage at all (ExecuteWithDelimiters only calls SetupGitStorage when
-// baseRef is non-empty), so every file failed with an opaque "three-way
-// merge failed" even on a completely unmodified, freshly re-run directory.
+// TestDefaultBaseRef pins two behaviors:
+//   - An explicit --base-ref always wins, regardless of targetDir.
+//   - With no --base-ref and no pinned metadata at targetDir, it still falls
+//     back to "HEAD" -- the original fix for --update with no --base-ref
+//     silently setting up no git storage at all (ExecuteWithDelimiters only
+//     calls SetupGitStorage when baseRef is non-empty), which failed every
+//     file with an opaque "three-way merge failed" even on a completely
+//     unmodified, freshly re-run directory.
 func TestDefaultBaseRef(t *testing.T) {
-	assert.Equal(t, "HEAD", defaultBaseRef(""))
-	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3"))
+	assert.Equal(t, "HEAD", defaultBaseRef("", t.TempDir()))
+	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3", t.TempDir()))
+}
+
+// TestDefaultBaseRef_PrefersPinnedMetadata reproduces the fix for the bug
+// where `--update` with no --base-ref always diffs against live HEAD, so a
+// customization the user committed after generation becomes indistinguishable
+// from the unmodified base -- the merge then silently lets the freshly
+// rendered template win with no conflict, discarding the user's edit. When a
+// pinned base ref exists (written once, at initial `--git` generation --
+// see gen.PinInitialBaseRef), defaultBaseRef must prefer it over live HEAD.
+func TestDefaultBaseRef_PrefersPinnedMetadata(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewScaffoldMetadata("demo", "1.0.0", "embedded", "abc123pinned", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Save(metadata))
+
+	assert.Equal(t, "abc123pinned", defaultBaseRef("", dir))
+	// An explicit --base-ref still overrides the pin.
+	assert.Equal(t, "v9.9.9", defaultBaseRef("v9.9.9", dir))
 }
 
 // TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory covers the
@@ -620,6 +749,83 @@ func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing
 	merged, err := os.ReadFile(readmePath)
 	require.NoError(t, err)
 	assert.Contains(t, string(merged), "user note", "the user's manual edit must survive the 3-way merge")
+}
+
+// TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit reproduces
+// a client-reported bug: `--update` silently discards a customization the
+// user committed to the generated project, as long as the template's own
+// change lands on a *different* line. Sequence (mirroring the report
+// exactly):
+//  1. Generate with --git (creates the pristine-content initial commit and
+//     pins its SHA -- see gen.PinInitialBaseRef).
+//  2. The user edits `runner: ubuntu-latest` to `runner: self-hosted` and
+//     commits it.
+//  3. The template changes an unrelated line (`app:` -> `appName:`).
+//  4. Re-run with --update and no --base-ref (the common case -- most users
+//     never pass --base-ref explicitly).
+//
+// Before the fix, --update's default base ref is live HEAD, which by step 4
+// is the user's own commit -- so git sees `runner: self-hosted` as part of
+// the "base" and the merge treats it as unchanged, letting the freshly
+// rendered template silently overwrite it back to `ubuntu-latest`. The fix
+// makes the default prefer the SHA pinned at step 1, so the merge always
+// diffs against the true pristine content regardless of what's since been
+// committed.
+func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.T) {
+	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	require.NoError(t, err)
+
+	cfg := &templates.Configuration{
+		Name: "values-template",
+		Files: []templates.File{
+			{
+				Path:        "deploy/values/default.yaml",
+				Content:     "app: {{ .Config.service }}\nrunner: ubuntu-latest\n",
+				IsTemplate:  true,
+				Permissions: 0o644,
+			},
+		},
+	}
+
+	dir := t.TempDir()
+	opts := &scaffoldGenerateOptions{
+		useDefaults:    true,
+		git:            true,
+		templateValues: map[string]interface{}{"service": "svc-x"},
+	}
+	require.NoError(t, executeTemplateGeneration(cfg, dir, opts, scaffoldUI))
+
+	valuesPath := filepath.Join(dir, "deploy", "values", "default.yaml")
+	original, err := os.ReadFile(valuesPath)
+	require.NoError(t, err)
+	require.Equal(t, "app: svc-x\nrunner: ubuntu-latest\n", string(original))
+
+	// The user customizes and commits a line the template will never touch again.
+	require.NoError(t, os.WriteFile(valuesPath, []byte("app: svc-x\nrunner: self-hosted\n"), 0o600))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "commit.gpgsign", "false"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.email", "test@example.com"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "config", "user.name", "Test"))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "add", "."))
+	require.NoError(t, scaffoldRunGitCommand(t, dir, "commit", "-m", "customize runner"))
+
+	// The template changes an unrelated line.
+	cfg.Files[0].Content = "appName: {{ .Config.service }}\nrunner: ubuntu-latest\n"
+
+	// Mirrors the RunE handler: resolve --base-ref's default (empty here,
+	// exactly like a real `--update` invocation with no --base-ref flag) the
+	// same way the CLI does, before calling into executeTemplateGeneration.
+	updateOpts := &scaffoldGenerateOptions{
+		useDefaults:    true,
+		update:         true,
+		baseRef:        defaultBaseRef("", dir),
+		templateValues: map[string]interface{}{"service": "svc-x"},
+	}
+	require.NoError(t, executeTemplateGeneration(cfg, dir, updateOpts, scaffoldUI))
+
+	merged, err := os.ReadFile(valuesPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), "appName: svc-x", "the template's own change must still apply")
+	assert.Contains(t, string(merged), "runner: self-hosted", "the user's committed customization must survive --update")
 }
 
 // scaffoldRunGitCommand runs git in dir for test setup, skipping the test if git is unavailable.

@@ -974,7 +974,7 @@ func TestLoadDryRunValues_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			values, err := loadDryRunValues(tt.config, tt.vars)
+			values, _, err := loadDryRunValues(tt.config, tt.vars)
 
 			if tt.expectError {
 				assert.Error(t, err)
