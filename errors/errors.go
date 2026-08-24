@@ -1612,6 +1612,16 @@ var (
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
+
+	// Native aws/cloudformation component errors.
+	ErrMissingAwsCloudFormationTemplate          = errors.New("aws/cloudformation component is missing a 'template' reference")
+	ErrMissingAwsCloudFormationStackName         = errors.New("aws/cloudformation component is missing a 'stack_name'")
+	ErrInvalidAwsCloudFormationCapabilities      = errors.New("invalid aws/cloudformation capabilities")
+	ErrInvalidAwsCloudFormationSettings          = errors.New("invalid aws/cloudformation settings")
+	ErrInvalidComponentsAwsCloudFormation        = errors.New("invalid 'components.aws/cloudformation' section")
+	ErrInvalidSpecificAwsCloudFormationComponent = errors.New("invalid aws/cloudformation component configuration")
+	ErrAwsCloudFormationChangeSetFailed          = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationDriftDetected            = errors.New("aws/cloudformation stack has drifted")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

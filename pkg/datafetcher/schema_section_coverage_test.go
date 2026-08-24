@@ -48,6 +48,7 @@ var manifestSections = map[string]sectionScope{
 	"ansible":                   {topLevel: true},
 	"kubernetes":                {topLevel: true},
 	"helm":                      {topLevel: true},
+	"aws/cloudformation":        {topLevel: true},
 	"components":                {topLevel: true},
 	"overrides":                 {topLevel: true},
 	"workflows":                 {topLevel: true},
@@ -114,6 +115,20 @@ var nonManifestSections = map[string]struct{}{
 	"abstract":        {}, // metadata sub-field, not a top-level section.
 	"container":       {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
 	"emulator":        {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
+
+	// aws/cloudformation component sub-fields (modeled in aws_cloudformation_component_manifest,
+	// not as standalone top-level/component-generic sections — same treatment as Helm's chart/
+	// values/values_files/repositories above).
+	"stack_name":             {},
+	"parameters":             {},
+	"capabilities":           {},
+	"tags":                   {},
+	"stack_policy":           {},
+	"role_arn":               {},
+	"notification_arns":      {},
+	"disable_rollback":       {},
+	"termination_protection": {},
+	"timeout_in_minutes":     {},
 }
 
 // knownSchemaGaps tracks sections that SHOULD be in the manifest schema but currently are not.
