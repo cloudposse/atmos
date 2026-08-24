@@ -46,6 +46,8 @@ enabled manually on the machine.
 
 ## Changes
 
+Landed in PR #2988.
+
 - `magefiles/mage_lint_golangci_run.go`
   - `setWorktreeIsolationEnv()` now derives the default cache/tmp location from
     `os.UserCacheDir()` instead of the worktree root: `<user-cache>/atmos-lint/<hash>/cache` and
@@ -78,6 +80,8 @@ repo config, then stopping all `git fsmonitor--daemon` processes. `git status` d
   `0 issues.` after fixes.
 - No leakage into the real user cache dir from the test suite (fake-injected root verified).
 - `gofumpt -l` clean on changed files.
+- End-to-end commit: the PR's own commit — every pre-commit hook plus 1Password SSH signing —
+  completed in 4.8s wall, where the pre-fix state exceeded a 2-minute `git status` timeout.
 - Not validated here: Windows `TMP`/`TEMP` branch behavior (unchanged logic, exercised by the
   existing platform-conditional test on Windows CI).
 
