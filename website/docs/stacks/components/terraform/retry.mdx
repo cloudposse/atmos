@@ -33,6 +33,7 @@ components:
         max_delay: 30s
         conditions:
           - /Bad Gateway/
+          - /GOAWAY/
           - /5\d\d /
           - /connection reset/
           - /TLS handshake timeout/
@@ -49,6 +50,24 @@ When `retry.conditions` is configured, each call Atmos makes to the terraform/to
 4. If no pattern matches, the error is returned immediately — real failures (`terraform plan` exit-code 2, schema errors, permission denials) are never silently retried.
 
 Each subprocess invocation has its own retry loop. Retrying `terraform init` does not consume the `apply` retry budget.
+
+## Provider registry failures
+
+Provider downloads during `init` fail in more than one shape. Alongside the 502 shown above, the upstream registry may terminate the HTTP/2 connection outright:
+
+```text
+Error: Failed to resolve provider packages
+
+Could not resolve provider cloudposse/awsutils: could not query provider
+registry for registry.opentofu.org/cloudposse/awsutils: http2: server sent
+GOAWAY and closed the connection; LastStreamID=5, ErrCode=NO_ERROR, debug=""
+```
+
+Both are transient registry connectivity issues, not code problems — `conditions` above already matches this error via `/could not query provider registry/` and `/GOAWAY/`.
+
+This class of error tends to fail many components **at once**, not just one. A scheduled batch — drift detection, a bulk `apply`, CI running many components in parallel — queries the registry for every component in the same narrow window, so a brief registry hiccup can take down the whole batch simultaneously rather than one isolated run. Configuring `retry` on the affected components (or on a shared abstract base component, see [Inheritance](#inheritance)) recovers the whole batch automatically instead of requiring a manual re-run.
+
+[`atmos terraform cache`](/cli/commands/terraform/cache) reduces how often Atmos has to round-trip to the upstream registry at all, but it performs **zero retries of its own** — a cache miss still hits the registry once and returns whatever error comes back. Retry and caching are complementary: caching lowers how often you're exposed to registry flakiness, `retry` is what recovers when you are.
 
 ## Arguments
 
@@ -96,6 +115,7 @@ components:
         backoff_strategy: exponential
         conditions:
           - /Bad Gateway/
+          - /GOAWAY/
           - /5\d\d /
 
     vpc:
@@ -124,3 +144,4 @@ components:
 
 - [Workflow retry](/workflows/steps/retry) — retry configuration for multi-step workflows.
 - [Vendor retry](/vendor/config/sources) — retry configuration for component vendoring.
+- [Terraform Registry Cache](/cli/commands/terraform/cache) — reduces registry round-trips; does not retry on its own.
