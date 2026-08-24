@@ -303,6 +303,8 @@ func sanitizeComponentNameForPath(name string) string {
 // "dev-a" + component "b" and stack "dev" + component "a-b" hash differently despite
 // producing the identical visible prefix "dev-a-b".
 func workdirPathHash(stack, component string) string {
+	// codeql[go/weak-sensitive-data-hashing] -- this hashes a stack/component name for a
+	// workdir directory-name uniqueness suffix, never a password or credential.
 	sum := sha256.Sum256([]byte(stack + "\x00" + component))
 	return hex.EncodeToString(sum[:])[:workdirHashLength]
 }
