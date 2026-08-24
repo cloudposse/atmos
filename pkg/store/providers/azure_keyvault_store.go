@@ -398,7 +398,7 @@ func (s *AzureKeyVaultStore) getRawByName(secretName string) (string, error) {
 	}
 
 	if resp.Value == nil {
-		return "", nil
+		return "", fmt.Errorf("%w: secret %q returned no value", store.ErrAccessSecret, secretName)
 	}
 
 	return *resp.Value, nil
@@ -555,7 +555,7 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 	}
 
 	if resp.Value == nil {
-		return "", nil
+		return nil, fmt.Errorf("%w: secret %q returned no value", store.ErrAccessSecret, secretName)
 	}
 
 	// Try to unmarshal as JSON first, fallback to string if it fails.

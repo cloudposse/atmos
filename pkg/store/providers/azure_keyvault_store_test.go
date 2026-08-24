@@ -599,6 +599,22 @@ func TestAzureKeyVaultStore_GetRawPreservesPayload(t *testing.T) {
 	}
 }
 
+func TestAzureKeyVaultStore_GetRawRejectsNilValue(t *testing.T) {
+	client := &mockClient{
+		getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+			return azsecrets.GetSecretResponse{}, nil
+		},
+	}
+	store := &AzureKeyVaultStore{
+		client:         client,
+		vaultURL:       "https://example.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.GetRaw("dev", "app", "credential")
+	assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
+}
+
 func TestAzureKeyVaultStore_GetKey(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -769,16 +785,15 @@ func TestAzureKeyVaultStore_Get_MoreCases(t *testing.T) {
 		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
 	})
 
-	t.Run("nil value returns empty string", func(t *testing.T) {
+	t.Run("nil value returns access error", func(t *testing.T) {
 		client := &mockClient{
 			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
 				return azsecrets.GetSecretResponse{}, nil // Value is nil.
 			},
 		}
 		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
-		v, err := s.Get("dev", "app", "k")
-		assert.NoError(t, err)
-		assert.Equal(t, "", v)
+		_, err := s.Get("dev", "app", "k")
+		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
 	})
 }
 
@@ -800,16 +815,15 @@ func TestAzureKeyVaultStore_GetKey_MoreCases(t *testing.T) {
 		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
 	})
 
-	t.Run("nil value returns empty string", func(t *testing.T) {
+	t.Run("nil value returns access error", func(t *testing.T) {
 		client := &mockClient{
 			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
 				return azsecrets.GetSecretResponse{}, nil // Value is nil.
 			},
 		}
 		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
-		v, err := s.GetKey("k")
-		assert.NoError(t, err)
-		assert.Equal(t, "", v)
+		_, err := s.GetKey("k")
+		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
 	})
 }
 

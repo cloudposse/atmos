@@ -204,17 +204,13 @@ func maskFoldedLiteral(input, literal, replacement string) string {
 		return input
 	}
 
-	parts := strings.FieldsFunc(literal, func(r rune) bool { return r == ' ' || r == '\t' })
-	if len(parts) < 2 {
-		return input
-	}
-
 	var pattern strings.Builder
-	for i, part := range parts {
-		if i > 0 {
-			pattern.WriteString(`(?:[ \t]+|\r?\n[ \t]+)`)
+	for _, char := range literal {
+		if char == ' ' || char == '\t' {
+			pattern.WriteString(`(?:[ \t]|\r?\n[ \t]+)`)
+		} else {
+			pattern.WriteString(regexp.QuoteMeta(string(char)))
 		}
-		pattern.WriteString(regexp.QuoteMeta(part))
 	}
 
 	re := regexp.MustCompile(pattern.String())
