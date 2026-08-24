@@ -250,9 +250,7 @@ func executePlanWithTempFile(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Add -out flag to args (copy slice to avoid modifying original).
 	planOpts := *opts
-	planOpts.Args = make([]string, len(opts.Args)+1)
-	copy(planOpts.Args, opts.Args)
-	planOpts.Args[len(opts.Args)] = "-out=" + planFile
+	planOpts.Args = append(append([]string(nil), opts.Args...), "-out="+planFile)
 
 	if err := Execute(ctx, &planOpts); err != nil {
 		return err

@@ -21,9 +21,13 @@ func NewParser(r io.Reader) *Parser {
 	defer perf.Track(nil, "terraform.ui.NewParser")()
 
 	scanner := bufio.NewScanner(r)
-	// Increase buffer size for large JSON lines.
-	const maxScanTokenSize = 1024 * 1024 // 1MB
-	buf := make([]byte, maxScanTokenSize)
+	// Cap large JSON lines (e.g. sizable resource states/diffs in big plans) well above
+	// the default 64KB scanner limit, which trips bufio.ErrTooLong and aborts streaming.
+	// The initial buffer starts small; bufio.Scanner grows it toward maxScanTokenSize
+	// only as needed, so this doesn't pre-allocate 10MB per parser.
+	const maxScanTokenSize = 10 * 1024 * 1024 // 10MB
+	const initialScanBufSize = 64 * 1024      // 64KB
+	buf := make([]byte, initialScanBufSize)
 	scanner.Buffer(buf, maxScanTokenSize)
 	return &Parser{
 		scanner: scanner,

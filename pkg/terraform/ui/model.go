@@ -107,6 +107,8 @@ func NewModel(component, stack, command string, reader io.Reader, opts ...ModelO
 //
 //nolint:gocritic // bubbletea models must be passed by value
 func (m Model) Init() tea.Cmd {
+	defer perf.Track(nil, "terraform.ui.Model.Init")()
+
 	return tea.Batch(
 		m.spinner.Tick,
 		m.listenForMessages(),
@@ -153,6 +155,8 @@ func (m *Model) handleParsedMessage(result *ParseResult) tea.Cmd {
 //
 //nolint:gocritic // bubbletea models must be passed by value
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "terraform.ui.Model.Update")()
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -197,6 +201,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 //
 //nolint:gocritic // bubbletea models must be passed by value
 func (m Model) View() string {
+	defer perf.Track(nil, "terraform.ui.Model.View")()
+
 	if m.done {
 		// Clear all lines that progressView() rendered.
 		// progressView outputs: header line + 2 newlines + completed resources.
