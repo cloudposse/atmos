@@ -59,7 +59,9 @@
         "base_path": "",
         "auto_generate_files": false
       },
-      "container": {},
+      "container": {
+        "base_path": "components/container"
+      },
       "list": {
         "format": "",
         "columns": null

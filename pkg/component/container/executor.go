@@ -145,10 +145,12 @@ func (r *resolved) mounts(componentPath string) []ctr.Mount {
 	return mounts
 }
 
-// buildConfig returns the build config with Context/Dockerfile anchored to
-// the container component's own resolved directory (see resolveComponentPath)
-// when relative, mirroring how the workflow `type: container` build step
-// anchors these same fields to its working_directory.
+// buildConfig returns the build config with Context anchored to the container
+// component's own resolved directory (see resolveComponentPath) when
+// relative, and Dockerfile anchored to that resolved Context when relative —
+// the same Docker/Compose convention (and the same rule the workflow `type:
+// container` build step already applies) where a relative dockerfile path is
+// relative to the build context, not the component directory itself.
 func (r *resolved) buildConfig(componentPath string) *ctr.BuildConfig {
 	buildConfig := r.spec.ToBuildConfig()
 	if buildConfig == nil {
@@ -338,7 +340,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := r.ensureImage(ctx, runtime, image); err != nil {
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
 		return err
 	}
 	runConfig := &ctr.EphemeralConfig{
@@ -403,7 +405,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
-	if err := r.ensureImage(ctx, runtime, image); err != nil {
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
 		return err
 	}
 	if err := spinner.ExecWithSpinnerDynamic(
@@ -620,7 +622,7 @@ func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovere
 // `build` and the image is not already present locally. This lets `up` and
 // `run` work without a separate `build` step (build-before-start). Components
 // without a build (image-only) are pulled on demand by the runtime instead.
-func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image string) error {
+func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image, componentPath string) error {
 	if r.spec.Build == nil {
 		return nil
 	}
@@ -632,7 +634,7 @@ func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image s
 	} else if !ctr.IsImageMissingError(err) {
 		return fmt.Errorf("%w: inspect image %q for %q: %w", errUtils.ErrComponentExecutionFailed, image, r.component, err)
 	}
-	buildConfig := r.spec.ToBuildConfig()
+	buildConfig := r.buildConfig(componentPath)
 	if buildConfig == nil {
 		return nil
 	}

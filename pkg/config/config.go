@@ -534,9 +534,18 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
 
-	// Convert Container dir to an absolute path.
+	// Convert Container dir to an absolute path. Unlike Terraform/Helmfile/etc.,
+	// components.container.base_path is a brand-new field: existing atmos.yaml
+	// files never set it, and defaultCliConfig's own default only applies via
+	// mergeDefaultConfig when no config file is found at all. Default it
+	// defensively here so containerDirAbsolutePath (and any other reader of
+	// Components.Container.BasePath) always sees "components/container"
+	// instead of silently falling back to the bare project root.
+	if atmosConfig.Components.Container.BasePath == "" {
+		atmosConfig.Components.Container.BasePath = "components/container"
+	}
 	containerBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Container.BasePath)
-	containerDirAbsPath, err := filepath.Abs(containerBasePath)
+	containerDirAbsPath, err := absPathOrError(containerBasePath, "container base path")
 	if err != nil {
 		return err
 	}
