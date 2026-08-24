@@ -53,7 +53,7 @@ Each subprocess invocation has its own retry loop. Retrying `terraform init` doe
 
 ## Provider registry failures
 
-Provider downloads during `init` fail in more than one shape. Alongside the 502 shown above, the upstream registry may terminate the HTTP/2 connection outright:
+Provider downloads can fail during `init` in more than one way. The example above shows a 502 Bad Gateway. The registry can also close the HTTP/2 connection with a GOAWAY error:
 
 ```text
 Error: Failed to resolve provider packages
@@ -63,11 +63,11 @@ registry for registry.opentofu.org/cloudposse/awsutils: http2: server sent
 GOAWAY and closed the connection; LastStreamID=5, ErrCode=NO_ERROR, debug=""
 ```
 
-Both are transient registry connectivity issues, not code problems — `conditions` above already matches this error via `/could not query provider registry/` and `/GOAWAY/`.
+Both errors come from a temporary connection problem with the registry. They are not code problems. The `conditions` list above already matches both errors, through `/could not query provider registry/` and `/GOAWAY/`.
 
-This class of error tends to fail many components **at once**, not just one. A scheduled batch — drift detection, a bulk `apply`, CI running many components in parallel — queries the registry for every component in the same narrow window, so a brief registry hiccup can take down the whole batch simultaneously rather than one isolated run. Configuring `retry` on the affected components (or on a shared abstract base component, see [Inheritance](#inheritance)) recovers the whole batch automatically instead of requiring a manual re-run.
+This type of error can fail many components at the same time. A drift-detection run, a bulk `apply`, or a CI job can query the registry for many components in a short time window. One registry connection problem can then fail the whole batch. Configure `retry` on each affected component. Or configure `retry` on one shared abstract base component — see [Inheritance](#inheritance). The whole batch then recovers on its own. You do not need to start a manual re-run.
 
-[`atmos terraform cache`](/cli/commands/terraform/cache) reduces how often Atmos has to round-trip to the upstream registry at all, but it performs **zero retries of its own** — a cache miss still hits the registry once and returns whatever error comes back. Retry and caching are complementary: caching lowers how often you're exposed to registry flakiness, `retry` is what recovers when you are.
+[`atmos terraform cache`](/cli/commands/terraform/cache) reduces the number of calls Atmos makes to the upstream registry. The cache does not retry a failed call. A cache miss still sends one call to the registry and returns any error from that call. Retry and the cache work together: the cache reduces how often you meet a registry problem, and `retry` recovers when you do.
 
 ## Arguments
 
@@ -144,4 +144,4 @@ components:
 
 - [Workflow retry](/workflows/steps/retry) — retry configuration for multi-step workflows.
 - [Vendor retry](/vendor/config/sources) — retry configuration for component vendoring.
-- [Terraform Registry Cache](/cli/commands/terraform/cache) — reduces registry round-trips; does not retry on its own.
+- [Terraform Registry Cache](/cli/commands/terraform/cache) — reduces calls to the registry. It does not retry on its own.
