@@ -22,11 +22,10 @@ Fixed by wiring the same component-auth setup and credential-injection path that
 
 ## Context
 
-Reported against a real workload (`atmos packer build fatvm -s safire-use2-platform`) that
-relies on Atmos Auth identities rather than pre-assumed ambient credentials.
+Reported against a real workload (`atmos packer build <component> -s <stack>`) that relies on
+Atmos Auth identities rather than pre-assumed ambient credentials.
 
-The DriveWealth reference pipeline
-(`packer-aws-al2023/.github/workflows/ami.yml`) sidesteps the bug entirely: it runs
+A common GitHub Actions packer pipeline sidesteps the bug entirely: it runs
 `aws-actions/configure-aws-credentials` (GitHub OIDC, `role-to-assume`) **before**
 `atmos packer build`, so the AWS SDK inside packer finds credentials in the process
 environment. That masks the defect in CI but leaves local runs — and any flow that
