@@ -1,0 +1,71 @@
+---
+slug: terraform-lock-timeout-flags
+title: "Stop retyping -lock-timeout on every terraform command"
+date: 2026-08-24T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Terraform locks state before it writes to it, and by default it gives up the instant that lock
+is already held — no retry, no wait. That's fine for a single engineer running commands one at a
+time. It falls apart the moment two pipelines, or a pipeline and an engineer, touch the same
+component's state around the same moment: whichever process loses the race just fails, even
+though the lock would have cleared in a few seconds.
+
+<!--truncate-->
+
+## The Problem
+
+Terraform and OpenTofu support `-lock-timeout=<duration>` to poll for a held lock instead of
+failing immediately, but it has to be typed on every single invocation — there was no way to
+declare "always retry lock contention for up to 5 minutes" once and have it apply everywhere.
+Teams running concurrent CI matrices, or Atmos Pro-driven deployments, would hit avoidable
+failures from Terraform's `0s` default and have no config-level fix, only a habit of remembering
+to type the flag by hand.
+
+## The Fix
+
+Terraform CLI execution flags — `lock_timeout`, `lock`, `parallelism`, `refresh`, and
+`compact_warnings` — can now be declared once under a `flags:` block: globally in `atmos.yaml`,
+for an entire stack, or for a single component, with each layer overriding the one before it. An
+explicit flag typed directly on the command line still wins over every declared default, so
+nothing about existing one-off usage changes.
+
+Atmos only injects a flag into commands that actually support it — for example `-refresh` isn't
+valid when applying a saved plan, and `terraform import` doesn't accept `-parallelism` — so you
+don't have to track those exceptions yourself.
+
+## How to Use It
+
+```yaml
+# atmos.yaml — fleet-wide default
+components:
+  terraform:
+    flags:
+      lock_timeout: "5m"
+      parallelism: 10
+
+# stack manifest — applies to every terraform component in this stack
+terraform:
+  flags:
+    lock_timeout: "5m"
+
+components:
+  terraform:
+    vpc:
+      # per-component override
+      flags:
+        lock_timeout: "10m"
+```
+
+```shell
+# one-off override still works exactly as before, and always wins
+atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s
+```
+
+## Get Involved
+
+See the [Terraform Configuration](/cli/configuration/components/terraform#flags) docs for the
+full field reference, defaults, and environment variable overrides. Have feedback on this
+feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in
+the [Cloud Posse community Slack](https://cloudposse.com/slack).
