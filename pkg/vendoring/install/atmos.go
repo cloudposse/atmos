@@ -3,6 +3,10 @@ package install
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -61,6 +65,35 @@ func NewAtmosVendorPackage(params *AtmosPackageParams) VendorPackage {
 	}
 }
 
+// logVendorDiagDir is a TEMPORARY diagnostic aid for tracking down a Windows-only silent
+// vendor-pull failure where a package reports installed successfully but its target ends up
+// missing files (https://github.com/cloudposse/atmos/pull/2958). Gated behind
+// ATMOS_VENDOR_DEBUG_DIAG so it only fires for the one test case currently reproducing it, not
+// every vendor pull in the suite. Remove this function and its two call sites in install() once
+// root-caused.
+func logVendorDiagDir(label, dir string) {
+	//nolint:forbidigo // Throwaway diagnostic toggle, not an Atmos config option; removed with this function once root-caused.
+	if os.Getenv("ATMOS_VENDOR_DEBUG_DIAG") == "" {
+		return
+	}
+	var files []string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // Best-effort listing: skip an inaccessible entry rather than abort the whole walk.
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			rel = path
+		}
+		files = append(files, rel)
+		return nil
+	})
+	log.Warn("VENDOR_DIAG", "label", label, "dir", dir, "fileCount", len(files), "files", strings.Join(files, ";"))
+}
+
 func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration) error {
 	fetchedDir, metadata, err := fetchToTempDir(ctx, atmosConfig, p.srcURI, p.pType, tempDir, fetchOptions{
 		ClientMode:        downloader.ClientModeAny,
@@ -70,10 +103,12 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 	if err != nil {
 		return err
 	}
+	logVendorDiagDir("after-fetch:"+p.name, fetchedDir)
 
 	if err := copyToTargetWithPatterns(fetchedDir, p.targetPath, &p.source, p.localFile); err != nil {
 		return fmt.Errorf("%w: %w", ErrCopyPackage, err)
 	}
+	logVendorDiagDir("after-copy:"+p.name, p.targetPath)
 
 	recordOpts := lockfile.RecordOptions{
 		IncludedPaths: p.source.IncludedPaths,
