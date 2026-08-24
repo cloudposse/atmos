@@ -2,6 +2,7 @@ package workdir
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -327,6 +328,14 @@ func legacyHyphenEncodedWorkdirName(stack, component string) string {
 // migrate) when no candidate matches, which is the overwhelmingly common case: a
 // component/stack pair whose legacy-formula path already agrees with its current one, or that
 // has never been provisioned before.
+//
+// A candidate whose identity is confirmed to belong to a different component/stack (see
+// verifyLegacyWorkdirIdentity) is not migratable but is not fail-closed either: the loop treats
+// it as "this candidate doesn't apply" and moves on to the next legacy formula, since a
+// same-named collision under one legacy formula says nothing about whether a later formula's
+// candidate is a genuine match (see migrateFromLegacyPath's doc comment for the collision
+// example). Missing/unreadable metadata and a genuine Rename failure remain fail-closed and
+// abort immediately, since those cases can't rule out the candidate belonging to the caller.
 func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath string) error {
 	defer perf.Track(nil, "workdir.Service.migrateLegacyWorkdir")()
 
@@ -348,6 +357,9 @@ func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath strin
 
 		migrated, err := s.migrateFromLegacyPath(basePath, component, stack, legacyName, newPath)
 		if err != nil {
+			if errors.Is(err, errUtils.ErrWorkdirIdentityMismatch) {
+				continue
+			}
 			return err
 		}
 		if migrated {
@@ -376,7 +388,9 @@ func (s *Service) migrateLegacyWorkdir(basePath, component, stack, newPath strin
 // is injective and has no such ambiguity, but the same identity check is applied uniformly for
 // defense in depth and to keep this function's contract simple. See
 // verifyLegacyWorkdirIdentity's doc comment for how identity is verified and what happens when
-// it can't be.
+// it can't be. A confirmed identity mismatch is returned wrapping errUtils.ErrWorkdirIdentityMismatch
+// specifically so the caller (migrateLegacyWorkdir) can tell "this candidate belongs to someone
+// else, try the next formula" apart from every other error here, which stays fail-closed.
 func (s *Service) migrateFromLegacyPath(basePath, component, stack, legacyName, newPath string) (bool, error) {
 	legacyPath := filepath.Join(basePath, WorkdirPath, "terraform", legacyName)
 	if legacyPath == newPath {
@@ -391,7 +405,12 @@ func (s *Service) migrateFromLegacyPath(basePath, component, stack, legacyName, 
 	}
 
 	if err := s.fs.Rename(legacyPath, newPath); err != nil {
-		return false, fmt.Errorf("rename legacy workdir %q to %q: %w", legacyPath, newPath, err)
+		return false, errUtils.Build(errUtils.ErrWorkdirCreation).
+			WithCause(err).
+			WithExplanationf("failed to rename legacy workdir %q to %q", legacyPath, newPath).
+			WithContext("legacy_path", legacyPath).
+			WithContext("new_path", newPath).
+			Err()
 	}
 	log.Debug("Migrated legacy workdir to its new encoded path", "legacy_path", legacyPath, "new_path", newPath)
 	return true, nil
@@ -435,7 +454,7 @@ func verifyLegacyWorkdirIdentity(legacyPath, component, stack string) error {
 			Err()
 	}
 	if metadata.Component != component || metadata.Stack != stack {
-		return errUtils.Build(errUtils.ErrWorkdirCreation).
+		return errUtils.Build(errUtils.ErrWorkdirIdentityMismatch).
 			WithExplanationf("legacy workdir metadata (component=%q, stack=%q) does not match the component/stack being provisioned (component=%q, stack=%q)", metadata.Component, metadata.Stack, component, stack).
 			WithHintf("The workdir at `%s` appears to belong to a different component instance. Inspect it manually and move or remove it before re-running; Atmos will not rename it automatically to avoid overwriting another instance's state.", legacyPath).
 			WithContext("legacy_path", legacyPath).

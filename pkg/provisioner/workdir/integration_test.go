@@ -701,8 +701,10 @@ func TestServiceProvision_MigratesPreExistingLegacyWorkdir(t *testing.T) {
 // "a-b" both resolve to the identical legacy name "dev-a-b". Simulate a legacy workdir that was
 // actually provisioned for "dev-a" + "b" (its metadata records that identity and it holds real
 // Terraform state), then provision the OTHER identity ("dev" + "a-b") through the same
-// Provision entry point a real terraform run uses. Provision must fail rather than silently
-// rename the first identity's workdir -- and its state -- out from under it.
+// Provision entry point a real terraform run uses. Provision must never silently rename the
+// first identity's workdir -- and its state -- out from under it. Since the second
+// (hyphen-encoded) legacy candidate for "dev" + "a-b" doesn't exist either, the mismatch on the
+// first candidate isn't fatal: Provision falls through to a fresh workdir instead of failing.
 func TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -742,14 +744,19 @@ func TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentit
 	}
 
 	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
-	require.Error(t, err, "Provision must refuse to migrate a legacy workdir belonging to a different identity")
-	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
+	require.NoError(t, err, "Provision should fall through to a fresh workdir rather than fail when the only same-named legacy candidate belongs to a different identity")
 
 	// The other identity's workdir (and its state) must be untouched: still present at the
 	// legacy path, not moved or overwritten.
 	stateBytes, statErr := os.ReadFile(filepath.Join(legacyPath, "terraform.tfstate"))
 	require.NoError(t, statErr, "the other identity's legacy workdir must not be moved or removed")
 	assert.Equal(t, `{"serial":1}`, string(stateBytes))
+
+	// This identity got a fresh workdir of its own, distinct from the other identity's legacy
+	// path.
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	assert.NotEqual(t, legacyPath, provisionedPath)
 }
 
 // TestServiceProvision_PreservesLocalBackendStateAcrossReprovision is a regression test for

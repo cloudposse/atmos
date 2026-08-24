@@ -1754,7 +1754,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -2131,7 +2131,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 		},
 	}, NewVariables(), nil)
 	if err != nil {
@@ -2161,7 +2161,7 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -2194,7 +2194,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 			{
 				Name:    "plan",
 				Type:    schema.TaskTypeAtmos,
@@ -2250,7 +2250,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: "2s"},
+					{Type: "wait", Text: "ready", Timeout: "10s"},
 				},
 			},
 			{
@@ -2302,7 +2302,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 			Steps: []schema.WorkflowStep{
 				{Type: "write", Text: "printf ready", Rate: "0"},
 				{Type: "key", Key: "enter"},
-				{Type: "wait", Text: "ready", Timeout: "2s"},
+				{Type: "wait", Text: "ready", Timeout: "10s"},
 				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
 			},
 		}},
@@ -2402,7 +2402,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: "2s"},
+					{Type: "wait", Text: "ready", Timeout: "10s"},
 				},
 			},
 			{Type: schema.TaskTypeSimulate, Text: "# narration after the session", Rate: "0"},

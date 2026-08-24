@@ -853,9 +853,11 @@ func TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure(t *testing.T) {
 // that shared name actually belongs to one of those pairs and the other pair is provisioned
 // under the new encoding, migrateLegacyWorkdir must NOT blindly rename it onto the second
 // pair's new path -- that would silently move the first identity's workdir (and any real
-// Terraform state inside it) out from under it. No Rename call is expected: an unexpected call
-// would fail the test via the strict mock controller, proving the caller stops before ever
-// reaching Rename once the metadata identity check fails.
+// Terraform state inside it) out from under it. It also must not treat the mismatch as fatal:
+// it moves on to the hyphen-encoded candidate, which doesn't exist here either, so the call
+// ends in "nothing to migrate" (nil), not an error. No Rename call is expected for either
+// candidate: an unexpected call would fail the test via the strict mock controller, proving the
+// caller never reaches Rename for the mismatched candidate.
 func TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -875,9 +877,11 @@ func TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity(t *t
 	newPath, err := BuildPath(base, "terraform", "a-b", "dev", nil)
 	require.NoError(t, err)
 	legacyPath := filepath.Join(base, WorkdirPath, "terraform", sharedLegacyName)
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "a-b"))
 	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev", "a-b"), "legacy name for the caller's own identity must match the shared legacy name")
 	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev-a", "b"), "legacy name for the other identity must also match the shared legacy name")
 	require.NotEqual(t, legacyPath, newPath)
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
 
 	// Seed metadata recording the OTHER identity ("dev-a" + "b"), simulating a legacy workdir
 	// that was actually provisioned for that pair, not for "dev" + "a-b".
@@ -890,14 +894,61 @@ func TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity(t *t
 
 	mockFS.EXPECT().Exists(legacyPath).Return(true)
 	mockFS.EXPECT().Exists(newPath).Return(false)
+	// The mismatched first candidate is skipped, not fatal, so the loop checks the second
+	// (hyphen-encoded) candidate; it isn't present, so migrateLegacyWorkdir ends with nothing
+	// to migrate.
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(false)
 	// No Rename expectation: migrateLegacyWorkdir must refuse before ever calling it.
 
-	migrateErr := service.migrateLegacyWorkdir(base, "a-b", "dev", newPath)
-	require.Error(t, migrateErr)
-	assert.ErrorIs(t, migrateErr, errUtils.ErrWorkdirCreation)
-	// The explanation/hint text lives in cockroachdb error details, not the top-level
-	// Error() string (which is just the sentinel message) -- use errUtils's helper.
-	assert.True(t, errUtils.HasHint(migrateErr, "different component instance"), "error should hint that manual investigation is needed")
+	require.NoError(t, service.migrateLegacyWorkdir(base, "a-b", "dev", newPath))
+}
+
+// TestMigrateLegacyWorkdir_MigratesSecondCandidateAfterFirstCandidateMismatch is a regression
+// test for the fix to the collision case above: a confirmed identity mismatch on the first
+// (pre-escaping) legacy candidate must not abort the whole migration -- it must let
+// migrateLegacyWorkdir fall through and migrate a genuine match found under the second
+// (hyphen-encoded) candidate. Both candidates exist on disk here: the first belongs to a
+// different identity (must be left untouched), the second genuinely belongs to the caller's
+// identity (must be renamed onto newPath).
+func TestMigrateLegacyWorkdir_MigratesSecondCandidateAfterFirstCandidateMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "a-b", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "a-b"))
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "a-b"))
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
+
+	// First candidate: exists, but belongs to a different identity ("dev-a" + "b").
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	// Second candidate: exists, and genuinely belongs to the identity being provisioned.
+	require.NoError(t, os.MkdirAll(legacyHyphenPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyHyphenPath, &WorkdirMetadata{
+		Component:  "a-b",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyHyphenPath, newPath).Return(nil)
+
+	require.NoError(t, service.migrateLegacyWorkdir(base, "a-b", "dev", newPath))
 }
 
 // TestMigrateLegacyWorkdir_RefusesWhenLegacyDirectoryHasNoMetadata is a regression test for the

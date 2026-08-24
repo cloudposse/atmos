@@ -71,7 +71,7 @@ func TestTerraformStateJITWorkdirViaAbstractInheritance(t *testing.T) {
 	// inheritor inherits from producer-reader/abstract which has:
 	//   vars.foo: !terraform.state producer test foo
 	// The !terraform.state reference must resolve through the inheritance chain
-	// to producer's JIT workdir state at .workdir/terraform/test-producer-486d7adf/
+	// to producer's JIT workdir state at .workdir/terraform/test-producer-486d7adf/.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
 			Component:            "inheritor",

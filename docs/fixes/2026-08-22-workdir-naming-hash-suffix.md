@@ -54,7 +54,7 @@ Replaced the whole injective-escaping design with the standard
 human-readable-prefix + content-hash-suffix pattern (the same shape used by
 Bazel, npm, and most build/package caches):
 
-```
+```text
 prod-vpc-flow-logs-1.226.1-09b13626
 dev-eks-ingress-1-c1ff2a35
 dev-eks-ingress-controller-6382df14
